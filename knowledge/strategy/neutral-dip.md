@@ -2,8 +2,8 @@
 
 **Answers:** What is a neutral dip and why does it save speed? When is it effective? How is it
 different from an ESS pump?
-**Status:** validated (planner uses it; live-confirmed plans).
-**Source:** decomp exit-release math; live 2026-06-27; A* planner.
+**Status:** validated (planner uses it; live-confirmed plans, 50k & 200k clean-DTM sync).
+**Source:** decomp exit-release math; live 2026-06-27 + 2026-07-02; A* planner.
 
 ---
 
@@ -21,20 +21,23 @@ transient on re-entry, amortized across many dips.
 
 ## When it's effective
 
-**Low speed + high air only.** There ESS displacement ≈ neutral displacement, so a dip is a near-free
-win. At [strobo bands](../mechanics/strobo.md) / high speed, ESS is already efficient → dips are NOT
-wins (use sustained ESS + [reboost](reboost.md) instead). **Dip at the anim peak.**
+Dips pay when the animation **lingers on the head-bob peak**, so you can catch it near-losslessly
+frame after frame. That happens in a [stroboscopic band](../mechanics/strobo.md): there the per-frame
+anim advance ≈ a multiple of 23, so the phase drifts slowly (band-1, |v|≈790: ~0.1 anim/frame → sits
+on the peak for many frames). Off-band the anim jumps ~10/frame and rarely lands on the peak, so dips
+are fewer and less free. The payoff therefore **grows with distance** as the optimal cruise speed
+climbs toward the band. **Dip at the anim peak.**
 
-Validated on the A*-best 200k plan: every cruise dip lands its *release* frame on the head-bob peak
-(`af_drag` retention ≈ 100%, so the exit is near-lossless). But dipping at *every* peak over-dips and
-LOSES — the optimizer is selective. The planner's [speed-retention prune](../model/planner.md#search)
-encodes exactly this: it drops the off-peak exits (which would cut > 2% of `|v|`) and keeps the
-near-peak ones.
+Every cruise dip lands its *release* frame on the peak (`af_drag` retention ≈ 100%, near-lossless
+exit). But dipping at *every* peak over-dips and LOSES — the optimizer is selective, and the planner's
+[speed-retention prune](../model/planner.md#search) encodes this: it drops off-peak exits (> 2% `|v|`
+cut) and keeps the near-peak ones.
 
 ## Measured
 
-The A*-best 200k plan interleaves **34+ neutral dips** with ESS → a **6-frame save** over the
-no-pump baseline (555 vs 561 frames), live-validated.
+Both live-synced (clean DTM, bit-exact) with `allow_pump=True` + the speed gate:
+- **200k** (band-1 cruise, |v|≈790): 26 dips → **555 fr** vs 561 no-pump (**−6**).
+- **50k** (off-band, |v|≈447): 9 dips → **280 fr** vs 282 no-pump (**−2**).
 
 ## Don't confuse with mid-swim ESS pumps
 
