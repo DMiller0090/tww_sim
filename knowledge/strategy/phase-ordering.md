@@ -12,10 +12,11 @@ A full route, in order:
 1. **Charge** at +3/frame (fastest growth). See [charging](../mechanics/charging.md).
 2. **Air refill** if possible — air −1/frame (max 900). Lower air → head deeper → slower ESS true
    speed (stacks on the [head-bob](../mechanics/animation.md) penalty).
-3. **Arrow charge** *(unproven)* — start [arrow-swimming](../mechanics/arrow.md) toward the
-   destination while still charging at the reduced (cos-penalized) rate; trades charge rate for
-   early progress. Offline it **likely loses ~2–4 frames** at 200k and is not validated cold — treat
-   as not-yet-recommended (see [arrow open question](../mechanics/arrow.md#open-question--does-arrow-swimming-save-time)).
+3. **Arrow charge** *(not recommended — loses frames)* — start [arrow-swimming](../mechanics/arrow.md)
+   toward the destination while still charging at the reduced (cos-penalized) rate; trades charge
+   rate for early progress. An exhaustive offline insertion sweep (2026-07-02) found it **never
+   saves frames** — best case loses +4, worse the later/longer you arrow (see
+   [arrow verdict](../mechanics/arrow.md#does-arrow-swimming-save-time--no-offline-exhaustive)).
 4. **ESS toward destination** — preserve potential speed (−1/6). Ride a
    [stroboscopic band](../mechanics/strobo.md) and [reboost](reboost.md) (phase-triggered) to stay
    at the head-bob peak.

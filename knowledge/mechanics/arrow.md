@@ -84,14 +84,39 @@ any start/target axis via a facing-BFS (it is not hardcoded — see
 > The state-54→55 **entry release** (the arrow↔cruise hand-off, live f1 −300→−24) is priced
 > separately by the planner, not inside the stepper.
 
-## Open question — does arrow swimming save time?
+## Does arrow swimming save time? — NO (offline, exhaustive)
 
-**Current verdict: probably not.** Offline the planner finds arrow **loses ~2–4 frames** at 200k
-(the early `sin α` cross-drift doesn't cover the prefix overhead), and it is **not yet validated
-from a cold start** — `ArrowState` is validated charged-only and does not model the state-54→55
-entry release + [x598 scramble](../reference/glossary.md#x598). Treat "use arrow swimming" as
-**unproven**, not recommended, until a cold-start DTM validation lands. Full provenance and the next
-experiment: [history/reboost-strobo-history.md](../history/reboost-strobo-history.md).
+**Verdict: no.** An exhaustive offline insertion sweep (2026-07-02, 134 cells) inserted an arrow
+phase at every point of a straight swim — deep build → build→cruise transition → into cruise —
+across distances 100k/200k/400k/800k, arrow lengths 30–300, and all schedule shapes, comparing
+total frames to the straight continuation from the *same* mid-swim state. **Every cell is a loss;
+zero wins.** Best case is **+4 frames** (400k, deep-build insertion at v≈−1280, length 60); losses
+grow **monotonically** the later/longer you arrow (transition ~+7–17, into cruise up to +32, long
+arrows +45–89).
+
+**Why:** cruising straight points the *whole* velocity at the target (ESS travels backward toward
+it); arrowing spends most speed on the perpendicular alternation axis and only the `sin α` sliver
+drifts toward target — so at any real cruise speed (v≈−300 to −1300) cruise's toward-target rate
+strictly beats arrow's. Arrow only out-progresses cruise at v≈0 (cold, before cruise spins up), a
+window too short to cover the reorient + [spin-up](#arrow-spin-up-cost-2-frames) overhead. This is
+why the from-cold planner also picks `n_arrow=0` (arrow lost by 2–4 there even with lengths
+searched to 300).
+
+**Scope (what this does NOT rule out):** the sweep is offline, on the single default slate
+geometry (target due-south, cam 270), with the α≤20° tip-over cap and the sim's charge/pump/ESS
+action set. It does not cover off-slate geometries, arrow interacting with reboost/stroboscopic
+phase, obstacle-forced detours where cross-drift is "free," or any regime the sim itself
+mis-models. The claim is strong and mechanism-backed for the straight open-water swim, not a
+universal proof. If a future route has a lateral offset the straight plan must pay for anyway,
+re-test arrow there — that's the one shape the mechanism above could favor.
+
+The only regime not yet live-validated is the **cold entry release** (v≈0, state 54→55,
+[×598 scramble](../reference/glossary.md#x598)) — `ArrowState` is validated charged
+(v≈−300..−1300), not through the cold entry. But that is arrow's *only* near-break-even case and
+it still loses offline, and every high-v cell (validated regime) loses decisively, so a cold-start
+DTM would be confirmation, not an open risk. Sweep data + full write-up:
+`_notes/arrow-verdict-2026-07-02.md`. Provenance:
+[history/reboost-strobo-history.md](../history/reboost-strobo-history.md).
 
 ## Constants used here
 

@@ -5,10 +5,10 @@
 
 ---
 
-- **Does arrow swimming save time?** Current verdict: probably not (offline loses ~2–4 fr at 200k;
-  not validated cold — `ArrowState` doesn't model the state-54→55 entry release + ×598). Next:
-  capture charged-arrow anchors, build arrow vs no-arrow plans, compare via DTM. →
-  [mechanics/arrow](../mechanics/arrow.md#open-question--does-arrow-swimming-save-time).
+- **Does arrow swimming save time?** RESOLVED (2026-07-02): **no.** Exhaustive offline insertion
+  sweep (134 cells: every insertion point × distance 100k–800k × arrow length × schedule shape)
+  found zero wins; best case loses +4 frames, worsening monotonically the later/longer you arrow. →
+  [mechanics/arrow](../mechanics/arrow.md#does-arrow-swimming-save-time--no-offline-exhaustive).
 
 - **Stroboscopic band exact derivation.** The bands are empirical (emerge from the increment
   formula); the exact decomp source (likely a Nonmatching `J3DFrameCtrl::update` term) and whether

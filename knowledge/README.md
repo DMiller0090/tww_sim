@@ -39,7 +39,7 @@ you can triage in one glance.
 - **How do turnaround frames work? What's the angle threshold?** → 45° off straight-back (`0x6000` = 135°) → [mechanics/turnaround.md](mechanics/turnaround.md)
 - **How do you reorient the charge axis?** → [turnaround.md#reorienting-the-charge-axis-turnaround-chains](mechanics/turnaround.md#reorienting-the-charge-axis-turnaround-chains)
 - **What is arrow swimming / charge-rate loss / tip-over / spin-up?** → [mechanics/arrow.md](mechanics/arrow.md)
-- **Does arrow swimming actually save time?** → probably not (loses ~2–4 fr; unproven cold) → [arrow.md#open-question--does-arrow-swimming-save-time](mechanics/arrow.md#open-question--does-arrow-swimming-save-time)
+- **Does arrow swimming actually save time?** → **no** (exhaustive offline sweep, 0 wins; best case loses +4 fr) → [arrow.md#does-arrow-swimming-save-time--no-offline-exhaustive](mechanics/arrow.md#does-arrow-swimming-save-time--no-offline-exhaustive)
 
 ### Strobo & reboost
 - **What is the stroboscopic effect / at what speeds?** → ≈ −794 / ≈ −1630 (air-dependent) → [mechanics/strobo.md](mechanics/strobo.md)
