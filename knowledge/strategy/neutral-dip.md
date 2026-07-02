@@ -22,11 +22,13 @@ transient on re-entry, amortized across many dips.
 ## When it's effective
 
 Dips pay when the animation **lingers on the head-bob peak**, so you can catch it near-losslessly
-frame after frame. That happens in a [stroboscopic band](../mechanics/strobo.md): there the per-frame
-anim advance ≈ a multiple of 23, so the phase drifts slowly (band-1, |v|≈790: ~0.1 anim/frame → sits
-on the peak for many frames). Off-band the anim jumps ~10/frame and rarely lands on the peak, so dips
-are fewer and less free. The payoff therefore **grows with distance** as the optimal cruise speed
-climbs toward the band. **Dip at the anim peak.**
+frame after frame. Whether it lingers is set entirely by the per-frame anim drift = `incr mod 23`
+(`incr = |v|/36 + 3/5 + air term`, so drift depends on `|v|`). In a
+[stroboscopic band](../mechanics/strobo.md) `incr ≈ a multiple of 23`, so the drift → ~0 and the phase
+camps on the peak (band-1, |v|≈790: ~0.1 anim/frame). Away from a band the drift is larger (at the 50k
+cruise |v|≈447 it's ~9.6/frame), so the phase rarely lands on the peak and dips are fewer and less
+free. The payoff therefore **grows with distance** as the optimal cruise speed climbs toward a band.
+**Dip at the anim peak.**
 
 Every cruise dip lands its *release* frame on the peak (`af_drag` retention ≈ 100%, near-lossless
 exit). But dipping at *every* peak over-dips and LOSES — the optimizer is selective, and the planner's
