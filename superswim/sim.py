@@ -153,6 +153,9 @@ def incr(v, air):
     return f32(rate + f32(timer * f32(1.0)))
 
 _F60 = f32(0.4)                 # field_0x60 (HIO mSwim.m.field_0x60)
+# Console loads M_PI SINGLE (lfs) then fmuls -> cos args use f32 pi, not double math.pi; the
+# 1-ULP diff flips cM_rad2s's truncated cell at knife-edges. Rationale: memory superswim-gekko-fp.
+_F32_PI = f32(math.pi)          # 3.1415927410125732 -- what `lfs M_PI` loads
 
 def af_drag(v, anim):
     # head-bob: (speedF*(1-0x60) + 0x60*speedF*|cM_scos(rad2s(pi*moveFrame/moveEnd))|)
@@ -160,8 +163,10 @@ def af_drag(v, anim):
     # 2424-2428; moveEnd = 23.) Used only for DISPLACEMENT (an ignored wave-affected
     # byproduct), so its exact f32 order is not validated. The v-setting EXIT release uses
     # release_ess_speed below, which matches the (different) procSwimWait_init f32 order.
-    return f32(f32(f32(f32(2.0 * v / 5.0)) * f32(abs(cM_scos(math.pi * anim / 23.0))))
-               + f32(3.0 * v / 5.0))
+    # cos arg is SINGLE on console (fdivs anim/23 then fmuls lfs M_PI = _F32_PI; posMoveFromFootPos
+    # JP @0x80106134/5c/60). Omits the /(1+0x7C*timerRate) divisor -- see predict/swim_exact.
+    c = f32(abs(cM_scos(f32(f32(anim / 23.0) * _F32_PI))))
+    return f32(f32(f32(f32(2.0 * v / 5.0)) * c) + f32(3.0 * v / 5.0))
 
 def release_ess_speed(v, rel_anim):
     # ESS->neutral EXIT release v (procSwimWait_init, d_a_player_swim.inc:414-415):
@@ -172,10 +177,10 @@ def release_ess_speed(v, rel_anim):
     # (1.0-0.4), and fVar2 = rel_anim/23 is taken in f32 BEFORE the *pi. The old af_drag
     # used 2v/5 * c + 3v/5 with pi*anim/23 in f64 -> ~2 ULP (3e-5) low at v~-180; that
     # constant v offset fed incr (~7e-7/frame) and the anim drift x598-amplified at pumps.
-    # cM_fcos(rad) == the sim's cM_scos(rad) (cM_rad2s + table). M_PI is double so the
-    # product promotes to double then truncates to the f32 cos arg.
+    # CRITICAL: `fVar2 * M_PI` compiles to lfs M_PI + fmuls = SINGLE pi (_F32_PI); double pi
+    # flips the truncated cos-cell at knife-edges (was the pump-300k desync; memory superswim-gekko-fp).
     fVar2 = f32(rel_anim / 23.0)
-    c = f32(abs(cM_scos(f32(fVar2 * math.pi))))
+    c = f32(abs(cM_scos(f32(fVar2 * _F32_PI))))
     term2 = f32(v * f32(1.0 - _F60))            # speedF * (1.0 - field_0x60)
     term1 = f32(f32(v * c) * _F60)              # speedF * |cos| * field_0x60
     return f32(term2 + term1)

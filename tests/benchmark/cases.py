@@ -79,10 +79,8 @@ CASES = [
     _case('cold_pump_200k',   'full', 200000, True,  555),
     # long-haul: also probes the 900-frame air budget (a cold swim can only last ~900 frames).
     _case('cold_nopump_300k', 'full', 300000, False, 711),   # DTM-verified 2026-07-02
-    # KNOWN LIVE DESYNC (xfail): sim says 705 but Dolphin reaches only ~282852 (pump plan not
-    # live-faithful at 300k). See README + memory superswim-pump-300k-desync. 705 is not a truth.
-    _case('cold_pump_300k',   'full', 300000, True,  None, xfail_live=True,
-          note='live reaches ~282852 not 300000 (sim v=804 vs live 524); pump plan not live-faithful'),
+    _case('cold_pump_300k',   'full', 300000, True,  705),   # DTM-verified 2026-07-02 (705fr/
+    # 39dips -> 300941 live); prior desync was a double-vs-single-pi release-cos bug (superswim-gekko-fp).
     _case('cold_nopump_400k', 'full', 400000, False, 819),   # DTM-verified 2026-07-02 (pending air-delta fix)
     _case('cold_pump_400k',   'full', 400000, True,  814),   # DTM-verified 2026-07-02
     # 400k is the ceiling for THIS anchor (Link hits the map edge before the ~900-frame air budget);

@@ -38,7 +38,9 @@ def disp_magnitude(v: float, frame: float, air: int) -> float:
     `frame` must be the LOOPED MOVE0 getFrame() in [0,23) (not the raw post-scramble value).
     f1 = (v*(1-0.4) + 0.4*(v*|cM_scos(pi*frame/23)|)) / (1 + 0.35*getSwimTimerRate(air))."""
     fr = frame - MOVE_END * math.floor(frame / MOVE_END)              # looped [0,23)
-    c = f32(abs(cM_scos(math.pi * fr / MOVE_END)))
+    # cos arg is SINGLE precision on console (fdivs fr/MOVE_END then fmuls lfs M_PI = f32 pi;
+    # see sim._F32_PI / af_drag). Double pi flips the truncated cos-cell at knife-edge frames.
+    c = f32(abs(cM_scos(f32(f32(fr / MOVE_END) * S._F32_PI))))
     num = f32(f32(v * f32(1.0 - FIELD_0x60)) + f32(FIELD_0x60 * f32(v * c)))
     return f32(num / f32(1.0 + f32(FIELD_0x7C * get_swim_timer_rate(air))))
 
