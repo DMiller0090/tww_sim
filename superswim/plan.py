@@ -191,8 +191,7 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
     if -seed.x >= dest:
         return _result([], 0, -seed.x, seed, gens, frontier_sizes, capped_layers)
 
-    for t in range(1, cap + 1):
-        cur = gens[-1]
+    def _build_layer(cur, apply_speed_gate):
         layer = Layer()
         for pi, (_, st, _, act_in) in enumerate(cur):
             # LIVE-FIDELITY CONSTRAINT (allow_pump=False, default): once we drop to
@@ -232,7 +231,7 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
                 c.step(act)
                 # Speed-retention prune: drop successors keeping < speed_gate of parent |v| (relax to
                 # speed_gate_end near the end). Prunes only losses. See model/planner.md.
-                if speed_gate > 0.0 and abs(st.v) > 1.0 and abs(c.v) < abs(st.v):
+                if apply_speed_gate and speed_gate > 0.0 and abs(st.v) > 1.0 and abs(c.v) < abs(st.v):
                     remaining = dest - (-c.x)
                     est_frames = remaining / max(abs(c.v), 1.0)
                     thr = speed_gate_end if est_frames < end_window_frames else speed_gate
@@ -242,6 +241,13 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
                     # a pump = re-entry from neutral back into a swim input (neu -> ess/chg)
                     c._pumps = getattr(st, '_pumps', 0) + (1 if act_in == 'neu' and act != 'neu' else 0)
                 layer.offer(-c.x, c, pi, act)
+        return layer
+
+    for t in range(1, cap + 1):
+        cur = gens[-1]
+        layer = _build_layer(cur, speed_gate > 0.0)
+        if not layer.nodes and speed_gate > 0.0:
+            layer = _build_layer(cur, False)      # gate would dead-end the frontier -> retry ungated
         ranked = sorted(layer.nodes, key=rank_key)
         if len(ranked) > max_frontier:
             ranked = ranked[:max_frontier]
