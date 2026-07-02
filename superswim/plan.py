@@ -54,6 +54,7 @@ Usage:
 """
 import sys, math
 from . import sim as S
+from .coldstart import ColdStartSwimState
 from .optimize import sig, seq_string, schedule, frames_to_dest_pure_ess
 
 # ---------------------------------------------------------------------------
@@ -135,7 +136,10 @@ def _hcost(st, dest):
 def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
                     max_frontier=8000, cap=4000, entry_tax=True, rank='astar',
                     allow_pump=False, pump_chg=False, cold_start=False, verbose=True,
-                    seed_state=None, max_pumps=None, refill_air=False, refill_until=0.0):
+                    seed_state=None, max_pumps=None, refill_air=False, refill_until=0.0,
+                    pump_eff_gate=0.0,
+                    speed_gate=0.98, speed_gate_end=0.90, end_window_frames=40,
+                    cold_mrate=None):
     """Forward DP: fewest frames to reach forward distance `dest` (= -x).
 
     HYBRID frontier control. A layer whose dominated frontier fits in
@@ -152,6 +156,17 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
                 exactly (use for selfcheck / short windows that don't cap hard).
     `cap` bounds the horizon (max frames before giving up).
 
+    `speed_gate` (default 0.98) prunes any successor that keeps < speed_gate of the parent's |v|,
+      relaxing to `speed_gate_end` (0.90) inside the last ~`end_window_frames` estimated frames so the
+      terminal neutral dash still enters. Only prunes speed LOSSES (charge/reboost build |v| so are
+      untouched; the only >(1-gate) losses are neutral-dip/exit af_drag frames). For the min-frames
+      objective this is loss-free (speed compounds over remaining frames, so a big one-frame dump only
+      pays near the end) -- validated byte-identical on the golden suite + cruise 200k/400k/500k +
+      full build+reboost, ~3-7x fewer nodes on cruise. Set 0.0 to disable.
+    `cold_mrate`: for a real cold start, the savestate's LOGGED move0 mRate (anchor 0.5, slate 0.5472;
+      history-dependent, measure live). Seeds the bit-exact ColdStartSwimState scramble; without it a
+      cold_start build uses the base +1.0 approximation and falls short live. See coldstart.py.
+
     Returns dict: actions, frames, reached, end_state, frontier_sizes, capped_layers.
     """
     rank_key = ((lambda b: _hcost(b[1], dest)) if rank == 'astar'
@@ -163,11 +178,7 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
         # planner to re-plan the cruise SUFFIX after an inserted pump (plan_hierarchical).
         seed = seed_state.clone()
     else:
-        seed = S.SwimState(v=v, anim=anim, air=air)
-        seed._entry_tax = entry_tax
-        if cold_start:                  # real cold start: floating in NEUTRAL (state 54),
-            seed.state = 54             # first charge goes through the 54->55 entry. (No
-            seed._entry_tax = False     # slate charge->hold artifact -> entry_tax off.)
+        seed = _seed_for(v, anim, air, entry_tax, cold_start, cold_mrate)
     if max_pumps is not None:
         seed._pumps = 0
     if refill_air:
@@ -208,9 +219,25 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
                 allowed = tuple(a for a in actions if a != 'chg')
             else:
                 allowed = actions
+            # EXPERIMENTAL: gate ESS-pump re-entry on the predicted x598-landed efficiency (peak =
+            # 2nd-order robust to the scramble). 2-frame lookahead. See model/planner.md.
+            if (pump_eff_gate > 0.0 and act_in == 'neu' and st.state == 54
+                    and any(a != 'neu' for a in allowed)):
+                probe = st.clone(); probe.step('ess'); probe.step('ess')
+                landed_eff = 0.6 + 0.4 * abs(math.cos(math.pi * probe.anim / 23.0))
+                if landed_eff < pump_eff_gate:
+                    allowed = ('neu',)          # off-peak landing -> forbid pump, stay neutral
             for act in allowed:
                 c = st.clone()
                 c.step(act)
+                # Speed-retention prune: drop successors keeping < speed_gate of parent |v| (relax to
+                # speed_gate_end near the end). Prunes only losses. See model/planner.md.
+                if speed_gate > 0.0 and abs(st.v) > 1.0 and abs(c.v) < abs(st.v):
+                    remaining = dest - (-c.x)
+                    est_frames = remaining / max(abs(c.v), 1.0)
+                    thr = speed_gate_end if est_frames < end_window_frames else speed_gate
+                    if abs(c.v) < thr * abs(st.v):
+                        continue
                 if max_pumps is not None:
                     # a pump = re-entry from neutral back into a swim input (neu -> ess/chg)
                     c._pumps = getattr(st, '_pumps', 0) + (1 if act_in == 'neu' and act != 'neu' else 0)
@@ -287,8 +314,15 @@ def _result(actions, frames, reached, end_state, gens, frontier_sizes, capped_la
 # and only the top `refine` get the exact cruise DP. Bounded build horizon => bounded cost;
 # pumps are still priced by the exact pumped DP where they matter.
 # ---------------------------------------------------------------------------
-def _seed_for(v, anim, air, entry_tax, cold_start):
-    seed = S.SwimState(v=v, anim=anim, air=air)
+def _seed_for(v, anim, air, entry_tax, cold_start, cold_mrate=None):
+    """Build the DP seed. For a real cold start, pass the savestate's LOGGED move0 mRate as
+    `cold_mrate` to seed the bit-exact ColdStartSwimState scramble (the anchor's is 0.5, the slate's
+    0.5472 -- it is history-dependent and must be measured live, see coldstart.py). Without it the
+    seed falls back to the base SwimState's approximate +1.0 scramble (builds fall short live)."""
+    if cold_start and cold_mrate is not None:
+        seed = ColdStartSwimState(v=v, anim=anim, air=air, mrate=cold_mrate)
+    else:
+        seed = S.SwimState(v=v, anim=anim, air=air)
     seed._entry_tax = entry_tax
     if cold_start:
         seed.state = 54
@@ -310,7 +344,7 @@ def _trajectory(seed, actions):
 
 def plan_hierarchical(dest, v, anim, air, cold_start=False, entry_tax=None,
                       build_dist=None, max_frontier=8000, cruise_frontier=4000,
-                      cap=4000, rank='astar', refine=16, verbose=True):
+                      cap=4000, rank='astar', refine=16, verbose=True, cold_mrate=None):
     """Crossover hierarchical plan: pumped low-speed BUILD + pump-free cruise SUFFIX.
     Returns the plan_min_frames result-dict shape plus 'baseline_frames' (pure-ESS-to-dest),
     'build_frames'/'build_dist', and 'cruise_frames'.
@@ -333,7 +367,7 @@ def plan_hierarchical(dest, v, anim, air, cold_start=False, entry_tax=None,
     if build_dist > 0:
         build = plan_min_frames(build_dist, v, anim, air, actions=('ess', 'chg', 'neu'),
                                 max_frontier=max_frontier, cap=cap, rank=rank,
-                                entry_tax=entry_tax, cold_start=cold_start,
+                                entry_tax=entry_tax, cold_start=cold_start, cold_mrate=cold_mrate,
                                 allow_pump=True, pump_chg=True, verbose=False)
         if build['frames'] is None:
             return build
@@ -347,7 +381,7 @@ def plan_hierarchical(dest, v, anim, air, cold_start=False, entry_tax=None,
                                             build['actions'])]
         build_frames_best = build['frames']
     else:
-        seed = _seed_for(v, anim, air, entry_tax, cold_start)
+        seed = _seed_for(v, anim, air, entry_tax, cold_start, cold_mrate)
         arrival = [(-seed.x, seed, [])]
         build_frames_best = 0
 
@@ -387,7 +421,7 @@ def plan_hierarchical(dest, v, anim, air, cold_start=False, entry_tax=None,
                 'frontier_sizes': [], 'capped_layers': [], 'baseline_frames': bn}
 
     total, build_acts, cruise_acts, cruise_fr = best
-    seed = _seed_for(v, anim, air, entry_tax, cold_start)
+    seed = _seed_for(v, anim, air, entry_tax, cold_start, cold_mrate)
     end = _trajectory(seed, build_acts + cruise_acts)[-1]
     out = _result(build_acts + cruise_acts, total, -end.x, end, None, [], [])
     out['baseline_frames'] = bn

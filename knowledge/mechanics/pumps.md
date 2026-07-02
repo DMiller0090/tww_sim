@@ -1,7 +1,7 @@
 # ESS pumps & the neutral→ESS x598 scramble
 
 **Answers:** What is an ESS pump? Why does a 1-frame pump do nothing? Why is the post-pump
-animation phase scrambled / unpredictable? What's the minimum useful pump?
+animation phase scrambled (hypersensitive)? What's the minimum useful pump?
 **Status:** validated (decomp + live).
 **Source:** decomp `setSwimMoveAnime` (d_a_player_swim.inc:264); live 2026-06-26.
 
@@ -48,13 +48,15 @@ where `swimwait_frame` is the neutral-anim controller frame on the transition fr
 replicate the frame-controller math exactly; a smooth approximation fails. (Raw data:
 [reference/data.md](../reference/data.md#neutraless-anim-scramble-ess3--first-real-state-55-ess-frame).)
 
-## Why this is a planning trap
+## Why pumps are off by default in the planner
 
-Because the landed phase is hypersensitive, a planner free to insert mid-cruise pumps under-prices
-the exit drag and mines phantom-cheap pumps that drain all speed (a band-1 plan bled to zero, 71%
-short). **Mid-swim pumps are disabled by default** (`allow_pump=False`); neutral is planned as a
-single terminal dash. Full detail: [model/planner](../model/planner.md#why-mid-swim-pumps-are-disabled)
-and [history/resolved-bugs](../history/resolved-bugs.md).
+The landed phase is hypersensitive, but the sim models it **exactly** — cold-start and short pump
+chains are bit-exact vs clean DTM. Mid-swim pumps are still **disabled by default**
+(`allow_pump=False`; neutral is planned as a single terminal dash) because they give no cruise payoff
+(they only help in the low-speed build), long chains hit a precision floor (beyond ~1.5 cycles), and a
+long pumped plan is not yet end-to-end clean-DTM validated. The historic "band-1 plan bled to zero,
+71% short" was a pipe-delivery artifact ([bug#2](../history/resolved-bugs.md)), not a modeling
+failure. Full detail: [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
 
 ## See also
 

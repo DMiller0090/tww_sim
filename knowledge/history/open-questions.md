@@ -19,8 +19,11 @@
   pump). Escape hatch: a per-entry anim ∈ [0,23] search dimension in the planner. →
   [mechanics/pumps](../mechanics/pumps.md), [model/planner](../model/planner.md).
 
-- **Re-enable mid-swim pumps.** Currently disabled (`allow_pump=False`) because the pump ess_start
-  anim is mispredicted. Re-enable only after validating the entry-anim phase live per entry-frame.
+- **Re-enable mid-swim pumps.** Still disabled (`allow_pump=False`), but NOT because the entry anim is
+  mispredicted — the sim's ×598 landing is bit-exact vs clean DTM (an 11-pump build matched live,
+  2026-07-02). Remaining blockers: no cruise payoff (pumps help only in the build), the multi-pump
+  precision floor above, and end-to-end clean-DTM validation of a LONG pumped plan. →
+  [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
 
 - **Camera: f32 ω precision + auto-flip envelope + negative fine-band symmetry.** We read the s16
   yaw output exactly; the internal ω velocity is f32 (upstream). The auto-camera *flip* trigger

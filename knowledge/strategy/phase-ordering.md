@@ -37,7 +37,7 @@ min-frames search). The switch is coupled to the **exit phase** — see
 
 In practice the planner fixes the BUILD (charge) phase and searches the cruise + terminal dash with
 [reboost](reboost.md); the cruise→dash boundary is a fixed point coupled to the route. Mid-swim
-pumps are disabled by default — see [model/planner](../model/planner.md#why-mid-swim-pumps-are-disabled).
+pumps are off by default — see [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
 
 ## See also
 

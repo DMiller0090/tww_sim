@@ -55,7 +55,7 @@ you can triage in one glance.
 
 ### Model (sim / planner)
 - **Why f32 / the console cosine table / CHARGE_DISP_FACTOR / cold-start mRate?** → [model/sim.md](model/sim.md)
-- **How does the planner search / why are mid-swim pumps disabled / the crossover decomposition?** → [model/planner.md](model/planner.md)
+- **How does the planner search / why are mid-swim pumps off by default / the crossover decomposition / the speed-retention prune?** → [model/planner.md](model/planner.md)
 - **What are the predict/ modules / the off-axis residual?** → [model/predictors.md](model/predictors.md)
 
 ### Provenance & open work

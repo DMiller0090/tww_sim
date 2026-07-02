@@ -27,6 +27,10 @@ python -c "from superswim import plan_min_frames; print(plan_min_frames(dest=200
 `viz=out.html` emits a self-contained animated top-down viewer (play/scrub, efficiency-colored
 trail, boost markers).
 
+`plan_min_frames` prunes off-peak speed dumps by default (`speed_gate=0.98`; see
+[model/planner](../model/planner.md#search)). For a real cold start, pass `cold_start=True,
+cold_mrate=<logged move0 mRate>` and a full-precision `anim` so the build is bit-exact live.
+
 ## Live (needs Dolphin + slate) — `dolphin_mem.py`
 
 ```bash

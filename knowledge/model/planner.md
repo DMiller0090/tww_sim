@@ -21,6 +21,13 @@ fixed window. This shapes the endgame: near D you should NOT boost (no frames to
   anim-phase diversity so a state that just paid a boost (lower x, better anim) isn't pruned by raw
   x. Air is omitted from the dominance key — every action decrements air by 1, so the whole frontier
   shares the same air per generation. Anim bucket = 0.03.
+- **Speed-retention prune** (`plan_min_frames`, default `speed_gate=0.98`): drop any successor that
+  keeps < 98% of the parent's `|v|`, relaxing to 90% (`speed_gate_end`) inside the last ~40 estimated
+  frames so the terminal neutral dash still enters. Only speed LOSSES are pruned — charge/reboost
+  build `|v|`, so the only frames it touches are off-peak neutral-dip/exit `af_drag` frames. Loss-free
+  for the min-frames objective (retained speed compounds over remaining frames, so a big one-frame
+  dump only pays near the end); validated byte-identical on the golden suite and cruise 200k/400k/500k
+  + a full build+reboost, at 3–7× fewer nodes on cruise. Set `speed_gate=0` to disable.
 - The legacy C# tool used Particle Swarm (`Omega=0.7627, Phi_G=1, Phi_P=3`) over `[chargeTime,
   essTime]` with neutral time computed analytically; PSO is overkill for this low-dimensional,
   monotonic-ish space — beam/closed-form is more reliable.
@@ -28,19 +35,27 @@ fixed window. This shapes the endgame: near D you should NOT boost (no frames to
   solves the optimal ESS↔neutral switch distance analytically; `avg_ess_rate = (4+3π)/(5π)` (mean
   speed fraction retained as displacement while ESSing).
 
-## Why mid-swim pumps are disabled
+## Why mid-swim pumps are off by default
 
-A planner free to insert `neu,1` pumps mid-cruise produces plans that FAIL catastrophically live: a
-band-1 (v=−806) 200k run planned at 266 fr bled speed to **zero by f252**, reaching only 58k/200k
-(**71% short**). Cause: every pump re-enters ESS → re-scrambles the ESS-start anim
-[×598](../mechanics/pumps.md#the-x598-scramble) → the sim can't predict the landed phase → it
-under-prices the exit `af_drag` cut → the optimizer mines phantom-cheap pumps that drain all speed.
-The reboost+ESS-cruise portion tracks live frame-exact; the divergence is **entirely the pumps**.
+Mid-swim pumps (`neu→ess` re-entries) are disabled by default (`allow_pump=False`); neutral is
+planned as a single one-way **terminal dash** — a predictable exit from sustained ESS. Three reasons,
+none of which is a sim-modeling failure:
 
-**Fix:** plan neutral as a ONE-WAY TERMINAL DASH (`allow_pump=False`, the default) — a single
-predictable exit from sustained ESS. That replanned to 275 fr and validated plan = sim = live
-frame-exact (0.0186% net error). Re-enable mid-swim pumps only after the pump ess_start anim is
-validated live per entry-frame.
+- **No cruise payoff.** Pumps only preserve speed cheaply at LOW speed; exhaustive search finds no ESS
+  pump beats the pure neutral boost at cruise. Pumps pay in the
+  [build](../strategy/phase-ordering.md), not the cruise.
+- **Long-chain precision floor.** The sim models the [×598 scramble](../mechanics/pumps.md#the-x598-scramble)
+  exactly — cold-start and short pump chains are bit-exact vs clean DTM (an 11-pump build matched live
+  `v/anim/air/state`, `dan`=0.000) — but beyond ~1.5 pump cycles a ~1e-4 per-entry anim oscillation
+  accumulates (~0.07 v/pump). See [open-questions](../history/open-questions.md).
+- **End-to-end validation pending.** A long pumped plan has not yet been re-validated via clean DTM.
+
+The historic "band-1 200k plan bled to zero, 71% short" was **not** a sim error: it was the
+`advanceseq` pipe-delivery artifact ([bug#2](../history/resolved-bugs.md)) plus planning from a
+truncated cold-start seed. Clean-DTM playback tracks the sim frame-exact.
+
+**Cold-start seeding:** seed builds with the savestate's LOGGED move0 mRate (`cold_mrate=`, which
+seeds `ColdStartSwimState`) and a FULL-PRECISION anim — a truncated seed diverges ×598 through pumps.
 
 ## Why the crossover (build + cruise) decomposition
 
