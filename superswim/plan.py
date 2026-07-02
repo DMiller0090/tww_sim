@@ -187,12 +187,19 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
     gens = [[(0.0, seed, -1, None)]]
     frontier_sizes = [1]
     capped_layers = []
+    # Search-work counters (always on, ~free): nodes_expanded = successors GENERATED (real work),
+    # vs frontier_sizes = states RETAINED; breakdown by gate/dominance/cap. See tests/benchmark.
+    stats = {'nodes_expanded': 0, 'nodes_gate_pruned': 0, 'nodes_dominated': 0,
+             'nodes_capped': 0, 'ungated_retries': 0}
 
     if -seed.x >= dest:
-        return _result([], 0, -seed.x, seed, gens, frontier_sizes, capped_layers)
+        return _result([], 0, -seed.x, seed, gens, frontier_sizes, capped_layers, stats)
 
     def _build_layer(cur, apply_speed_gate):
+        """Returns (layer, expanded, gate_pruned) for the caller to account only the
+        layer it actually keeps (an ungated retry discards the gated attempt)."""
         layer = Layer()
+        expanded = gate_pruned = 0
         for pi, (_, st, _, act_in) in enumerate(cur):
             # LIVE-FIDELITY CONSTRAINT (allow_pump=False, default): once we drop to
             # neutral we may only stay neutral -> 'neu' is a one-way terminal dash,
@@ -229,6 +236,7 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
             for act in allowed:
                 c = st.clone()
                 c.step(act)
+                expanded += 1
                 # Speed-retention prune: drop successors keeping < speed_gate of parent |v| (relax to
                 # speed_gate_end near the end). Prunes only losses. See model/planner.md.
                 if apply_speed_gate and speed_gate > 0.0 and abs(st.v) > 1.0 and abs(c.v) < abs(st.v):
@@ -236,20 +244,28 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
                     est_frames = remaining / max(abs(c.v), 1.0)
                     thr = speed_gate_end if est_frames < end_window_frames else speed_gate
                     if abs(c.v) < thr * abs(st.v):
+                        gate_pruned += 1
                         continue
                 if max_pumps is not None:
                     # a pump = re-entry from neutral back into a swim input (neu -> ess/chg)
                     c._pumps = getattr(st, '_pumps', 0) + (1 if act_in == 'neu' and act != 'neu' else 0)
                 layer.offer(-c.x, c, pi, act)
-        return layer
+        return layer, expanded, gate_pruned
 
     for t in range(1, cap + 1):
         cur = gens[-1]
-        layer = _build_layer(cur, speed_gate > 0.0)
+        layer, expanded, gate_pruned = _build_layer(cur, speed_gate > 0.0)
         if not layer.nodes and speed_gate > 0.0:
-            layer = _build_layer(cur, False)      # gate would dead-end the frontier -> retry ungated
+            # gate would dead-end the frontier -> retry ungated (discard the gated attempt's counts)
+            layer, expanded, gate_pruned = _build_layer(cur, False)
+            stats['ungated_retries'] += 1
+        stats['nodes_expanded'] += expanded
+        stats['nodes_gate_pruned'] += gate_pruned
+        # offered (= expanded - gate_pruned) minus unique sigs kept = merged by dominance
+        stats['nodes_dominated'] += (expanded - gate_pruned) - len(layer.nodes)
         ranked = sorted(layer.nodes, key=rank_key)
         if len(ranked) > max_frontier:
+            stats['nodes_capped'] += len(ranked) - max_frontier
             ranked = ranked[:max_frontier]
             layer.capped = True
             capped_layers.append((t, len(layer.nodes)))
@@ -260,7 +276,7 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
         if ranked[best_i][0] >= dest:
             acts = _backtrack(gens, best_i)
             res = _result(acts, t, ranked[best_i][0], ranked[best_i][1],
-                          gens, frontier_sizes, capped_layers)
+                          gens, frontier_sizes, capped_layers, stats)
             # ARRIVAL FRONTIER: every node in the terminating layer that reached `dest`,
             # with its full state and action path. The crossover hierarchical planner
             # continues each of these pump-free toward the real (far) destination, so it is
@@ -272,7 +288,7 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
 
     best_i = max(range(len(gens[-1])), key=lambda i: gens[-1][i][0])
     res = _result(_backtrack(gens, best_i), None, gens[-1][best_i][0],
-                  gens[-1][best_i][1], gens, frontier_sizes, capped_layers)
+                  gens[-1][best_i][1], gens, frontier_sizes, capped_layers, stats)
     res['arrival'] = []
     return res
 
@@ -288,11 +304,19 @@ def _backtrack(gens, end_i):
     return actions
 
 
-def _result(actions, frames, reached, end_state, gens, frontier_sizes, capped_layers):
+def _result(actions, frames, reached, end_state, gens, frontier_sizes, capped_layers,
+            stats=None):
+    sizes = frontier_sizes or [0]
+    st = dict(stats or {})
+    st['frontier_max'] = max(sizes)
+    st['frontier_peak_layer'] = sizes.index(max(sizes))
+    st['frontier_sum'] = sum(sizes)          # states RETAINED (cf. nodes_expanded = generated)
+    st['layers'] = len(sizes)
+    st['capped_layers'] = len(capped_layers)
     return {
         'actions': actions, 'frames': frames, 'reached': reached,
         'end_state': end_state, 'frontier_sizes': frontier_sizes,
-        'capped_layers': capped_layers,
+        'capped_layers': capped_layers, 'stats': st,
     }
 
 

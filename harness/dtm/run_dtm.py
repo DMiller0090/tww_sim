@@ -191,8 +191,8 @@ def run_dtm(sticks, expected=None, *, game=None, anchor=DEFAULT_ANCHOR,
     start = {k: D.read_named(h0, m0, k) for k in
              ("potential_speed", "anim_frame", "air", "link_state")}
 
-    # Read at exhaustion: free-run, read once playback stops. Exact because the emulator PAUSES at
-    # the last movie frame (PauseMovie, ensured by relaunch); no slow per-frame pipe stepping.
+    # Read at exhaustion: free-run, read once playback stops. The emulator PAUSES at the last movie
+    # frame (PauseMovie, ensured by relaunch); no slow per-frame pipe stepping.
     D.control_pipe_quiet("resume")
     t1 = time.time(); ended = False
     while time.time() - t1 < playsecs:
@@ -200,7 +200,16 @@ def run_dtm(sticks, expected=None, *, game=None, anchor=DEFAULT_ANCHOR,
             ended = True; break
         time.sleep(0.3)
     D.control_pipe_quiet("pause")
+
+    # PauseMovie can freeze before the final frame's air decrement commits, leaving the read one
+    # air-tick early. One advance flushes that pending frame (air only) -> frame-accurate read.
     advanced = None
+    if ended:
+        try:
+            D.control_pipe_quiet("advance", {"frames": 1})
+            advanced = 1
+        except BaseException:
+            advanced = None
 
     h, m = D.attach()
     end = _read_end(h, m)

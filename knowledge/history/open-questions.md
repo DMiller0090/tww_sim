@@ -21,10 +21,14 @@
 
 - **Re-enable mid-swim pumps.** Still disabled (`allow_pump=False`), but NOT because the entry anim is
   mispredicted (the sim's ×598 landing is bit-exact vs clean DTM, 11-pump build matched live 2026-07-02)
-  and NOT for lack of payoff — with `allow_pump=True` + the speed gate the planner's pumped plans are
-  now **live clean-DTM synced bit-exact at both 50k (280 fr, 9 dips) and 200k (555 fr, 26 dips)**, no
-  phantom blowup. Remaining blockers: frontier saturation (allow_pump pins 8000), the multi-pump
-  precision floor above, and the decision to flip the default (guard with a planner benchmark first). →
+  and NOT for lack of payoff — with `allow_pump=True` + the speed gate the planner's pumped plans
+  DTM-verify **bit-exact at 50k (280 fr), 100k (397), 200k (555, 26–37 dips) and 400k (814)**. BUT they
+  are **not universally live-faithful: pump-300k desyncs** — the 705-frame/47-dip plan reaches only
+  ~282852 live (17k short, live v=−524 vs sim −804), reproducible (2026-07-02, caught by the DTM-verified
+  planner benchmark). Suspected: one dip lands on an anim phase the ×598 model mis-predicts (301k has the
+  most dips). Tracked as `xfail_live` in `tests/benchmark/cases.py`; the verified 300k optimum is the
+  no-pump 711. Remaining blockers to flipping the default: this desync, frontier saturation (allow_pump
+  pins 8000), the multi-pump precision floor above. →
   [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
 
 - **Camera: f32 ω precision + auto-flip envelope + negative fine-band symmetry.** We read the s16
