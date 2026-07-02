@@ -30,6 +30,16 @@
   saturation (allow_pump pins the 8000 cap) and confirming no other dest desyncs. →
   [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
 
+- **Main-sim displacement omits the head-bob divisor.** `sim.af_drag` (used by `true_disp`, so by
+  the planner for distance) computes `0.6·v + 0.4·v·|cM_scos|` but DROPS the console's
+  `/(1 + field_0x7C·getSwimTimerRate())` divisor (field_0x7C = 0.35; posMoveFromFootPos,
+  d_a_player_main.cpp:2425-2429). So net/distance is a validated approximation, not bit-exact
+  (v/anim ARE bit-exact — af_drag never feeds them). The exact form already exists in
+  `predict/swim_exact.disp_magnitude` (divisor + f32 pi). Porting it into `af_drag` would make
+  net-distance bit-faithful, but needs live net validation + a `cold_plan3k` golden regen. Low
+  priority (displacement is not amplified and doesn't affect plan v/anim/air/state verification).
+  → memory `superswim-gekko-fp`, `_notes/gekko-fp.md`.
+
 - **Camera: f32 ω precision + auto-flip envelope + negative fine-band symmetry.** We read the s16
   yaw output exactly; the internal ω velocity is f32 (upstream). The auto-camera *flip* trigger
   (speed/hold-length) is uncharacterized — steering must stay in a non-flipping band. →
