@@ -34,9 +34,16 @@ def classify(acts):
     for (a, s, l) in rr:
         if a == 'chg' and l >= 10:
             build_end = s + l
+    # Terminal dash = last long neutral run, tolerating a short trailing tail (e.g. "neu,48;ess,1");
+    # scan back, stop at a charge. Short neu runs (dips) aren't the dash -> stay marked as pumps.
+    DASH_MIN = 5
     dash_start = len(acts)
-    if rr and rr[-1][0] == 'neu':
-        dash_start = rr[-1][1]
+    for (a, s, l) in reversed(rr):
+        if a == 'neu' and l >= DASH_MIN:
+            dash_start = s
+            break
+        if a == 'chg':
+            break
     phase = []
     for f, a in enumerate(acts):
         if f < build_end:
