@@ -23,8 +23,9 @@ A full route, in order:
 5. **Neutral dash** — once ESS drag outweighs the −2 neutral loss, exit to
    [neutral](../mechanics/neutral.md) (true speed = potential speed) for the terminal stretch.
    **Exit at a good head-bob phase** (anim near 0/23) or hold ESS a few frames to reach one.
-6. **ESS pump / neutral dip** *(low-speed only)* — see [neutral-dip](neutral-dip.md). Mid-swim
-   [pumps](../mechanics/pumps.md) are a planning **trap** at speed (x598); don't plan with them.
+6. **ESS pump / neutral dip** — see [neutral-dip](neutral-dip.md). These `neu→ess` re-entries save
+   frames at band-1 cruise (the 555-fr 200k optimum has 26), but the planner keeps them **off by
+   default** (`allow_pump=False`) — see [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
 
 ## The ESS↔neutral switch is the key decision
 

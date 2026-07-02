@@ -51,12 +51,13 @@ replicate the frame-controller math exactly; a smooth approximation fails. (Raw 
 ## Why pumps are off by default in the planner
 
 The landed phase is hypersensitive, but the sim models it **exactly** — cold-start and short pump
-chains are bit-exact vs clean DTM. Mid-swim pumps are still **disabled by default**
-(`allow_pump=False`; neutral is planned as a single terminal dash) because they give no cruise payoff
-(they only help in the low-speed build), long chains hit a precision floor (beyond ~1.5 cycles), and a
-long pumped plan is not yet end-to-end clean-DTM validated. The historic "band-1 plan bled to zero,
-71% short" was a pipe-delivery artifact ([bug#2](../history/resolved-bugs.md)), not a modeling
-failure. Full detail: [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
+chains are bit-exact vs clean DTM. Pumps (= mid-cruise [neutral dips](../strategy/neutral-dip.md)) DO
+help at band-1 cruise (with `allow_pump=True` the planner recovers the optimal 200k plan, 555 fr / 26
+dips). They are still **off by default** (`allow_pump=False`; neutral planned as a single terminal
+dash) because the pump DP saturates the frontier, long chains hit a precision floor (beyond ~1.5
+cycles), and a long pumped plan is not yet end-to-end clean-DTM validated. The historic "band-1 plan
+bled to zero, 71% short" was a pipe-delivery artifact ([bug#2](../history/resolved-bugs.md)), not a
+modeling failure. Full detail: [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
 
 ## See also
 

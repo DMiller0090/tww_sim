@@ -20,10 +20,11 @@
   [mechanics/pumps](../mechanics/pumps.md), [model/planner](../model/planner.md).
 
 - **Re-enable mid-swim pumps.** Still disabled (`allow_pump=False`), but NOT because the entry anim is
-  mispredicted — the sim's ×598 landing is bit-exact vs clean DTM (an 11-pump build matched live,
-  2026-07-02). Remaining blockers: no cruise payoff (pumps help only in the build), the multi-pump
-  precision floor above, and end-to-end clean-DTM validation of a LONG pumped plan. →
-  [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
+  mispredicted (the sim's ×598 landing is bit-exact vs clean DTM, 11-pump build matched live 2026-07-02)
+  and NOT for lack of payoff — with `allow_pump=True` + the speed gate the planner recovers the optimal
+  200k plan (555 fr, 26 band-1 dips) offline with no phantom blowup. Remaining blockers: frontier
+  saturation, the multi-pump precision floor above, and end-to-end clean-DTM validation of a LONG
+  pumped plan. → [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
 
 - **Camera: f32 ω precision + auto-flip envelope + negative fine-band symmetry.** We read the s16
   yaw output exactly; the internal ω velocity is f32 (upstream). The auto-camera *flip* trigger

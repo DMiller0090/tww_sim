@@ -37,14 +37,19 @@ fixed window. This shapes the endgame: near D you should NOT boost (no frames to
 
 ## Why mid-swim pumps are off by default
 
-Mid-swim pumps (`neu→ess` re-entries) are disabled by default (`allow_pump=False`); neutral is
-planned as a single one-way **terminal dash** — a predictable exit from sustained ESS. Three reasons,
-none of which is a sim-modeling failure:
+Mid-swim pumps (`neu→ess` re-entries — the same move as a mid-cruise [neutral dip](../strategy/neutral-dip.md))
+are disabled by default (`allow_pump=False`); neutral is planned as a single one-way **terminal dash**.
+They **do** help at band-1 cruise: with `allow_pump=True` the planner recovers the optimal 200k plan
+(**555 fr, 26 dips**, −6 vs the 561-frame pump-free plan). They're off by default — not for lack of
+payoff, and not from any sim-modeling failure — for these reasons:
 
-- **No cruise payoff.** Pumps only preserve speed cheaply at LOW speed; exhaustive search finds no ESS
-  pump beats the pure neutral boost at cruise. Pumps pay in the
-  [build](../strategy/phase-ordering.md), not the cruise.
-- **Long-chain precision floor.** The sim models the [×598 scramble](../mechanics/pumps.md#the-x598-scramble)
+- **Frontier saturation.** The [×598 scramble](../mechanics/pumps.md#the-x598-scramble) lands a distinct
+  anim phase per entry, so the pump DP pins `max_frontier` (200k `allow_pump` run: frontier at 8000,
+  544/555 layers capped). It still finds the optimum, but the search is heavy.
+- **End-to-end validation pending.** A long pumped plan has not yet been re-validated via clean DTM.
+  (The [speed-retention prune](#search) keeps all 26 dips at gate 0.98 and prunes off-peak pump
+  landings, which should keep pumps sane — a promising path to re-enabling them.)
+- **Long-chain precision floor.** The sim models the ×598 scramble
   exactly — cold-start and short pump chains are bit-exact vs clean DTM (an 11-pump build matched live
   `v/anim/air/state`, `dan`=0.000) — but beyond ~1.5 pump cycles a ~1e-4 per-entry anim oscillation
   accumulates (~0.07 v/pump). See [open-questions](../history/open-questions.md).

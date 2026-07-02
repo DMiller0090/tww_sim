@@ -38,10 +38,10 @@ no-pump baseline (555 vs 561 frames), live-validated.
 
 ## Don't confuse with mid-swim ESS pumps
 
-A neutral dip is a state-54 frame carrying the exit-release speed (re-entry tax amortized across many
-dips). Mid-swim **ESS pumps** (neutral→ESS bursts) are off by default: the
-[x598 scramble](../mechanics/pumps.md#the-x598-scramble) makes their landed phase hypersensitive
-(though the sim models it exactly), and pumps give no cruise payoff — see
+A neutral dip is itself a `neu→ess` re-entry, so the planner treats it as a **pump** — mid-swim pumps
+are off by default (`allow_pump=False`), which is why the default planner emits a pump-free plan (561
+fr at 200k) and only `allow_pump=True` recovers the dip-laden optimum (555 fr, 26 dips). Off by default
+for frontier saturation + pending live validation, NOT lack of payoff — see
 [model/planner](../model/planner.md#why-mid-swim-pumps-are-off-by-default).
 
 ## See also
