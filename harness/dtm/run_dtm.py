@@ -8,14 +8,13 @@ WantDeterminism on and polls at the game's natural cadence -- no advanceseq pipe
 see pt-21 / SUPERSWIM_KNOWLEDGE bug#2).
 
 Generalizes harness/validate/validate_dtm.py, which was hardwired to action-seq files, the
-cold anchor, and a SwimState compare with a free-run-to-exhaustion read that races on
-SHORT movies. Here:
+cold anchor, and a SwimState compare. Here:
   - inputs are universal per-frame sticks (action lists convert via actions.acts_to_seq),
   - the anchor / template / expected are all parameters,
   - boot is detected by a readable charged/neutral slate (state 54/55), NOT the playing
     flag (which a short movie can flip before detection stabilizes), and
-  - the read is a DETERMINISTIC frame-step to movie exhaustion (drift-free, any length)
-    with a free-run 'exhaust' fallback for very long movies.
+  - the end state is read once the movie exhausts and the emulator pauses at the last frame
+    (PauseMovie, ensured by dolphin_env) -- exact and fast, no per-frame pipe stepping.
 
 Programmatic:
     from harness.dtm.run_dtm import run_dtm, sticks_from_actions
@@ -25,7 +24,7 @@ Programmatic:
 CLI:
     python run_dtm.py seq=plan3k_exact_seq.txt [game=<iso>] [anchor=<.sav>]
                       [expect_v=..] [expect_anim=..] [expect_air=..] [expect_state=..]
-                      [tol=0.02] [read=auto|step|exhaust] [norelaunch=0]
+                      [tol=0.02] [norelaunch=0]
 """
 import sys, os, time, math, json, shutil, subprocess
 # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
@@ -145,7 +144,7 @@ def _read_end(h, m):
 # --- the engine -----------------------------------------------------------------------
 def run_dtm(sticks, expected=None, *, game=None, anchor=DEFAULT_ANCHOR,
             template=DEFAULT_TEMPLATE, out=None, relaunch_dolphin=True,
-            polls=4, seed=1, bootsecs=180, read='auto', playsecs=360,
+            polls=4, seed=1, bootsecs=180, playsecs=360,
             min_air=800, tol=0.02, facing_tol=FACING_TOL_DEG, verbose=True):
     """Author -> play -> read -> compare. Returns an endpoint dict (see module docstring).
 
@@ -153,13 +152,10 @@ def run_dtm(sticks, expected=None, *, game=None, anchor=DEFAULT_ANCHOR,
     expected : optional dict, any of {v, anim, air, state, facing} (facing in DEGREES);
                v/anim/state/air compared within tol, facing cyclically within facing_tol.
     game     : iso path; if None, derived from the anchor's '@<isokey>' tag.
-    read     : 'exhaust' (resume + free-run until the movie exhausts; the emulator PAUSES at the
-                          last movie frame -- guaranteed by dolphin_env.ensure_pause_at_end -- so
-                          the read is exact and there is no per-frame pipe overhead: FAST default),
-               'step'    (advance one input frame at a time via the pipe; exact WITHOUT relying on
-                          PauseMovie, but ControlPipe's per-frame DoFrameStep wait makes it ~100x
-                          slower -- keep only for debugging / a machine that can't set PauseMovie),
-               'auto'    (== 'exhaust').
+    The end state is read at movie exhaustion: the movie free-runs and is read once playback
+    stops, which is exact because the emulator PAUSES at the last movie frame (PauseMovie, ensured
+    by relaunch via dolphin_env). No per-frame pipe stepping -- that paid ControlPipe's per-frame
+    DoFrameStep wait and ran ~100x slower.
     """
     anchor = resolve_anchor(anchor)
     game = (game or iso_for_anchor(anchor)).replace('\\', '/')
@@ -173,12 +169,10 @@ def run_dtm(sticks, expected=None, *, game=None, anchor=DEFAULT_ANCHOR,
         print(f"authored {os.path.basename(out)}: {info['frames']} fr, "
               f"{info['rows']} rows; anchor={os.path.basename(anchor)}")
 
-    mode = 'exhaust' if read == 'auto' else read
-
     if relaunch_dolphin:
         relaunch(verbose)
     D.control_pipe_quiet("playmovie", {"path": out.replace('\\', '/'), "game": game})
-    if verbose: print(f"playmovie {os.path.basename(out)} (read={mode})")
+    if verbose: print(f"playmovie {os.path.basename(out)}")
 
     # boot: wait for a readable swim slate (movie loaded the anchor). NOT the playing flag.
     t0 = time.time(); slate = None
@@ -197,25 +191,16 @@ def run_dtm(sticks, expected=None, *, game=None, anchor=DEFAULT_ANCHOR,
     start = {k: D.read_named(h0, m0, k) for k in
              ("potential_speed", "anim_frame", "air", "link_state")}
 
-    if mode == 'step':
-        # Deterministic: step one game frame at a time; the movie injects its inputs each
-        # poll. Stop exactly when the movie exhausts (playing flips false) -> no drift.
-        advanced = 0
-        for _ in range(nframes + seed + 8):       # a little headroom past the inputs
-            D.control_pipe_quiet("advance", {"frames": 1})
-            advanced += 1
-            if not _status().get("playing"):
-                break
-        ended = True
-    else:
-        D.control_pipe_quiet("resume")
-        t1 = time.time(); ended = False
-        while time.time() - t1 < playsecs:
-            if not _status().get("playing"):
-                ended = True; break
-            time.sleep(0.3)
-        D.control_pipe_quiet("pause")
-        advanced = None
+    # Read at exhaustion: free-run, read once playback stops. Exact because the emulator PAUSES at
+    # the last movie frame (PauseMovie, ensured by relaunch); no slow per-frame pipe stepping.
+    D.control_pipe_quiet("resume")
+    t1 = time.time(); ended = False
+    while time.time() - t1 < playsecs:
+        if not _status().get("playing"):
+            ended = True; break
+        time.sleep(0.3)
+    D.control_pipe_quiet("pause")
+    advanced = None
 
     h, m = D.attach()
     end = _read_end(h, m)
@@ -288,7 +273,6 @@ def main():
             game=o.get('game'),                 # default: derived from anchor's @isokey tag
             anchor=o.get('anchor', DEFAULT_ANCHOR),
             template=o.get('template', DEFAULT_TEMPLATE),
-            read=o.get('read', 'auto'),
             tol=float(o.get('tol', '0.02')),
             relaunch_dolphin=o.get('norelaunch', '0') not in ('1', 'true', 'yes'),
             bootsecs=int(o.get('bootsecs', '180')))

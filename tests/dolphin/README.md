@@ -74,11 +74,10 @@ the movie → compares v/anim/air/state/**facing**. Position (x/z) is wave-affec
 asserted. The iso is read from the anchor name, so no `game=` needed. `seq=NAME` resolves `NAME`
 under `fixtures/`; pass a path for files elsewhere, or raw sticks with `sticks=<csv>`.
 
-Playback defaults to the fast **`exhaust`** read: the movie free-runs and the end state is read once
-playback stops. This is exact only because the emulator **pauses at the last movie frame** — the
-relaunch enables *Pause at end of movie* (`dolphin_env.ensure_pause_at_end`) so this always holds.
-`read=step` (advance one frame at a time over the pipe) is exact without that setting but ~100× slower
-(ControlPipe waits per frame-step) — keep it only for debugging.
+Playback reads the end state once the movie free-runs to exhaustion. This is exact because the
+emulator **pauses at the last movie frame** — the relaunch enables *Pause at end of movie*
+(`dolphin_env.ensure_pause_at_end`) so this always holds. (Per-frame pipe stepping was removed: it
+paid ControlPipe's per-frame frame-step wait and ran ~100× slower.)
 
 ## Anchors
 

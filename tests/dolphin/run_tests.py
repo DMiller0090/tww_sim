@@ -84,7 +84,7 @@ def run_dtm_truth(seqfile, dtm_truth, live_dtm):
 
     truth = dict(dtm_truth)
     if live_dtm:
-        end = run_dtm(sticks, expected=truth, anchor=DEFAULT_ANCHOR, read='step', verbose=True)
+        end = run_dtm(sticks, expected=truth, anchor=DEFAULT_ANCHOR, verbose=True)
         c = end.get("compare", {})
         if not c.get("ok", False):
             print(f"      !! live run_dtm disagrees with recorded dtm_truth "
