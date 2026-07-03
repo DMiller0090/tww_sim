@@ -204,6 +204,12 @@ CASES = [
     _case('cold_pump_400k_f1500', 'grid', 400000, True, None, max_frontier=1500),
     _case('cold_pump_400k_f2500', 'grid', 400000, True, None, max_frontier=2500),
     _case('cold_pump_400k_f3000', 'grid', 400000, True, None, max_frontier=3000),
+    # does the non-monotonic valley generalize? 300k pump sweep vs base truth 705 @mf=8000
+    _case('cold_pump_300k_f1000', 'grid', 300000, True, None, max_frontier=1000),
+    _case('cold_pump_300k_f1500', 'grid', 300000, True, None, max_frontier=1500),
+    _case('cold_pump_300k_f2000', 'grid', 300000, True, None, max_frontier=2000),
+    _case('cold_pump_300k_f2500', 'grid', 300000, True, None, max_frontier=2500),
+    _case('cold_pump_300k_f3000', 'grid', 300000, True, None, max_frontier=3000),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
