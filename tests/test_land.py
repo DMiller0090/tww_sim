@@ -5,11 +5,33 @@ the FREE_WAIT->MOVE->WAIT state machine -- as a golden arc, without needing Dolp
 live sim-vs-live gate is tests/dolphin/run_land_tests.py::walk_run; this is its token-cheap
 offline shadow (same walk seq, same anchor rest seed, values pinned from land_walk_gt.csv).
 
-Pure offline. What is asserted tightly (nspeed/state) is decomp-faithful to the ULP; the
-position/speedF is the calibrated foot-plant stand-in (checked only loosely at the endpoint,
-matching the live test's +-3), so it is NOT pinned per-frame here.
+nspeed/state are decomp-faithful to the ULP. speedF/position is now BIT-EXACT too via the ported
+anim engine (superswim.anim.foot_speedf) -- the golden speedF/pos_z arc (land_walk_speedf.csv,
+live-captured) is pinned per-frame, but only WHEN the copyrighted anim keyframe data is present
+under _generated/anim/ (dev machines). Without it LandState falls back to the calibrated stand-in,
+so those two tests SKIP and only the loose endpoint check runs.
 """
+import csv
+import os
+
+import pytest
+
 from superswim.land import LandState, WAIT, FREE_WAIT, MOVE
+from superswim.anim.foot_speedf import FootSpeedF
+
+_ANIM = FootSpeedF.available()
+_GOLDEN = os.path.join(os.path.dirname(__file__), "golden", "land_walk_speedf.csv")
+
+
+def _load_golden():
+    rows = []
+    with open(_GOLDEN) as f:
+        for line in f:
+            if line.startswith("#") or line.startswith("f,"):
+                continue
+            fr, ns, msd, spF, pz = line.strip().split(",")
+            rows.append((int(fr), float(ns), float(msd), float(spF), float(pz)))
+    return rows
 
 # Anchor rest seed (land_flatwalk@twwgz): flat wall-free room, Link idle, csangle 0.
 SEED_POS_Z = 764.079
@@ -70,7 +92,30 @@ def test_decel_matches_cLib_addCalc():
 
 
 def test_end_position_within_tolerance():
-    # Calibrated foot-plant stand-in: endpoint within +-3 of the live 1278.25 (loose by design).
+    # Endpoint vs live 1278.25: bit-exact with the anim engine, +-3 calibrated stand-in without it.
     s, _ = _run()
     assert s.state == WAIT
-    assert abs(s.pos_z - 1278.25) < 3.0
+    tol = 0.05 if _ANIM else 3.0
+    assert abs(s.pos_z - 1278.25) < tol
+
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_speedf_matches_live_golden_bit_exact():
+    # Feed the live (ns, msd) arc into the ported posMoveFromFootPos and assert speedF reproduces
+    # the live-captured golden to float precision (isolates the anim engine from the nspeed sim).
+    golden = _load_golden()
+    drv = FootSpeedF(idle_frame=70.0)
+    for fr, ns, msd, spF, _pz in golden:
+        got = drv.step(ns, msd)
+        assert abs(got - spF) < 1e-3, f"frame {fr}: speedF {got} != golden {spF}"
+
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_pos_z_arc_bit_exact():
+    # Full LandState walk (its own bit-exact nspeed driving the anim engine) tracks the live
+    # golden pos_z every frame, not just the endpoint.
+    golden = _load_golden()
+    s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
+    for (sx, sy), (fr, _ns, _msd, _spF, pz) in zip(WALK_STICKS, golden):
+        s.step(sx, sy)
+        assert abs(s.pos_z - pz) < 0.05, f"frame {fr}: pos_z {s.pos_z} != golden {pz}"

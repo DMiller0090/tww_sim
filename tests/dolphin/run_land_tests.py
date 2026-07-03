@@ -41,7 +41,7 @@ from superswim.land import LandState
 
 ANCHOR = resolve_anchor("land_flatwalk@twwgz")
 READS = ["link_state", "potential_speed", "true_speed", "shape_angle_y",
-         "travel_angle", "csangle", "pos_x", "pos_z"]
+         "travel_angle", "csangle", "pos_x", "pos_z", "anim_frame"]
 
 
 def hold(sx, sy, n, buttons=0, triggerL=0):
@@ -99,7 +99,8 @@ def replay_sim_vs_live(seq):
     seed = {k: D.read_named(h, m, k) for k in READS}   # anchor's deterministic rest state
     sim = LandState(pos_z=seed["pos_z"], facing=int(seed["shape_angle_y"]),
                     travel=int(seed["travel_angle"]), csangle=int(seed["csangle"]),
-                    state=int(seed["link_state"]), nspeed=seed["potential_speed"])
+                    state=int(seed["link_state"]), nspeed=seed["potential_speed"],
+                    idle_frame=seed["anim_frame"])
     for el in seq:                                # C-stick full down => free cam, csangle 0
         for _ in range(el.get("frames", 1)):
             sim.step(el["stickX"], el["stickY"])
@@ -109,17 +110,21 @@ def replay_sim_vs_live(seq):
     return sim, live
 
 
-# SIM-vs-LIVE checks for walk_run: potential_speed (mNormalSpeed) + state are BIT-EXACT
-# (tight tol); position is the calibrated foot-plant stand-in (+-3, see superswim/land.py).
+# SIM-vs-LIVE checks for walk_run: nspeed + state BIT-EXACT; pos_z BIT-EXACT (tol 0.05) via the anim
+# engine when keyframe data is present, else the +-3 calibrated stand-in. See superswim/anim/foot_speedf.
 def walk_checks(sim, live):
     dv = abs(sim.nspeed - live["potential_speed"])
+    anim = sim._foot is not None
+    ptol = 0.05 if anim else 3.0
+    dpos = abs(sim.pos_z - live["pos_z"])
     return [
         (sim.state == int(live["link_state"]),
          f"state sim/live {sim.state}/{int(live['link_state'])} (both idle 4)"),
         (dv <= 0.02, f"potential_speed bit-exact  dv={dv:.5f}  "
                      f"(sim {sim.nspeed:.3f} / live {live['potential_speed']:.3f})"),
-        (abs(sim.pos_z - live["pos_z"]) < 3.0,
-         f"pos_z within 3 (calibrated)  sim {sim.pos_z:.2f} / live {live['pos_z']:.2f}"),
+        (dpos < ptol,
+         f"pos_z {'BIT-EXACT (anim)' if anim else 'within 3 (calibrated)'}  d={dpos:.4f}  "
+         f"sim {sim.pos_z:.3f} / live {live['pos_z']:.3f}"),
     ]
 
 

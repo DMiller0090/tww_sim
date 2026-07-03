@@ -17,14 +17,17 @@ WHAT IS BIT-EXACT vs WHAT IS CALIBRATED (read this before trusting a number)
   17 and the cLib_addCalc decel 17->14.5->12->9.5->7->4.5->2->0.2->0 fall straight out of
   setSpeedAndAngleNormal + setNormalSpeedF with the shipped HIO constants (0 fitting).
 * state machine (FREE_WAIT 5 -> MOVE 6 -> WAIT 4) and the two angles: reproduced.
-* `speedF` (true_speed) and hence POSITION: CALIBRATED, *not* bit-exact. On land the real
-  speedF is foot-plant/animation driven -- posMoveFromFootPos (2353) reads the walk anim's
-  foot-joint matrices, so an exact speedF needs the skeletal animation system (out of scope
-  for this increment). Instead speedF is modelled as a cLib chase toward mNormalSpeed
-  (SPEEDF_CHASE below), calibrated so the END position lands within the walk_run tolerance
-  and locked exactly at steady state. This mirrors how the swim sim treats af_drag
-  displacement: an un-validated byproduct, separate from the bit-exact potential speed.
-  => Trust nspeed/state/angles to the ULP; treat position as a +-3 model.
+* `speedF` (true_speed) and hence POSITION: BIT-EXACT (float, ~1e-5) when the anim engine is
+  available. On land the real speedF is foot-plant/animation driven -- posMoveFromFootPos (2353)
+  reads the walk anim's foot-joint matrices -- so it needs the ported J3D animation runtime
+  (superswim.anim: the BCK keyframe eval + reduced foot-chain FK + two-anim blend + oldframe-morf,
+  all FMA-faithful). superswim.anim.foot_speedf.FootSpeedF is that chain; LandState drives it each
+  frame and it reproduces speedF to ~1e-5 across accel/cruise/decel INCLUDING the standing->walk
+  entry and the stop. Its keyframe DATA (Link.arc/LkAnm.arc) is copyrighted and gitignored under
+  _generated/anim/, so it is dev-supplied: when absent, speedF FALLS BACK to a calibrated cLib
+  chase toward mNormalSpeed (SPEEDF_CHASE below), matching the END position within +-3 and locked
+  at steady state. => nspeed/state/angles are ULP-exact always; position is ~1e-5 with the anim
+  data present, a +-3 model without it.
 
 INPUT LATENCY: the game acts on the stick delivered 2 frames earlier (INPUT_DELAY). This one
 constant reproduces BOTH observed edges: forward accel starts on the 3rd up-frame and the
@@ -43,9 +46,13 @@ MOVE = 6          # daPyProc_MOVE_e         (ground locomotion)
 # Frames of controller-input latency: physics at frame f acts on the stick from frame f-2.
 INPUT_DELAY = 2
 
-# speedF->pos: CALIBRATED cLib chase toward mNormalSpeed, a stand-in for posMoveFromFootPos's
-# foot-plant (see module header). Matches the walk_run endpoint (+-3), not the transient shape.
+# speedF->pos FALLBACK: calibrated cLib chase toward mNormalSpeed, used only when the anim engine
+# (superswim.anim.foot_speedf) lacks keyframe data (endpoint +-3). With data, speedF is bit-exact.
 SPEEDF_CHASE = (0.5, 2.0, 1.4)   # (scale, maxStep, minStep) fit vs land_walk_gt.csv
+
+# Standing-idle FREEB frame-controller value at the land_flatwalk anchor (mFrameCtrlUnder[0]). It
+# sets the entry idle-drift phase for the anim engine; seed it from live for other anchors.
+DEFAULT_IDLE_FRAME = 70.0
 
 
 def cLib_addCalcAngleS(value, target, scale, max_step, min_step):
@@ -94,7 +101,8 @@ class LandState:
     F24 = f32(0.6)                  # speed cLib scale -> setNormalSpeedF param_2
 
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
-                 state=FREE_WAIT, nspeed=0.0, speedF=0.0):
+                 state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
+                 use_anim=True):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
         self.facing = int(facing) & 0xFFFF     # shape_angle.y (s16)
@@ -103,15 +111,32 @@ class LandState:
         self.target = 0                        # m34E8 (s16), set each frame by setStickData
         self.state = int(state)                # link_state / mCurProc
         self.nspeed = f32(nspeed)              # mNormalSpeed (potential_speed) -- bit-exact
-        self.speedF = f32(speedF)              # position-integrating speed -- CALIBRATED
+        self.speedF = f32(speedF)              # position-integrating speed
         self.msd = 0.0                         # mStickDistance
         # 2-frame controller-input buffer (index 0 = oldest = the input acted on this frame).
         self._inbuf = [(128, 128)] * INPUT_DELAY
+        # Anim-driven speedF: the ported posMoveFromFootPos chain (bit-exact position). None when
+        # disabled or the keyframe data is absent -> fall back to the SPEEDF_CHASE stand-in.
+        self._foot = None
+        if use_anim:
+            try:
+                from .anim.foot_speedf import FootSpeedF
+                self._foot = FootSpeedF(idle_frame=float(idle_frame))
+            except (FileNotFoundError, OSError, ImportError):
+                self._foot = None
 
     def clone(self):
         s = LandState.__new__(LandState)
         s.__dict__.update(self.__dict__)
         s._inbuf = list(self._inbuf)
+        # FootSpeedF is stateful; a shallow copy would alias it. Clones share nothing, so clone
+        # cannot preserve mid-walk anim state -- only clone at rest (pre-walk) where seeding matches.
+        if self._foot is not None and (s._foot is None or s._foot is self._foot):
+            from .anim.foot_speedf import FootSpeedF
+            try:
+                s._foot = FootSpeedF(idle_frame=self._foot.idle_frame)
+            except (FileNotFoundError, OSError, ImportError):
+                s._foot = None
         return s
 
     # --- stick layer (setStickData, 10530) -------------------------------------------------
@@ -221,15 +246,19 @@ class LandState:
                 self.state = WAIT
         # else WAIT/FREE_WAIT with no input: nspeed stays 0, no movement.
 
-        # speedF -> position (CALIBRATED foot-plant stand-in; see module header).
-        sc, mx, mn = SPEEDF_CHASE
-        self.speedF = cLib_addCalc(self.speedF, self.nspeed, sc, mx, mn)
-        if self.nspeed == 0.0 and self.speedF < 0.5:
-            self.speedF = 0.0                    # snap to a clean standstill at the WAIT edge
-        # world motion is |speedF| along travel (on the walk, travel = 0 => +z forward).
+        # speedF -> position via the bit-exact anim engine (ported posMoveFromFootPos), stepped every
+        # frame (advances the standing idle so the entry drift is exact); cLib chase only as fallback.
+        if self._foot is not None:
+            self.speedF = self._foot.step(self.nspeed, self.msd)
+        else:
+            sc, mx, mn = SPEEDF_CHASE
+            self.speedF = cLib_addCalc(self.speedF, self.nspeed, sc, mx, mn)
+            if self.nspeed == 0.0 and self.speedF < 0.5:
+                self.speedF = 0.0                # snap to a clean standstill at the WAIT edge
+        # world motion is speedF along travel (current.angle.y): speed.z = speedF*cos, x = speedF*sin.
         d = self.speedF
-        self.pos_x += f32(d * S.cM_scos_s16(0))            # placeholder axis math (travel=0)
-        self.pos_z += d
+        self.pos_x += f32(d * _cM_ssin_s16(self.travel))
+        self.pos_z += f32(d * S.cM_scos_s16(self.travel))
         return d, ("MOVE" if self.state == MOVE else "WAIT")
 
 
@@ -241,6 +270,11 @@ def _is_zero(x):
 def _dist_angle_s(a, b):
     # cLib_distanceAngleS: |signed s16 difference| (magnitude of the shortest turn).
     return abs(s16_signed(int(a) - int(b)))
+
+
+def _cM_ssin_s16(angle):
+    # cM_ssin on an s16 angle: sin(a) = cos(a - 0x4000). Reuses sim's baked console cos table.
+    return S.cM_scos_s16((int(angle) - 0x4000) & 0xFFFF)
 
 
 def run_walk(sticks, csangle=0, **seed):
