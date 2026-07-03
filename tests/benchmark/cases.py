@@ -162,6 +162,12 @@ CASES = [
     _case('cold_nopump_450k', 'grid', 450000, False, None),
     _case('cold_nopump_475k', 'grid', 475000, False, None),
     _case('cold_nopump_500k', 'grid', 500000, False, None),
+    # finer refill no-pump (parallel to refill_pump 50k granularity) + 1M no-pump ceiling check
+    _case('refill_nopump_250k',  'grid', 250000,  False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_350k',  'grid', 350000,  False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_450k',  'grid', 450000,  False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_550k',  'grid', 550000,  False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_1000k', 'grid', 1000000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
