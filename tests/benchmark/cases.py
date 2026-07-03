@@ -215,6 +215,11 @@ CASES = [
     _case('refill_pump_400k_f2000', 'grid', 400000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=2000),
     _case('refill_pump_400k_f2500', 'grid', 400000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=2500),
     _case('refill_pump_400k_f3000', 'grid', 400000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=3000),
+    # converge the grid curve at the mf=2500 sweet spot (vs mf=1000): catch improvements like 400k
+    _case('cold_pump_150k_f2500', 'grid', 150000, True, None, max_frontier=2500),
+    _case('cold_pump_250k_f2500', 'grid', 250000, True, None, max_frontier=2500),
+    _case('cold_pump_350k_f2500', 'grid', 350000, True, None, max_frontier=2500),
+    _case('cold_pump_450k_f2500', 'grid', 450000, True, None, max_frontier=2500),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
