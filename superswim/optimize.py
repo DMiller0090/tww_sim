@@ -33,12 +33,17 @@ def sig(st):
     that just paid a boost cost (lower x, but better anim) isn't pruned by raw x.
     Includes the 54<->55 transition-lag fields so neutral/ESS/pump states that look
     alike in (anim,v) but carry different pending transitions are NOT merged.
-    Air is NOT in the key: every action decrements air by 1, so the whole frontier
-    shares the same air at each generation."""
+    Air IS in the key. Without refill every action decrements air by 1 so the whole
+    layer shares one air value -> air is a per-layer constant and adding it to the key
+    is a no-op (bucketing byte-identical, all validated baselines unchanged). WITH air
+    refill (air pinned to 900 while -x <= refill_until) air is NO LONGER layer-constant:
+    states that crossed the refill boundary at different frames carry different air and
+    different futures, so omitting air would unsoundly MERGE them. Keeping air in the key
+    makes the refill regime correct at zero cost to the non-refill case."""
     return (round(st.anim / 0.03), round(st.v / 0.1),
             st._pending_flip, round(st._pending_gain),
             int(round(st.heading / math.pi)) & 1, st._entry_tax,
-            st.state, st._pending_state, st._just_released, st._skip_advance)
+            st.state, st._pending_state, st._just_released, st._skip_advance, st.air)
 
 def beam_search(frames, v, anim, air, beam=4000, entry_tax=True):
     seed = S.SwimState(v=v, anim=anim, air=air); seed._entry_tax = entry_tax

@@ -51,3 +51,10 @@
 
 - **HIO constant provenance.** Not all `m_HIO->mSwim` magic constants are resolved to decomp names. →
   [reference/constants](../reference/constants.md), [reference/addresses](../reference/addresses.md).
+
+- **Air-refill model vs live.** The planner's `refill_air` regime (air pinned to 900 in the refill
+  zone, ~900-frame budget after) is a user-specified 1-D approximation whose savings/enabling
+  numbers are **sim-derived, not live-DTM-verified** — needs live validation. And the 1-D sim has no
+  x/z coordinates, so **mid-cruise / multiple refills** along a real route are out of scope (it can
+  only model one refill pinned at the start). →
+  [model/planner](../model/planner.md#air-refill--the-far-swim-regime-sim-model).

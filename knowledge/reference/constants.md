@@ -93,6 +93,7 @@ exit and the x598 scramble; using `math.cos` breaks bit-exactness. See [glossary
 |----------|-------|--------|
 | Max air | **900** | reset on swim entry (`changeSwimProc`, d_a_player_swim.inc:126) | 
 | Air drain | **−1 / frame** | live |
+| Cold-swim air budget | **≈ 900 frames** | 900 air ÷ 1/frame — a cold cruise from full air lasts this long before drowning; the planner enforces it (`allow_drown=False`) | derived |
 
 ## Turnaround / arrow angular budget
 

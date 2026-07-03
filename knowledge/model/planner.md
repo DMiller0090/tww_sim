@@ -19,8 +19,21 @@ fixed window. This shapes the endgame: near D you should NOT boost (no frames to
 
 - **Beam search** over the per-frame {ESS, charge} decision space (`optimize.py`), keeping
   anim-phase diversity so a state that just paid a boost (lower x, better anim) isn't pruned by raw
-  x. Air is omitted from the dominance key — every action decrements air by 1, so the whole frontier
-  shares the same air per generation. Anim bucket = 0.03.
+  x. Anim bucket = 0.03.
+- **`air` is in the dominance key** (`optimize.sig()`). Without [refill](#air-refill--the-far-swim-regime-sim-model),
+  every action decrements air by 1, so a whole DP layer shares one air value — air is a per-layer
+  constant and including it in the key is a no-op (bucketing byte-identical; all baselines unchanged,
+  110 pytest pass). **With** refill, air is pinned at [900](../reference/constants.md#air) inside the
+  refill zone, so two states in the same layer that *left* the refill zone at different frames carry
+  different air and different futures. Omitting air would then unsoundly **merge** them, so it must be
+  in the key.
+- **Air-budget (drowning) enforcement** (`plan_min_frames(..., allow_drown=False)`, default): any
+  successor with `air < 0` is dropped. The sim's `step()` is a pure physics stepper with no `air ≤ 0`
+  check — air just goes negative and it keeps computing — so without this the planner emits far-dest
+  "solutions" that actually drown (a non-refill 500k "reached" with `end_air = −7`, impossible). With
+  enforcement such dests correctly return not-reached (`frames=None`), the signal that the swim needs
+  a [refill](#air-refill--the-far-swim-regime-sim-model). Non-refill ≤ 400k are unaffected (they
+  arrive with air to spare, e.g. 400k `end_air ≈ 84`).
 - **Speed-retention prune** (`plan_min_frames`, default `speed_gate=0.98`): drop any successor that
   keeps < 98% of the parent's `|v|`, relaxing to 90% (`speed_gate_end`) inside the last ~40 estimated
   frames so the terminal neutral dash still enters. Only speed LOSSES are pruned — charge/reboost
@@ -79,6 +92,32 @@ scales with seed speed (a fast seed is already cruising → pumps never help →
 Project at current velocity for N frames, then **0.75× speed on landing** + 27-frame resurface
 (−3/frame), forced air refill to 900. Decomp confirms the 0.75 landing multiplier
 (`mNormalSpeed *= 0.75f`, d_a_player_swim.inc:137) and the 900 air reset (line 126).
+
+## Air refill — the far-swim regime (SIM MODEL)
+
+> **Status: sim-model-derived, NOT live-DTM-verified.** The refill *rule* below is a user-specified
+> 1-D approximation, and every number in this section is an illustrative sim result — treat it as a
+> planner model, not validated game truth.
+
+**Model** (`plan_min_frames(..., refill_air=True, refill_until=X)`): air is pinned to
+[900](../reference/constants.md#air) while forward progress `-x ≤ X`, then depletes −1/frame as
+normal. It models building a swim "pinned back at the start" on an air-refill spot, then committing
+to a single cruise. From full air a cold cruise lasts the ~900-frame [air budget](../reference/constants.md#air).
+
+Sim-model findings (illustrative, not live-verified):
+
+- **Benefit scales with distance:** ~1.5% frames saved at 100k, ~3.8% at 200k (higher sustained air
+  → less [head-bob/air drag](../mechanics/animation.md) → faster true speed).
+- **Simplifies plans:** fewer [neutral dips](../strategy/neutral-dip.md) — e.g. 200k drops 35 → 27
+  dips (103 → 60 neutral frames) because high air already keeps drag low.
+- **Enabling at the far end (not a percentage):** non-refill drowns around ~450–500k (500k non-refill
+  ends at air = −7); a refill plan reaches 500k with ~411 air to spare, and 600k is reachable — build
+  to high speed "for free" at the pinned-back spot, then cruise within the ~900-frame budget.
+- The **real TAS swim regime is ~200k–600k**, i.e. squarely where refill matters.
+
+**Out of scope / open:** mid-cruise or *multiple* refills are a real, opportunistic thing the 1-D sim
+cannot model — it has no x/z coordinates, so it cannot place refill spots along the route. See
+[open-questions](../history/open-questions.md).
 
 ## See also
 

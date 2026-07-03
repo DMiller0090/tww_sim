@@ -108,7 +108,7 @@ class Layer:
         count is part of the key so a low-pump state isn't merged away by a higher-
         forward high-pump state at the same physical sig (preserves the pump-capped
         option). When pumps aren't tracked (_pumps absent) this collapses to plain sig."""
-        k = (sig(state), getattr(state, '_pumps', 0))
+        k = (sig(state), getattr(state, '_pumps', 0), getattr(state, '_dipped', False))
         j = self.index_of.get(k)
         if j is None:
             self.index_of[k] = len(self.nodes)
@@ -137,9 +137,9 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
                     max_frontier=8000, cap=4000, entry_tax=True, rank='astar',
                     allow_pump=False, pump_chg=False, cold_start=False, verbose=True,
                     seed_state=None, max_pumps=None, refill_air=False, refill_until=0.0,
-                    pump_eff_gate=0.0,
+                    pump_eff_gate=0.0, dip_latch=False, allow_drown=False,
                     speed_gate=0.98, speed_gate_end=0.90, end_window_frames=40,
-                    cold_mrate=None):
+                    gate_coeff=None, cold_mrate=None):
     """Forward DP: fewest frames to reach forward distance `dest` (= -x).
 
     HYBRID frontier control. A layer whose dominated frontier fits in
@@ -166,8 +166,20 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
     `cold_mrate`: for a real cold start, the savestate's LOGGED move0 mRate (anchor 0.5, slate 0.5472;
       history-dependent, measure live). Seeds the bit-exact ColdStartSwimState scramble; without it a
       cold_start build uses the base +1.0 approximation and falls short live. See coldstart.py.
+    `allow_drown` (default False): if False, a successor whose `air` would go < 0 is dropped -- the swim
+      can only last within its ~900-frame air budget (air refill pins air to 900 in the refill zone).
+      Prevents the planner emitting far-dest plans (~450k+ non-refill) that actually drown; such dests
+      then correctly return frames=None (need a refill). Set True to allow the old unbounded behaviour.
+    `gate_coeff` (default None): if set, the speed-gate threshold becomes CONTINUOUS -- clamp(1 -
+      gate_coeff/est_frames, speed_gate_end, speed_gate) -- instead of the 2-step (speed_gate far,
+      speed_gate_end inside end_window_frames). Derived from how a 1-frame |v| loss compounds over the
+      remaining frames; loosens the gate smoothly as the destination nears. On tested cases it is
+      loss-free but equivalent to the 2-step (the 0.98 floor is already well-placed); kept as an option.
+    `dip_latch` (default False): EXPERIMENTAL fast mode -- once a state takes a neutral dip, forbid
+      `chg` for the rest of that path (dipped states never re-charge in known optima). ~12-13% fewer
+      expansions but LOSSY at some dests (100k: 397->398); an optional speed/quality knob, not a default.
 
-    Returns dict: actions, frames, reached, end_state, frontier_sizes, capped_layers.
+    Returns dict: actions, frames, reached, end_state, frontier_sizes, capped_layers, stats.
     """
     rank_key = ((lambda b: _hcost(b[1], dest)) if rank == 'astar'
                 else (lambda b: -b[0]))
@@ -225,6 +237,10 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
                 allowed = tuple(a for a in actions if a != 'chg')
             else:
                 allowed = actions
+            # EXPERIMENTAL dip-latch: once a path dips, forbid chg for the rest of it (optima
+            # never re-charge after dipping). ~13% fewer nodes, lossy at some dests. See planner.md.
+            if dip_latch and getattr(st, '_dipped', False):
+                allowed = tuple(a for a in allowed if a != 'chg')
             # EXPERIMENTAL: gate ESS-pump re-entry on the predicted x598-landed efficiency (peak =
             # 2nd-order robust to the scramble). 2-frame lookahead. See model/planner.md.
             if (pump_eff_gate > 0.0 and act_in == 'neu' and st.state == 54
@@ -237,18 +253,30 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
                 c = st.clone()
                 c.step(act)
                 expanded += 1
+                # AIR BUDGET: swim lasts only while air >= 0 (~900-frame budget; refill pins 900 in
+                # the refill zone). Drop air<0 successors -- they'd drown. See model/planner.md.
+                if not allow_drown and c.air < 0:
+                    continue
                 # Speed-retention prune: drop successors keeping < speed_gate of parent |v| (relax to
                 # speed_gate_end near the end). Prunes only losses. See model/planner.md.
                 if apply_speed_gate and speed_gate > 0.0 and abs(st.v) > 1.0 and abs(c.v) < abs(st.v):
                     remaining = dest - (-c.x)
                     est_frames = remaining / max(abs(c.v), 1.0)
-                    thr = speed_gate_end if est_frames < end_window_frames else speed_gate
+                    if gate_coeff is not None:
+                        # CONTINUOUS gate: clamp(1 - gate_coeff/est_frames, end, gate) -- loosens as
+                        # dest nears (a loss compounds over est_frames). See model/planner.md.
+                        thr = min(speed_gate, max(speed_gate_end,
+                                                  1.0 - gate_coeff / max(est_frames, 1.0)))
+                    else:
+                        thr = speed_gate_end if est_frames < end_window_frames else speed_gate
                     if abs(c.v) < thr * abs(st.v):
                         gate_pruned += 1
                         continue
                 if max_pumps is not None:
                     # a pump = re-entry from neutral back into a swim input (neu -> ess/chg)
                     c._pumps = getattr(st, '_pumps', 0) + (1 if act_in == 'neu' and act != 'neu' else 0)
+                if dip_latch and (act == 'neu' or getattr(st, '_dipped', False)):
+                    c._dipped = True        # sticky: latch persists through the dip's ess re-entry
                 layer.offer(-c.x, c, pi, act)
         return layer, expanded, gate_pruned
 
@@ -259,6 +287,10 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
             # gate would dead-end the frontier -> retry ungated (discard the gated attempt's counts)
             layer, expanded, gate_pruned = _build_layer(cur, False)
             stats['ungated_retries'] += 1
+        if not layer.nodes:
+            # Frontier died (all successors drowned, air<0) -> dest unreachable within the air
+            # budget: stop and report not-reached (frames=None). Needs a refill. See planner.md.
+            break
         stats['nodes_expanded'] += expanded
         stats['nodes_gate_pruned'] += gate_pruned
         # offered (= expanded - gate_pruned) minus unique sigs kept = merged by dominance
