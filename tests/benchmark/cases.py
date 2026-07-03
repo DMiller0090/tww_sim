@@ -232,6 +232,10 @@ CASES = [
     _case('cold_pump_250k_f2000', 'grid', 250000, True, None, max_frontier=2000),
     _case('cold_pump_350k_f2000', 'grid', 350000, True, None, max_frontier=2000),
     _case('cold_pump_450k_f2000', 'grid', 450000, True, None, max_frontier=2000),
+    # broaden the mf=2000-optimality evidence: 100k non-refill (base truth 397 @8000) + refill far
+    _case('cold_pump_100k_f2000',   'grid', 100000, True, None, max_frontier=2000),
+    _case('refill_pump_500k_f2000', 'grid', 500000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=2000),
+    _case('refill_pump_600k_f2000', 'grid', 600000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=2000),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
