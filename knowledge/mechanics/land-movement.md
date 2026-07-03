@@ -4,15 +4,15 @@
 brakeslide / extended brakeslide (EBS)? Why does holding ESS left/right preserve speed "almost
 forever"? Is speed preservation governed by facing or travel?
 **Status:** validated live (2026-07-04). The **flat-ground walk, the ATN_MOVE tier (brakeslide /
-EBS / facing decouple / brake), AND the forward roll (FRONT_ROLL, entry→standstill) are fully
-simulated** (`superswim.land`): `mNormalSpeed` (signed), the proc state machine, **facing
-(`shape_angle.y`) and travel (`current.angle.y`) are all BIT-EXACT** vs live, and the walk + roll
-`speedF`/position is bit-exact too (d≈0.0001, via the ported J3D anim engine — see below). Locked by
-`tests/dolphin/run_land_tests.py`: **8 sim-vs-live cases** (nspeed dv=0.00000, facing/travel
-d=0.0000°). Position is asserted bit-exact for the on-axis walk and the full roll (which stay in
-MOVE/FRONT_ROLL); runs that visit ATN_MOVE use the calibrated position fallback (the `ANM_ATN*` foot
-anims are not ported — they don't affect the velocity/state/facing physics, which are the tech).
-Anchor `land_flatwalk@twwgz.sav`.
+EBS / facing decouple / brake), AND the forward roll (FRONT_ROLL — entry→standstill and the
+frame-perfect roll-EBS exit) are fully simulated** (`superswim.land`): `mNormalSpeed` (signed), the
+proc state machine, **facing (`shape_angle.y`) and travel (`current.angle.y`) are all BIT-EXACT** vs
+live, and the walk + roll `speedF`/position is bit-exact too (d≈0.0001, via the ported J3D anim
+engine — see below). Locked by `tests/dolphin/run_land_tests.py`: **9 sim-vs-live cases** (nspeed
+dv=0.00000, facing/travel d=0.0000°) + the `wiggle_ebs_roll` DTM-playback lock. Position is asserted
+bit-exact for the on-axis walk and the full roll (which stay in MOVE/FRONT_ROLL); runs that visit
+ATN_MOVE use the calibrated position fallback (the `ANM_ATN*` foot anims are not ported — they don't
+affect the velocity/state/facing physics, which are the tech). Anchor `land_flatwalk@twwgz.sav`.
 **Source:** live captures (`harness/capture/land_capture.py`, cross-checked advancewith == advanceseq
 == DTM movie); decomp `d_a_player_main.cpp` proc enum + `setSpeedAndAngleNormal`/`setNormalSpeedF` +
 `setSpeedAndAngleAtn`/`setSpeedAndAngleAtnBack` + `setBlendAtnMoveAnime` (mDirection machine) +
@@ -152,19 +152,23 @@ Press **A** (the "do" button, `dActStts_ATTACK_e`) while moving on the ground �
 - **Duration:** state 30 while the `ANM_ROLLF` frame ctrl runs ~0→17 (`mRoll.field_0x10`, rate 1.1,
   ≈18 frames), then `checkNextMode(1)` exits to MOVE carrying the speed, which decels to a stop
   (a full-run roll travels ≈ **760 units** — pos_z 764→1525 on the flat anchor).
-- **Frame-perfect EBS out of a roll (~−23):** HOLD **L + full-down through the roll** so it exits
-  *straight to ATN_MOVE* at the full 26 (skipping the roll→MOVE decel), then **release L into ESS-down**
+- **Frame-perfect EBS out of a roll (~−23):** HOLD **L + full-down through the roll**. Because the
+  stick is pushed, the `getFrame()>17` (`field_0x10`) early-turn `checkNextMode(1)` fires *one frame
+  before* the anim-end exit — and since L is held it routes to **ATN_MOVE at the full 26** (skipping
+  both the `getRate<0.01` branch's `−5` and the roll→MOVE walk decel). Then **release L into ESS-down**
   → the ATN backward-flip preserves it as **≈ −23.1** speed (state 6 EBS). A one-frame window — release
   a frame late and the roll→MOVE decel bleeds it to ~−18; a frame early and it dead-stops. This combo
   (huge negative speed from a roll) is a prime seam-clip setup.
 - Rolling **into a wall** → `procFrontRollCrash` (needs `speedF ≥ 10` = `field_0x3C`); inert on flat
   wall-free ground.
 - **Simulated** (`superswim.land`, `step` with A = button `0x100`): the roll is **fully bit-exact,
-  entry to standstill** (`roll_run`/`roll_slow`/`roll_settle` are all sim-vs-live, pos_z d≈0.0001).
-  Duration = the `ANM_ROLLF` frame ctrl running 0→`field_0x0` (19) at rate 1.1 (~18 frames); with a
-  neutral stick the `getFrame()>17` early-turn exit is inert (`checkNextMode(1)` returns false when
-  not moving), so the roll runs to the anim end, then `mNormalSpeed -= 5.0` (26→21) and MOVE decels
-  to a stop.
+  entry to standstill AND the roll-EBS exit** (`roll_run`/`roll_slow`/`roll_settle`/`roll_ebs` are all
+  sim-vs-live, pos_z d≈0.0001, roll-EBS speed −23.109 bit-exact). Duration = the `ANM_ROLLF` frame ctrl
+  running 0→`field_0x0` (19) at rate 1.1 (~18 frames). Two exits: with a **neutral** stick the
+  `getFrame()>17` early-turn `checkNextMode(1)` is inert (returns false when `msd≤0.05` and no action
+  button), so the roll runs to the anim end (`getRate<0.01`), takes `mNormalSpeed -= 5.0` (26→21), and
+  MOVE decels to a stop; with a **pushed** stick that early exit fires one frame sooner (no `−5`) and
+  routes via `checkNextMode` to ATN_MOVE (L held) or MOVE — this is the roll-EBS above.
   - **The low-speed post-roll tail** (`nspeed < 17`, where the walk foot-plant `m3598 > 0` resumes)
     is bit-exact because `posMoveFromFootPos` runs *every* frame — including the roll — so the foot
     engine poses `ANM_ROLLF` (a `setSingleMoveAnime`, MOVE0=rollf, MOVE1=NULL, `m34C3=0`) throughout
@@ -175,7 +179,6 @@ Press **A** (the "do" button, `dActStts_ATTACK_e`) while moving on the ground �
     frame then reads the correct roll-warmed `m359C` via the 0.3/0.7 recursive smoothing. Foot engine:
     `superswim/anim/foot_speedf.py` `enter_roll`/`step_roll`; `rollf` keyframe data added to the
     gitignored `_generated/anim/` set (frameMax 19, `EMode_NONE`, decShift 2).
-  - Still a live-lock: `roll_ebs` (Tier B — needs the roll→ATN exit routing, not yet simulated).
 
 ## Wiggle EBS + L+Up cancel → chained roll (speed-preservation combo)
 
@@ -229,7 +232,7 @@ signature (the two roll speeds, the −23 wiggle plateau, and the final `pos_z 2
   the `mDirection` machine + `checkNextMode` transitions; `step(sx, sy, buttons, triggerL)`);
   `superswim.anim` (`foot_speedf.FootSpeedF` + the J3D engine) — the bit-exact walk `speedF`;
   `tests/test_land.py` (offline golden walk arc + the ATN + roll end-state cases) +
-  `tests/dolphin/run_land_tests.py`: **8 sim-vs-live** cases (walk + 4 ATN + roll_run/roll_slow/roll_settle:
-  nspeed/facing/travel bit-exact; walk, mid-roll, and full roll-to-standstill pos_z bit-exact) **plus
-  1 roll `LIVE_CASE`** (`roll_ebs`, Tier B roll→ATN routing) and the `wiggle_ebs_roll` DTM-playback lock.
+  `tests/dolphin/run_land_tests.py`: **9 sim-vs-live** cases (walk + 4 ATN + roll_run/roll_slow/roll_settle/
+  roll_ebs: nspeed/facing/travel bit-exact; walk, mid-roll, and full roll-to-standstill pos_z bit-exact)
+  plus the `wiggle_ebs_roll` DTM-playback lock.
 - `_notes/tww-sim-architecture-design.md` §5/§5b — how land folds into the generalized proc-machine sim.

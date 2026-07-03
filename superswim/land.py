@@ -139,8 +139,9 @@ class LandState:
     ROLL_RATE = f32(1.1)            # field_0x8 = ANM_ROLLF frame-ctrl rate (mFrameCtrlUnder[MOVE0])
     ROLL_ENTRY_MORF = 2.0           # field_0x14 = setSingleMoveAnime i_morf at roll entry
     MOVE_REENTRY_MORF = 2.4         # mBasic.field_0xC = procMove_init setBlendMoveAnime morf (roll->walk)
-    # (field_0x10=17 is the getFrame()>17 -> checkNextMode(1) early-turn exit, inert with a neutral
-    # stick (4457 returns false), so the roll runs to ROLL_END; the moving-stick early exit is Tier B.)
+    ROLL_EARLY = f32(17.0)          # field_0x10 = getFrame()>this -> checkNextMode(1) moving-stick exit
+    # (with a neutral stick checkNextMode(1) is inert -- 4457 returns false when msd<=0.05 and no action
+    # button -- so a neutral roll runs to ROLL_END; a held stick exits one frame early, e.g. the roll-EBS.)
 
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
@@ -399,24 +400,33 @@ class LandState:
         if self._foot is not None:
             self._foot.enter_roll(morf=self.ROLL_ENTRY_MORF)
 
-    def _proc_roll(self):
-        """One FRONT_ROLL frame: speed is constant momentum (position uses speedF = mNormalSpeed, NO
-        foot-plant), the ANM_ROLLF frame ctrl advances at ROLL_RATE from 0. When it reaches the anim
-        end (ROLL_END) the anim completes and the roll ends (getRate()<0.01 branch): if the stick is
-        neutral, mNormalSpeed -= field_0x20 (the observed 26->21 drop, 6862), then MOVE decels to a
-        stop. The entry frame doesn't advance the ctrl (matches the live 0-at-entry counter)."""
+    def _proc_roll(self, l_held):
+        """One FRONT_ROLL frame (procFrontRoll 6851): speed is constant momentum (position uses
+        speedF = mNormalSpeed, NO foot-plant), the ANM_ROLLF frame ctrl advances at ROLL_RATE from 0.
+        Two exits: (a) the anim completes (getRate()<0.01, frame reaches ROLL_END) -> if the stick is
+        neutral, mNormalSpeed -= field_0x20 (the 26->21 drop, 6862), then checkNextMode(0); (b) with a
+        PUSHED stick the getFrame()>field_0x10 early-turn fires checkNextMode(1) one frame sooner (no
+        -field_0x20), routing to ATN_MOVE while L is held -- the roll-EBS that catches the full 26
+        before the decel. checkNextMode picks the next proc (ATN if L else MOVE). Entry frame: no advance."""
         if self._roll_entered:                   # entry frame: ctrl stays at 0, no exit check
             self._roll_entered = False
             return
         self.roll_frame = f32(self.roll_frame + self.ROLL_RATE)
-        if self.roll_frame >= self.ROLL_END:     # anim reached its end -> exit to MOVE
+        if self.roll_frame >= self.ROLL_END:     # getRate()<0.01: anim complete
             if self.msd <= 0.05:
                 self.nspeed = f32(self.nspeed - self.ROLL_MIN)
-            self.state = MOVE
-            # roll->MOVE: procMove_init calls setBlendMoveAnime(mBasic.field_0xC). Because the roll
-            # left m34C3==0, the walk blend re-inits its frame ctrl to 0 and re-triggers the morf.
-            if self._foot is not None:
-                self._foot._pending_morf = self.MOVE_REENTRY_MORF
+            self._roll_exit(l_held)
+        elif self.roll_frame > self.ROLL_EARLY and self.msd > 0.05:
+            # getFrame()>field_0x10 with a pushed stick: checkNextMode(1) is NOT inert -> exit early.
+            self._roll_exit(l_held)
+
+    def _roll_exit(self, l_held):
+        """The roll's checkNextMode transition. -> ATN_MOVE if L held (procAtnMove_init), else MOVE
+        (procMove_init). On the MOVE path arm the walk re-entry morf; the walk blend re-inits its
+        frame ctrl to 0 because the roll left m34C3==0 (see enter_roll)."""
+        self._check_next_mode(l_held)            # sets state (MOVE/ATN_MOVE) + mMaxNormalSpeed
+        if self.state == MOVE and self._foot is not None:
+            self._foot._pending_morf = self.MOVE_REENTRY_MORF
 
     # --- proc dispatch + per-frame step ----------------------------------------------------
     def step(self, sx, sy, buttons=0, triggerL=0):
@@ -445,18 +455,19 @@ class LandState:
             self._roll_init()
 
         # dispatch the active proc's speed/angle update
-        if self.state == MOVE:
+        proc = self.state                        # dispatch-time proc (may transition below)
+        if proc == MOVE:
             self._set_speed_and_angle_normal(self.F0, attention_lock=l_held)
-        elif self.state == ATN_MOVE:
+        elif proc == ATN_MOVE:
             self._visited_atn = True
             self._set_speed_and_angle_atn()
-        elif self.state == FRONT_ROLL:
-            self._proc_roll()
+        elif proc == FRONT_ROLL:
+            self._proc_roll(l_held)              # calls checkNextMode itself on its exit frame
         # WAIT/FREE_WAIT: idle, nspeed stays put.
 
-        # checkNextMode: transition arbiter (runs after the proc). Then setBlendAtnMoveAnime's
-        # direction update for the next ATN frame (also fires at ATN entry).
-        if self.state in (MOVE, ATN_MOVE):
+        # checkNextMode: procMove/procAtnMove call it after their physics (procFrontRoll already did).
+        # Then setBlendAtnMoveAnime's direction update for the (possibly just-entered) ATN frame.
+        if proc in (MOVE, ATN_MOVE):
             self._check_next_mode(l_held)
         if self.state == ATN_MOVE:
             self._update_atn_direction()

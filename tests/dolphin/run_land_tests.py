@@ -1,18 +1,16 @@
-"""LAND-movement regression, three categories: SIM-vs-LIVE (walk + 4 ATN techs + 3 roll cases),
-LIVE-LOCK (roll_ebs), and DTM-PLAYBACK (the wiggle-EBS-into-roll combo).
+"""LAND-movement regression, two categories: SIM-vs-LIVE (walk + 4 ATN techs + 4 roll cases) and
+DTM-PLAYBACK (the wiggle-EBS-into-roll combo).
 
-SIM-vs-LIVE (walk_run + brakeslide/ebs/face_left/brake_right + roll_run/roll_slow/roll_settle): seed
-a `superswim.land.LandState` from the live frame-0 snapshot, step the sim over the input burst
+SIM-vs-LIVE (walk_run + brakeslide/ebs/face_left/brake_right + roll_run/roll_slow/roll_settle/roll_ebs):
+seed a `superswim.land.LandState` from the live frame-0 snapshot, step the sim over the input burst
 (stick + L-target + A), and compare the END state against the game replayed via one race-free
 `advanceseq`. mNormalSpeed (signed potential_speed), the proc state machine, facing (shape_angle.y)
-and travel (current.angle.y) are all BIT-EXACT. Position (pos_z) is bit-exact for the on-axis walk
-(stays in MOVE), mid-roll (momentum), and the full roll-to-standstill (roll_settle: the foot engine
-poses ANM_ROLLF through the roll so the toe stream is warm at the roll->walk tail); runs that visit
-ATN_MOVE use the calibrated position fallback (ANM_ATN* unported) and pos is not asserted. Each case
-also layers its tech assertions.
-
-LIVE-LOCK (roll_ebs): the roll is simulated, but roll_ebs needs the roll->ATN exit routing (Tier B),
-so it stays an immutable live lock (replay live, assert the game's captured end-state) until it lands.
+and travel (current.angle.y) are all BIT-EXACT -- including roll_ebs, whose ~-23.109 preserved speed
+comes from the roll's getFrame()>17 checkNextMode(1) exit straight to ATN then the backward-flip.
+Position (pos_z) is bit-exact for the on-axis walk (stays in MOVE), mid-roll (momentum), and the full
+roll-to-standstill (roll_settle: the foot engine poses ANM_ROLLF through the roll so the toe stream is
+warm at the roll->walk tail); runs that visit ATN_MOVE use the calibrated position fallback (ANM_ATN*
+unported) and pos is not asserted. Each case also layers its tech assertions.
 
 DTM-PLAYBACK (wiggle_ebs_roll): the wiggle-EBS-into-roll chain is DENSE frame-perfect input, where
 the advanceseq pipe could jitter (bug#2). It is locked by loading a movie-active savestate fixture
@@ -115,24 +113,6 @@ def replay_sim_vs_live(seq):
     h, m = D.attach()
     live = {k: D.read_named(h, m, k) for k in READS}
     return sim, live
-
-
-def replay_live(seq):
-    """LIVE-ONLY (no sim yet). Load the anchor, replay the seq via one race-free advanceseq, and
-    return the live end-state as an `e` dict (v/facing/travel/face_trav). For techs whose sim is not
-    built -- currently the roll (FRONT_ROLL) tier -- these are immutable live-behavior locks, exactly
-    like the ATN cases were pre-sim; flip them to sim-vs-live once superswim.land models the roll."""
-    D.control_pipe_quiet("clearinput")
-    D.control_pipe_quiet("savestate", {"action": "load", "path": ANCHOR.replace('\\', '/')})
-    h, m = D.attach()
-    D.control_pipe_quiet("advanceseq", {"port": 0, "seq": seq})
-    h, m = D.attach()
-    live = {k: D.read_named(h, m, k) for k in READS}
-    return {"link_state": int(live["link_state"]), "v": abs(live["potential_speed"]),
-            "pot": live["potential_speed"], "facing": deg(live["shape_angle_y"]),
-            "travel": deg(live["travel_angle"]),
-            "face_trav": abs(sdiff_deg(live["shape_angle_y"], live["travel_angle"])),
-            "pos_z": live["pos_z"]}
 
 
 def replay_dtm_trajectory(sav, nframes):
@@ -244,15 +224,11 @@ CASES = [
         (e["link_state"] == 4, f"state 4 (idle/stopped)  [{e['link_state']}]"),
         (e["v"] < 0.5, f"|v|~0 stopped  [{e['v']:.2f}]"),
     ]),
-]
-
-
-# LIVE-ONLY lock (immutable): roll_ebs (Tier B: roll->ATN exit routing, not yet simulated). See
-# land-movement.md. (roll_settle graduated to a SIM-vs-LIVE case once ANM_ROLLF posing landed.)
-LIVE_CASES = [
+    # frame-perfect EBS out of a roll: getFrame()>17 exits straight to ATN at 26, release L into
+    # ESS-down -> backward-flip preserves -23.109. Signed speed asserted by sim_checks. See land-movement.md.
     ("roll_ebs", seq_roll_ebs, "frame-perfect EBS out of a roll: 26 flipped/preserved as ~-23", lambda e: [
         (e["link_state"] == 6, f"state 6 (MOVE/EBS)  [{e['link_state']}]"),
-        (abs(e["pot"] - (-23.109)) < 0.05, f"~-23 preserved (frame-perfect)  [{e['pot']:.3f}]"),
+        (abs(e["v"] - 23.109) < 0.05, f"~-23 preserved (frame-perfect)  [{e['v']:.3f}]"),
         (e["face_trav"] < 5, f"facing~travel aligned (EBS)  [{e['face_trav']:.1f}]"),
     ]),
 ]
@@ -285,22 +261,6 @@ def main():
         npass += ok
         nfail += (not ok)
         print(f"{'PASS' if ok else 'FAIL'} {label:<12} (SIM-vs-LIVE: {note})")
-        for passed, desc in checks:
-            print(f"     {'ok ' if passed else 'X  '}{desc}")
-
-    for label, seqfn, note, check in LIVE_CASES:   # roll tier: live-only locks (no sim yet)
-        if only and only != label:
-            continue
-        e = replay_live(seqfn())
-        if record:
-            print(f"{label:<12} st={e['link_state']} pot={e['pot']:.3f} v={e['v']:.3f} "
-                  f"face={e['facing']:.1f} trav={e['travel']:.1f} pos_z={e['pos_z']:.2f}  # {note}")
-            continue
-        checks = check(e)
-        ok = all(c[0] for c in checks)
-        npass += ok
-        nfail += (not ok)
-        print(f"{'PASS' if ok else 'FAIL'} {label:<12} (LIVE-LOCK: {note})")
         for passed, desc in checks:
             print(f"     {'ok ' if passed else 'X  '}{desc}")
 

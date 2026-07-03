@@ -181,7 +181,8 @@ def test_atn_brake_right():
 # --- FRONT_ROLL tier (A button) -------------------------------------------------------------
 
 # Roll speed set once at entry from pre-roll speedF: clamp(speedF*1.5+0.5, 5, 26). nspeed/state and
-# the mid-roll momentum position are bit-exact; the low-speed post-roll tail is ~4u off (see land.py).
+# position are bit-exact end to end -- the foot engine poses ANM_ROLLF through the roll so the
+# low-speed post-roll walk tail tracks live too (see land.py enter_roll/step_roll).
 _A = [(128, 255, 0x100, 0)]      # A + up, 1 frame
 
 
@@ -211,3 +212,22 @@ def test_roll_nspeed_arc_and_exit():
     assert all(rows[f][0] == FRONT_ROLL and abs(rows[f][1] - 26.0) < 1e-4 for f in range(18, 36))
     assert rows[36][0] == MOVE and abs(rows[36][1] - 21.0) < 1e-4      # exit drops field_0x20 (5.0)
     assert rows[-1][0] == WAIT and rows[-1][1] == 0.0                   # decels to a clean stop
+
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_roll_settle_position_bit_exact():
+    # Full-run roll played to a standstill: total distance is bit-exact (live pos_z 1524.694). The
+    # low-speed post-roll tail needs the ANM_ROLLF-warmed toe stream (foot engine step_roll).
+    s = _run_atn(_UP * 15 + _A + [(128, 128, 0, 0)] * 40)
+    assert s.state == WAIT and abs(s.nspeed) < 0.5
+    assert abs(s.pos_z - 1524.694) < 0.05
+
+
+def test_roll_ebs_preserves_negative_speed():
+    # Frame-perfect EBS out of a roll: getFrame()>17 exits straight to ATN at 26, release L into
+    # ESS-down -> backward-flip preserves -23.109 in MOVE. Pure mNormalSpeed (no anim data needed).
+    s = _run_atn(_UP * 15 + _A + [(128, 0, 0x40, 255)] * 17 + [(128, 110, 0, 0)] * 14)
+    assert s.state == MOVE
+    assert abs(s.nspeed - (-23.109)) < 0.02
+    d = ((s.facing - s.travel) % 65536)                     # facing ~ travel (aligned EBS)
+    assert min(d, 65536 - d) < 0x0400
