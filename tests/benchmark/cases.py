@@ -36,11 +36,9 @@ _COMMON = dict(
     verbose=False,
 )
 
-# max_frontier is the runtime<->optimality lever: smoke=1000 fast (converges for 50k); full=8000
-# = the shipped optimum (hardest cases land 1 frame short at 1000). See README for the tradeoff.
-# refill=1000: the air-refill regime (200k-600k, the real TAS range). Recorded at 1000 for
-# feasibility (far dests at 8000 are minutes each); may land 1 frame short of the 8000 optimum.
-_TIER_FRONTIER = {'smoke': 1000, 'full': 8000, 'refill': 1000, 'grid': 1000}
+# max_frontier lever. full=2000 = DOMINANT frontier (optimal in 10/10 swept dests, ~4x faster than
+# 8000, non-monotone so bigger can be WORSE; 400k 812 vs 814). See knowledge/model/planner.md.
+_TIER_FRONTIER = {'smoke': 1000, 'full': 2000, 'refill': 1000, 'grid': 1000}
 
 # Air-refill model (user-specified 1-D approx, NOT DTM-verified): air pinned 900 while -x <=
 # REFILL_UNTIL (pinned-back build), then one fresh-budget cruise. See model/planner.md, README.
@@ -88,7 +86,7 @@ CASES = [
     _case('cold_pump_300k',   'full', 300000, True,  705),   # DTM-verified 2026-07-02 (705fr/
     # 39dips -> 300941 live); prior desync was a double-vs-single-pi release-cos bug (superswim-gekko-fp).
     _case('cold_nopump_400k', 'full', 400000, False, 819),   # DTM-verified 2026-07-02 (pending air-delta fix)
-    _case('cold_pump_400k',   'full', 400000, True,  814),   # DTM-verified 2026-07-02
+    _case('cold_pump_400k',   'full', 400000, True,  812),   # DTM-verified 2026-07-03 @mf=2000 (was 814@8000; dv/dan=0.000)
     # 400k is the map-edge/air ceiling for THIS anchor WITHOUT refill (Link hits the edge before
     # the ~900-frame air budget). Air refill lifts it (cases below). Extend when a farther anchor exists.
 

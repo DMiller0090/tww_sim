@@ -690,14 +690,9 @@ def main():
     v = float(opts.get('v', '-1630'))
     air = int(opts.get('air', '900'))
     anim = float(opts.get('anim', '18.148'))
-    # HEURISTIC FRONTIER (2026-06-27): the game is discrete, so MANY action sequences reach a
-    # destination in the same min-frame count. The A*-ranked frontier therefore needs to keep
-    # only a small set of the most-promising states -- frame count is INSENSITIVE to the cap
-    # far below the old 8000. Measured (cold-start, pumps on): dest=20000 gives 177 frames at
-    # EVERY cap 250..8000 (162s -> 4s); dest=200000 gives 556 fr @250 (13s) and converges to
-    # 555 fr @1000 (55s) -- was a >250s timeout at 8000. Default 1000 = converged & fast; raise
-    # for the last frame or two on very long horizons, lower (250-500) for speed. See HANDOFF.
-    max_frontier = int(opts.get('max_frontier', '1000'))
+    # HEURISTIC FRONTIER default 2000 = the DOMINANT sweet spot (optimal in 10/10 swept dests,
+    # ~4x faster than 8000, and non-monotone so bigger can be WORSE). See knowledge/model/planner.md.
+    max_frontier = int(opts.get('max_frontier', '2000'))
     cap = int(opts.get('cap', '4000'))
     rank = opts.get('rank', 'astar')
     allow_pump = opts.get('pump', '0') != '0'   # mid-swim pumps (NOT live-faithful yet)
