@@ -151,6 +151,11 @@ CASES = [
     _case('cold_pump_1k', 'grid', 1000, True, None),
     _case('cold_pump_2k', 'grid', 2000, True, None),
     _case('cold_pump_3k', 'grid', 3000, True, None),
+    # complete the no-pump refill curve (have 200/400/600k) to clarify pump-benefit-under-refill
+    _case('refill_nopump_300k', 'grid', 300000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_500k', 'grid', 500000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_700k', 'grid', 700000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_800k', 'grid', 800000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
