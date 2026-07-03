@@ -3,14 +3,18 @@
 **Answers:** How does on-ground walking accelerate? What are the two movement angles? What is a
 brakeslide / extended brakeslide (EBS)? Why does holding ESS left/right preserve speed "almost
 forever"? Is speed preservation governed by facing or travel?
-**Status:** validated live (2026-07-04). The **flat-ground walk is fully simulated** (`superswim.land`):
-`mNormalSpeed` + state machine **and now `speedF`/position are BIT-EXACT** (position d=0.0000 vs live,
-via the ported J3D anim engine — see below). Locked by `tests/dolphin/run_land_tests.py`: `walk_run` is
-**sim-vs-live (pos_z bit-exact)**, the other 4 (brakeslide/EBS/facing) remain live-behavior locks
-(ATN_MOVE = next tier). Anchor `land_flatwalk@twwgz.sav`.
+**Status:** validated live (2026-07-04). The **flat-ground walk AND the ATN_MOVE tier (brakeslide /
+EBS / facing decouple / brake) are fully simulated** (`superswim.land`): `mNormalSpeed` (signed),
+the proc state machine, **facing (`shape_angle.y`) and travel (`current.angle.y`) are all BIT-EXACT**
+vs live, and the walk `speedF`/position is bit-exact too (d=0.0000, via the ported J3D anim engine —
+see below). Locked by `tests/dolphin/run_land_tests.py`: **all 5 cases are sim-vs-live** (nspeed
+dv=0.00000, facing/travel d=0.0000°). Position is asserted bit-exact only for the on-axis walk; runs
+that visit ATN_MOVE use the calibrated position fallback (the `ANM_ATN*` foot anims are not ported —
+they don't affect the velocity/state/facing physics, which are the tech). Anchor `land_flatwalk@twwgz.sav`.
 **Source:** live captures (`harness/capture/land_capture.py`, cross-checked advancewith == advanceseq
 == DTM movie); decomp `d_a_player_main.cpp` proc enum + `setSpeedAndAngleNormal`/`setNormalSpeedF` +
-`posMoveFromFootPos` + `mDoExt_MtxCalcAnmBlendTblOld` (the foot-chain anim path).
+`setSpeedAndAngleAtn`/`setSpeedAndAngleAtnBack` + `setBlendAtnMoveAnime` (mDirection machine) +
+`checkNextMode` (MOVE↔ATN_MOVE) + `posMoveFromFootPos` + `mDoExt_MtxCalcAnmBlendTblOld` (foot anim).
 
 > First land-movement page. Land is the next target after superswim; see the architecture forward-plan
 > `_notes/tww-sim-architecture-design.md` §5b. Fields logged via `dolphin_mem` named reads
@@ -86,16 +90,27 @@ decel including the standing→walk entry and the stop; final `pos_z` bit-exact 
 ## Brakeslide (L held)
 
 From a run, **press L (target) + full-down for 1 frame, keep L held, then hold ESS-down** `(128,110)`:
-- proc → **`daPyProc_ATN_MOVE_e` (state 7)** — the targeting-move proc.
-- **facing LOCKS** at the run heading (targeting holds it); travel flips to 180° (a 180° facing/travel
-  split); speed goes negative (backward-representation) but world motion continues forward.
-- speed bleeds **~−0.14/frame** — a braking slide.
+- proc → **`daPyProc_ATN_MOVE_e` (state 7)** — the targeting-move proc (`procAtnMove` → `setSpeedAndAngleAtn`).
+- **facing LOCKS**: on the L-engage frame `m34E6 = shape_angle.y` is captured (d_a_player_main.cpp:2067)
+  and every ATN frame writes `shape_angle.y = m34E6` back — the run heading is frozen.
+- travel flips to 180°: `getDirectionFromCurrentAngle()==DIR_BACKWARD` reflects `current.angle.y` by
+  `0x8000` and negates `mNormalSpeed` (2863) — the backward slide is represented as a **negative speed on
+  a flipped heading**, world motion still forward.
+- steady state runs the **`setSpeedAndAngleAtnBack`** path (`mDirection==DIR_BACKWARD`, cap → **15** =
+  `mAtnMoveB.field_0xC`). The ~−0.14/frame bleed is *not* a decay term: it is the accel-inject branch of
+  `setNormalSpeedF` adding `f1 = 2.5·mStickDistance·cos(Δtravel) ≈ +0.139` to the negative speed each frame,
+  walking it toward 0 (`mAtnMoveB.field_0x8 = 2.5`, `msd = 0.0556` at the ESS magnitude).
+- **Simulated bit-exact** (`superswim.land`, `LandState.step` with L via `buttons`/`triggerL`).
 
 ## Extended brakeslide (EBS) — release L
 
 Same start, but **release L after the 1 full-down frame**, then hold ESS:
-- proc drops out of targeting to **`MOVE` (state 6)**; facing unlocks.
-- momentum bleeds **~13× slower (~−0.011/frame)** than the brakeslide — the "extended" part.
+- proc drops out of targeting to **`MOVE` (state 6)** (`checkNextMode` `r24` false → `procMove_init`);
+  facing unlocks and tracks travel via the normal facing-chase.
+- momentum bleeds **~13× slower (~−0.011/frame)** than the brakeslide — the "extended" part. This is the
+  ordinary `setSpeedAndAngleNormal` on a nearly-reversed heading (cap back to **17**): the `cM_scos(target−
+  travel)` speed scale is ~1 while travel slowly chases the backward target, so `mNormalSpeed` barely moves.
+- **Simulated bit-exact** (reuses the walk proc; the negative-speed entry carries over from the 1 ATN frame).
 
 ## Camera-relative speed preservation (the EBS payoff)
 
@@ -110,7 +125,11 @@ right brakes**). The brakeslide brakes precisely *because* its facing points ant
 
 **Facing, not travel, is the predictor.** In the decoupling test both directions hold near-identical
 travel (~172°), yet the one whose *facing* rotates toward camera preserves and the one whose facing
-stays anti-camera brakes — same travel, opposite outcome. (Mechanism not yet decomp-traced; observed.)
+stays anti-camera brakes — same travel, opposite outcome. **Mechanism (now traced + simulated):** once
+L is released the frame runs `setSpeedAndAngleNormal`, whose target-speed scale is `cM_scos(m34E8 −
+current.angle.y)` — the cosine of *stick-target vs travel*. Steering the ESS toward camera keeps that
+angle small (cos≈1, speed held); steering anti-camera pushes it past `0x7800`, taking the reversal
+branch (`dVar9 = 0`) so the speed decays at the normal −2.5/frame brake to a full stop (state 4).
 
 ## Facing/travel decoupling (how to turn facing independently)
 
@@ -130,13 +149,20 @@ first instead keeps facing glued to travel.)
 | ESS down / left / right | `(128,110)` / `(110,128)` / `(146,128)` |
 | decay: brakeslide / EBS / EBS-toward-cam / brake | −0.14 / −0.011 / ~−0.001 / −2.5 per frame |
 | procs (`link_state`) | 4 WAIT · 5 FREE_WAIT · 6 MOVE · 7 ATN_MOVE · 30 FRONT_ROLL |
+| ATN cap `mMaxNormalSpeed` (attention / DIR_BACKWARD) | 12 (`mAtnMove.field_0xC`) / 15 (`mAtnMoveB.field_0xC`) |
+| ATN speed scale (side / back) `field_0x8` | 5.0 / 2.5 |
+| ATN `setNormalSpeedF` (scale/max/min) side / back | 0.5 / 7.5 / 4.0 · 0.5 / 8.0 / 2.0 |
+| ATN travel-chase `cLib_addCalcAngleS(scale,max,min)` | 6 / 3000 / 2000 |
+| direction cos thresholds (fwd / back) `mAtnMoveB.0x2C/0x30` | ≥0.99 → FORWARD · ≤−0.99 → BACKWARD (else side by sin) |
 
 ## See also
 
 - [ESS](ess.md) — the same `(128,110)`-class stick position (land reuses the swim ESS coordinate).
 - [Camera](camera.md) — `csangle` / `dCam_getControledAngleY`, here a live per-frame movement input.
-- `superswim.land` (`LandState`) — the walk sim; `superswim.anim` (`foot_speedf.FootSpeedF` + the J3D
-  engine) — the bit-exact `speedF`; `tests/test_land.py` (offline golden arc, incl. per-frame speedF/
-  pos_z vs `tests/golden/land_walk_speedf.csv`) + `tests/dolphin/run_land_tests.py` (`walk_run`
-  sim-vs-live pos_z bit-exact + 4 live locks).
+- `superswim.land` (`LandState`) — the walk **and ATN_MOVE** sim (`setSpeedAndAngleAtn`/`AtnBack` +
+  the `mDirection` machine + `checkNextMode` transitions; `step(sx, sy, buttons, triggerL)`);
+  `superswim.anim` (`foot_speedf.FootSpeedF` + the J3D engine) — the bit-exact walk `speedF`;
+  `tests/test_land.py` (offline golden walk arc + the 4 ATN end-state cases) +
+  `tests/dolphin/run_land_tests.py` (**all 5 sim-vs-live**: nspeed/facing/travel bit-exact, walk pos_z
+  bit-exact).
 - `_notes/tww-sim-architecture-design.md` §5/§5b — how land folds into the generalized proc-machine sim.

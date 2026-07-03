@@ -1,23 +1,19 @@
-"""LAND-movement regression: walk_run is SIM-vs-LIVE; the other 4 are live-behavior locks.
+"""LAND-movement regression: ALL 5 cases are SIM-vs-LIVE (walk + the 4 ATN-tier techs).
 
-`walk_run` is the first LAND sim-vs-live gate (the swim run_tests analogue): it seeds a
-`superswim.land.LandState` from the live frame-0 snapshot, steps the sim over the walk seq,
-and compares the END potential_speed / state / position against the game replayed via one
-race-free `advanceseq`. potential_speed (mNormalSpeed) and the state machine are BIT-EXACT;
-position is a CALIBRATED foot-plant stand-in (see superswim/land.py) so it is checked to a
-+-3 tolerance, not to the ULP.
-
-The other 4 (brakeslide / EBS / facing decouple / brake) are still LIVE-BEHAVIOR LOCKS -- no
-sim yet (they need the ATN_MOVE proc + the facing/travel decouple, the next tier). Each
-replays a fixed input burst from the land_flatwalk anchor and asserts the GAME's
-characteristic END-STATE (the discovered tech: L-held targeting slide with facing locked;
-L-released extended slide; camera-relative speed preservation; facing/travel decouple). They
-also guard the anchor + capture harness against drift.
+Each case seeds a `superswim.land.LandState` from the live frame-0 snapshot, steps the sim over
+the input burst (stick + L-target), and compares the END state against the game replayed via one
+race-free `advanceseq`. mNormalSpeed (signed potential_speed), the proc state machine, facing
+(shape_angle.y) and travel (current.angle.y) are all BIT-EXACT. Position (pos_z) is checked
+bit-exact via the ported anim engine ONLY for the on-axis walk (which stays in MOVE); any run that
+visits ATN_MOVE uses the calibrated position fallback (the ANM_ATN* anims are not ported) and pos
+is not asserted there. On top of the sim-vs-live core, each ATN case layers its characteristic tech
+assertions (L-held targeting slide with facing locked; L-released extended slide; camera-relative
+speed preservation; facing/travel decouple) -- these document the mechanic + guard the anchor.
 
 Determinism: the anchor + inputs are fixed and advanceseq is race-free, so end-state is
-reproducible and can be locked tight, exactly like the swim run_tests baselines. These locks
-are the land analogue of the immutable swim syncs -- do not loosen a check to make a run
-pass; a real change means the tech (or anchor) changed, which is a finding, not a test edit.
+reproducible and can be locked tight, exactly like the swim run_tests baselines. These are the
+land analogue of the immutable swim syncs -- do not loosen a check to make a run pass; a real
+change means the sim (or tech, or anchor) changed, which is a finding, not a test edit.
 
 Free cam: C-stick full DOWN every frame (substickY=0) so csangle stays 0 (the reference).
 L-target uses digital L (buttons 0x40) + analog triggerL=255. ESS = (128,110); ESS-left =
@@ -71,24 +67,10 @@ def sdiff_deg(a, b):
     return d * 360.0 / 65536.0
 
 
-def replay(seq):
-    D.control_pipe_quiet("clearinput")   # persistent override would leak a stale button
-    D.control_pipe_quiet("savestate", {"action": "load", "path": ANCHOR.replace('\\', '/')})
-    h, m = D.attach()
-    D.control_pipe_quiet("advanceseq", {"port": 0, "seq": seq})
-    h, m = D.attach()
-    e = {k: D.read_named(h, m, k) for k in READS}
-    e["v"] = abs(e["potential_speed"])
-    e["facing"] = deg(e["shape_angle_y"])
-    e["travel"] = deg(e["travel_angle"])
-    e["face_trav"] = abs(sdiff_deg(e["shape_angle_y"], e["travel_angle"]))
-    return e
-
-
 def replay_sim_vs_live(seq):
-    """SIM-vs-LIVE for the walk. Load the anchor, read the resting frame-0 seed, seed a
-    LandState, step it over the seq, and replay the same seq live via one advanceseq.
-    Returns (sim_state, live_end) for comparison. Mirrors swim run_tests.run_one.
+    """SIM-vs-LIVE. Load the anchor, read the resting frame-0 seed, seed a LandState, step it
+    over the seq (stick + L-target via buttons/triggerL), and replay the same seq live via one
+    advanceseq. Returns (sim_state, live_end) for comparison. Mirrors swim run_tests.run_one.
 
     NOTE: read the seed DIRECTLY after loadstate (no settle frame). A stray `advancewith`
     neutral frame before the advanceseq perturbs the live walk by ~5 units (advancewith vs
@@ -103,35 +85,45 @@ def replay_sim_vs_live(seq):
                     idle_frame=seed["anim_frame"])
     for el in seq:                                # C-stick full down => free cam, csangle 0
         for _ in range(el.get("frames", 1)):
-            sim.step(el["stickX"], el["stickY"])
+            sim.step(el["stickX"], el["stickY"],
+                     buttons=el.get("buttons", 0), triggerL=el.get("triggerL", 0))
     D.control_pipe_quiet("advanceseq", {"port": 0, "seq": seq})
     h, m = D.attach()
     live = {k: D.read_named(h, m, k) for k in READS}
     return sim, live
 
 
-# SIM-vs-LIVE checks for walk_run: nspeed + state BIT-EXACT; pos_z BIT-EXACT (tol 0.05) via the anim
-# engine when keyframe data is present, else the +-3 calibrated stand-in. See superswim/anim/foot_speedf.
-def walk_checks(sim, live):
-    dv = abs(sim.nspeed - live["potential_speed"])
-    anim = sim._foot is not None
-    ptol = 0.05 if anim else 3.0
-    dpos = abs(sim.pos_z - live["pos_z"])
-    return [
+def sim_checks(sim, live, note):
+    """SIM-vs-LIVE core checks (ALL cases): state exact; mNormalSpeed (signed) bit-exact; facing +
+    travel bit-exact (s16). pos_z is bit-exact via the anim engine ONLY for the on-axis walk (state
+    MOVE throughout) -- runs that visit ATN_MOVE use the calibrated position fallback (ANM_ATN* anims
+    unported) so pos is not asserted there. See superswim/land.py step() + knowledge/land-movement.md."""
+    dv = abs(sim.nspeed - live["potential_speed"])         # signed: brakeslide/EBS go negative
+    dfac = abs(sdiff_deg(sim.facing, live["shape_angle_y"]))
+    dtrav = abs(sdiff_deg(sim.travel, live["travel_angle"]))
+    visited_atn = getattr(sim, "_visited_atn", False)
+    checks = [
         (sim.state == int(live["link_state"]),
-         f"state sim/live {sim.state}/{int(live['link_state'])} (both idle 4)"),
+         f"state sim/live {sim.state}/{int(live['link_state'])}"),
         (dv <= 0.02, f"potential_speed bit-exact  dv={dv:.5f}  "
                      f"(sim {sim.nspeed:.3f} / live {live['potential_speed']:.3f})"),
-        (dpos < ptol,
-         f"pos_z {'BIT-EXACT (anim)' if anim else 'within 3 (calibrated)'}  d={dpos:.4f}  "
-         f"sim {sim.pos_z:.3f} / live {live['pos_z']:.3f}"),
+        (dfac < 0.1, f"facing bit-exact  d={dfac:.4f}deg  "
+                     f"(sim {deg(sim.facing):.2f} / live {deg(live['shape_angle_y']):.2f})"),
+        (dtrav < 0.1, f"travel bit-exact  d={dtrav:.4f}deg  "
+                      f"(sim {deg(sim.travel):.2f} / live {deg(live['travel_angle']):.2f})"),
     ]
+    if not visited_atn and sim._foot is not None:          # on-axis walk: position is bit-exact
+        dpos = abs(sim.pos_z - live["pos_z"])
+        checks.append((dpos < 0.05,
+                       f"pos_z BIT-EXACT (anim)  d={dpos:.4f}  "
+                       f"sim {sim.pos_z:.3f} / live {live['pos_z']:.3f}"))
+    return checks
 
 
-# check(end) -> list of (ok, description) -- the LOCKED characteristic assertions per case.
-# walk_run is SIM-vs-LIVE (handled specially in main via walk_checks); the rest are live locks.
+# extra_check(live) -> the characteristic tech assertions (documents the mechanic + guards the
+# anchor). ALL cases are now SIM-vs-LIVE (sim_checks) with the tech assertions layered on top.
 CASES = [
-    ("walk_run", seq_walk, "SIM-vs-LIVE: run accel to cap 17 then decel to standstill", None),
+    ("walk_run", seq_walk, "run accel to cap 17 then decel to standstill", None),
     ("brakeslide", seq_brakeslide, "L held -> targeting slide, facing locked", lambda e: [
         (e["link_state"] == 7, f"state 7 (ATN_MOVE)  [{e['link_state']}]"),
         (e["facing"] < 5 or e["facing"] > 355, f"facing locked ~0  [{e['facing']:.1f}]"),
@@ -160,29 +152,28 @@ def main():
     record = o.get('record', '0') in ('1', 'true', 'yes')
     only = o.get('only')
     npass = nfail = 0
-    for label, seqfn, note, check in CASES:
+    for label, seqfn, note, extra_check in CASES:
         if only and only != label:
             continue
-        if check is None:                        # walk_run: SIM-vs-LIVE
-            sim, live = replay_sim_vs_live(seqfn())
-            if record:
-                print(f"{label:<12} SIM st={sim.state} v={sim.nspeed:.3f} pos_z={sim.pos_z:.2f}  "
-                      f"| LIVE st={int(live['link_state'])} v={live['potential_speed']:.3f} "
-                      f"pos_z={live['pos_z']:.2f}  # {note}")
-                continue
-            checks = walk_checks(sim, live)
-        else:                                    # live-behavior lock
-            end = replay(seqfn())
-            if record:
-                print(f"{label:<12} st={end['link_state']} v={end['v']:.3f} "
-                      f"face={end['facing']:.1f} trav={end['travel']:.1f} "
-                      f"face-trav={end['face_trav']:.1f} pos=({end['pos_x']:.1f},{end['pos_z']:.1f})  # {note}")
-                continue
-            checks = check(end)
+        sim, live = replay_sim_vs_live(seqfn())
+        if record:
+            e = {"link_state": int(live["link_state"]), "v": abs(live["potential_speed"]),
+                 "facing": deg(live["shape_angle_y"]), "travel": deg(live["travel_angle"])}
+            print(f"{label:<12} SIM st={sim.state} v={sim.nspeed:.3f} face={deg(sim.facing):.1f} "
+                  f"trav={deg(sim.travel):.1f} pos_z={sim.pos_z:.2f}  | LIVE st={e['link_state']} "
+                  f"v={live['potential_speed']:.3f} face={e['facing']:.1f} trav={e['travel']:.1f} "
+                  f"pos_z={live['pos_z']:.2f}  # {note}")
+            continue
+        checks = sim_checks(sim, live, note)
+        if extra_check is not None:              # layer the characteristic tech assertions on top
+            e = {"link_state": int(live["link_state"]), "v": abs(live["potential_speed"]),
+                 "facing": deg(live["shape_angle_y"]), "travel": deg(live["travel_angle"]),
+                 "face_trav": abs(sdiff_deg(live["shape_angle_y"], live["travel_angle"]))}
+            checks += extra_check(e)
         ok = all(c[0] for c in checks)
         npass += ok
         nfail += (not ok)
-        print(f"{'PASS' if ok else 'FAIL'} {label:<12} ({note})")
+        print(f"{'PASS' if ok else 'FAIL'} {label:<12} (SIM-vs-LIVE: {note})")
         for passed, desc in checks:
             print(f"     {'ok ' if passed else 'X  '}{desc}")
     if not record:

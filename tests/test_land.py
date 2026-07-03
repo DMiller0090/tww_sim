@@ -16,7 +16,7 @@ import os
 
 import pytest
 
-from superswim.land import LandState, WAIT, FREE_WAIT, MOVE
+from superswim.land import LandState, WAIT, FREE_WAIT, MOVE, ATN_MOVE
 from superswim.anim.foot_speedf import FootSpeedF
 
 _ANIM = FootSpeedF.available()
@@ -119,3 +119,60 @@ def test_pos_z_arc_bit_exact():
     for (sx, sy), (fr, _ns, _msd, _spF, pz) in zip(WALK_STICKS, golden):
         s.step(sx, sy)
         assert abs(s.pos_z - pz) < 0.05, f"frame {fr}: pos_z {s.pos_z} != golden {pz}"
+
+
+# --- ATN_MOVE tier: brakeslide / EBS / facing decouple / brake -----------------------------
+
+# Offline shadow of run_land_tests.py's ATN cases; end-states pinned from the bit-exact live
+# sim-vs-live run. Guards setSpeedAndAngleAtn/AtnBack + the mDirection machine (no Dolphin).
+def _deg(a):
+    return (int(a) % 65536) * 360.0 / 65536.0
+
+
+def _run_atn(seq):
+    s = LandState(pos_z=SEED_POS_Z, facing=0, travel=0, csangle=0, state=FREE_WAIT,
+                  nspeed=0.0, idle_frame=70.0)
+    for (sx, sy, btn, tl) in seq:
+        s.step(sx, sy, buttons=btn, triggerL=tl)
+    return s
+
+
+_UP = [(128, 255, 0, 0)]
+_LDN = [(128, 0, 0x40, 255)]     # L-target + full down, 1 frame
+
+
+def test_atn_brakeslide():
+    # L HELD -> daPyProc_ATN_MOVE (state 7), facing LOCKED at the run heading (0), travel flips
+    # to 180, speed negative bleeding slowly toward 0 (~-0.14/frame, mAtnMoveB cap 15).
+    s = _run_atn(_UP * 10 + _LDN + [(128, 110, 0x40, 255)] * 10)
+    assert s.state == ATN_MOVE
+    assert s.direction == 1  # DIR_BACKWARD (steady brakeslide runs the AtnBack path)
+    assert abs(_deg(s.facing) - 0.0) < 0.1
+    assert abs(_deg(s.travel) - 180.0) < 0.1
+    assert abs(abs(s.nspeed) - 15.756) < 0.02
+
+
+def test_atn_ebs():
+    # L RELEASED after 1 frame -> MOVE (state 6); facing unlocks and tracks travel; the negative
+    # speed bleeds ~13x slower than the brakeslide (~-0.011/frame, cap stays 17).
+    s = _run_atn(_UP * 10 + _LDN + [(128, 110, 0, 0)] * 30)
+    assert s.state == MOVE
+    assert abs(abs(s.nspeed) - 16.437) < 0.02
+    assert abs(_deg(s.facing) - _deg(s.travel)) < 0.5   # facing ~ travel aligned
+
+
+def test_atn_facing_decouple():
+    # ESS-down 1 frame then ESS-left held -> facing rotates to ~90 and decouples from travel (~171)
+    # while speed is preserved (the facing/travel split).
+    s = _run_atn(_UP * 10 + _LDN + [(128, 110, 0, 0)] + [(110, 128, 0, 0)] * 60)
+    assert s.state == MOVE
+    assert abs(_deg(s.facing) - 90.0) < 0.5
+    assert abs(_deg(s.travel) - 171.32) < 0.5
+    assert abs(abs(s.nspeed) - 16.650) < 0.02
+
+
+def test_atn_brake_right():
+    # ESS toward anti-camera brakes to a full stop (state 4, |v| ~ 0).
+    s = _run_atn(_UP * 10 + _LDN + [(128, 110, 0, 0)] + [(146, 128, 0, 0)] * 60)
+    assert s.state == WAIT
+    assert abs(s.nspeed) < 0.01

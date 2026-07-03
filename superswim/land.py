@@ -38,10 +38,19 @@ import math
 from . import sim as S
 from .sim import f32, cLib_addCalc, cM_scos_s16, deg_to_s16, s16_signed, _deadzone, stick_angle_deg
 
-# link_state / daPyProc values (d_a_player_main.h). Only the walk trio is modelled here.
+# link_state / daPyProc values (d_a_player_main.h). Walk trio + the targeting-move proc.
 WAIT = 4          # daPyProc_WAIT_e         (idle standstill)
 FREE_WAIT = 5     # daPyProc_FREE_WAIT_e    (anchor's resting proc)
 MOVE = 6          # daPyProc_MOVE_e         (ground locomotion)
+ATN_MOVE = 7      # daPyProc_ATN_MOVE_e     (targeting move: brakeslide / L-held slide)
+
+# mDirection enum (d_a_player_main.h daPy_lk_c::direction_e). getDirectionFromAngle buckets the
+# stick-vs-heading angle into these; ATN physics branches on it (fwd->Normal, back->AtnBack, side).
+DIR_FORWARD = 0
+DIR_BACKWARD = 1
+DIR_LEFT = 2
+DIR_RIGHT = 3
+DIR_NONE = 4
 
 # Frames of controller-input latency: physics at frame f acts on the stick from frame f-2.
 INPUT_DELAY = 2
@@ -100,6 +109,26 @@ class LandState:
     F20 = f32(1.8)                  # decel rate -> setNormalSpeedF param_4 (cLib minStep)
     F24 = f32(0.6)                  # speed cLib scale -> setNormalSpeedF param_2
 
+    # HIO mAtnMove (targeting-move) constants (d_a_player_HIO_data.inc:14, offsets per
+    # daPy_HIO_atnMove_c1). Used by setSpeedAndAngleAtn side branch + the DIR_FORWARD->Normal cap.
+    ATN_MAX = f32(12.0)             # field_0xC  = mMaxNormalSpeed under attention lock
+    ATN_TURN_MAX = 3000             # field_0x0  = travel-chase max step (s16)
+    ATN_TURN_MIN = 2000             # field_0x2  = travel-chase min step (s16)
+    ATN_TURN_SCALE = 6              # field_0x4  = travel-chase scale (s16)
+    ATN_SPD = f32(5.0)             # field_0x8  = target-speed scale (fVar2 = *msd*cos)
+    ATN_ACC = f32(7.5)             # field_0x10 = setNormalSpeedF maxStep
+    ATN_DEC = f32(4.0)             # field_0x14 = setNormalSpeedF minStep
+    ATN_SCL = f32(0.5)             # field_0x18 = setNormalSpeedF cLib scale
+    # HIO mAtnMoveB (targeting-move BACKWARD) constants, d_a_player_HIO_data.inc:18. The
+    # steady-state brakeslide runs here (facing locked, travel ~180, speed negative bleeding up).
+    ATNB_MAX = f32(15.0)            # field_0xC  = mMaxNormalSpeed when DIR_BACKWARD
+    ATNB_SPD = f32(2.5)             # field_0x8  = target-speed scale
+    ATNB_ACC = f32(8.0)             # field_0x10 = setNormalSpeedF maxStep
+    ATNB_DEC = f32(2.0)             # field_0x14 = setNormalSpeedF minStep
+    ATNB_SCL = f32(0.5)             # field_0x18 = setNormalSpeedF cLib scale
+    ATNB_COS_FWD = f32(0.99)        # field_0x2C = cos(travel-facing) >= this -> DIR_FORWARD
+    ATNB_COS_BACK = f32(-0.99)      # field_0x30 = cos(travel-facing) <= this -> DIR_BACKWARD
+
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
                  use_anim=True):
@@ -113,8 +142,14 @@ class LandState:
         self.nspeed = f32(nspeed)              # mNormalSpeed (potential_speed) -- bit-exact
         self.speedF = f32(speedF)              # position-integrating speed
         self.msd = 0.0                         # mStickDistance
+        self.max_nspeed = f32(self.MAX_NSPEED) # mMaxNormalSpeed (switches 17/15/12 under ATN)
+        self.direction = DIR_NONE              # mDirection (ATN physics branch selector)
+        self.m34E6 = int(facing) & 0xFFFF      # facing lock captured on attention-lock engage
+        self._l_prev = False                   # attention-lock (L) held last frame (rising edge)
+        self._visited_atn = False              # did this run ever enter ATN_MOVE (ATN anims unported)
         # 2-frame controller-input buffer (index 0 = oldest = the input acted on this frame).
-        self._inbuf = [(128, 128)] * INPUT_DELAY
+        # Tuple = (stickX, stickY, buttons, triggerL) -- L/target is delayed like the stick.
+        self._inbuf = [(128, 128, 0, 0)] * INPUT_DELAY
         # Anim-driven speedF: the ported posMoveFromFootPos chain (bit-exact position). None when
         # disabled or the keyframe data is absent -> fall back to the SPEEDF_CHASE stand-in.
         self._foot = None
@@ -158,7 +193,7 @@ class LandState:
         msd * (max*msd)), no slide polygon, no wall deflect. dVar10 is the speed cap this
         frame; below it the cLib_addCalc chases up (param_1 injects the accel step directly),
         above it (release) it cLib-decays down."""
-        dVar10 = f32(self.msd * f32(self.MAX_NSPEED * self.msd))   # target/cap speed
+        dVar10 = f32(self.msd * f32(self.max_nspeed * self.msd))   # target/cap speed
         if dVar10 < self.nspeed:                # decelerating toward the (lower) cap
             temp_f0 = f32(self.nspeed - dVar10)
             temp_f3 = param_3 if temp_f0 > param_3 else temp_f0
@@ -177,15 +212,18 @@ class LandState:
             self.nspeed = cLib_addCalc(self.nspeed, dVar6, param_2, temp_f3, param_4)
 
     # --- setSpeedAndAngleNormal (2751), walk path ------------------------------------------
-    def _set_speed_and_angle_normal(self, param_1):
+    def _set_speed_and_angle_normal(self, param_1, attention_lock=False):
         """Compute the target-speed scalar dVar9 from the stick + the facing/travel-vs-target
         angle, chase the two angles toward m34E8, then hand dVar9 to setNormalSpeedF. Walk
-        path only: not attention-locked, not MOVE_TURN, no event/heavy/grab."""
+        path (+ the ATN DIR_FORWARD sub-case). The near-reversal branch (2763) and the facing
+        chase (2834) are both guarded by !checkAttentionLock() in the decomp, so `attention_lock`
+        (L held) suppresses them -- the ATN-forward call keeps facing frozen (set by the caller
+        to m34E6) and never takes the reversal/slip branch. No MOVE_TURN/event/heavy/grab."""
         if self.msd > 0.05:
             dVar11 = f32(self.msd * self.msd)
             # Aligned branch (walk): m34E8 within 0x7800 of travel -> chase travel + keep the
-            # cM_scos speed scale. The >0x7800 near-reversal branch is a next-tier concern.
-            if _dist_angle_s(self.target, self.travel) > 0x7800:
+            # cM_scos speed scale. The >0x7800 near-reversal branch (skipped under attention).
+            if not attention_lock and _dist_angle_s(self.target, self.travel) > 0x7800:
                 # near-reversal: chase and skip the speed-scale (bVar2). Rare in steady walk.
                 self.travel = cLib_addCalcAngleS(self.travel, self.target, self.F6, param_1, self.F4)
                 dVar9 = 0.0
@@ -201,12 +239,12 @@ class LandState:
                 bVar2 = False
             if not bVar2:
                 dVar9 = cM_scos_s16(s16_signed(self.target - self.travel))
-                if self.nspeed > f32(0.5 * self.MAX_NSPEED):
+                if self.nspeed > f32(0.5 * self.max_nspeed):
                     if dVar9 < 0.7:
                         dVar9 = f32(0.7)
                 elif dVar9 < 0.0:
                     dVar9 = 0.0
-                dVar10 = f32(0.5 - f32(0.5 * abs(f32(self.nspeed / self.MAX_NSPEED))))
+                dVar10 = f32(0.5 - f32(0.5 * abs(f32(self.nspeed / self.max_nspeed))))
                 if self.msd > dVar10:
                     dVar9 = f32(dVar9 * f32(self.F14 * dVar11))
                 else:
@@ -214,8 +252,9 @@ class LandState:
         else:
             dVar9 = 0.0
         # facing (shape_angle.y) chases m34E8 at DOUBLE the travel rate (<<1); if the chase
-        # crosses travel it snaps onto it. On-axis walk: no-op. (2834-2845)
-        if self.msd > 0.05:
+        # crosses travel it snaps onto it. On-axis walk: no-op. Skipped under attention lock
+        # (facing is frozen to m34E6 by the ATN caller). (2834-2845)
+        if not attention_lock and self.msd > 0.05:
             sVar6 = self.facing
             self.facing = cLib_addCalcAngleS(self.facing, self.target, self.F6,
                                              (param_1 << 1) & 0xFFFF, (self.F4 << 1) & 0xFFFF)
@@ -225,41 +264,152 @@ class LandState:
                 self.facing = self.travel
         self._set_normal_speed_f(dVar9, self.F24, self.F1C, self.F20)
 
+    # --- setSpeedAndAngleAtn (2851): the targeting-move dispatch ----------------------------
+    def _get_dir_from_angle(self, angle):
+        """getDirectionFromAngle (2278): bucket a signed s16 heading delta into a direction."""
+        a = s16_signed(angle)
+        if abs(a) > 0x6000:
+            return DIR_BACKWARD
+        if a >= 0x2000:
+            return DIR_LEFT
+        if a <= -0x2000:
+            return DIR_RIGHT
+        return DIR_FORWARD
+
+    def _set_speed_and_angle_atn(self):
+        """procAtnMove speed/angle. Branches on mDirection: FORWARD reuses the Normal walk path
+        (with attention lock -> facing frozen); BACKWARD is the steady brakeslide (setSpeedAndAngleAtnBack,
+        mAtnMoveB constants); the side branch chases travel toward the stick and snaps facing to the
+        captured lock m34E6. The BACKWARD-flip (getDirectionFromCurrentAngle) reflects travel by 0x8000
+        and negates mNormalSpeed so a backward slide is represented as a negative speed on a flipped
+        heading -- the sign convention that makes the brake a slow positive accel toward 0. (2851)"""
+        if self.direction == DIR_FORWARD:
+            return self._set_speed_and_angle_normal(self.F0, attention_lock=True)
+        if self.direction == DIR_BACKWARD:
+            return self._set_speed_and_angle_atn_back()
+        # side (DIR_LEFT / DIR_RIGHT)
+        if self.msd > 0.05:
+            if self._get_dir_from_angle(self.target - self.travel) == DIR_BACKWARD:
+                self.travel = (self.travel + 0x8000) & 0xFFFF
+                self.nspeed = f32(self.nspeed * -1.0)
+            old = self.travel
+            self.travel = cLib_addCalcAngleS(self.travel, self.target, self.ATN_TURN_SCALE,
+                                             self.ATN_TURN_MAX, self.ATN_TURN_MIN)
+            fVar2 = f32(f32(self.ATN_SPD * self.msd) * cM_scos_s16(s16_signed(self.travel - old)))
+        else:
+            fVar2 = 0.0
+        self.facing = self.m34E6                 # shape_angle.y = m34E6 (facing lock)
+        self._set_normal_speed_f(fVar2, self.ATN_SCL, self.ATN_ACC, self.ATN_DEC)
+
+    def _set_speed_and_angle_atn_back(self):
+        """setSpeedAndAngleAtnBack (2882): the steady brakeslide. Same shape as the side branch
+        but with the mAtnMoveB constants (cap 15, speed scale 2.5, cLib 0.5/8.0/2.0). Facing stays
+        locked at m34E6; travel chases the (backward) stick target; the negative speed bleeds toward
+        0 via the accel-inject branch of setNormalSpeedF (~-0.14/frame observed)."""
+        if self.msd > 0.05:
+            if self._get_dir_from_angle(self.target - self.travel) == DIR_BACKWARD:
+                self.travel = (self.travel + 0x8000) & 0xFFFF
+                self.nspeed = f32(self.nspeed * -1.0)
+            old = self.travel
+            self.travel = cLib_addCalcAngleS(self.travel, self.target, self.ATN_TURN_SCALE,
+                                             self.ATN_TURN_MAX, self.ATN_TURN_MIN)
+            f1 = f32(f32(self.ATNB_SPD * self.msd) * cM_scos_s16(s16_signed(self.travel - old)))
+        else:
+            f1 = 0.0
+        self.facing = self.m34E6
+        self._set_normal_speed_f(f1, self.ATNB_SCL, self.ATNB_ACC, self.ATNB_DEC)
+
+    def _update_atn_direction(self):
+        """setBlendAtnMoveAnime's mDirection state machine (3280), the flat/no-lock-on subset.
+        Runs AFTER checkNextMode each ATN frame (and at ATN entry) to pick next frame's direction
+        from cos/sin(travel - facing): within ~8deg of facing -> FORWARD, of the opposite -> BACKWARD,
+        else a side (sin sign). Also sets mMaxNormalSpeed for the chosen direction (17/15/12)."""
+        iVar6 = s16_signed(self.travel - self.facing)   # current.angle.y - shape_angle.y
+        f2 = _cM_ssin_s16(iVar6)
+        fVar4 = S.cM_scos_s16(iVar6)
+        uVar1 = self.direction
+        if self.msd > 0.05:
+            if fVar4 <= self.ATNB_COS_BACK or fVar4 >= self.ATNB_COS_FWD:
+                self.direction = DIR_BACKWARD if fVar4 <= self.ATNB_COS_BACK else DIR_FORWARD
+            else:
+                if uVar1 in (DIR_BACKWARD, DIR_FORWARD):
+                    self.direction = DIR_RIGHT
+                    self.max_nspeed = self.ATN_MAX
+                if f2 > 0.0:
+                    self.direction = DIR_LEFT
+                elif f2 < 0.0:
+                    self.direction = DIR_RIGHT
+        if self.direction == DIR_BACKWARD:
+            self.max_nspeed = self.ATNB_MAX
+        elif self.direction == DIR_FORWARD:
+            self.max_nspeed = f32(self.MAX_NSPEED)
+        elif self.direction not in (DIR_RIGHT, DIR_LEFT):
+            self.direction = DIR_RIGHT
+
+    def _check_next_mode(self, l_held):
+        """checkNextMode (4424) transition arbiter, flat/no-enemy subset: sets mMaxNormalSpeed from
+        the attention state, then picks next frame's proc. r24 (L held) -> ATN_MOVE while moving,
+        WAIT when stopped; else the MOVE branch -> MOVE while moving, WAIT when stopped. The
+        MOVE_TURN / WaitTurn / Slip sub-procs (reversal turns) are not modelled -- the aligned walk
+        and the brakeslide/EBS tests never enter them (a reversal in a MOVE frame is flagged)."""
+        if l_held:                                        # r24: checkAttentionLock (no lock-on actor)
+            self.max_nspeed = self.ATN_MAX
+            self.state = WAIT if abs(self.nspeed) <= 0.001 else ATN_MOVE
+        else:
+            self.max_nspeed = f32(self.MAX_NSPEED)
+            self.direction = DIR_NONE
+            self.state = WAIT if abs(self.nspeed) <= 0.001 else MOVE
+
     # --- proc dispatch + per-frame step ----------------------------------------------------
-    def step(self, sx, sy):
-        """Advance one frame with a raw stick (sx, sy). Returns (d_pos, tag). csangle is held
-        in self.csangle (set it before stepping to steer the camera-relative target)."""
-        # 2-frame controller latency: act on the input delivered INPUT_DELAY frames ago.
-        self._inbuf.append((int(sx), int(sy)))
-        asx, asy = self._inbuf.pop(0)
+    def step(self, sx, sy, buttons=0, triggerL=0):
+        """Advance one frame with a raw stick (sx, sy) + optional L-target (buttons 0x40 or analog
+        triggerL). Returns (d_pos, tag). csangle is held in self.csangle (set it before stepping to
+        steer the camera-relative target)."""
+        # 2-frame controller latency: act on the input (stick AND L) delivered INPUT_DELAY frames ago.
+        self._inbuf.append((int(sx), int(sy), int(buttons), int(triggerL)))
+        asx, asy, abtn, atrig = self._inbuf.pop(0)
         self._set_stick_data(asx, asy)
+        l_held = bool(abtn & 0x40) or atrig >= 200      # checkAttentionLock proxy (digital/analog L)
 
         moving = self.msd > 0.05
-        # transition arbitration (pre-dispatch): idle + movement stick -> enter procMove.
+        # Attention-lock engage: capture the facing lock (m34E6 = shape_angle.y, 2067) on the rising
+        # edge; it stays frozen because the ATN path writes shape_angle.y = m34E6 every frame.
+        if l_held and not self._l_prev:
+            self.m34E6 = self.facing
+        # idle -> move entry (procFreeWait/procWait push a stick): start the locomotion proc.
         if self.state in (WAIT, FREE_WAIT) and moving:
-            self.state = MOVE                    # procMove_init
-        # dispatch
-        if self.state == MOVE:
-            self._set_speed_and_angle_normal(self.F0)
-            # checkNextMode: stopped (neutral stick, speed bled to 0) -> back to WAIT (idle).
-            if not moving and self.nspeed <= 0.0:
-                self.state = WAIT
-        # else WAIT/FREE_WAIT with no input: nspeed stays 0, no movement.
+            self.state = ATN_MOVE if l_held else MOVE
 
-        # speedF -> position via the bit-exact anim engine (ported posMoveFromFootPos), stepped every
-        # frame (advances the standing idle so the entry drift is exact); cLib chase only as fallback.
-        if self._foot is not None:
+        # dispatch the active proc's speed/angle update
+        if self.state == MOVE:
+            self._set_speed_and_angle_normal(self.F0, attention_lock=l_held)
+        elif self.state == ATN_MOVE:
+            self._visited_atn = True
+            self._set_speed_and_angle_atn()
+        # WAIT/FREE_WAIT: idle, nspeed stays put.
+
+        # checkNextMode: transition arbiter (runs after the proc). Then setBlendAtnMoveAnime's
+        # direction update for the next ATN frame (also fires at ATN entry).
+        if self.state in (MOVE, ATN_MOVE):
+            self._check_next_mode(l_held)
+        if self.state == ATN_MOVE:
+            self._update_atn_direction()
+
+        # speedF -> position: the bit-exact WALK anim engine drives state MOVE; ATN_MOVE falls back to
+        # a cLib chase (ANM_ATN* anims unported; ATN position not validated to ULP). See land-movement.md.
+        if self.state != ATN_MOVE and self._foot is not None:
             self.speedF = self._foot.step(self.nspeed, self.msd)
         else:
             sc, mx, mn = SPEEDF_CHASE
             self.speedF = cLib_addCalc(self.speedF, self.nspeed, sc, mx, mn)
-            if self.nspeed == 0.0 and self.speedF < 0.5:
+            if self.nspeed == 0.0 and abs(self.speedF) < 0.5:
                 self.speedF = 0.0                # snap to a clean standstill at the WAIT edge
         # world motion is speedF along travel (current.angle.y): speed.z = speedF*cos, x = speedF*sin.
         d = self.speedF
         self.pos_x += f32(d * _cM_ssin_s16(self.travel))
         self.pos_z += f32(d * S.cM_scos_s16(self.travel))
-        return d, ("MOVE" if self.state == MOVE else "WAIT")
+        self._l_prev = l_held
+        return d, {MOVE: "MOVE", ATN_MOVE: "ATN", WAIT: "WAIT", FREE_WAIT: "WAIT"}.get(self.state, "?")
 
 
 def _is_zero(x):
