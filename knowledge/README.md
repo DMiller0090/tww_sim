@@ -58,6 +58,10 @@ you can triage in one glance.
 - **How do air refills work / why is touching land fatal / flat vs wavy / corner refills / the manual-refill workflow?** → [mechanics/air-refill.md](mechanics/air-refill.md)
 - **How does the sim handle unmodeled world features (refills, sploosh) / the re-plan loop?** → [model/planner.md#unmodeled-world-features--the-re-plan-loop](model/planner.md#unmodeled-world-features--the-re-plan-loop)
 
+### Land movement (walk, brakeslide, EBS)
+- **How does walking accelerate / what are the two movement angles (facing vs travel)?** → [mechanics/land-movement.md](mechanics/land-movement.md)
+- **What is a brakeslide / extended brakeslide (EBS) / why does ESS left-or-right hold speed almost forever?** → is *facing* (not travel) relative to `csangle` → [land-movement.md#camera-relative-speed-preservation-the-ebs-payoff](mechanics/land-movement.md#camera-relative-speed-preservation-the-ebs-payoff)
+
 ### Model (sim / planner)
 - **Why f32 / the console cosine table / CHARGE_DISP_FACTOR / cold-start mRate?** → [model/sim.md](model/sim.md)
 - **How does the planner search / why are mid-swim pumps off by default / the crossover decomposition / the speed-retention prune?** → [model/planner.md](model/planner.md)
