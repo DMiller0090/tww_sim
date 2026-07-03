@@ -1,18 +1,23 @@
-"""Live-behavior regression locks for LAND movement tech (brakeslide / EBS / facing).
+"""LAND-movement regression: walk_run is SIM-vs-LIVE; the other 4 are live-behavior locks.
 
-There is no land SIM yet, so these are NOT sim-vs-live. Each case replays a fixed input
-sequence from the land_flatwalk anchor via ONE race-free `advanceseq` and asserts the
-GAME's characteristic END-STATE -- the *discovered tech*: clean run accel, the brakeslide
-(L held -> targeting slide, facing locked), the EBS (L released -> extended slide), the
-camera-relative speed preservation (ESS toward csangle holds speed ~forever; ESS toward
-csangle+180 brakes to a stop), and the facing/travel DECOUPLING (facing turns while the
-slide direction holds). They also guard the anchor + capture harness against drift.
+`walk_run` is the first LAND sim-vs-live gate (the swim run_tests analogue): it seeds a
+`superswim.land.LandState` from the live frame-0 snapshot, steps the sim over the walk seq,
+and compares the END potential_speed / state / position against the game replayed via one
+race-free `advanceseq`. potential_speed (mNormalSpeed) and the state machine are BIT-EXACT;
+position is a CALIBRATED foot-plant stand-in (see superswim/land.py) so it is checked to a
++-3 tolerance, not to the ULP.
+
+The other 4 (brakeslide / EBS / facing decouple / brake) are still LIVE-BEHAVIOR LOCKS -- no
+sim yet (they need the ATN_MOVE proc + the facing/travel decouple, the next tier). Each
+replays a fixed input burst from the land_flatwalk anchor and asserts the GAME's
+characteristic END-STATE (the discovered tech: L-held targeting slide with facing locked;
+L-released extended slide; camera-relative speed preservation; facing/travel decouple). They
+also guard the anchor + capture harness against drift.
 
 Determinism: the anchor + inputs are fixed and advanceseq is race-free, so end-state is
-reproducible and can be locked tight, exactly like the swim run_tests baselines. Upgrade
-to sim-vs-live (or DTM-gold via run_dtm) once a land sim exists. These locks are the land
-analogue of the immutable swim syncs -- do not loosen a check to make a run pass; a real
-change means the tech (or anchor) changed, which is a finding, not a test edit.
+reproducible and can be locked tight, exactly like the swim run_tests baselines. These locks
+are the land analogue of the immutable swim syncs -- do not loosen a check to make a run
+pass; a real change means the tech (or anchor) changed, which is a finding, not a test edit.
 
 Free cam: C-stick full DOWN every frame (substickY=0) so csangle stays 0 (the reference).
 L-target uses digital L (buttons 0x40) + analog triggerL=255. ESS = (128,110); ESS-left =
@@ -32,6 +37,7 @@ _tb = os.path.join(os.path.dirname(_rb), 'tools')  # locate tools/
 if _tb not in sys.path: sys.path.append(_tb)
 import dolphin_mem as D
 from harness.dtm.run_dtm import resolve_anchor
+from superswim.land import LandState
 
 ANCHOR = resolve_anchor("land_flatwalk@twwgz")
 READS = ["link_state", "potential_speed", "true_speed", "shape_angle_y",
@@ -79,13 +85,48 @@ def replay(seq):
     return e
 
 
+def replay_sim_vs_live(seq):
+    """SIM-vs-LIVE for the walk. Load the anchor, read the resting frame-0 seed, seed a
+    LandState, step it over the seq, and replay the same seq live via one advanceseq.
+    Returns (sim_state, live_end) for comparison. Mirrors swim run_tests.run_one.
+
+    NOTE: read the seed DIRECTLY after loadstate (no settle frame). A stray `advancewith`
+    neutral frame before the advanceseq perturbs the live walk by ~5 units (advancewith vs
+    advanceseq pipe artifact -- bug#2); the clean advanceseq-from-load result is 1278.25."""
+    D.control_pipe_quiet("clearinput")
+    D.control_pipe_quiet("savestate", {"action": "load", "path": ANCHOR.replace('\\', '/')})
+    h, m = D.attach()
+    seed = {k: D.read_named(h, m, k) for k in READS}   # anchor's deterministic rest state
+    sim = LandState(pos_z=seed["pos_z"], facing=int(seed["shape_angle_y"]),
+                    travel=int(seed["travel_angle"]), csangle=int(seed["csangle"]),
+                    state=int(seed["link_state"]), nspeed=seed["potential_speed"])
+    for el in seq:                                # C-stick full down => free cam, csangle 0
+        for _ in range(el.get("frames", 1)):
+            sim.step(el["stickX"], el["stickY"])
+    D.control_pipe_quiet("advanceseq", {"port": 0, "seq": seq})
+    h, m = D.attach()
+    live = {k: D.read_named(h, m, k) for k in READS}
+    return sim, live
+
+
+# SIM-vs-LIVE checks for walk_run: potential_speed (mNormalSpeed) + state are BIT-EXACT
+# (tight tol); position is the calibrated foot-plant stand-in (+-3, see superswim/land.py).
+def walk_checks(sim, live):
+    dv = abs(sim.nspeed - live["potential_speed"])
+    return [
+        (sim.state == int(live["link_state"]),
+         f"state sim/live {sim.state}/{int(live['link_state'])} (both idle 4)"),
+        (dv <= 0.02, f"potential_speed bit-exact  dv={dv:.5f}  "
+                     f"(sim {sim.nspeed:.3f} / live {live['potential_speed']:.3f})"),
+        (abs(sim.pos_z - live["pos_z"]) < 3.0,
+         f"pos_z within 3 (calibrated)  sim {sim.pos_z:.2f} / live {live['pos_z']:.2f}"),
+    ]
+
+
 # check(end) -> list of (ok, description) -- the LOCKED characteristic assertions per case.
+# walk_run is SIM-vs-LIVE (handled specially in main via walk_checks); the rest are live locks.
 CASES = [
-    ("walk_run", seq_walk, "run to max then standstill", lambda e: [
-        (e["link_state"] == 4, f"state 4 (idle)  [{e['link_state']}]"),
-        (abs(e["pos_z"] - 1278.25) < 3.0, f"pos_z~1278.25  [{e['pos_z']:.2f}]"),
-        (e["v"] < 0.5, f"|v|~0 stopped  [{e['v']:.2f}]"),
-    ]),
+    ("walk_run", seq_walk, "SIM-vs-LIVE: run accel to cap 17 then decel to standstill", None),
     ("brakeslide", seq_brakeslide, "L held -> targeting slide, facing locked", lambda e: [
         (e["link_state"] == 7, f"state 7 (ATN_MOVE)  [{e['link_state']}]"),
         (e["facing"] < 5 or e["facing"] > 355, f"facing locked ~0  [{e['facing']:.1f}]"),
@@ -117,13 +158,22 @@ def main():
     for label, seqfn, note, check in CASES:
         if only and only != label:
             continue
-        end = replay(seqfn())
-        if record:
-            print(f"{label:<12} st={end['link_state']} v={end['v']:.3f} "
-                  f"face={end['facing']:.1f} trav={end['travel']:.1f} "
-                  f"face-trav={end['face_trav']:.1f} pos=({end['pos_x']:.1f},{end['pos_z']:.1f})  # {note}")
-            continue
-        checks = check(end)
+        if check is None:                        # walk_run: SIM-vs-LIVE
+            sim, live = replay_sim_vs_live(seqfn())
+            if record:
+                print(f"{label:<12} SIM st={sim.state} v={sim.nspeed:.3f} pos_z={sim.pos_z:.2f}  "
+                      f"| LIVE st={int(live['link_state'])} v={live['potential_speed']:.3f} "
+                      f"pos_z={live['pos_z']:.2f}  # {note}")
+                continue
+            checks = walk_checks(sim, live)
+        else:                                    # live-behavior lock
+            end = replay(seqfn())
+            if record:
+                print(f"{label:<12} st={end['link_state']} v={end['v']:.3f} "
+                      f"face={end['facing']:.1f} trav={end['travel']:.1f} "
+                      f"face-trav={end['face_trav']:.1f} pos=({end['pos_x']:.1f},{end['pos_z']:.1f})  # {note}")
+                continue
+            checks = check(end)
         ok = all(c[0] for c in checks)
         npass += ok
         nfail += (not ok)

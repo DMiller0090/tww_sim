@@ -11,6 +11,7 @@ Typical use::
     print(st.v, st.anim)
 """
 from .sim import SwimState, run_trace, run_arrow, ArrowState
+from .land import LandState, run_walk
 from .plan import plan_min_frames, plan_hierarchical
 from .optimize import beam_search, beam_search_to_dest
 from .actions import expand, acts_to_seq, animdiff, ESS, NEU, CHG_UP, CHG_DN
@@ -19,6 +20,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "SwimState", "run_trace", "run_arrow", "ArrowState",
+    "LandState", "run_walk",
     "plan_min_frames", "plan_hierarchical",
     "beam_search", "beam_search_to_dest",
     "expand", "acts_to_seq", "animdiff", "ESS", "NEU", "CHG_UP", "CHG_DN",
