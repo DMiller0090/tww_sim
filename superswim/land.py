@@ -43,6 +43,9 @@ WAIT = 4          # daPyProc_WAIT_e         (idle standstill)
 FREE_WAIT = 5     # daPyProc_FREE_WAIT_e    (anchor's resting proc)
 MOVE = 6          # daPyProc_MOVE_e         (ground locomotion)
 ATN_MOVE = 7      # daPyProc_ATN_MOVE_e     (targeting move: brakeslide / L-held slide)
+WAIT_TURN = 23    # daPyProc_WAIT_TURN_e    (pivot-in-place reversal from a standstill)
+MOVE_TURN = 24    # daPyProc_MOVE_TURN_e    (turn-around reversal, low speed / post-slip)
+SLIP = 25         # daPyProc_SLIP_e         (high-speed reversal skid, hands to MOVE_TURN)
 FRONT_ROLL = 30   # daPyProc_FRONT_ROLL_e   (A-button forward roll)
 
 # mDirection enum (d_a_player_main.h daPy_lk_c::direction_e). getDirectionFromAngle buckets the
@@ -143,6 +146,21 @@ class LandState:
     # (with a neutral stick checkNextMode(1) is inert -- 4457 returns false when msd<=0.05 and no action
     # button -- so a neutral roll runs to ROLL_END; a held stick exits one frame early, e.g. the roll-EBS.)
 
+    # HIO mTurn (ground reversal turns), d_a_player_HIO_data.inc:22. WaitTurn pivots facing toward the
+    # captured stick target; the min step (0x1F40) dominates -> ~8000/frame. (MoveTurn sweep: see its init.)
+    TURN_MAX = 0x3CDF               # field_0x0 = cLib_addCalcAngleS max step (WaitTurn facing pivot)
+    TURN_MIN = 0x1F40               # field_0x2 = min step
+    TURN_SCALE = 30                 # field_0x4 = scale (diff/scale; << min so the min step rules)
+    # HIO mSlip (high-speed reversal skid), d_a_player_HIO_data.inc:106 (daPy_HIO_slip_c1). Entry from a
+    # MOVE frame whose speedF/mMaxNormalSpeed exceeds the threshold AND the stick genuinely flipped.
+    SLIP_THRESH = f32(0.6)          # field_0x4 = speedF/mMaxNormalSpeed slip-entry threshold
+    SLIP_ENTRY = f32(1.1)           # field_0x8 = entry-speed multiplier (mNormalSpeed = speedF * this)
+    SLIP_DEC_SCALE = f32(0.6)       # field_0x18 = cLib_addCalc decel scale
+    SLIP_DEC_MAX = f32(1.25)        # field_0x10 = cLib_addCalc decel maxStep (~-1.25/frame skid bleed)
+    SLIP_DEC_MIN = f32(0.1875)      # field_0x14 = cLib_addCalc decel minStep
+    # MoveTurn slip-exit re-accel seed = mMaxNormalSpeed * this (procSlip 6666); shape nudge = 0x100.
+    MT_SLIP_SEED = f32(0.5)
+
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
                  use_anim=True):
@@ -152,6 +170,8 @@ class LandState:
         self.travel = int(travel) & 0xFFFF     # current.angle.y (s16)
         self.csangle = int(csangle) & 0xFFFF   # dCam_getControledAngleY (s16)
         self.target = 0                        # m34E8 (s16), set each frame by setStickData
+        self.m34dc = int(facing) & 0xFFFF      # stick want-angle pre-csangle (m34E8 = m34dc + csangle)
+        self.m34ea = int(facing) & 0xFFFF      # PREVIOUS frame's m34dc (slip stick-flip detector, 11289)
         self.state = int(state)                # link_state / mCurProc
         self.nspeed = f32(nspeed)              # mNormalSpeed (potential_speed) -- bit-exact
         self.speedF = f32(speedF)              # position-integrating speed
@@ -161,8 +181,15 @@ class LandState:
         self.m34E6 = int(facing) & 0xFFFF      # facing lock captured on attention-lock engage
         self._l_prev = False                   # attention-lock (L) held last frame (rising edge)
         self._visited_atn = False              # did this run ever enter ATN_MOVE (ATN anims unported)
+        self.visited = set()                   # every proc state this run passed through (path assertions)
         self.roll_frame = 0.0                  # ANM_ROLLF frame ctrl during FRONT_ROLL (times the exit)
         self._roll_entered = False             # entry frame: don't advance the anim ctrl yet
+        self.turn_target = 0                   # mProcVar2.m34D4 (WaitTurn facing-pivot target)
+        self.turn_shape_scale = 0              # MoveTurn shape-sweep cLib params (m34D0/m34D4/m34D6)
+        self.turn_shape_max = 0
+        self.turn_shape_min = 0
+        self._pos_fallback = False             # a turn proc (ANM_ROT/SLIP/turn-blend unported) was entered
+        #                                        -> position uses the calibrated chase, not asserted bit-exact
         # 2-frame controller-input buffer (index 0 = oldest = the input acted on this frame).
         # Tuple = (stickX, stickY, buttons, triggerL) -- L/target is delayed like the stick.
         self._inbuf = [(128, 128, 0, 0)] * INPUT_DELAY
@@ -200,8 +227,8 @@ class LandState:
         if sa is None:
             self.target = self.travel           # neutral: no want -> hold (irrelevant, gated)
         else:
-            m34dc = (deg_to_s16(sa) + 0x8000) & 0xFFFF
-            self.target = (m34dc + self.csangle) & 0xFFFF
+            self.m34dc = (deg_to_s16(sa) + 0x8000) & 0xFFFF
+            self.target = (self.m34dc + self.csangle) & 0xFFFF
 
     # --- setNormalSpeedF (2301), walk path -------------------------------------------------
     def _set_normal_speed_f(self, param_1, param_2, param_3, param_4):
@@ -236,14 +263,29 @@ class LandState:
         (L held) suppresses them -- the ATN-forward call keeps facing frozen (set by the caller
         to m34E6) and never takes the reversal/slip branch. No MOVE_TURN/event/heavy/grab."""
         if self.msd > 0.05:
+            bVar2 = False
             dVar11 = f32(self.msd * self.msd)
-            # Aligned branch (walk): m34E8 within 0x7800 of travel -> chase travel + keep the
-            # cM_scos speed scale. The >0x7800 near-reversal branch (skipped under attention).
-            if not attention_lock and _dist_angle_s(self.target, self.travel) > 0x7800:
-                # near-reversal: chase and skip the speed-scale (bVar2). Rare in steady walk.
-                self.travel = cLib_addCalcAngleS(self.travel, self.target, self.F6, param_1, self.F4)
-                dVar9 = 0.0
-                bVar2 = True
+            # >0x7800 near-reversal branch (2763), skipped under attention lock or during MOVE_TURN.
+            if (not attention_lock and _dist_angle_s(self.target, self.travel) > 0x7800
+                    and self.state != MOVE_TURN):
+                # ModeFlg_00000001 (WAIT/FREE_WAIT/WAIT_TURN): a reversal is INERT while idle -- return
+                # with speed/angles untouched so checkNextMode sees the full reversal -> procWaitTurn (2766).
+                if self.state in (WAIT, FREE_WAIT, WAIT_TURN):
+                    return
+                if self.state == MOVE:
+                    sp_ratio = f32(self.speedF / self.max_nspeed)
+                    # fast + a genuine stick flip -> leave everything for checkNextMode -> procSlip (2770).
+                    if (sp_ratio > self.SLIP_THRESH
+                            and self._get_dir_from_angle(s16_signed(self.m34ea - self.m34dc)) == DIR_BACKWARD):
+                        return
+                    # slow -> chase travel toward the reverse (dropping the dist below 0x7800) and
+                    # return; checkNextMode then routes via the DIR_BACKWARD branch -> procMoveTurn (2775).
+                    if sp_ratio <= self.SLIP_THRESH:
+                        self.travel = cLib_addCalcAngleS(self.travel, self.target, self.F6, param_1, self.F4)
+                        return
+                    bVar2 = True             # fast + not a flip: skip the speed scale, keep sliding
+                else:
+                    self.travel = cLib_addCalcAngleS(self.travel, self.target, self.F6, param_1, self.F4)
             else:
                 sVar6 = int(param_1 * dVar11)
                 if sVar6 < 10:
@@ -252,7 +294,6 @@ class LandState:
                 if sVar7 < 1:
                     sVar7 = 1
                 self.travel = cLib_addCalcAngleS(self.travel, self.target, self.F6, sVar6, sVar7)
-                bVar2 = False
             if not bVar2:
                 dVar9 = cM_scos_s16(s16_signed(self.target - self.travel))
                 if self.nspeed > f32(0.5 * self.max_nspeed):
@@ -269,8 +310,9 @@ class LandState:
             dVar9 = 0.0
         # facing (shape_angle.y) chases m34E8 at DOUBLE the travel rate (<<1); if the chase
         # crosses travel it snaps onto it. On-axis walk: no-op. Skipped under attention lock
-        # (facing is frozen to m34E6 by the ATN caller). (2834-2845)
-        if not attention_lock and self.msd > 0.05:
+        # (facing is frozen to m34E6 by the ATN caller) and during MOVE_TURN (its own body sweeps
+        # facing toward travel instead). (2834-2845)
+        if not attention_lock and self.state != MOVE_TURN and self.msd > 0.05:
             sVar6 = self.facing
             self.facing = cLib_addCalcAngleS(self.facing, self.target, self.F6,
                                              (param_1 << 1) & 0xFFFF, (self.F4 << 1) & 0xFFFF)
@@ -365,16 +407,42 @@ class LandState:
     def _check_next_mode(self, l_held):
         """checkNextMode (4424) transition arbiter, flat/no-enemy subset: sets mMaxNormalSpeed from
         the attention state, then picks next frame's proc. r24 (L held) -> ATN_MOVE while moving,
-        WAIT when stopped; else the MOVE branch -> MOVE while moving, WAIT when stopped. The
-        MOVE_TURN / WaitTurn / Slip sub-procs (reversal turns) are not modelled -- the aligned walk
-        and the brakeslide/EBS tests never enter them (a reversal in a MOVE frame is flagged)."""
+        WAIT when stopped. The non-attention branch (4483) is the full ground-reversal machine:
+          * stopped + >0x7800 stick reversal -> procWaitTurn (pivot in place)
+          * already MOVE_TURN with facing!=travel -> stay MOVE_TURN (init is a no-op, 6612)
+          * moving + >0x7800 reversal -> procSlip (fast + genuine stick flip) else procMoveTurn(1)
+          * moving + the (post-travel-chase) heading now reads BACKWARD -> procMoveTurn(1)
+          * otherwise procMove.
+        The reversal-branch travel chase in setSpeedAndAngleNormal runs BEFORE this, so a slow MOVE
+        reversal arrives here already below 0x7800 and routes via the DIR_BACKWARD branch instead."""
+        cur = self.state                                  # mCurProc (dispatch-time proc)
         if l_held:                                        # r24: checkAttentionLock (no lock-on actor)
             self.max_nspeed = self.ATN_MAX
             self.state = WAIT if abs(self.nspeed) <= 0.001 else ATN_MOVE
+            return
+        self.max_nspeed = f32(self.MAX_NSPEED)
+        self.direction = DIR_NONE
+        dist = _dist_angle_s(self.target, self.travel)
+        if abs(self.nspeed) <= 0.001:
+            if dist > 0x7800 and self.msd > 0.05:
+                self._proc_wait_turn_init()
+            else:
+                # changeWaitProc -> procWait_init: a no-op while already idle (FREE_WAIT keeps
+                # playing its rest anim, 6062), so a resting stand stays FREE_WAIT rather than WAIT.
+                self.state = self.state if self.state in (WAIT, FREE_WAIT) else WAIT
+        elif cur == MOVE_TURN and self.travel != self.facing:
+            self.state = MOVE_TURN                        # procMoveTurn_init(0) no-op: keep sweeping
+        elif dist > 0x7800 and self.msd > 0.05:
+            if (f32(self.speedF / self.max_nspeed) > self.SLIP_THRESH
+                    and self._get_dir_from_angle(s16_signed(self.m34ea - self.m34dc)) == DIR_BACKWARD):
+                self._proc_slip_init()
+            else:
+                self._proc_move_turn_init(1)
+        elif (self._get_dir_from_angle(s16_signed(self.target - self.travel)) == DIR_BACKWARD
+              and self.msd > 0.05):
+            self._proc_move_turn_init(1)                  # getDirectionFromCurrentAngle == BACKWARD
         else:
-            self.max_nspeed = f32(self.MAX_NSPEED)
-            self.direction = DIR_NONE
-            self.state = WAIT if abs(self.nspeed) <= 0.001 else MOVE
+            self.state = MOVE
 
     # --- roll (procFrontRoll_init 6817 / procFrontRoll 6851) -------------------------------
     def _roll_init(self):
@@ -428,6 +496,80 @@ class LandState:
         if self.state == MOVE and self._foot is not None:
             self._foot._pending_morf = self.MOVE_REENTRY_MORF
 
+    # --- ground-reversal turn procs (WaitTurn 23 / MoveTurn 24 / Slip 25) ------------------
+    def _proc_wait_turn_init(self):
+        """procWaitTurn_init (6569): pivot in place. Capture the stick target (mProcVar2.m34D4 = m34E8)
+        as the fixed pivot goal, snap travel onto facing (current.angle.y = shape_angle.y), reset the
+        (ANM_ROT) anim. mNormalSpeed is already ~0. Position is frozen (speedF 0) through the pivot."""
+        self.state = WAIT_TURN
+        self.turn_target = self.target
+        self.travel = self.facing
+        self._pos_fallback = True
+
+    def _proc_wait_turn(self, l_held):
+        """procWaitTurn (6584): bleed mNormalSpeed toward 0, pivot facing toward the captured target at
+        the mTurn rate (min step ~0x1F40 rules -> ~8000/frame), keep travel == facing. When the pivot
+        residual reaches 0 -> checkNextMode(0): the stick is now aligned so it hands off to WAIT (then
+        MOVE next frame). No translation while pivoting (speedF 0)."""
+        self.nspeed = cLib_addCalc(self.nspeed, 0.0, self.F24, self.F1C, self.F20)
+        self.facing = cLib_addCalcAngleS(self.facing, self.turn_target,
+                                         self.TURN_SCALE, self.TURN_MAX, self.TURN_MIN)
+        self.travel = self.facing
+        if s16_signed(self.turn_target - self.facing) == 0:   # sVar1 == 0 (pivot complete)
+            self._check_next_mode(l_held)
+
+    def _proc_move_turn_init(self, param_1):
+        """procMoveTurn_init (6611): set up the facing sweep. param_1!=0 (the 1 path, low-speed reversal):
+        snap travel to the stick target (current.angle.y = m34E8), halve mNormalSpeed, sweep params
+        (scale 2, max F0*4+0x4A56, min F0*2). param_1==0 (the slip-exit path): travel already flipped by
+        procSlip; sweep params (scale 3, max F0*2, min F0). The body then re-accelerates while facing
+        catches up to the (reversed) travel."""
+        self.state = MOVE_TURN
+        self._pos_fallback = True
+        if param_1 != 0:
+            self.turn_shape_max = (self.F0 * 4 + 0x4A56) & 0xFFFF
+            self.turn_shape_min = (self.F0 * 2) & 0xFFFF
+            self.turn_shape_scale = 2
+            self.travel = self.target
+            self.nspeed = f32(self.nspeed * 0.5)
+        else:
+            self.turn_shape_max = (self.F0 * 2) & 0xFFFF
+            self.turn_shape_min = self.F0 & 0xFFFF
+            self.turn_shape_scale = 3
+
+    def _proc_move_turn(self, l_held):
+        """procMoveTurn (6632): setSpeedAndAngleNormal re-accelerates along the (fixed) reversed travel
+        (its reversal + facing-chase branches are both suppressed while mCurProc==MOVE_TURN), then sweep
+        facing toward travel via cLib_addCalcAngleS(scale/max/min from init). checkNextMode keeps us in
+        MOVE_TURN until facing == travel, then routes to MOVE. Position is walk-anim driven (fallback)."""
+        self._set_speed_and_angle_normal(self.F0, attention_lock=l_held)
+        self.facing = cLib_addCalcAngleS(self.facing, self.travel,
+                                         self.turn_shape_scale, self.turn_shape_max, self.turn_shape_min)
+        self._check_next_mode(l_held)
+
+    def _proc_slip_init(self):
+        """procSlip_init (6642): the skid seed. mNormalSpeed = speedF * mSlip.field_0x8 (1.1); field_0x0==0
+        so no cap clamp -> the skid speed can exceed mMaxNormalSpeed (e.g. 17 -> 18.7). Anim ANM_SLIP
+        (unported); position is pure momentum (speedF == mNormalSpeed) so the skid distance is exact."""
+        self.state = SLIP
+        self._pos_fallback = True
+        self.nspeed = f32(self.speedF * self.SLIP_ENTRY)
+
+    def _proc_slip(self, l_held):
+        """procSlip (6658): bleed mNormalSpeed toward 0 at the mSlip decel (~-1.25/frame) while travel is
+        held (skids FORWARD). When |mNormalSpeed| reaches ~0: with the stick still pushed, flip travel by
+        0x8000, nudge facing +0x100, re-seed mNormalSpeed = mMaxNormalSpeed*0.5, and hand to procMoveTurn(0);
+        with a neutral stick, checkNextMode(0). Flat/wall-free: the wall-hit branches are omitted."""
+        self.nspeed = cLib_addCalc(self.nspeed, 0.0, self.SLIP_DEC_SCALE, self.SLIP_DEC_MAX, self.SLIP_DEC_MIN)
+        if abs(self.nspeed) <= 0.001:                    # fabsf(0 - mNormalSpeed) <= 0.001 (6662)
+            if self.msd > 0.05:
+                self.travel = (self.facing + 0x8000) & 0xFFFF
+                self.facing = (self.facing + 0x100) & 0xFFFF
+                self.nspeed = f32(self.max_nspeed * self.MT_SLIP_SEED)
+                self._proc_move_turn_init(0)
+            else:
+                self._check_next_mode(l_held)
+
     # --- proc dispatch + per-frame step ----------------------------------------------------
     def step(self, sx, sy, buttons=0, triggerL=0):
         """Advance one frame with a raw stick (sx, sy) + optional L-target (buttons 0x40 or analog
@@ -445,42 +587,55 @@ class LandState:
         # edge; it stays frozen because the ATN path writes shape_angle.y = m34E6 every frame.
         if l_held and not self._l_prev:
             self.m34E6 = self.facing
-        # idle -> move entry (procFreeWait/procWait push a stick): start the locomotion proc.
-        if self.state in (WAIT, FREE_WAIT) and moving:
-            self.state = ATN_MOVE if l_held else MOVE
         # A while moving on the ground -> forward roll (doTrigger + ATTACK, 4318). Facing snaps to the
         # stick target first (shape_angle.y = m34E8, 4319), then procFrontRoll_init.
         if a_pressed and moving and self.state in (MOVE, ATN_MOVE):
             self.facing = self.target
             self._roll_init()
 
-        # dispatch the active proc's speed/angle update
-        proc = self.state                        # dispatch-time proc (may transition below)
-        if proc == MOVE:
+        # dispatch the active proc body. WAIT/FREE_WAIT/MOVE/ATN_MOVE run their speed/angle update then
+        # checkNextMode (the arbiter: starts locomotion from idle, routes reversals to the turn procs).
+        proc = self.state                        # dispatch-time proc (mCurProc; may transition below)
+        if proc in (WAIT, FREE_WAIT):
+            if l_held:                           # attention lock from a standstill -> procAtnMove path
+                self.state = ATN_MOVE
+                self._visited_atn = True
+                self._set_speed_and_angle_atn()
+            else:
+                self._set_speed_and_angle_normal(self.F0, attention_lock=False)
+            self._check_next_mode(l_held)
+        elif proc == MOVE:
             self._set_speed_and_angle_normal(self.F0, attention_lock=l_held)
+            self._check_next_mode(l_held)
         elif proc == ATN_MOVE:
             self._visited_atn = True
             self._set_speed_and_angle_atn()
-        elif proc == FRONT_ROLL:
-            self._proc_roll(l_held)              # calls checkNextMode itself on its exit frame
-        # WAIT/FREE_WAIT: idle, nspeed stays put.
-
-        # checkNextMode: procMove/procAtnMove call it after their physics (procFrontRoll already did).
-        # Then setBlendAtnMoveAnime's direction update for the (possibly just-entered) ATN frame.
-        if proc in (MOVE, ATN_MOVE):
             self._check_next_mode(l_held)
+        elif proc == WAIT_TURN:
+            self._proc_wait_turn(l_held)         # checkNextMode when the pivot completes
+        elif proc == MOVE_TURN:
+            self._proc_move_turn(l_held)         # checkNextMode after the facing sweep
+        elif proc == SLIP:
+            self._proc_slip(l_held)              # checkNextMode / hand to MoveTurn when the skid dies
+        elif proc == FRONT_ROLL:
+            self._proc_roll(l_held)              # checkNextMode on its exit frame
+
+        # setBlendAtnMoveAnime's direction update for a (possibly just-entered) ATN frame.
         if self.state == ATN_MOVE:
             self._update_atn_direction()
 
-        # speedF -> position: FRONT_ROLL is pure momentum (speedF = mNormalSpeed); the bit-exact WALK
-        # anim engine drives MOVE; ATN_MOVE falls back to a cLib chase. See land-movement.md.
-        if self.state == FRONT_ROLL:
-            # roll position is momentum (posMoveFromFootPos with m3598==0 => speedF == mNormalSpeed);
-            # still pose rollf each frame so the foot toe stream is warm for the post-roll walk tail.
-            if self._foot is not None:
+        # speedF -> position. FRONT_ROLL & SLIP are pure momentum (speedF == mNormalSpeed); WAIT_TURN pivots
+        # in place; clean MOVE uses the bit-exact anim engine; ATN_MOVE / turn tails use the cLib fallback.
+        if self.state == WAIT_TURN:
+            self.speedF = 0.0
+        elif self.state in (FRONT_ROLL, SLIP):
+            if self.state == FRONT_ROLL and self._foot is not None:
+                # pose rollf each frame so the foot toe stream is warm for the post-roll walk tail.
                 self._foot.step_roll(self.nspeed, self.msd)
             self.speedF = self.nspeed
         elif self.state != ATN_MOVE and self._foot is not None:
+            # walk anim engine (bit-exact for a clean MOVE; a best-effort approximation for the MOVE
+            # tail after a turn proc, whose ANM_ROT/SLIP/turn-blend anims are unported -> _pos_fallback).
             self.speedF = self._foot.step(self.nspeed, self.msd)
         else:
             sc, mx, mn = SPEEDF_CHASE
@@ -491,8 +646,11 @@ class LandState:
         d = self.speedF
         self.pos_x += f32(d * _cM_ssin_s16(self.travel))
         self.pos_z += f32(d * S.cM_scos_s16(self.travel))
+        self.m34ea = self.m34dc                  # m34EA = m34DC (end-of-frame, 11289): last stick want
+        self.visited.add(self.state)
         self._l_prev = l_held
-        return d, {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL",
+        return d, {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL", WAIT_TURN: "WAITTURN",
+                   MOVE_TURN: "MOVETURN", SLIP: "SLIP",
                    WAIT: "WAIT", FREE_WAIT: "WAIT"}.get(self.state, "?")
 
 

@@ -16,7 +16,8 @@ import os
 
 import pytest
 
-from superswim.land import LandState, WAIT, FREE_WAIT, MOVE, ATN_MOVE, FRONT_ROLL
+from superswim.land import (LandState, WAIT, FREE_WAIT, MOVE, ATN_MOVE, FRONT_ROLL,
+                             WAIT_TURN, MOVE_TURN, SLIP)
 from superswim.anim.foot_speedf import FootSpeedF
 
 _ANIM = FootSpeedF.available()
@@ -231,3 +232,53 @@ def test_roll_ebs_preserves_negative_speed():
     assert abs(s.nspeed - (-23.109)) < 0.02
     d = ((s.facing - s.travel) % 65536)                     # facing ~ travel (aligned EBS)
     assert min(d, 65536 - d) < 0x0400
+
+
+# --- ground-reversal turn procs (WAIT_TURN 23 / MOVE_TURN 24 / SLIP 25) ---------------------
+
+# Offline shadow of run_land_tests.py's turn cases. All three reverse a >0x7800 stick to end walking (MOVE)
+# 180deg-reversed at the cap; only the PATH differs (LandState.visited). Position isn't pinned (fallback).
+_DN = [(128, 0, 0, 0)]           # full-down, no L, 1 frame
+
+
+def _run_turn(seq):
+    s = LandState(pos_z=SEED_POS_Z, facing=0, travel=0, csangle=0, state=FREE_WAIT,
+                  nspeed=0.0, idle_frame=70.0)
+    rows = []
+    for (sx, sy, btn, tl) in seq:
+        s.step(sx, sy, buttons=btn, triggerL=tl)
+        rows.append((s.state, s.nspeed))
+    return s, rows
+
+
+def test_waitturn_pivots_in_place_then_walks():
+    # Idle + full-reverse flick from a standstill (nspeed~0, >0x7800): procWaitTurn pivots facing in
+    # place (no MOVE_TURN/SLIP), then walks off reversed at the cap.
+    s, rows = _run_turn(_DN * 15)
+    assert WAIT_TURN in s.visited and MOVE_TURN not in s.visited and SLIP not in s.visited
+    assert all(abs(ns) < 0.05 for st, ns in rows if st == WAIT_TURN)   # pivots in place (nspeed ~0)
+    assert s.state == MOVE
+    assert abs(s.nspeed - 17.0) < 1e-4
+    assert abs(_deg(s.facing) - 180.0) < 0.1 and abs(_deg(s.travel) - 180.0) < 0.1
+
+
+def test_moveturn_below_slip_threshold():
+    # 1 up frame (barely moving, speedF/max << 0.6) then full reverse -> procMoveTurn(1) directly,
+    # no SLIP. Halves nspeed at entry then re-accelerates while facing sweeps to the reversed travel.
+    s, rows = _run_turn([(128, 255, 0, 0)] + _DN * 18)
+    assert MOVE_TURN in s.visited and SLIP not in s.visited
+    assert s.state == MOVE
+    assert abs(s.nspeed - 17.0) < 1e-4
+    assert abs(_deg(s.facing) - 180.0) < 0.1
+
+
+def test_slip_skids_forward_then_moveturn():
+    # Full-speed run (speedF/max = 1.0 > 0.6) + a genuine stick flip -> procSlip: mNormalSpeed = speedF*1.1
+    # (18.7, exceeds the cap), skids FORWARD (travel held) bleeding ~-1.25/frame, then hands to procMoveTurn.
+    s, rows = _run_turn([(128, 255, 0, 0)] * 15 + _DN * 30)
+    assert SLIP in s.visited and MOVE_TURN in s.visited
+    slip_speeds = [ns for st, ns in rows if st == SLIP]
+    assert abs(max(slip_speeds) - 18.7) < 0.02          # entry seed speedF(17)*1.1, no cap clamp
+    assert s.state == MOVE
+    assert abs(s.nspeed - 17.0) < 1e-4
+    assert abs(_deg(s.facing) - 180.0) < 0.1 and abs(_deg(s.travel) - 180.0) < 0.1

@@ -1,15 +1,16 @@
-"""LAND-movement regression, three categories: SIM-vs-LIVE (walk + 4 ATN techs + 4 roll cases),
-LIVE-LOCK (the big-reversal ground-turn procs WAIT_TURN/MOVE_TURN/SLIP, not yet simulated), and
-DTM-PLAYBACK (the wiggle-EBS-into-roll combo).
+"""LAND-movement regression, two categories: SIM-vs-LIVE (walk + 4 ATN techs + 4 roll cases + 3 ground-
+reversal turn procs) and DTM-PLAYBACK (the wiggle-EBS-into-roll combo).
 
-LIVE-LOCK (waitturn/moveturn/slip): a >0x7800 stick reversal routes through checkNextMode to a turn
-proc -- stopped -> procWaitTurn (pivot in place), moving -> procSlip (high-speed skid) or procMoveTurn
-(low-speed turn-around). The proc is transient (gone by the end), so these replay a per-frame
-advancewith trajectory (race-safe for land; end-state matches advanceseq) and assert the proc was
-entered + the reversed-walk end state. Immutable live-behavior locks -- exactly like the roll cases
-were pre-sim; flip to sim-vs-live once superswim.land models the turn procs.
+TURN PROCS (waitturn/moveturn/slip), now SIMULATED: a >0x7800 stick reversal routes through checkNextMode's
+non-attention arbiter to a turn proc -- stopped -> procWaitTurn (pivot in place), moving+fast+genuine flip
+-> procSlip (skid then procMoveTurn), moving+slow -> procMoveTurn (turn-around). The proc is transient
+(gone by the end), so a single advanceseq end-state can't see it -- instead the SIM's `visited` set proves
+the proc was entered, while sim_checks asserts the reversed-walk end state (state/mNormalSpeed/facing/travel)
+BIT-EXACT vs the live advanceseq. Position is the calibrated fallback (ANM_ROT/ANM_SLIP/turn-blend foot
+anims unported), so pos_z is not asserted bit-exact -- the locked live distance guards the anchor instead.
 
-SIM-vs-LIVE (walk_run + brakeslide/ebs/face_left/brake_right + roll_run/roll_slow/roll_settle/roll_ebs):
+SIM-vs-LIVE (walk_run + brakeslide/ebs/face_left/brake_right + roll_run/roll_slow/roll_settle/roll_ebs
++ waitturn/moveturn/slip):
 seed a `superswim.land.LandState` from the live frame-0 snapshot, step the sim over the input burst
 (stick + L-target + A), and compare the END state against the game replayed via one race-free
 `advanceseq`. mNormalSpeed (signed potential_speed), the proc state machine, facing (shape_angle.y)
@@ -148,42 +149,18 @@ def replay_dtm_trajectory(sav, nframes):
     return traj
 
 
-def replay_land_trajectory(seq):
-    """PER-FRAME advancewith trajectory over a stick seq (race-safe for land; the end-state matches a
-    single advanceseq -- verified). Needed to lock procs whose signature is TRANSIENT (WAIT_TURN/
-    MOVE_TURN/SLIP appear mid-sequence and are gone by the end). Returns [{f, state, pot, face, trav, pos_z}]."""
-    D.control_pipe_quiet("clearinput")
-    D.control_pipe_quiet("savestate", {"action": "load", "path": ANCHOR.replace('\\', '/')})
-    traj = []
-    i = 0
-    for el in seq:
-        for _ in range(el.get("frames", 1)):
-            i += 1
-            D.control_pipe_quiet("advancewith", {
-                "stickX": el["stickX"], "stickY": el["stickY"], "substickX": el["substickX"],
-                "substickY": el["substickY"], "buttons": el["buttons"], "triggerL": el["triggerL"],
-                "frames": 1})
-            h, m = D.attach()
-            traj.append({"f": i, "state": int(D.read_named(h, m, "link_state")),
-                         "pot": D.read_named(h, m, "potential_speed"),
-                         "face": D.read_named(h, m, "shape_angle_y"),
-                         "trav": D.read_named(h, m, "travel_angle"),
-                         "pos_z": D.read_named(h, m, "pos_z")})
-    return traj
-
-
-def turn_checks(traj, proc, proc_name, posz, extra=()):
-    """Shared signature for the ground-turn live-locks: the transient `proc` (23/24/25) is entered,
-    the run ends walking (MOVE) 180deg-reversed at the cap, and the total distance matches. `extra`
-    layers each case's characteristic detail (turn-in-place, no-slip, or skid-forward)."""
-    states = {r["state"] for r in traj}
-    end = traj[-1]
+def turn_checks(sim, live, proc, proc_name, posz, extra=()):
+    """Shared signature for the SIMULATED ground-turn procs: the transient `proc` (23/24/25) is entered
+    (proven by the sim's `visited` set -- the proc is gone by the end, so a single advanceseq can't see
+    it live), the run ends walking (MOVE) 180deg-reversed at the cap, and the live distance still matches
+    the locked value (anchor/seq guard). state/mNormalSpeed/facing/travel bit-exactness is asserted
+    separately by sim_checks; `extra` layers each case's characteristic path detail (no-slip / skid+turn)."""
     checks = [
-        (proc in states, f"{proc_name} ({proc}) entered  [states {sorted(states)}]"),
-        (end["state"] == 6, f"ends walking (MOVE 6)  [{end['state']}]"),
-        (abs(sdiff_deg(end["face"], 0x8000)) < 2, f"faces ~180 (reversed)  [{deg(end['face']):.1f}]"),
-        (abs(end["pot"] - 17.0) < 0.1, f"re-accelerated to the cap  [{end['pot']:.2f}]"),
-        (abs(end["pos_z"] - posz) < 0.5, f"distance pos_z~{posz:.1f}  [{end['pos_z']:.2f}]"),
+        (proc in sim.visited, f"{proc_name} ({proc}) entered  [sim visited {sorted(sim.visited)}]"),
+        (int(live["link_state"]) == 6, f"ends walking (MOVE 6)  [{int(live['link_state'])}]"),
+        (abs(sdiff_deg(live["shape_angle_y"], 0x8000)) < 2, f"faces ~180 (reversed)  [{deg(live['shape_angle_y']):.1f}]"),
+        (abs(abs(live["potential_speed"]) - 17.0) < 0.1, f"re-accelerated to the cap  [{live['potential_speed']:.2f}]"),
+        (abs(live["pos_z"] - posz) < 0.5, f"live distance pos_z~{posz:.1f}  [{live['pos_z']:.2f}]"),
     ]
     return checks + list(extra)
 
@@ -214,12 +191,14 @@ def wiggle_ebs_roll_checks(traj):
 def sim_checks(sim, live, note):
     """SIM-vs-LIVE core checks (ALL cases): state exact; mNormalSpeed (signed) bit-exact; facing +
     travel bit-exact (s16). pos_z is bit-exact via the anim engine ONLY for the on-axis walk (state
-    MOVE throughout) -- runs that visit ATN_MOVE use the calibrated position fallback (ANM_ATN* anims
-    unported) so pos is not asserted there. See superswim/land.py step() + knowledge/land-movement.md."""
+    MOVE throughout) -- runs that visit ATN_MOVE (ANM_ATN* unported) or a ground-turn proc (_pos_fallback:
+    ANM_ROT/ANM_SLIP/turn-blend unported) use the calibrated position fallback so pos is not asserted
+    there. See superswim/land.py step() + knowledge/mechanics/land-movement.md."""
     dv = abs(sim.nspeed - live["potential_speed"])         # signed: brakeslide/EBS go negative
     dfac = abs(sdiff_deg(sim.facing, live["shape_angle_y"]))
     dtrav = abs(sdiff_deg(sim.travel, live["travel_angle"]))
     visited_atn = getattr(sim, "_visited_atn", False)
+    pos_fallback = getattr(sim, "_pos_fallback", False)   # a turn proc (ANM_ROT/SLIP/turn-blend unported)
     checks = [
         (sim.state == int(live["link_state"]),
          f"state sim/live {sim.state}/{int(live['link_state'])}"),
@@ -230,7 +209,7 @@ def sim_checks(sim, live, note):
         (dtrav < 0.1, f"travel bit-exact  d={dtrav:.4f}deg  "
                       f"(sim {deg(sim.travel):.2f} / live {deg(live['travel_angle']):.2f})"),
     ]
-    if not visited_atn and sim._foot is not None:          # on-axis walk: position is bit-exact
+    if not visited_atn and not pos_fallback and sim._foot is not None:  # clean walk: position bit-exact
         dpos = abs(sim.pos_z - live["pos_z"])
         checks.append((dpos < 0.05,
                        f"pos_z BIT-EXACT (anim)  d={dpos:.4f}  "
@@ -288,21 +267,18 @@ CASES = [
 ]
 
 
-# LIVE-LOCKS (immutable): the turn procs are not yet simulated -- lock the live behavior via a per-frame
-# advancewith trajectory (the proc is transient), the target for a future sim tier. Distances 2026-07-04.
+# ground-reversal turn procs (WAIT_TURN 23 / MOVE_TURN 24 / SLIP 25), now SIMULATED -- sim_checks asserts
+# state/mNormalSpeed/facing/travel bit-exact, turn_checks proves the path. See knowledge/mechanics/land-movement.md.
 TURN_CASES = [
     ("waitturn", seq_waitturn, "idle flick-reverse -> pivot in place (WAIT_TURN) then walk off",
-     lambda t: turn_checks(t, 23, "WAIT_TURN", 690.47, [
-        (all(abs(r["pot"]) < 0.05 for r in t if r["state"] == 23),
-         "pivots in place (pot~0 through the turn)")])),
+     lambda sim, live: turn_checks(sim, live, 23, "WAIT_TURN", 690.47, [
+        (24 not in sim.visited and 25 not in sim.visited, "pure pivot (no MOVE_TURN/SLIP)")])),
     ("moveturn", seq_moveturn, "low-speed reverse -> MOVE_TURN turn-around (below the slip threshold)",
-     lambda t: turn_checks(t, 24, "MOVE_TURN", 545.69, [
-        (25 not in {r["state"] for r in t}, "no SLIP (entry speed below the slip threshold)")])),
+     lambda sim, live: turn_checks(sim, live, 24, "MOVE_TURN", 545.69, [
+        (25 not in sim.visited, "no SLIP (entry speedF/max below the 0.6 threshold)")])),
     ("slip", seq_slip, "full-speed reverse -> SLIP skid then MOVE_TURN turn-around",
-     lambda t: turn_checks(t, 25, "SLIP", 981.72, [
-        (24 in {r["state"] for r in t}, "MOVE_TURN follows the skid"),
-        (all(abs(sdiff_deg(r["trav"], 0)) < 2 for r in t if r["state"] == 25),
-         "skids FORWARD (travel held ~0 through the slip)")])),
+     lambda sim, live: turn_checks(sim, live, 25, "SLIP", 981.72, [
+        (24 in sim.visited, "MOVE_TURN follows the skid")])),
 ]
 
 
@@ -336,21 +312,21 @@ def main():
         for passed, desc in checks:
             print(f"     {'ok ' if passed else 'X  '}{desc}")
 
-    for label, seqfn, note, check in TURN_CASES:   # ground-turn procs: live-locks (no sim yet)
+    for label, seqfn, note, check in TURN_CASES:   # ground-reversal turn procs (now SIM-vs-LIVE)
         if only and only != label:
             continue
-        traj = replay_land_trajectory(seqfn())
+        sim, live = replay_sim_vs_live(seqfn())
         if record:
-            states = sorted({r["state"] for r in traj})
-            e = traj[-1]
-            print(f"{label:<12} states={states} end=(st{e['state']}, pot {e['pot']:.3f}, "
-                  f"face {deg(e['face']):.1f}, pos_z {e['pos_z']:.2f})  # {note}")
+            print(f"{label:<12} SIM st={sim.state} v={sim.nspeed:.3f} face={deg(sim.facing):.1f} "
+                  f"trav={deg(sim.travel):.1f} visited={sorted(sim.visited)} pos_z={sim.pos_z:.2f}  | "
+                  f"LIVE st={int(live['link_state'])} v={live['potential_speed']:.3f} "
+                  f"face={deg(live['shape_angle_y']):.1f} pos_z={live['pos_z']:.2f}  # {note}")
             continue
-        checks = check(traj)
+        checks = sim_checks(sim, live, note) + check(sim, live)
         ok = all(c[0] for c in checks)
         npass += ok
         nfail += (not ok)
-        print(f"{'PASS' if ok else 'FAIL'} {label:<12} (LIVE-LOCK: {note})")
+        print(f"{'PASS' if ok else 'FAIL'} {label:<12} (SIM-vs-LIVE: {note})")
         for passed, desc in checks:
             print(f"     {'ok ' if passed else 'X  '}{desc}")
 
