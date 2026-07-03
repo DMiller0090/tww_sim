@@ -69,6 +69,39 @@ quality; (2) with a non-admissible prune, no single frontier is trustworthy as "
 exceeds 8000, so 8000 is still in the lossy-cut regime. NOTE 400k=812 is an unverified improvement
 candidate over the DTM-verified 814 — needs its own DTM before replacing the base truth.
 
+### Saturation is INTRINSIC diversity — the frontier cannot be shrunk or reshaped losslessly
+
+The frontier pins `max_frontier` on ~98% of layers (400k: 803/813 capped, from layer ~10 onward),
+and this is **not** removable precision. A layer's composition, measured deep in cruise: only
+**~30–48 distinct velocity buckets** (96% of states inside a ~12–17-unit `|v|` span near max speed)
+and ~8–11 flag-combos, but **~380–430 anim-phase buckets** — phase is the diversity axis. Three
+levers to exploit that were tested and all **fail**:
+
+- **Uniform anim/v-bucket coarsening** (older attempt) — leaves the frontier pinned; lossy.
+- **Distance-adaptive phase coarsening** (coarsen phase far from dest, keep it fine near dest —
+  motivated by head-bob phase-averaging: `|cos(π·anim/23)|` integrates to [`avg_ess_rate`](#search),
+  so same-`v` states differing only in phase accumulate a *bounded* position gap). It does **not**
+  shrink the frontier (even phase-bucket 1.0 = ~23 possible phases leaves `anim×v×flags` > 2000
+  occupied cells, so the cap stays full) and it **loses frames** (400k 812 → 814/815). The
+  phase-averaging argument is defeated because **mid-cruise dips are phase-locked to the head-bob
+  peak** — so mid-cruise phase IS frame-relevant, not just endgame phase.
+- **Diversity-preserving cut** (phase- or v-stratified selection when the cap fires, instead of pure
+  top-rank) — only chaotic ±1–2-frame jitter (v-stratified `mf=1000` → 813 beats baseline 814, but
+  `mf=1500` → 815 is *worse* than baseline 813). No cut reaches the 812 optimum below the frontier
+  width the plain cut already needs (1800).
+
+Mechanistic root: `_hcost`'s `best_disp` uses `cos=1` (peak phase) for **every** state regardless of
+its actual phase, so the rank is nearly **phase-blind** — among same-`v` states it is ~constant, making
+the cap's choice *among phases* effectively arbitrary. That single fact explains both the
+non-monotonicity *and* why a wide frontier is required (it retains phases blindly). But the diversity
+it retains is genuinely frame-relevant (mf=1000→2000 gains real frames), so it can't be cut away.
+
+**Bottom line:** frontier saturation is intrinsic and cannot be reduced *algorithmically* without
+losing frames — the "shrink/reshape the frontier" line is closed. Work is linear in frontier, so the
+only remaining cost levers are **cheaper per-expansion** ([Cython](sim.md), the durable ~2–3×, needs a
+build step) or **parallelizing the per-layer expansion** (embarrassingly parallel within a layer, but
+Python pickling of ~2000 states × ~700 layers is a real risk) — neither reduces the frontier itself.
+
 ## Why mid-swim pumps are off by default
 
 Mid-swim pumps (`neu→ess` re-entries — the same move as a mid-cruise [neutral dip](../strategy/neutral-dip.md))
