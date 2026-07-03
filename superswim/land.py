@@ -43,6 +43,7 @@ WAIT = 4          # daPyProc_WAIT_e         (idle standstill)
 FREE_WAIT = 5     # daPyProc_FREE_WAIT_e    (anchor's resting proc)
 MOVE = 6          # daPyProc_MOVE_e         (ground locomotion)
 ATN_MOVE = 7      # daPyProc_ATN_MOVE_e     (targeting move: brakeslide / L-held slide)
+FRONT_ROLL = 30   # daPyProc_FRONT_ROLL_e   (A-button forward roll)
 
 # mDirection enum (d_a_player_main.h daPy_lk_c::direction_e). getDirectionFromAngle buckets the
 # stick-vs-heading angle into these; ATN physics branches on it (fwd->Normal, back->AtnBack, side).
@@ -129,6 +130,16 @@ class LandState:
     ATNB_COS_FWD = f32(0.99)        # field_0x2C = cos(travel-facing) >= this -> DIR_FORWARD
     ATNB_COS_BACK = f32(-0.99)      # field_0x30 = cos(travel-facing) <= this -> DIR_BACKWARD
 
+    # HIO mRoll (forward roll) constants, d_a_player_HIO_data.inc:97 (daPy_HIO_roll_c1). The roll
+    # speed is set ONCE at entry from the pre-roll speedF; the anim frame ctrl (ANM_ROLLF) times it.
+    ROLL_SPD = f32(1.5)             # field_0x18 = speedF multiplier
+    ROLL_ADD = f32(0.5)             # field_0x1C = base add
+    ROLL_MIN = f32(5.0)             # field_0x20 = speed floor (standstill roll) + neutral-exit -= this
+    ROLL_END = f32(19.0)            # field_0x0 = ANM_ROLLF end frame; anim completes (rate->0) here
+    ROLL_RATE = f32(1.1)            # ANM_ROLLF frame-ctrl rate (mFrameCtrlUnder[MOVE0], captured 1.10)
+    # (field_0x10=17 is the getFrame()>17 -> checkNextMode(1) early-turn exit, inert with a neutral
+    # stick (4457 returns false), so the roll runs to ROLL_END; the moving-stick early exit is Tier B.)
+
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
                  use_anim=True):
@@ -147,6 +158,8 @@ class LandState:
         self.m34E6 = int(facing) & 0xFFFF      # facing lock captured on attention-lock engage
         self._l_prev = False                   # attention-lock (L) held last frame (rising edge)
         self._visited_atn = False              # did this run ever enter ATN_MOVE (ATN anims unported)
+        self.roll_frame = 0.0                  # ANM_ROLLF frame ctrl during FRONT_ROLL (times the exit)
+        self._roll_entered = False             # entry frame: don't advance the anim ctrl yet
         # 2-frame controller-input buffer (index 0 = oldest = the input acted on this frame).
         # Tuple = (stickX, stickY, buttons, triggerL) -- L/target is delayed like the stick.
         self._inbuf = [(128, 128, 0, 0)] * INPUT_DELAY
@@ -360,6 +373,41 @@ class LandState:
             self.direction = DIR_NONE
             self.state = WAIT if abs(self.nspeed) <= 0.001 else MOVE
 
+    # --- roll (procFrontRoll_init 6817 / procFrontRoll 6851) -------------------------------
+    def _roll_init(self):
+        """A-button forward roll entry. Speed is set ONCE from the pre-roll speedF (true_speed):
+        clamp(speedF*1.5 + 0.5, 5.0, cap) where cap = 0.5 + mMaxNormalSpeed*1.5 = 26. Facing snaps
+        to the stick target (shape_angle.y = m34E8, set by the caller when moving), and travel
+        follows facing (current.angle.y = shape_angle.y, 6837). Anim frame ctrl starts at 0."""
+        v = f32(f32(self.speedF * self.ROLL_SPD) + self.ROLL_ADD)
+        if v < self.ROLL_MIN:
+            v = f32(self.ROLL_MIN)
+        else:
+            cap = f32(self.ROLL_ADD + f32(self.MAX_NSPEED * self.ROLL_SPD))
+            if v > cap:
+                v = cap
+        self.nspeed = v
+        self.facing = self.target                # shape_angle.y = m34E8 (already snapped when moving)
+        self.travel = self.facing                # current.angle.y = shape_angle.y (6837)
+        self.state = FRONT_ROLL
+        self.roll_frame = 0.0
+        self._roll_entered = True
+
+    def _proc_roll(self):
+        """One FRONT_ROLL frame: speed is constant momentum (position uses speedF = mNormalSpeed, NO
+        foot-plant), the ANM_ROLLF frame ctrl advances at ROLL_RATE from 0. When it reaches the anim
+        end (ROLL_END) the anim completes and the roll ends (getRate()<0.01 branch): if the stick is
+        neutral, mNormalSpeed -= field_0x20 (the observed 26->21 drop, 6862), then MOVE decels to a
+        stop. The entry frame doesn't advance the ctrl (matches the live 0-at-entry counter)."""
+        if self._roll_entered:                   # entry frame: ctrl stays at 0, no exit check
+            self._roll_entered = False
+            return
+        self.roll_frame = f32(self.roll_frame + self.ROLL_RATE)
+        if self.roll_frame >= self.ROLL_END:     # anim reached its end -> exit to MOVE
+            if self.msd <= 0.05:
+                self.nspeed = f32(self.nspeed - self.ROLL_MIN)
+            self.state = MOVE
+
     # --- proc dispatch + per-frame step ----------------------------------------------------
     def step(self, sx, sy, buttons=0, triggerL=0):
         """Advance one frame with a raw stick (sx, sy) + optional L-target (buttons 0x40 or analog
@@ -370,6 +418,7 @@ class LandState:
         asx, asy, abtn, atrig = self._inbuf.pop(0)
         self._set_stick_data(asx, asy)
         l_held = bool(abtn & 0x40) or atrig >= 200      # checkAttentionLock proxy (digital/analog L)
+        a_pressed = bool(abtn & 0x100)                   # doTrigger: A = the "do"/roll button
 
         moving = self.msd > 0.05
         # Attention-lock engage: capture the facing lock (m34E6 = shape_angle.y, 2067) on the rising
@@ -379,6 +428,11 @@ class LandState:
         # idle -> move entry (procFreeWait/procWait push a stick): start the locomotion proc.
         if self.state in (WAIT, FREE_WAIT) and moving:
             self.state = ATN_MOVE if l_held else MOVE
+        # A while moving on the ground -> forward roll (doTrigger + ATTACK, 4318). Facing snaps to the
+        # stick target first (shape_angle.y = m34E8, 4319), then procFrontRoll_init.
+        if a_pressed and moving and self.state in (MOVE, ATN_MOVE):
+            self.facing = self.target
+            self._roll_init()
 
         # dispatch the active proc's speed/angle update
         if self.state == MOVE:
@@ -386,6 +440,8 @@ class LandState:
         elif self.state == ATN_MOVE:
             self._visited_atn = True
             self._set_speed_and_angle_atn()
+        elif self.state == FRONT_ROLL:
+            self._proc_roll()
         # WAIT/FREE_WAIT: idle, nspeed stays put.
 
         # checkNextMode: transition arbiter (runs after the proc). Then setBlendAtnMoveAnime's
@@ -395,9 +451,11 @@ class LandState:
         if self.state == ATN_MOVE:
             self._update_atn_direction()
 
-        # speedF -> position: the bit-exact WALK anim engine drives state MOVE; ATN_MOVE falls back to
-        # a cLib chase (ANM_ATN* anims unported; ATN position not validated to ULP). See land-movement.md.
-        if self.state != ATN_MOVE and self._foot is not None:
+        # speedF -> position: FRONT_ROLL is pure momentum (speedF = mNormalSpeed); the bit-exact WALK
+        # anim engine drives MOVE; ATN_MOVE falls back to a cLib chase. See land-movement.md.
+        if self.state == FRONT_ROLL:
+            self.speedF = self.nspeed            # roll position is momentum, not animation-driven
+        elif self.state != ATN_MOVE and self._foot is not None:
             self.speedF = self._foot.step(self.nspeed, self.msd)
         else:
             sc, mx, mn = SPEEDF_CHASE
@@ -409,7 +467,8 @@ class LandState:
         self.pos_x += f32(d * _cM_ssin_s16(self.travel))
         self.pos_z += f32(d * S.cM_scos_s16(self.travel))
         self._l_prev = l_held
-        return d, {MOVE: "MOVE", ATN_MOVE: "ATN", WAIT: "WAIT", FREE_WAIT: "WAIT"}.get(self.state, "?")
+        return d, {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL",
+                   WAIT: "WAIT", FREE_WAIT: "WAIT"}.get(self.state, "?")
 
 
 def _is_zero(x):

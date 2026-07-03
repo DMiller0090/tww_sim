@@ -16,7 +16,7 @@ import os
 
 import pytest
 
-from superswim.land import LandState, WAIT, FREE_WAIT, MOVE, ATN_MOVE
+from superswim.land import LandState, WAIT, FREE_WAIT, MOVE, ATN_MOVE, FRONT_ROLL
 from superswim.anim.foot_speedf import FootSpeedF
 
 _ANIM = FootSpeedF.available()
@@ -176,3 +176,38 @@ def test_atn_brake_right():
     s = _run_atn(_UP * 10 + _LDN + [(128, 110, 0, 0)] + [(146, 128, 0, 0)] * 60)
     assert s.state == WAIT
     assert abs(s.nspeed) < 0.01
+
+
+# --- FRONT_ROLL tier (A button) -------------------------------------------------------------
+
+# Roll speed set once at entry from pre-roll speedF: clamp(speedF*1.5+0.5, 5, 26). nspeed/state and
+# the mid-roll momentum position are bit-exact; the low-speed post-roll tail is ~4u off (see land.py).
+_A = [(128, 255, 0x100, 0)]      # A + up, 1 frame
+
+
+def test_roll_from_run_caps_at_26():
+    # Full-run roll: speedF 17 at entry -> 17*1.5+0.5 = 26 (cap). Robust w/o anim data (speedF -> 17).
+    s = _run_atn(_UP * 15 + _A + [(128, 128, 0, 0)] * 5)
+    assert s.state == FRONT_ROLL
+    assert abs(s.nspeed - 26.0) < 0.02
+
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_roll_slow_is_speedF_scaled():
+    # Rolling while barely moving -> the entry speedF (~3.67) scales the roll: 3.67*1.5+0.5 ~= 6.0.
+    s = _run_atn(_UP * 2 + _A + [(128, 128, 0, 0)] * 5)
+    assert s.state == FRONT_ROLL
+    assert abs(s.nspeed - 6.001) < 0.05
+
+
+def test_roll_nspeed_arc_and_exit():
+    # The whole roll nspeed arc is bit-exact: 26 held through the roll, -5 on the neutral exit (26->21),
+    # then the normal decel to a clean stop (state 4). (Position tail is not asserted -- foot phase.)
+    s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
+    rows = [None]
+    for (sx, sy, b, tl) in (_UP * 15 + _A + [(128, 128, 0, 0)] * 30):
+        s.step(sx, sy, buttons=b, triggerL=tl)
+        rows.append((s.state, s.nspeed))
+    assert all(rows[f][0] == FRONT_ROLL and abs(rows[f][1] - 26.0) < 1e-4 for f in range(18, 36))
+    assert rows[36][0] == MOVE and abs(rows[36][1] - 21.0) < 1e-4      # exit drops field_0x20 (5.0)
+    assert rows[-1][0] == WAIT and rows[-1][1] == 0.0                   # decels to a clean stop

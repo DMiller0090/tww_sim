@@ -1,17 +1,18 @@
-"""LAND-movement regression, three categories: SIM-vs-LIVE (walk + 4 ATN techs), LIVE-LOCK
-(the roll tier, not yet simulated), and DTM-PLAYBACK (the wiggle-EBS-into-roll combo).
+"""LAND-movement regression, three categories: SIM-vs-LIVE (walk + 4 ATN techs + 2 roll cases),
+LIVE-LOCK (roll_settle/roll_ebs), and DTM-PLAYBACK (the wiggle-EBS-into-roll combo).
 
-SIM-vs-LIVE (walk_run + brakeslide/ebs/face_left/brake_right): seed a `superswim.land.LandState`
-from the live frame-0 snapshot, step the sim over the input burst (stick + L-target), and compare
-the END state against the game replayed via one race-free `advanceseq`. mNormalSpeed (signed
-potential_speed), the proc state machine, facing (shape_angle.y) and travel (current.angle.y) are
-all BIT-EXACT. Position (pos_z) is bit-exact via the ported anim engine ONLY for the on-axis walk
-(stays in MOVE); runs that visit ATN_MOVE use the calibrated position fallback (ANM_ATN* unported)
-and pos is not asserted. Each ATN case also layers its characteristic tech assertions.
+SIM-vs-LIVE (walk_run + brakeslide/ebs/face_left/brake_right + roll_run/roll_slow): seed a
+`superswim.land.LandState` from the live frame-0 snapshot, step the sim over the input burst
+(stick + L-target + A), and compare the END state against the game replayed via one race-free
+`advanceseq`. mNormalSpeed (signed potential_speed), the proc state machine, facing (shape_angle.y)
+and travel (current.angle.y) are all BIT-EXACT. Position (pos_z) is bit-exact for the on-axis walk
+(stays in MOVE) and mid-roll (momentum); runs that visit ATN_MOVE use the calibrated position
+fallback (ANM_ATN* unported) and pos is not asserted. Each case also layers its tech assertions.
 
-LIVE-LOCK (roll_run/roll_slow/roll_settle/roll_ebs): the FRONT_ROLL tier has no sim yet, so these
-replay live via advanceseq and assert the game's own captured end-state (immutable, like the ATN
-cases were pre-sim). Flip to sim-vs-live once LandState models the roll.
+LIVE-LOCK (roll_settle/roll_ebs): the roll is simulated for speed/state/mid-roll position, but
+roll_settle needs the low-speed post-roll tail (unported ANM_ROLLF->walk phase, ~4u off) and
+roll_ebs needs the roll->ATN exit routing (Tier B) -- so these stay immutable live locks (replay
+live, assert the game's captured end-state) until those pieces land.
 
 DTM-PLAYBACK (wiggle_ebs_roll): the wiggle-EBS-into-roll chain is DENSE frame-perfect input, where
 the advanceseq pipe could jitter (bug#2). It is locked by loading a movie-active savestate fixture
@@ -227,21 +228,23 @@ CASES = [
         (e["link_state"] == 4, f"state 4 (idle/stopped)  [{e['link_state']}]"),
         (e["v"] < 0.5, f"|v|~0 braked  [{e['v']:.2f}]"),
     ]),
-]
-
-
-# LIVE-ONLY locks (no sim yet): the roll (FRONT_ROLL) tier -- immutable characteristic end-states,
-# same as the ATN cases were pre-sim. Roll = state 30 for ~18 anim frames (const speed), then exits.
-ROLL_SETTLE_POSZ = 1524.69   # full-run roll total pos_z at standstill (locked from advanceseq record)
-LIVE_CASES = [
-    ("roll_run", seq_roll_run, "full-run roll: state 30 at the 26 cap (mid-roll)", lambda e: [
+    # roll (FRONT_ROLL) is now SIMULATED (superswim.land) -- these end MID-ROLL so nspeed/state and
+    # the momentum position are bit-exact (roll speed = clamp(speedF*1.5+0.5, 5, 26) set at entry).
+    ("roll_run", seq_roll_run, "full-run roll -> state 30 at the 26 cap (mid-roll)", lambda e: [
         (e["link_state"] == 30, f"state 30 (FRONT_ROLL)  [{e['link_state']}]"),
         (abs(e["v"] - 26.0) < 0.05, f"roll speed at cap 26  [{e['v']:.3f}]"),
     ]),
-    ("roll_slow", seq_roll_slow, "barely-moving roll: low speedF -> near the 5.0 floor (mid-roll)", lambda e: [
+    ("roll_slow", seq_roll_slow, "barely-moving roll -> speedF-scaled low roll speed (mid-roll)", lambda e: [
         (e["link_state"] == 30, f"state 30 (FRONT_ROLL)  [{e['link_state']}]"),
-        (5.0 <= e["v"] < 8.0, f"roll speed near floor (speedF-scaled)  [{e['v']:.3f}]"),
+        (5.0 <= e["v"] < 8.0, f"roll speed speedF-scaled near floor  [{e['v']:.3f}]"),
     ]),
+]
+
+
+# LIVE-ONLY locks (immutable): roll_settle (full roll->stop distance -- low-speed tail ~4u off, needs
+# the unported ANM_ROLLF->walk phase) + roll_ebs (Tier B: roll->ATN routing). See land-movement.md.
+ROLL_SETTLE_POSZ = 1524.69   # full-run roll total pos_z at standstill (locked from advanceseq record)
+LIVE_CASES = [
     ("roll_settle", seq_roll_settle, "full-run roll played to standstill: total distance + clean stop", lambda e: [
         (e["link_state"] == 4, f"state 4 (idle/stopped)  [{e['link_state']}]"),
         (e["v"] < 0.5, f"|v|~0 stopped  [{e['v']:.2f}]"),

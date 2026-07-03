@@ -156,7 +156,15 @@ Press **A** (the "do" button, `dActStts_ATTACK_e`) while moving on the ground �
   a frame late and the roll→MOVE decel bleeds it to ~−18; a frame early and it dead-stops. This combo
   (huge negative speed from a roll) is a prime seam-clip setup.
 - Rolling **into a wall** → `procFrontRollCrash` (needs `speedF ≥ 10` = `field_0x3C`); inert on flat
-  wall-free ground. Not yet SIMULATED — live-behavior locks only (`run_land_tests` `roll_*`).
+  wall-free ground.
+- **Simulated** (`superswim.land`, `step` with A = button `0x100`): the roll **speed, state, duration,
+  and momentum position are bit-exact** (`roll_run`/`roll_slow` are sim-vs-live). Duration = the
+  `ANM_ROLLF` frame ctrl running 0→`field_0x0` (19) at rate 1.1 (~18 frames); with a neutral stick the
+  `getFrame()>17` early-turn exit is inert (`checkNextMode(1)` returns false when not moving), so the
+  roll runs to the anim end, then `mNormalSpeed -= 5.0` (26→21) and MOVE decels to a stop. The one gap:
+  the **low-speed post-roll tail** (`nspeed < 8.5`, where the walk foot-plant resumes) is ~4u off,
+  because `ANM_ROLLF`→walk anim phase isn't ported — so `roll_settle` (full distance) stays a live-lock,
+  as does `roll_ebs` (needs the roll→ATN exit routing, Tier B).
 
 ## Wiggle EBS + L+Up cancel → chained roll (speed-preservation combo)
 
