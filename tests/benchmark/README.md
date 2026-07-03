@@ -55,6 +55,11 @@ difference in what's recorded — every run appends the same rich record.
   short (200k pump 556@1000 vs 555@8000; 100k no-pump 402 vs 401). This is the base-truth
   producer. Slow (200k pump ~8 min). Run before shipping or when chasing frames / search speed.
   `known_best` is asserted here.
+- **refill** — the air-refill regime (200k–600k, the real TAS range) at `max_frontier=1000` for
+  feasibility. `refill_pump_200k..600k` model a "pinned-back" free build (air pinned to 900 while
+  `-x <= REFILL_UNTIL`) then one fresh-budget cruise; `cold_pump_500k_nodrown` documents the
+  drowning boundary (non-refill → NOREACH). These are SIM predictions (`known_best=None`,
+  BASELINE), not yet DTM-verified — the refill model is a user-specified 1-D approximation.
 
 `max_frontier` is the runtime↔optimality lever (see `cases.py` `_TIER_FRONTIER`). The same case
 recorded at both caps is left in the dataset on purpose — the frames-vs-frontier tradeoff is

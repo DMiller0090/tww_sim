@@ -38,7 +38,13 @@ _COMMON = dict(
 
 # max_frontier is the runtime<->optimality lever: smoke=1000 fast (converges for 50k); full=8000
 # = the shipped optimum (hardest cases land 1 frame short at 1000). See README for the tradeoff.
-_TIER_FRONTIER = {'smoke': 1000, 'full': 8000}
+# refill=1000: the air-refill regime (200k-600k, the real TAS range). Recorded at 1000 for
+# feasibility (far dests at 8000 are minutes each); may land 1 frame short of the 8000 optimum.
+_TIER_FRONTIER = {'smoke': 1000, 'full': 8000, 'refill': 1000}
+
+# Air-refill model (user-specified 1-D approx, NOT DTM-verified): air pinned 900 while -x <=
+# REFILL_UNTIL (pinned-back build), then one fresh-budget cruise. See model/planner.md, README.
+REFILL_UNTIL = 3000.0
 
 
 def _case(name, tier, dest, allow_pump, known_best, xfail_live=False, note=None,
@@ -83,12 +89,25 @@ CASES = [
     # 39dips -> 300941 live); prior desync was a double-vs-single-pi release-cos bug (superswim-gekko-fp).
     _case('cold_nopump_400k', 'full', 400000, False, 819),   # DTM-verified 2026-07-02 (pending air-delta fix)
     _case('cold_pump_400k',   'full', 400000, True,  814),   # DTM-verified 2026-07-02
-    # 400k is the ceiling for THIS anchor (Link hits the map edge before the ~900-frame air budget);
-    # a differently-placed savestate could test 700k+. Extend here when such an anchor exists.
+    # 400k is the map-edge/air ceiling for THIS anchor WITHOUT refill (Link hits the edge before
+    # the ~900-frame air budget). Air refill lifts it (cases below). Extend when a farther anchor exists.
+
+    # Non-refill drowning boundary: 500k returns NOREACH (frames=None) -- every completion needs
+    # air<0 (~900-frame budget). Physical proof far swims REQUIRE a refill. See model/planner.md.
+    _case('cold_pump_500k_nodrown', 'refill', 500000, True, None,
+          note='non-refill 500k drowns (air budget) -> NOREACH; needs refill'),
+
+    # Air-refill regime (real 200k-600k TAS range, SIM-MODEL not DTM-verified): pinned-back free
+    # build + fresh-budget cruise. BASELINE sim predictions at mf=1000 (refill tier). See README.
+    _case('refill_pump_200k', 'refill', 200000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_300k', 'refill', 300000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_400k', 'refill', 400000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_500k', 'refill', 500000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_600k', 'refill', 600000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
-TIERS = ('smoke', 'full')
+TIERS = ('smoke', 'full', 'refill')
 
 
 def cases_for(tiers):
