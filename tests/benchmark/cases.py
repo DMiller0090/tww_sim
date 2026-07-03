@@ -104,6 +104,13 @@ CASES = [
     _case('refill_pump_400k', 'refill', 400000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
     _case('refill_pump_500k', 'refill', 500000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
     _case('refill_pump_600k', 'refill', 600000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    # granularity fill (100k-step gaps) + reach-ceiling probe (does refill still fit the budget at 700/800k?)
+    _case('refill_pump_250k', 'refill', 250000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_350k', 'refill', 350000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_450k', 'refill', 450000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_550k', 'refill', 550000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_700k', 'refill', 700000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_800k', 'refill', 800000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
