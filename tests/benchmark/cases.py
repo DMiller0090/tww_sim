@@ -210,6 +210,11 @@ CASES = [
     _case('cold_pump_300k_f2000', 'grid', 300000, True, None, max_frontier=2000),
     _case('cold_pump_300k_f2500', 'grid', 300000, True, None, max_frontier=2500),
     _case('cold_pump_300k_f3000', 'grid', 300000, True, None, max_frontier=3000),
+    # does refill also have a non-monotonic valley? refill_pump_400k sweep vs mf=1000 (797)
+    _case('refill_pump_400k_f1500', 'grid', 400000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=1500),
+    _case('refill_pump_400k_f2000', 'grid', 400000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=2000),
+    _case('refill_pump_400k_f2500', 'grid', 400000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=2500),
+    _case('refill_pump_400k_f3000', 'grid', 400000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=3000),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
