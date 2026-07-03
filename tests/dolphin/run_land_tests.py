@@ -1,14 +1,23 @@
-"""LAND-movement regression: ALL 5 cases are SIM-vs-LIVE (walk + the 4 ATN-tier techs).
+"""LAND-movement regression, three categories: SIM-vs-LIVE (walk + 4 ATN techs), LIVE-LOCK
+(the roll tier, not yet simulated), and DTM-PLAYBACK (the wiggle-EBS-into-roll combo).
 
-Each case seeds a `superswim.land.LandState` from the live frame-0 snapshot, steps the sim over
-the input burst (stick + L-target), and compares the END state against the game replayed via one
-race-free `advanceseq`. mNormalSpeed (signed potential_speed), the proc state machine, facing
-(shape_angle.y) and travel (current.angle.y) are all BIT-EXACT. Position (pos_z) is checked
-bit-exact via the ported anim engine ONLY for the on-axis walk (which stays in MOVE); any run that
-visits ATN_MOVE uses the calibrated position fallback (the ANM_ATN* anims are not ported) and pos
-is not asserted there. On top of the sim-vs-live core, each ATN case layers its characteristic tech
-assertions (L-held targeting slide with facing locked; L-released extended slide; camera-relative
-speed preservation; facing/travel decouple) -- these document the mechanic + guard the anchor.
+SIM-vs-LIVE (walk_run + brakeslide/ebs/face_left/brake_right): seed a `superswim.land.LandState`
+from the live frame-0 snapshot, step the sim over the input burst (stick + L-target), and compare
+the END state against the game replayed via one race-free `advanceseq`. mNormalSpeed (signed
+potential_speed), the proc state machine, facing (shape_angle.y) and travel (current.angle.y) are
+all BIT-EXACT. Position (pos_z) is bit-exact via the ported anim engine ONLY for the on-axis walk
+(stays in MOVE); runs that visit ATN_MOVE use the calibrated position fallback (ANM_ATN* unported)
+and pos is not asserted. Each ATN case also layers its characteristic tech assertions.
+
+LIVE-LOCK (roll_run/roll_slow/roll_settle/roll_ebs): the FRONT_ROLL tier has no sim yet, so these
+replay live via advanceseq and assert the game's own captured end-state (immutable, like the ATN
+cases were pre-sim). Flip to sim-vs-live once LandState models the roll.
+
+DTM-PLAYBACK (wiggle_ebs_roll): the wiggle-EBS-into-roll chain is DENSE frame-perfect input, where
+the advanceseq pipe could jitter (bug#2). It is locked by loading a movie-active savestate fixture
+and frame-advancing so the RECORDED MOVIE drives the inputs (the faithful delivery), asserting the
+whole chain's trajectory signature (roll@26 -> wiggle-EBS ~-23 -> L+Up cancel -> roll@24 -> stop).
+Needs the dev-local .dtm.sav fixture; SKIPS if absent.
 
 Determinism: the anchor + inputs are fixed and advanceseq is race-free, so end-state is
 reproducible and can be locked tight, exactly like the swim run_tests baselines. These are the
@@ -38,6 +47,10 @@ from superswim.land import LandState
 ANCHOR = resolve_anchor("land_flatwalk@twwgz")
 READS = ["link_state", "potential_speed", "true_speed", "shape_angle_y",
          "travel_angle", "csangle", "pos_x", "pos_z", "anim_frame"]
+
+# DTM-playback fixture: a movie-active savestate -- loading it restores a recorded movie at frame 0
+# and `advance` replays it through the movie system (faithful for dense input). Dev-local; SKIPS if absent.
+WIGGLE_SAV = os.path.join(os.path.dirname(ANCHOR), "wiggle_ebs_roll@twwgz.dtm.sav")
 
 
 def hold(sx, sy, n, buttons=0, triggerL=0):
@@ -119,6 +132,48 @@ def replay_live(seq):
             "travel": deg(live["travel_angle"]),
             "face_trav": abs(sdiff_deg(live["shape_angle_y"], live["travel_angle"])),
             "pos_z": live["pos_z"]}
+
+
+def replay_dtm_trajectory(sav, nframes):
+    """Load a movie-active savestate fixture (frame 0), then frame-advance nframes letting the
+    RECORDED MOVIE drive the inputs (plain `advance` injects nothing). Returns the per-frame
+    trajectory [{f, state, pot, pos_z}]. This is the faithful path for dense frame-perfect input:
+    movie playback polls at the game's cadence, unlike the advanceseq pipe (bug#2)."""
+    D.control_pipe_quiet("clearinput")
+    D.control_pipe_quiet("savestate", {"action": "load", "path": sav.replace('\\', '/')})
+    h, m = D.attach()
+    f0 = {"f": 0, "state": int(D.read_named(h, m, "link_state")),
+          "pot": D.read_named(h, m, "potential_speed"), "pos_z": D.read_named(h, m, "pos_z")}
+    traj = [f0]
+    for i in range(1, nframes + 1):
+        D.control_pipe_quiet("advance", {"frames": 1})
+        h, m = D.attach()
+        traj.append({"f": i, "state": int(D.read_named(h, m, "link_state")),
+                     "pot": D.read_named(h, m, "potential_speed"), "pos_z": D.read_named(h, m, "pos_z")})
+    return traj
+
+
+def wiggle_ebs_roll_checks(traj):
+    """Signature of the wiggle-EBS-into-roll chain (see knowledge/mechanics/land-movement.md):
+    rest -> roll @26 -> roll-EBS/wiggle preserving ~-23 -> L+Up cancel -> 2nd roll @24.088 -> stop.
+    The final pos_z is a sensitive end-to-end signature (any misdelivery of the frame-perfect wiggle
+    or the cancel changes the second roll and the total distance)."""
+    states = {r["state"] for r in traj}
+    pots = [r["pot"] for r in traj]
+    roll_speeds = [r["pot"] for r in traj if r["state"] == 30]   # FRONT_ROLL frames
+    min_pot = min(pots)
+    end = traj[-1]
+    roll1 = any(abs(v - 26.0) < 0.05 for v in roll_speeds)        # first roll at the 26 cap
+    roll2 = any(abs(v - 24.088) < 0.1 for v in roll_speeds)       # 2nd roll off the preserved speed
+    return [
+        (traj[0]["state"] == 5 and abs(traj[0]["pos_z"] - 764.08) < 0.5,
+         f"frame0 rest (state 5 @ pos_z 764)  [{traj[0]['state']}, {traj[0]['pos_z']:.2f}]"),
+        (roll1, f"first roll at the 26 cap present  [{max(roll_speeds) if roll_speeds else 0:.3f}]"),
+        (abs(min_pot - (-23.227)) < 0.05, f"wiggle-EBS preserves ~-23.23  [{min_pot:.3f}]"),
+        (roll2, f"second roll @24.088 present  [{'yes' if roll2 else 'no'}]"),
+        (end["state"] == 4 and abs(end["pos_z"] - 2341.62) < 0.5,
+         f"ends stopped at pos_z 2341.62  [state {end['state']}, {end['pos_z']:.2f}]"),
+    ]
 
 
 def sim_checks(sim, live, note):
@@ -245,6 +300,28 @@ def main():
         print(f"{'PASS' if ok else 'FAIL'} {label:<12} (LIVE-LOCK: {note})")
         for passed, desc in checks:
             print(f"     {'ok ' if passed else 'X  '}{desc}")
+
+    # DTM-playback lock: the wiggle-EBS-into-roll chain (dense frame-perfect input; needs the
+    # movie fixture). SKIPS cleanly when the dev-local .dtm.sav is absent.
+    if (not only or only == "wiggle_ebs_roll"):
+        note = "wiggle EBS holds facing fwd, L+Up cancel -> 24 roll (roll->EBS->wiggle->cancel->roll)"
+        if not os.path.exists(WIGGLE_SAV):
+            print(f"SKIP wiggle_ebs_roll (fixture absent: {os.path.basename(WIGGLE_SAV)})")
+        else:
+            traj = replay_dtm_trajectory(WIGGLE_SAV, 80)
+            if record:
+                rolls = sorted({round(r["pot"], 3) for r in traj if r["state"] == 30})
+                print(f"wiggle_ebs_roll frames={len(traj)-1} roll_speeds={rolls} "
+                      f"min_pot={min(r['pot'] for r in traj):.3f} "
+                      f"end=(st{traj[-1]['state']}, pos_z {traj[-1]['pos_z']:.2f})  # {note}")
+            else:
+                checks = wiggle_ebs_roll_checks(traj)
+                ok = all(c[0] for c in checks)
+                npass += ok
+                nfail += (not ok)
+                print(f"{'PASS' if ok else 'FAIL'} wiggle_ebs_roll (DTM-PLAYBACK: {note})")
+                for passed, desc in checks:
+                    print(f"     {'ok ' if passed else 'X  '}{desc}")
     if not record:
         print(f"\n{npass} passed, {nfail} failed")
         sys.exit(1 if nfail else 0)

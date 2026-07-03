@@ -36,3 +36,19 @@ as the test's expected endpoint.
 | anchor | slate | notes |
 |--------|-------|-------|
 | `cruise_cold@twwgz.sav` | cold start, v=0, state 54, COLD_ANIM | shared cruise baseline (was `cruise_pump300k_rec.dtm.sav`) |
+| `land_flatwalk@twwgz.sav` | flat wall-free room, idle (state 5, pos_z 764) | land-movement gate (`run_land_tests`): walk + ATN + roll |
+
+## Movie-active fixtures (DTM playback)
+
+Some techs are **dense frame-perfect input** that the `advanceseq` pipe can jitter (bug#2), so
+they are locked by replaying a **recorded movie** instead. The fixture is a *movie-active*
+savestate: loading it (`savestate` action `load`) restores the movie at frame 0, and plain
+`advance` frame-steps let the recording drive the inputs (the faithful delivery).
+
+- `wiggle_ebs_roll@twwgz.dtm.sav` — the wiggle-EBS-into-roll chain (roll@26 → roll-EBS/wiggle
+  preserving ~−23 with facing held forward → L+Up cancel → 2nd roll@24.088 → stop @ pos_z 2341.62).
+  The **inputs** live in the committed companion `wiggle_ebs_roll@twwgz.dtm.sav.dtm` (a small `.dtm`);
+  the **`.dtm.sav`** is copyrighted RAM (~46 MB, gitignored, dev-local). `run_land_tests`'
+  `wiggle_ebs_roll` case SKIPS when the `.dtm.sav` is absent. To (re)create it: load the movie in
+  Dolphin at frame 0, then `python ../../../tools/dolphin_mem.py savestate savefile
+  tests/dolphin/anchors/wiggle_ebs_roll@twwgz.dtm.sav`.

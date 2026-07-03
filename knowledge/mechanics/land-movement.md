@@ -158,6 +158,30 @@ Press **A** (the "do" button, `dActStts_ATTACK_e`) while moving on the ground �
 - Rolling **into a wall** → `procFrontRollCrash` (needs `speedF ≥ 10` = `field_0x3C`); inert on flat
   wall-free ground. Not yet SIMULATED — live-behavior locks only (`run_land_tests` `roll_*`).
 
+## Wiggle EBS + L+Up cancel → chained roll (speed-preservation combo)
+
+A chain that carries a roll's speed through a direction reversal into a *second* roll — the highest
+speed-preservation tech found so far. Observed from a recorded DTM (`run_land_tests` `wiggle_ebs_roll`,
+DTM-playback lock; the wiggle is dense frame-perfect input so it's replayed via the movie system, not
+`advanceseq`). Full chain: **roll (26) → frame-perfect roll-EBS (−23) → wiggle EBS → L+Up cancel →
+second roll (24.088) → stop**.
+
+- **Wiggle EBS:** during the EBS, *alternate* the ESS between two positions (observed `target_angle`
+  cycling ~`270° → 270° → 135°`, msd ≈ 0.06) so **facing oscillates right around forward** (≈ 328–360°/
+  0–2°) while travel stays pinned backward (~185°). This holds the −23 speed at only **≈ −0.002/frame**
+  — the camera-relative preservation (`cM_scos(target − travel) ≈ 1`), but wiggled so the *body* points
+  roughly forward instead of drifting. Keeping facing forward is what makes the next step give forward
+  speed. **The C-stick is also nudged to shift the camera** (`csangle`) into the angle that yields the
+  desired EBS — `target = m34DC(stick) + csangle`, so camera is a live input to the whole thing.
+- **L+Up cancel:** tapping L + forward (Up) snaps `target` to forward, the ATN backward-flip converts
+  the backward slide, and it lands in MOVE at **+16** forward (speedF ~15.7).
+- **Second roll:** rolling off that preserved speedF → `15.725·1.5 + 0.5 =` **24.088** — a second
+  near-cap roll out of what began as a braking slide. Net: a huge fraction of the first roll's speed
+  is carried through the reversal.
+
+Not yet SIMULATED (depends on the roll + a camera model); the DTM-playback lock guards the end-to-end
+signature (the two roll speeds, the −23 wiggle plateau, and the final `pos_z 2341.62`).
+
 ## Values
 
 | thing | value |
