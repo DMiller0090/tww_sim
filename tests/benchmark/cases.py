@@ -156,6 +156,12 @@ CASES = [
     _case('refill_nopump_500k', 'grid', 500000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
     _case('refill_nopump_700k', 'grid', 700000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
     _case('refill_nopump_800k', 'grid', 800000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    # non-refill no-pump toward the drowning boundary (parallel to the pump curve): where does
+    # no-pump drown vs pump (475k pump reaches @887fr, air ~13)?
+    _case('cold_nopump_425k', 'grid', 425000, False, None),
+    _case('cold_nopump_450k', 'grid', 450000, False, None),
+    _case('cold_nopump_475k', 'grid', 475000, False, None),
+    _case('cold_nopump_500k', 'grid', 500000, False, None),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
