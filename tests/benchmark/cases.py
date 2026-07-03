@@ -176,6 +176,13 @@ CASES = [
     _case('cold_pump_275k', 'grid', 275000, True, None),
     _case('cold_pump_325k', 'grid', 325000, True, None),
     _case('cold_pump_375k', 'grid', 375000, True, None),
+    # refill pump fine granularity (match the non-refill curve density at ~50k steps)
+    _case('refill_pump_225k', 'grid', 225000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_275k', 'grid', 275000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_325k', 'grid', 325000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_375k', 'grid', 375000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_425k', 'grid', 425000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_475k', 'grid', 475000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
