@@ -168,6 +168,14 @@ CASES = [
     _case('refill_nopump_450k',  'grid', 450000,  False, None, refill_air=True, refill_until=REFILL_UNTIL),
     _case('refill_nopump_550k',  'grid', 550000,  False, None, refill_air=True, refill_until=REFILL_UNTIL),
     _case('refill_nopump_1000k', 'grid', 1000000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    # smooth the primary non-refill pump curve to ~50k granularity in the mid-range
+    _case('cold_pump_75k',  'grid',  75000, True, None),
+    _case('cold_pump_125k', 'grid', 125000, True, None),
+    _case('cold_pump_175k', 'grid', 175000, True, None),
+    _case('cold_pump_225k', 'grid', 225000, True, None),
+    _case('cold_pump_275k', 'grid', 275000, True, None),
+    _case('cold_pump_325k', 'grid', 325000, True, None),
+    _case('cold_pump_375k', 'grid', 375000, True, None),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
