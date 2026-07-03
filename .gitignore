@@ -1,5 +1,6 @@
 # Regenerable artifacts (captures, viz, DTMs, run dumps, logs)
 _generated/
+harness/capture/*.csv
 
 # Local-only research notes / session provenance (not part of the shared repo)
 _notes/
