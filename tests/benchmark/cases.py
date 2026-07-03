@@ -124,6 +124,10 @@ CASES = [
     _case('cold_nopump_150k', 'grid', 150000, False, None),
     _case('cold_nopump_250k', 'grid', 250000, False, None),
     _case('cold_nopump_350k', 'grid', 350000, False, None),
+    # no-pump refill (shared cruise-DP under refill; pump benefit WITH refill vs refill_pump_*)
+    _case('refill_nopump_200k', 'grid', 200000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_400k', 'grid', 400000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_600k', 'grid', 600000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
