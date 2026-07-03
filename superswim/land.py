@@ -136,7 +136,9 @@ class LandState:
     ROLL_ADD = f32(0.5)             # field_0x1C = base add
     ROLL_MIN = f32(5.0)             # field_0x20 = speed floor (standstill roll) + neutral-exit -= this
     ROLL_END = f32(19.0)            # field_0x0 = ANM_ROLLF end frame; anim completes (rate->0) here
-    ROLL_RATE = f32(1.1)            # ANM_ROLLF frame-ctrl rate (mFrameCtrlUnder[MOVE0], captured 1.10)
+    ROLL_RATE = f32(1.1)            # field_0x8 = ANM_ROLLF frame-ctrl rate (mFrameCtrlUnder[MOVE0])
+    ROLL_ENTRY_MORF = 2.0           # field_0x14 = setSingleMoveAnime i_morf at roll entry
+    MOVE_REENTRY_MORF = 2.4         # mBasic.field_0xC = procMove_init setBlendMoveAnime morf (roll->walk)
     # (field_0x10=17 is the getFrame()>17 -> checkNextMode(1) early-turn exit, inert with a neutral
     # stick (4457 returns false), so the roll runs to ROLL_END; the moving-stick early exit is Tier B.)
 
@@ -392,6 +394,10 @@ class LandState:
         self.state = FRONT_ROLL
         self.roll_frame = 0.0
         self._roll_entered = True
+        # setSingleMoveAnime(ANM_ROLLF, ...): the foot engine poses rollf through the roll (m34C3=0)
+        # so the toe stream is warm for the post-roll walk tail. morf = mRoll.field_0x14 = 2.0.
+        if self._foot is not None:
+            self._foot.enter_roll(morf=self.ROLL_ENTRY_MORF)
 
     def _proc_roll(self):
         """One FRONT_ROLL frame: speed is constant momentum (position uses speedF = mNormalSpeed, NO
@@ -407,6 +413,10 @@ class LandState:
             if self.msd <= 0.05:
                 self.nspeed = f32(self.nspeed - self.ROLL_MIN)
             self.state = MOVE
+            # roll->MOVE: procMove_init calls setBlendMoveAnime(mBasic.field_0xC). Because the roll
+            # left m34C3==0, the walk blend re-inits its frame ctrl to 0 and re-triggers the morf.
+            if self._foot is not None:
+                self._foot._pending_morf = self.MOVE_REENTRY_MORF
 
     # --- proc dispatch + per-frame step ----------------------------------------------------
     def step(self, sx, sy, buttons=0, triggerL=0):
@@ -454,7 +464,11 @@ class LandState:
         # speedF -> position: FRONT_ROLL is pure momentum (speedF = mNormalSpeed); the bit-exact WALK
         # anim engine drives MOVE; ATN_MOVE falls back to a cLib chase. See land-movement.md.
         if self.state == FRONT_ROLL:
-            self.speedF = self.nspeed            # roll position is momentum, not animation-driven
+            # roll position is momentum (posMoveFromFootPos with m3598==0 => speedF == mNormalSpeed);
+            # still pose rollf each frame so the foot toe stream is warm for the post-roll walk tail.
+            if self._foot is not None:
+                self._foot.step_roll(self.nspeed, self.msd)
+            self.speedF = self.nspeed
         elif self.state != ATN_MOVE and self._foot is not None:
             self.speedF = self._foot.step(self.nspeed, self.msd)
         else:

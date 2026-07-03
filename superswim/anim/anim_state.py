@@ -34,6 +34,7 @@ ANIM_META = {
     'waits': (60, EMode_LOOP),
     'walk':  (32, EMode_LOOP),
     'dash':  (32, EMode_LOOP),
+    'rollf': (19, EMode_NONE),   # ANM_ROLLF (forward roll); single-anim during FRONT_ROLL
 }
 
 # HIO daPy_HIO_move_c0::m constants (the flat free-walk subset).
@@ -155,6 +156,28 @@ class UnderAnimState:
             morf = self._set_move_anime(1.0, H_48, H_48, 'dash', 'dash', 1, i_morf)
             self.m3598 = 0.0
         return morf
+
+    def set_single(self, anim, start, end, rate, m34C3=0):
+        """daPy_lk_c::setSingleMoveAnime (12794), under-body part: MOVE0 = `anim` at ratio 1, MOVE1 =
+        NULL at ratio 0, m34C3 = 0. Used by procFrontRoll_init (ANM_ROLLF) and other single-anim procs.
+        Does NOT touch m3598 (it keeps its pre-proc value -- so during a roll the foot term stays off
+        exactly as it was, and speedF = mNormalSpeed momentum). frame ctrl: frame = end-0.001 if the
+        rate is negative else start (12815). The caller triggers the FootFK oldframe-morf separately."""
+        self.move0 = anim
+        self.move1 = None
+        self.m34C3 = m34C3
+        self.ratio = 0.0
+        frame = fp.fsubs(float(end), 0.001) if rate < 0.0 else float(start)
+        self.fc0.set(ANIM_META[anim][1], float(start), float(end), float(rate), frame)
+
+    def step_single(self):
+        """Advance the single-anim frame ctrl one game frame (J3DFrameCtrl::update) and return the
+        render state: MOVE0 only (ratio 0), m3598 frozen. The mirror of step() for a setSingleMoveAnime
+        proc (no setBlendMoveAnime re-pose). posMoveFromFootPos still runs, so the foot toe stream keeps
+        updating -- which is what seeds the low-speed tail of the *following* walk (post-roll)."""
+        self.fc0.update()
+        return dict(move0=self.move0, move1=self.move0, f0=self.fc0.frame, f1=self.fc0.frame,
+                    ratio=0.0, m3598=self.m3598, morf=False)
 
     def step(self, nspeed, m34E2_cos=1.0, i_morf=-1.0):
         """Advance one game frame at the given (already bit-exact) mNormalSpeed. Returns the render

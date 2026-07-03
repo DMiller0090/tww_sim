@@ -81,6 +81,38 @@ class FootSpeedF:
         self.t2 = draw0
         self.prev_f312 = 0.0
         self.m35B4 = 0.0                               # previous frame's mStickDistance
+        self._roll = False                             # in a FRONT_ROLL (single rollf anim) segment
+        self._roll_entered = False                     # roll entry frame: hold the ctrl at start
+        self._pending_morf = None                      # morf to apply on the next step (roll/walk entry)
+
+    def enter_roll(self, morf=2.4, start=0.0, end=19.0, rate=1.1):
+        """procFrontRoll_init: setSingleMoveAnime(ANM_ROLLF). The under-body switches to a single
+        rollf anim (m34C3=0), so during the roll posMoveFromFootPos keeps posing the foot + updating
+        the toe stream while m3598 stays frozen (=> speedF stays = mNormalSpeed momentum). Because
+        m34C3==0, the following walk blend re-inits its frame ctrl to 0 on the roll->MOVE exit
+        (live roll_run.csv f36: move0_frame=0 at rate 2.30). Call step_roll() each FRONT_ROLL frame.
+        morf = the roll-entry oldframe-morf (mRoll.field_0x14); it decays out long before the exit."""
+        self.st.set_single('rollf', start, end, rate)
+        self.started = True
+        self._roll = True
+        self._roll_entered = True                  # entry frame: don't advance the ctrl (matches land)
+        self._pending_morf = float(morf) if morf is not None else None
+
+    def step_roll(self, nspeed, msd):
+        """One FRONT_ROLL frame: advance the rollf frame ctrl, pose the foot, run the posMoveFromFootPos
+        toe-stream bookkeeping (f31_2, m359C, stored toe). Returns speedF (== nspeed while m3598==0, the
+        roll momentum). Its real job is warming the toe stream so the post-roll walk tail is bit-exact."""
+        nspeed = _f32(nspeed)
+        msd = _f32(msd)
+        morf = self._pending_morf if self._pending_morf is not None else -1.0
+        self._pending_morf = None
+        if self._roll_entered:                     # entry frame: pose at frame 0 (no ctrl advance)
+            self._roll_entered = False
+            state = dict(move0='rollf', move1='rollf', f0=self.st.fc0.frame, f1=self.st.fc0.frame,
+                         ratio=0.0, m3598=self.st.m3598, morf=False)
+        else:
+            state = self.st.step_single()
+        return self._foot_speedf(nspeed, msd, state, morf)
 
     def _shift(self, cur, f312, msd):
         self.m35B4 = _f32(msd)
@@ -110,10 +142,20 @@ class FootSpeedF:
             self.stopped = True
             self.m35B4 = msd
             return 0.0
+        elif self._pending_morf is not None:
+            morf = self._pending_morf                 # roll->walk re-entry: re-trigger oldframe-morf
+            self._pending_morf = None
         else:
             morf = -1.0
+        self._roll = False
 
         state = self.st.step(nspeed)
+        return self._foot_speedf(nspeed, msd, state, morf)
+
+    def _foot_speedf(self, nspeed, msd, state, morf):
+        """The shared posMoveFromFootPos math (d_a_player_main.cpp:2372+): pose the foot, take the
+        1-frame-delayed plant toe delta f31_2 with the recursive smoothing, and compose
+        speedF = nspeed*(1-m3598) +/- f31_2*m3598. Used by both the walk step() and the roll step_roll()."""
         cur = self.ff.step_feet(state['move0'], state['move1'], state['f0'], state['f1'],
                                 state['ratio'], i_morf=morf)
         # spB0 = the toe DRAWN last frame (1-frame delay) = t1; prevStored = t2.
