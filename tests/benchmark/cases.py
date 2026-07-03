@@ -139,6 +139,9 @@ CASES = [
     _case('refill_pump_400k_ru1000',  'grid', 400000, True, None, refill_air=True, refill_until=1000.0),
     _case('refill_pump_400k_ru5000',  'grid', 400000, True, None, refill_air=True, refill_until=5000.0),
     _case('refill_pump_400k_ru10000', 'grid', 400000, True, None, refill_air=True, refill_until=10000.0),
+    # frontier sensitivity under refill: 200k @mf=8000 == 535 == @mf=1000 -> refill is
+    # FRONTIER-INSENSITIVE (converges at 1000, like non-refill), and air-in-sig doesn't blow up.
+    _case('refill_pump_200k_f8000', 'grid', 200000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=8000),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
