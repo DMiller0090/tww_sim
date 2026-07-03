@@ -128,6 +128,11 @@ CASES = [
     _case('refill_nopump_200k', 'grid', 200000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
     _case('refill_nopump_400k', 'grid', 400000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
     _case('refill_nopump_600k', 'grid', 600000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    # drowning-boundary map (non-refill, allow_drown default): 400k reaches (air 84), 500k drowns.
+    # Which of these still reach within the ~900-frame budget? NOREACH = drowns.
+    _case('cold_pump_425k', 'grid', 425000, True, None),
+    _case('cold_pump_450k', 'grid', 450000, True, None),
+    _case('cold_pump_475k', 'grid', 475000, True, None),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
