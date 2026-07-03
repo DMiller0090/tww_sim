@@ -142,6 +142,15 @@ CASES = [
     # frontier sensitivity under refill: 200k @mf=8000 == 535 == @mf=1000 -> refill is
     # FRONTIER-INSENSITIVE (converges at 1000, like non-refill), and air-in-sig doesn't blow up.
     _case('refill_pump_200k_f8000', 'grid', 200000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=8000),
+    # refill far-ceiling probe: does refill ITSELF eventually drown (cruise > ~900-frame budget
+    # even at max buildable speed)? 800k reached at 1132fr; push to find the refill reach limit.
+    _case('refill_pump_1000k', 'grid', 1000000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_1200k', 'grid', 1200000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_1500k', 'grid', 1500000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+    # tiny dests (low end of the curve)
+    _case('cold_pump_1k', 'grid', 1000, True, None),
+    _case('cold_pump_2k', 'grid', 2000, True, None),
+    _case('cold_pump_3k', 'grid', 3000, True, None),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
