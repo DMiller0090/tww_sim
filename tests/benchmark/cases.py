@@ -242,6 +242,12 @@ CASES = [
     _case('cold_pump_400k_f2200', 'grid', 400000, True, None, max_frontier=2200),
     _case('cold_pump_400k_f2300', 'grid', 400000, True, None, max_frontier=2300),
     _case('cold_pump_400k_f2400', 'grid', 400000, True, None, max_frontier=2400),
+    # fine-sweep 350k (have 1000=765, 2000/2500=763): plateau like 400k? band edges?
+    _case('cold_pump_350k_f1500', 'grid', 350000, True, None, max_frontier=1500),
+    _case('cold_pump_350k_f1800', 'grid', 350000, True, None, max_frontier=1800),
+    _case('cold_pump_350k_f2200', 'grid', 350000, True, None, max_frontier=2200),
+    _case('cold_pump_350k_f2400', 'grid', 350000, True, None, max_frontier=2400),
+    _case('cold_pump_350k_f3000', 'grid', 350000, True, None, max_frontier=3000),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}

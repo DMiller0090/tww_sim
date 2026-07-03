@@ -48,6 +48,27 @@ fixed window. This shapes the endgame: near D you should NOT boost (no frames to
   solves the optimal ESS↔neutral switch distance analytically; `avg_ess_rate = (4+3π)/(5π)` (mean
   speed fraction retained as displacement while ESSing).
 
+## Frontier size vs quality — mf=2000 is the sweet spot (non-monotone!)
+
+`max_frontier` is the runtime↔quality lever, and search work scales ~**linearly** with it (mf=2000 vs
+8000 = exactly 4× fewer nodes, ~4.1–4.7× faster wall). But because the A* rank (`_hcost`) is **not
+admissible** (a pruning priority, not a lower bound), frontier→frames is **non-monotone**: a *larger*
+frontier can yield a *worse* plan. When a layer exceeds `max_frontier` the ranked cut can evict the
+eventual-optimal state, and which states survive is not a clean superset as the cap grows.
+
+Empirically (benchmark `grid` tier, cold pump): **mf=2000 achieves the best-known frames in every dest
+swept (10/10)** — 100/200/250/300/350/400/450k + refill 400/500/600k — strictly beating mf=1000 in 7/10
+by 1–5 fr and tying otherwise. The standout is **400k = 812 across a stable mf=1800–2500 plateau, vs 814
+at mf=1000/4000/8000** — i.e. mf=2000 is 4.7× faster *and* 2 frames better than the mf=8000 run. (The
+non-monotonicity is dest-dependent: 200k is monotone, 300k is flat 705 everywhere, 400k has the valley.)
+
+Consequences: (1) **default the quality frontier to ~2000**, not 8000 — dominant on both speed and
+quality; (2) with a non-admissible prune, no single frontier is trustworthy as "the optimum" — a cheap
+**frontier sweep** (min over {1000, 2000, 4000}) beats cranking one large frontier. A high-enough
+(effectively uncapped) frontier *would* converge back up to the plateau optimum, but at 400k the width
+exceeds 8000, so 8000 is still in the lossy-cut regime. NOTE 400k=812 is an unverified improvement
+candidate over the DTM-verified 814 — needs its own DTM before replacing the base truth.
+
 ## Why mid-swim pumps are off by default
 
 Mid-swim pumps (`neu→ess` re-entries — the same move as a mid-cruise [neutral dip](../strategy/neutral-dip.md))

@@ -55,6 +55,12 @@ difference in what's recorded — every run appends the same rich record.
   short (200k pump 556@1000 vs 555@8000; 100k no-pump 402 vs 401). This is the base-truth
   producer. Slow (200k pump ~8 min). Run before shipping or when chasing frames / search speed.
   `known_best` is asserted here.
+- **grid** — breadth/curve-fitting data at `max_frontier=1000` (BASELINE, sim-only): dense pump &
+  no-pump curves 1k–1.5M, refill curves, the drowning boundary, `refill_until` sensitivity, and the
+  **frontier-convergence sweep** (`*_f####` cases). Key finding: mf=2000 is the dominant frontier —
+  optimal in 10/10 swept dests, ~4× faster than 8000, and at 400k *better* (812 vs 814). Frontier→frames
+  is non-monotone (the A* prune isn't admissible), so a sweep beats one large frontier. See
+  `knowledge/model/planner.md`.
 - **refill** — the air-refill regime (200k–600k, the real TAS range) at `max_frontier=1000` for
   feasibility. `refill_pump_200k..600k` model a "pinned-back" free build (air pinned to 900 while
   `-x <= REFILL_UNTIL`) then one fresh-budget cruise; `cold_pump_500k_nodrown` documents the
