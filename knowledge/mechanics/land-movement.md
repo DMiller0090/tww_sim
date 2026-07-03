@@ -9,7 +9,8 @@ frame-perfect roll-EBS exit) are fully simulated** (`superswim.land`): `mNormalS
 proc state machine, **facing (`shape_angle.y`) and travel (`current.angle.y`) are all BIT-EXACT** vs
 live, and the walk + roll `speedF`/position is bit-exact too (d≈0.0001, via the ported J3D anim
 engine — see below). Locked by `tests/dolphin/run_land_tests.py`: **9 sim-vs-live cases** (nspeed
-dv=0.00000, facing/travel d=0.0000°) + the `wiggle_ebs_roll` DTM-playback lock. Position is asserted
+dv=0.00000, facing/travel d=0.0000°) + **3 live-locks** for the not-yet-simulated big-reversal turn
+procs (WAIT_TURN/MOVE_TURN/SLIP) + the `wiggle_ebs_roll` DTM-playback lock. Position is asserted
 bit-exact for the on-axis walk and the full roll (which stay in MOVE/FRONT_ROLL); runs that visit
 ATN_MOVE use the calibrated position fallback (the `ANM_ATN*` foot anims are not ported — they don't
 affect the velocity/state/facing physics, which are the tech). Anchor `land_flatwalk@twwgz.sav`.
@@ -204,6 +205,32 @@ second roll (24.088) → stop**.
 Not yet SIMULATED (depends on the roll + a camera model); the DTM-playback lock guards the end-to-end
 signature (the two roll speeds, the −23 wiggle plateau, and the final `pos_z 2341.62`).
 
+## Big-reversal ground-turn procs (WAIT_TURN 23 / MOVE_TURN 24 / SLIP 25)
+
+When the stick target is a hard reversal — `cLib_distanceAngleS(m34E8, current.angle.y) > 0x7800`
+(≈ >168°) with `msd > 0.05`, no attention lock — `checkNextMode` (4424) routes *away* from the plain
+MOVE proc into one of three turn procs (no reversal ⇒ the aligned walk keeps facing≈travel, so these
+never fire on-axis):
+
+- **`procWaitTurn` (`WAIT_TURN`, 23)** — reversal from a **standstill** (`|mNormalSpeed| ≤ 0.001`). Link
+  **pivots in place**: `mNormalSpeed` stays 0 while facing+travel rotate ~180° over ~5 frames, then it
+  drops to WAIT and walks off in the new direction. (Flick down from the idle anchor → face-about.)
+- **`procMoveTurn` (`MOVE_TURN`, 24)** — reversal while **moving below the slip threshold**
+  (`speedF/mMaxNormalSpeed ≤ mSlip.field_0x4 = 0.4`). Travel flips to the new heading immediately
+  (`current.angle.y += 0x8000`), `mNormalSpeed` takes a turn cost, then facing sweeps around to the new
+  travel while it re-accelerates to the cap — a quick turn-around.
+- **`procSlip` (`SLIP`, 25)** — reversal while **moving fast** (`speedF/mMaxNormalSpeed > 0.4`, non-ice,
+  and `getDirectionFromAngle(m34EA − m34DC) == BACKWARD`). Link **keeps sliding FORWARD** (travel held at
+  the old heading) while `mNormalSpeed` decelerates through the skid; once it bleeds down it hands off to
+  `MOVE_TURN` to complete the turn-around. So a full-speed reverse is **SLIP → MOVE_TURN → MOVE**.
+
+**Status:** live-behavior locks only (`run_land_tests` `waitturn`/`moveturn`/`slip`), **not yet
+simulated** in `superswim.land` — the target for the next sim tier. Because the proc is transient
+(gone by the end state) each lock replays a per-frame `advancewith` trajectory and asserts the proc was
+entered plus the reversed-walk end state (MOVE, facing ~180°, back at the cap; distances 690/546/982 on
+the flat anchor). `LandState.step` currently shortcuts idle→MOVE and never enters these; the reversal
+routing lives in `checkNextMode`'s `!attention_lock` branch (procWaitTurn / procMoveTurn / procSlip).
+
 ## Values
 
 | thing | value |
@@ -214,7 +241,8 @@ signature (the two roll speeds, the −23 wiggle plateau, and the final `pos_z 2
 | input latency | 2 frames (press and release) |
 | ESS down / left / right | `(128,110)` / `(110,128)` / `(146,128)` |
 | decay: brakeslide / EBS / EBS-toward-cam / brake | −0.14 / −0.011 / ~−0.001 / −2.5 per frame |
-| procs (`link_state`) | 4 WAIT · 5 FREE_WAIT · 6 MOVE · 7 ATN_MOVE · 30 FRONT_ROLL |
+| procs (`link_state`) | 4 WAIT · 5 FREE_WAIT · 6 MOVE · 7 ATN_MOVE · 0x17/23 WAIT_TURN · 0x18/24 MOVE_TURN · 0x19/25 SLIP · 30 FRONT_ROLL |
+| slip speed threshold `mSlip.field_0x4` | `speedF/mMaxNormalSpeed > 0.4` → SLIP (else MOVE_TURN) on a moving reversal |
 | ATN cap `mMaxNormalSpeed` (attention / DIR_BACKWARD) | 12 (`mAtnMove.field_0xC`) / 15 (`mAtnMoveB.field_0xC`) |
 | ATN speed scale (side / back) `field_0x8` | 5.0 / 2.5 |
 | ATN `setNormalSpeedF` (scale/max/min) side / back | 0.5 / 7.5 / 4.0 · 0.5 / 8.0 / 2.0 |
@@ -234,5 +262,6 @@ signature (the two roll speeds, the −23 wiggle plateau, and the final `pos_z 2
   `tests/test_land.py` (offline golden walk arc + the ATN + roll end-state cases) +
   `tests/dolphin/run_land_tests.py`: **9 sim-vs-live** cases (walk + 4 ATN + roll_run/roll_slow/roll_settle/
   roll_ebs: nspeed/facing/travel bit-exact; walk, mid-roll, and full roll-to-standstill pos_z bit-exact)
-  plus the `wiggle_ebs_roll` DTM-playback lock.
+  **plus 3 live-locks** (`waitturn`/`moveturn`/`slip`, the un-simulated turn procs) and the
+  `wiggle_ebs_roll` DTM-playback lock.
 - `_notes/tww-sim-architecture-design.md` §5/§5b — how land folds into the generalized proc-machine sim.
