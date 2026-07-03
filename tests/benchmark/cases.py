@@ -191,6 +191,11 @@ CASES = [
     _case('cold_nopump_275k', 'grid', 275000, False, None),
     _case('cold_nopump_325k', 'grid', 325000, False, None),
     _case('cold_nopump_375k', 'grid', 375000, False, None),
+    # mf-convergence study at 200k pump (have 1000=556, 8000=555): frames-vs-frontier curve
+    _case('cold_pump_200k_f250',  'grid', 200000, True, None, max_frontier=250),
+    _case('cold_pump_200k_f500',  'grid', 200000, True, None, max_frontier=500),
+    _case('cold_pump_200k_f2000', 'grid', 200000, True, None, max_frontier=2000),
+    _case('cold_pump_200k_f4000', 'grid', 200000, True, None, max_frontier=4000),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
