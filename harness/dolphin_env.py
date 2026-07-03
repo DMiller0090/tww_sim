@@ -78,6 +78,38 @@ def iso_path(key: str = "twwgz") -> str:
     return hits[0].replace("\\", "/")
 
 
+def tww_extract_dir() -> str | None:
+    """Optional path to an already-extracted disc root (the dir CONTAINING `files/`).
+    env TWW_EXTRACT_DIR -> dolphin.local.json["tww_extract_dir"] -> None (fall back to the ISO)."""
+    return _resolve("TWW_EXTRACT_DIR", "tww_extract_dir", None)
+
+
+def game_file_bytes(disc_path: str, iso_key: str = "twwgz") -> bytes:
+    """Return the raw bytes of a disc file (e.g. 'files/res/Object/LkAnm.arc') WITHOUT committing
+    any copyrighted game data: read it from tww_extract_dir if configured, else pull it straight
+    from the configured ISO in memory via the wwrando GCM reader. Lets tools parse game assets on
+    demand from the user's own dump. `disc_path` is relative to the disc root, forward slashes."""
+    ed = tww_extract_dir()
+    if ed:
+        p = os.path.join(ed, disc_path.replace("/", os.sep))
+        if os.path.exists(p):
+            with open(p, "rb") as f:
+                return f.read()
+    # fall back to reading the single file out of the ISO
+    wwrando = os.path.join(_SPEEDRUN, "ww_model_helpers", "wwrando")
+    if wwrando not in sys.path:
+        sys.path.insert(0, wwrando)
+    from wwlib.gcm import GCM
+    gcm = GCM(iso_path(iso_key))
+    gcm.read_entire_disc()
+    return gcm.read_file_data(disc_path).getvalue()
+
+
+def object_arc_bytes(name: str, iso_key: str = "twwgz") -> bytes:
+    """Raw bytes of files/res/Object/<name>.arc from the user's dump (extract dir or ISO)."""
+    return game_file_bytes(f"files/res/Object/{name}.arc", iso_key)
+
+
 # --- "Pause at end of movie" (required for exact `exhaust` DTM reads) ------------------
 def _user_dir(exe: str) -> str:
     d = os.path.dirname(exe)

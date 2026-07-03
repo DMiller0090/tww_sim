@@ -35,7 +35,10 @@ from harness.dtm.run_dtm import resolve_anchor
 # Angle fields (u16 heading) + speed/pos. Trio = target/travel/shape.
 READS = ["target_angle", "travel_angle", "shape_angle_y", "facing", "csangle",
          "potential_speed", "true_speed", "max_normal_speed", "msd", "link_state",
-         "ground_angle", "pos_x", "pos_z", "anim_frame"]
+         "ground_angle", "pos_x", "pos_z", "anim_frame",
+         # Walk-position (posMoveFromFootPos) internals: the MOVE0/MOVE1 anim controllers, the
+         # WALK<->DASH blend (m3598), and the planted-foot XZ delta f31_2 (m359C, one frame late).
+         "fc_rate", "move1_frame", "move1_rate", "blend_move", "foot_delta_prev", "msd_prev"]
 
 # buttons:0 EXPLICITLY every frame -- the override persists (advancewith doesn't clear it), so a
 # stale A/Start would inject a phantom roll/menu; press a button only when a step needs it.
@@ -127,12 +130,12 @@ def main():
 
     # link_state is printed every frame: an UNEXPECTED state (e.g. a roll/attack from a stray
     # button press) is the fastest tell that the input isn't the clean walk you think it is.
-    print(" f  phase   | st |  target   travel   shape  (deg)   |  pot    true   msd    |  dz")
+    print(" f  phase   | st |  pot    true  |  m0fr  m0rt   m1fr  m1rt | blend  fdelta |  pos_z")
     for r in rows:
         print(f"{r['f']:>2}  {r['phase']:<7} | {r['link_state']:>2} | "
-              f"{deg(r['target_angle']):7.2f} {deg(r['travel_angle']):7.2f} {deg(r['shape_angle_y']):7.2f}   | "
-              f"{r['potential_speed']:6.2f} {r['true_speed']:6.2f} {r['msd']:5.2f}  | "
-              f"{r['pos_z']:9.2f}")
+              f"{r['potential_speed']:6.2f} {r['true_speed']:6.2f} | "
+              f"{r['anim_frame']:5.2f} {r['fc_rate']:5.2f}  {r['move1_frame']:5.2f} {r['move1_rate']:5.2f} | "
+              f"{r['blend_move']:5.3f} {r['foot_delta_prev']:6.3f} | {r['pos_z']:9.3f}")
 
 
 if __name__ == "__main__":
