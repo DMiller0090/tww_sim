@@ -133,6 +133,12 @@ CASES = [
     _case('cold_pump_425k', 'grid', 425000, True, None),
     _case('cold_pump_450k', 'grid', 450000, True, None),
     _case('cold_pump_475k', 'grid', 475000, True, None),
+    # refill_until sensitivity at 400k (baseline ru=3000 -> 797fr): bigger zone = air stays 900
+    # deeper into the cruise = fewer frames. Quantifies the refill model's key knob.
+    _case('refill_pump_400k_ru500',   'grid', 400000, True, None, refill_air=True, refill_until=500.0),
+    _case('refill_pump_400k_ru1000',  'grid', 400000, True, None, refill_air=True, refill_until=1000.0),
+    _case('refill_pump_400k_ru5000',  'grid', 400000, True, None, refill_air=True, refill_until=5000.0),
+    _case('refill_pump_400k_ru10000', 'grid', 400000, True, None, refill_air=True, refill_until=10000.0),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
