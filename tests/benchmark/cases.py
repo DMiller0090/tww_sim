@@ -200,6 +200,10 @@ CASES = [
     _case('cold_pump_400k_f1000', 'grid', 400000, True, None, max_frontier=1000),
     _case('cold_pump_400k_f2000', 'grid', 400000, True, None, max_frontier=2000),
     _case('cold_pump_400k_f4000', 'grid', 400000, True, None, max_frontier=4000),
+    # map the non-monotonic region around the mf=2000 minimum (812) to find the best frames
+    _case('cold_pump_400k_f1500', 'grid', 400000, True, None, max_frontier=1500),
+    _case('cold_pump_400k_f2500', 'grid', 400000, True, None, max_frontier=2500),
+    _case('cold_pump_400k_f3000', 'grid', 400000, True, None, max_frontier=3000),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
