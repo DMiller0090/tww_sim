@@ -236,6 +236,12 @@ CASES = [
     _case('cold_pump_100k_f2000',   'grid', 100000, True, None, max_frontier=2000),
     _case('refill_pump_500k_f2000', 'grid', 500000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=2000),
     _case('refill_pump_600k_f2000', 'grid', 600000, True, None, refill_air=True, refill_until=REFILL_UNTIL, max_frontier=2000),
+    # fine-grained 400k sweep inside the valley (2000-2500=812): does the jitter dip below 812?
+    _case('cold_pump_400k_f1800', 'grid', 400000, True, None, max_frontier=1800),
+    _case('cold_pump_400k_f2100', 'grid', 400000, True, None, max_frontier=2100),
+    _case('cold_pump_400k_f2200', 'grid', 400000, True, None, max_frontier=2200),
+    _case('cold_pump_400k_f2300', 'grid', 400000, True, None, max_frontier=2300),
+    _case('cold_pump_400k_f2400', 'grid', 400000, True, None, max_frontier=2400),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
