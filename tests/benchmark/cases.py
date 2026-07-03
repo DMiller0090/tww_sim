@@ -220,6 +220,14 @@ CASES = [
     _case('cold_pump_250k_f2500', 'grid', 250000, True, None, max_frontier=2500),
     _case('cold_pump_350k_f2500', 'grid', 350000, True, None, max_frontier=2500),
     _case('cold_pump_450k_f2500', 'grid', 450000, True, None, max_frontier=2500),
+    # extend refill curves to the LOW end (refill only covered >=200k) -- refill benefit is
+    # small here (little air depletion over a short swim) but non-zero; completes the curves.
+    _case('refill_pump_50k',   'grid',  50000, True,  None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_100k',  'grid', 100000, True,  None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_pump_150k',  'grid', 150000, True,  None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_50k', 'grid',  50000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_100k','grid', 100000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
+    _case('refill_nopump_150k','grid', 150000, False, None, refill_air=True, refill_until=REFILL_UNTIL),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
