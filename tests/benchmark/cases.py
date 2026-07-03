@@ -40,7 +40,7 @@ _COMMON = dict(
 # = the shipped optimum (hardest cases land 1 frame short at 1000). See README for the tradeoff.
 # refill=1000: the air-refill regime (200k-600k, the real TAS range). Recorded at 1000 for
 # feasibility (far dests at 8000 are minutes each); may land 1 frame short of the 8000 optimum.
-_TIER_FRONTIER = {'smoke': 1000, 'full': 8000, 'refill': 1000}
+_TIER_FRONTIER = {'smoke': 1000, 'full': 8000, 'refill': 1000, 'grid': 1000}
 
 # Air-refill model (user-specified 1-D approx, NOT DTM-verified): air pinned 900 while -x <=
 # REFILL_UNTIL (pinned-back build), then one fresh-budget cruise. See model/planner.md, README.
@@ -111,10 +111,23 @@ CASES = [
     _case('refill_pump_550k', 'refill', 550000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
     _case('refill_pump_700k', 'refill', 700000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
     _case('refill_pump_800k', 'refill', 800000, True, None, refill_air=True, refill_until=REFILL_UNTIL),
+
+    # --- grid: non-refill gap-fill data at mf=1000 (BASELINE, sim-only). Breadth for mining. ---
+    # small dests (low end)
+    _case('cold_pump_5k',  'grid',  5000, True, None),
+    _case('cold_pump_10k', 'grid', 10000, True, None),
+    _case('cold_pump_15k', 'grid', 15000, True, None),
+    # mid-gaps between the existing 100k-step points (pump + no-pump)
+    _case('cold_pump_150k',   'grid', 150000, True,  None),
+    _case('cold_pump_250k',   'grid', 250000, True,  None),
+    _case('cold_pump_350k',   'grid', 350000, True,  None),
+    _case('cold_nopump_150k', 'grid', 150000, False, None),
+    _case('cold_nopump_250k', 'grid', 250000, False, None),
+    _case('cold_nopump_350k', 'grid', 350000, False, None),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
-TIERS = ('smoke', 'full', 'refill')
+TIERS = ('smoke', 'full', 'refill', 'grid')
 
 
 def cases_for(tiers):
