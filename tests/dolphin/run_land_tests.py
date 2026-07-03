@@ -47,6 +47,7 @@ def hold(sx, sy, n, buttons=0, triggerL=0):
 
 
 L_DOWN = hold(128, 0, 1, buttons=0x40, triggerL=255)   # L-target + full down, 1 frame
+A = 0x100                                              # GC PAD_BUTTON_A (the "do"/roll button)
 
 # --- the discovered sequences ---------------------------------------------------------
 def seq_walk():        return hold(128, 255, 30) + hold(128, 128, 20)                  # run -> standstill
@@ -54,6 +55,15 @@ def seq_brakeslide():  return hold(128, 255, 10) + L_DOWN + hold(128, 110, 10, 0
 def seq_ebs():         return hold(128, 255, 10) + L_DOWN + hold(128, 110, 30)          # L released -> extended slide
 def seq_face_left():   return hold(128, 255, 10) + L_DOWN + hold(128, 110, 1) + hold(110, 128, 60)
 def seq_brake_right(): return hold(128, 255, 10) + L_DOWN + hold(128, 110, 1) + hold(146, 128, 60)
+
+# --- roll (FRONT_ROLL, state 30) sequences: A while moving -> forward roll. Roll speed set at entry
+# from the PRE-roll speedF = clamp(speedF*1.5+0.5, 5, 26); these end MID-ROLL to read that speed. ---
+def seq_roll_run():    return hold(128, 255, 15) + hold(128, 255, 1, A) + hold(128, 128, 5)   # full run -> roll @ cap 26
+def seq_roll_slow():   return hold(128, 255, 2) + hold(128, 255, 1, A) + hold(128, 128, 5)    # barely moving -> roll near floor
+def seq_roll_settle(): return hold(128, 255, 15) + hold(128, 255, 1, A) + hold(128, 128, 40)  # roll played to a full stop
+# Frame-perfect EBS out of a roll: HOLD L+down through the roll (17 frames) -> it exits straight to
+# ATN at 26; release L into ESS-down -> flip preserves ~-23 (one-frame window). See land-movement.md.
+def seq_roll_ebs():  return hold(128, 255, 15) + hold(128, 255, 1, A) + hold(128, 0, 17, 0x40, 255) + hold(128, 110, 14)
 
 
 def deg(a):
@@ -91,6 +101,24 @@ def replay_sim_vs_live(seq):
     h, m = D.attach()
     live = {k: D.read_named(h, m, k) for k in READS}
     return sim, live
+
+
+def replay_live(seq):
+    """LIVE-ONLY (no sim yet). Load the anchor, replay the seq via one race-free advanceseq, and
+    return the live end-state as an `e` dict (v/facing/travel/face_trav). For techs whose sim is not
+    built -- currently the roll (FRONT_ROLL) tier -- these are immutable live-behavior locks, exactly
+    like the ATN cases were pre-sim; flip them to sim-vs-live once superswim.land models the roll."""
+    D.control_pipe_quiet("clearinput")
+    D.control_pipe_quiet("savestate", {"action": "load", "path": ANCHOR.replace('\\', '/')})
+    h, m = D.attach()
+    D.control_pipe_quiet("advanceseq", {"port": 0, "seq": seq})
+    h, m = D.attach()
+    live = {k: D.read_named(h, m, k) for k in READS}
+    return {"link_state": int(live["link_state"]), "v": abs(live["potential_speed"]),
+            "pot": live["potential_speed"], "facing": deg(live["shape_angle_y"]),
+            "travel": deg(live["travel_angle"]),
+            "face_trav": abs(sdiff_deg(live["shape_angle_y"], live["travel_angle"])),
+            "pos_z": live["pos_z"]}
 
 
 def sim_checks(sim, live, note):
@@ -147,6 +175,31 @@ CASES = [
 ]
 
 
+# LIVE-ONLY locks (no sim yet): the roll (FRONT_ROLL) tier -- immutable characteristic end-states,
+# same as the ATN cases were pre-sim. Roll = state 30 for ~18 anim frames (const speed), then exits.
+ROLL_SETTLE_POSZ = 1524.69   # full-run roll total pos_z at standstill (locked from advanceseq record)
+LIVE_CASES = [
+    ("roll_run", seq_roll_run, "full-run roll: state 30 at the 26 cap (mid-roll)", lambda e: [
+        (e["link_state"] == 30, f"state 30 (FRONT_ROLL)  [{e['link_state']}]"),
+        (abs(e["v"] - 26.0) < 0.05, f"roll speed at cap 26  [{e['v']:.3f}]"),
+    ]),
+    ("roll_slow", seq_roll_slow, "barely-moving roll: low speedF -> near the 5.0 floor (mid-roll)", lambda e: [
+        (e["link_state"] == 30, f"state 30 (FRONT_ROLL)  [{e['link_state']}]"),
+        (5.0 <= e["v"] < 8.0, f"roll speed near floor (speedF-scaled)  [{e['v']:.3f}]"),
+    ]),
+    ("roll_settle", seq_roll_settle, "full-run roll played to standstill: total distance + clean stop", lambda e: [
+        (e["link_state"] == 4, f"state 4 (idle/stopped)  [{e['link_state']}]"),
+        (e["v"] < 0.5, f"|v|~0 stopped  [{e['v']:.2f}]"),
+        (abs(e["pos_z"] - ROLL_SETTLE_POSZ) < 0.5, f"roll distance pos_z~{ROLL_SETTLE_POSZ:.1f}  [{e['pos_z']:.2f}]"),
+    ]),
+    ("roll_ebs", seq_roll_ebs, "frame-perfect EBS out of a roll: 26 flipped/preserved as ~-23", lambda e: [
+        (e["link_state"] == 6, f"state 6 (MOVE/EBS)  [{e['link_state']}]"),
+        (abs(e["pot"] - (-23.109)) < 0.05, f"~-23 preserved (frame-perfect)  [{e['pot']:.3f}]"),
+        (e["face_trav"] < 5, f"facing~travel aligned (EBS)  [{e['face_trav']:.1f}]"),
+    ]),
+]
+
+
 def main():
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
     record = o.get('record', '0') in ('1', 'true', 'yes')
@@ -174,6 +227,22 @@ def main():
         npass += ok
         nfail += (not ok)
         print(f"{'PASS' if ok else 'FAIL'} {label:<12} (SIM-vs-LIVE: {note})")
+        for passed, desc in checks:
+            print(f"     {'ok ' if passed else 'X  '}{desc}")
+
+    for label, seqfn, note, check in LIVE_CASES:   # roll tier: live-only locks (no sim yet)
+        if only and only != label:
+            continue
+        e = replay_live(seqfn())
+        if record:
+            print(f"{label:<12} st={e['link_state']} pot={e['pot']:.3f} v={e['v']:.3f} "
+                  f"face={e['facing']:.1f} trav={e['travel']:.1f} pos_z={e['pos_z']:.2f}  # {note}")
+            continue
+        checks = check(e)
+        ok = all(c[0] for c in checks)
+        npass += ok
+        nfail += (not ok)
+        print(f"{'PASS' if ok else 'FAIL'} {label:<12} (LIVE-LOCK: {note})")
         for passed, desc in checks:
             print(f"     {'ok ' if passed else 'X  '}{desc}")
     if not record:

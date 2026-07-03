@@ -138,6 +138,26 @@ makes **facing rotate to the ESS direction (~90°) and lock there while travel s
 heading (~171°)** — a sustained ~80° facing≠travel split, speed preserved. (Holding ESS-down 3+ frames
 first instead keeps facing glued to travel.)
 
+## Roll (FRONT_ROLL) — the fast approach movement
+
+Press **A** (the "do" button, `dActStts_ATTACK_e`) while moving on the ground → **`procFrontRoll_init`
+(state 30)**, `ANM_ROLLF`. On entry, facing snaps to the stick target (`shape_angle.y = m34E8`).
+- **Speed (set once at entry, from the PRE-roll `speedF`):** `mNormalSpeed = clamp(speedF·1.5 + 0.5,
+  5.0, 26.0)` (`mRoll.field_0x18/0x1C/0x20`). Full-run (`speedF` 17) → the **26 cap**; barely-moving →
+  the **5.0 floor**. It's a big boost — 26 vs the walk cap 17 — which is why rolling is the workhorse
+  ground-cover tech. During the roll `speedF == mNormalSpeed` (constant, momentum; **no foot-plant
+  blend**, `m3598 = 0`), so position advances at the roll speed exactly.
+- **Duration:** state 30 while the `ANM_ROLLF` frame ctrl runs ~0→17 (`mRoll.field_0x10`, rate 1.1,
+  ≈18 frames), then `checkNextMode(1)` exits to MOVE carrying the speed, which decels to a stop
+  (a full-run roll travels ≈ **760 units** — pos_z 764→1525 on the flat anchor).
+- **Frame-perfect EBS out of a roll (~−23):** HOLD **L + full-down through the roll** so it exits
+  *straight to ATN_MOVE* at the full 26 (skipping the roll→MOVE decel), then **release L into ESS-down**
+  → the ATN backward-flip preserves it as **≈ −23.1** speed (state 6 EBS). A one-frame window — release
+  a frame late and the roll→MOVE decel bleeds it to ~−18; a frame early and it dead-stops. This combo
+  (huge negative speed from a roll) is a prime seam-clip setup.
+- Rolling **into a wall** → `procFrontRollCrash` (needs `speedF ≥ 10` = `field_0x3C`); inert on flat
+  wall-free ground. Not yet SIMULATED — live-behavior locks only (`run_land_tests` `roll_*`).
+
 ## Values
 
 | thing | value |
@@ -154,6 +174,9 @@ first instead keeps facing glued to travel.)
 | ATN `setNormalSpeedF` (scale/max/min) side / back | 0.5 / 7.5 / 4.0 · 0.5 / 8.0 / 2.0 |
 | ATN travel-chase `cLib_addCalcAngleS(scale,max,min)` | 6 / 3000 / 2000 |
 | direction cos thresholds (fwd / back) `mAtnMoveB.0x2C/0x30` | ≥0.99 → FORWARD · ≤−0.99 → BACKWARD (else side by sin) |
+| roll speed `clamp(speedF·field_0x18 + field_0x1C, field_0x20, cap)` | ×1.5 + 0.5, floor 5.0, cap 26.0 (= 0.5 + 17·1.5) |
+| roll duration / exit frame `mRoll.field_0x10` | 17 (anim rate 1.1, ≈18 frames) |
+| roll-EBS (frame-perfect) | full-run roll → hold L+down through roll → release L into ESS-down → ≈ −23.1 |
 
 ## See also
 
@@ -163,6 +186,8 @@ first instead keeps facing glued to travel.)
   the `mDirection` machine + `checkNextMode` transitions; `step(sx, sy, buttons, triggerL)`);
   `superswim.anim` (`foot_speedf.FootSpeedF` + the J3D engine) — the bit-exact walk `speedF`;
   `tests/test_land.py` (offline golden walk arc + the 4 ATN end-state cases) +
-  `tests/dolphin/run_land_tests.py` (**all 5 sim-vs-live**: nspeed/facing/travel bit-exact, walk pos_z
-  bit-exact).
+  `tests/dolphin/run_land_tests.py`: the **5 sim-vs-live** cases (walk + ATN: nspeed/facing/travel
+  bit-exact, walk pos_z bit-exact) **plus 4 roll `LIVE_CASES`** — live-behavior locks only (the roll is
+  NOT yet simulated; these capture the target for the next sim tier, then flip to sim-vs-live once
+  `LandState` models FRONT_ROLL).
 - `_notes/tww-sim-architecture-design.md` §5/§5b — how land folds into the generalized proc-machine sim.
