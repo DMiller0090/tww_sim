@@ -196,6 +196,10 @@ CASES = [
     _case('cold_pump_200k_f500',  'grid', 200000, True, None, max_frontier=500),
     _case('cold_pump_200k_f2000', 'grid', 200000, True, None, max_frontier=2000),
     _case('cold_pump_200k_f4000', 'grid', 200000, True, None, max_frontier=4000),
+    # confirm mf=2000 convergence generalizes at 400k (cold_pump_400k = 814 @mf=8000)
+    _case('cold_pump_400k_f1000', 'grid', 400000, True, None, max_frontier=1000),
+    _case('cold_pump_400k_f2000', 'grid', 400000, True, None, max_frontier=2000),
+    _case('cold_pump_400k_f4000', 'grid', 400000, True, None, max_frontier=4000),
 ]
 
 CASES_BY_NAME = {c['name']: c for c in CASES}
