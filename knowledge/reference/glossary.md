@@ -33,3 +33,7 @@ One-line definitions. Each links to the page that explains it fully.
 | **DTM** | A Dolphin movie file; the faithful input-delivery path for live validation (vs the `advanceseq` pipe — see bug#2). |
 | **Bug#2** | The dense-pump live divergence — resolved as a pipe input-delivery artifact, not physics. DTM playback is faithful. |
 | **Cold start** | A swim begun from `v = 0` (vs seeded at cruise speed). |
+| **Quadrant grid** | The Great Sea = a **7×7 grid of 49 quadrants**, one island each. Routes are planned quadrant-to-quadrant. See [ocean-environment](../mechanics/ocean-environment.md). |
+| **Air refill** | Resetting air to [900](constants.md#air) by skimming a loaded island's land/water boundary while still swimming (**touching land 1 frame loses ALL speed**). See [air-refill](../mechanics/air-refill.md). |
+| **Sploosh zone** | A sparse flat-ocean quadrant where the **ocean surface collision loads too slowly** — entering too fast drops Link to the sea floor ("sploosh"). Must be approached under a max-speed cap or routed around. See [ocean-environment](../mechanics/ocean-environment.md#sploosh-zones-ocean-collision-load-failure). |
+| **Collision streaming** | Only **one island's collision is loaded at a time** (load timing unpredictable) — why mid-swim refills are rare. See [ocean-environment](../mechanics/ocean-environment.md). |

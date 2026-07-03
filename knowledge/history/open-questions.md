@@ -54,7 +54,18 @@
 
 - **Air-refill model vs live.** The planner's `refill_air` regime (air pinned to 900 in the refill
   zone, ~900-frame budget after) is a user-specified 1-D approximation whose savings/enabling
-  numbers are **sim-derived, not live-DTM-verified** — needs live validation. And the 1-D sim has no
-  x/z coordinates, so **mid-cruise / multiple refills** along a real route are out of scope (it can
-  only model one refill pinned at the start). →
-  [model/planner](../model/planner.md#air-refill--the-far-swim-regime-sim-model).
+  numbers are **sim-derived, not live-DTM-verified** — needs live validation. The 1-D sim has no
+  x/z coordinates, so it can only model one refill pinned at the start; **mid-cruise / multiple
+  refills** are out of scope — though also **rare** in practice (target island collision won't
+  [load in time](../mechanics/ocean-environment.md#only-one-islands-collision-is-loaded-at-a-time)).
+  Proposed cheap fix (not built): model refills as **calibrated boundary events** at route points
+  (`air:=900` + measured frame cost), never collision physics. →
+  [model/planner](../model/planner.md#unmodeled-world-features--the-re-plan-loop).
+
+- **World/route model (unbuilt).** The sim models swim physics but no world: no
+  [sploosh zones](../mechanics/ocean-environment.md#sploosh-zones-ocean-collision-load-failure)
+  (max-speed-capped quadrants that force detours), no island/ocean collision, no waves (which move
+  refill spots in [wavy quadrants](../mechanics/air-refill.md#flat-vs-wavy-quadrants)). Open question:
+  is a **coarse 7×7 quadrant-route layer** (avoid/slow sploosh zones, place refills at loaded islands)
+  worth building, and what data (divergence-cause logging over real swims) should drive it? Today
+  these are handled by the human via the template + manual + re-plan loop.

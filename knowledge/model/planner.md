@@ -151,7 +151,8 @@ Project at current velocity for N frames, then **0.75× speed on landing** + 27-
 
 > **Status: sim-model-derived, NOT live-DTM-verified.** The refill *rule* below is a user-specified
 > 1-D approximation, and every number in this section is an illustrative sim result — treat it as a
-> planner model, not validated game truth.
+> planner model, not validated game truth. For the *game* mechanic (boundary-skim trick, touch-land =
+> total speed loss, flat vs wavy, corner refills) see [mechanics/air-refill](../mechanics/air-refill.md).
 
 **Model** (`plan_min_frames(..., refill_air=True, refill_until=X)`): air is pinned to
 [900](../reference/constants.md#air) while forward progress `-x ≤ X`, then depletes −1/frame as
@@ -169,9 +170,37 @@ Sim-model findings (illustrative, not live-verified):
   to high speed "for free" at the pinned-back spot, then cruise within the ~900-frame budget.
 - The **real TAS swim regime is ~200k–600k**, i.e. squarely where refill matters.
 
-**Out of scope / open:** mid-cruise or *multiple* refills are a real, opportunistic thing the 1-D sim
-cannot model — it has no x/z coordinates, so it cannot place refill spots along the route. See
-[open-questions](../history/open-questions.md).
+**Out of scope / open:** mid-cruise or *multiple* refills are a real thing the 1-D sim cannot place
+(it has no x/z coordinates), but they are **rare** — the target island's collision won't
+[load in time](../mechanics/ocean-environment.md#only-one-islands-collision-is-loaded-at-a-time) at
+superswim speed, so refills cluster at the launch island (distance ≈ 0), which `refill_until` already
+approximates. See [open-questions](../history/open-questions.md).
+
+## Unmodeled world features & the re-plan loop
+
+The sim is **1-D swim physics only** — bit-exact along a straight leg in flat open water, but it models
+**no world**: no waves, no island/ocean collision, no [refill placement](../mechanics/air-refill.md), no
+[sploosh zones](../mechanics/ocean-environment.md#sploosh-zones-ocean-collision-load-failure). Those
+unmodeled features — not physics drift — are what eventually make a real run diverge from the plan.
+
+**Why this is fine (the re-plan loop).** In flat open water a plan holds indefinitely (no re-plan
+needed). You re-plan **event-driven**, when you approach a feature the sim doesn't know: run the sim as
+a template, execute, and when reality diverges (a manual refill, a route change) **re-seed from the live
+state and re-solve the remainder** — the planner already takes arbitrary initial `(v, anim, air)`. And
+the ~1–2 frames a better plan saves are **real, not noise**: at cruise `|v|` (~1300/frame) the
+sub-frame position error from unmodeled features rarely crosses a whole discrete frame boundary, so a
+bit-exact leg delivers its computed frame count. (This is *not* an argument for chasing provable
+sim-optimality via minute-long uncapped runs — see [frontier § saturation](#saturation-is-intrinsic-diversity--the-frontier-cannot-be-shrunk-or-reshaped-losslessly).)
+
+**Design stance for world features (proposed, not built):**
+- **Refills = calibrated boundary events, never collision physics.** Model a refill as `air:=900` plus a
+  measured frame cost at a *fixed route point the human/route decides* — not a search dimension. This
+  keeps the [frontier](#frontier-size-vs-quality--mf2000-is-the-sweet-spot-non-monotone) exactly 1-D
+  (zero cost), generalizes `refill_until` from one start-region to a set of route boundaries, and lets a
+  known multi-refill island-chain template in one run. The precise touch-nothing skim stays **manual**.
+- **Sploosh zones = a coarse quadrant-route constraint,** not per-frame state: a max-speed cap on entry
+  and possible detour, decided at a small 7×7-grid route layer that feeds per-leg cruise DPs. Folding
+  collision into the cruise DP would multiply an already-saturated frontier for no benefit.
 
 ## See also
 

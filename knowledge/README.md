@@ -53,6 +53,11 @@ you can triage in one glance.
 ### Camera
 - **How does camera yaw affect movement / the steering law / fine steering?** → [mechanics/camera.md](mechanics/camera.md)
 
+### Ocean world, refills & routing
+- **How is the sea laid out / why is only one island loaded / what's a sploosh zone / why route around quadrants?** → [mechanics/ocean-environment.md](mechanics/ocean-environment.md)
+- **How do air refills work / why is touching land fatal / flat vs wavy / corner refills / the manual-refill workflow?** → [mechanics/air-refill.md](mechanics/air-refill.md)
+- **How does the sim handle unmodeled world features (refills, sploosh) / the re-plan loop?** → [model/planner.md#unmodeled-world-features--the-re-plan-loop](model/planner.md#unmodeled-world-features--the-re-plan-loop)
+
 ### Model (sim / planner)
 - **Why f32 / the console cosine table / CHARGE_DISP_FACTOR / cold-start mRate?** → [model/sim.md](model/sim.md)
 - **How does the planner search / why are mid-swim pumps off by default / the crossover decomposition / the speed-retention prune?** → [model/planner.md](model/planner.md)
