@@ -114,8 +114,76 @@ def _recip2(denom):
     return fp.fmuls(r, 2.0)
 
 
+# --- paired-single register ops (each reg = [ps0, ps1]); scalar single ops broadcast to both lanes ---
+def _psmul(a, c):    return [fp.fmuls(a[0], c[0]), fp.fmuls(a[1], c[1])]
+def _psmadd(a, c, b):return [fp.fmadds(a[0], c[0], b[0]), fp.fmadds(a[1], c[1], b[1])]
+def _psmsub(a, c, b):return [fp.fmsubs(a[0], c[0], b[0]), fp.fmsubs(a[1], c[1], b[1])]
+def _psnmsub(a, c, b):return [fp.fnmsubs(a[0], c[0], b[0]), fp.fnmsubs(a[1], c[1], b[1])]
+def _psmadds0(a, c, b):return [fp.fmadds(a[0], c[0], b[0]), fp.fmadds(a[1], c[0], b[1])]  # frC.ps0 both lanes
+def _psmuls1(a, c):  return [fp.fmuls(a[0], c[1]), fp.fmuls(a[1], c[1])]                  # frC.ps1 both lanes
+def _pssum0(a, c, b):return [fp.fadds(a[0], b[1]), c[1]]                                   # ps0=A.ps0+B.ps1; ps1=C.ps1
+def _pssum1(a, c, b):return [c[0], fp.fadds(a[0], b[1])]                                   # ps0=C.ps0; ps1=A.ps0+B.ps1
+
+
+def psmtx_quat(q, scale_mode='fdivs'):
+    """Literal paired-single port of the retail **PSMTXQuat** asm (mtx.c:1016), which is what
+    `mDoMtx_quat` (and thus the CL foot chain) actually uses -- NOT `C_MTXQuat`. The off-diagonals are
+    computed **fused then scaled** (`m[0][1]=(x*y - z*w)*s` via ps_msub, one rounding on the product-
+    difference), unlike `mtx_quat`'s element-wise `x*(y*s)-w*(z*s)`. This is bit-exact vs the live
+    `anmMtx` rotation for all-nonzero quats (validated element-wise vs jnt0). q=(w,x,y,z) -> 3x4 (trans=0).
+
+    scale_mode: 'fdivs' (default) uses exact `2/denom` -- on the test Dolphin the HW `fres`+1-Newton step
+    yields exactly this (the `_fres` estimate here is ~7 ULP low for denom just below 1). 'fres' keeps the
+    literal asm reciprocal for provenance. See knowledge/model/sim.md (world-space quantization section).
+
+    KNOWN GAP: single-axis (zero-component) quats (e.g. a pure-90-deg joint) are still ~1 ULP off -- a
+    sub-ULP lane subtlety for zero inputs. Wire this into a WORLD-space foot FK; identity-space FK cannot
+    match the game (the game quantizes the foot matrices at world magnitude ~764)."""
+    w, x, y, z = q
+    tmp0 = [x, y]; tmp1 = [z, w]
+    c_one = [1.0, 1.0]
+    _z = fp.fsubs(1.0, 1.0); c_zero = [_z, _z]
+    _t = fp.fadds(1.0, 1.0); c_two = [_t, _t]
+    tmp2 = _psmul(tmp0, tmp0)
+    tmp5 = [tmp0[1], tmp0[0]]                      # ps_merge10(tmp0,tmp0) = [y, x]
+    tmp4 = _psmadd(tmp1, tmp1, tmp2)
+    tmp3 = _psmul(tmp1, tmp1)
+    scale = _pssum0(tmp4, tmp4, tmp4)             # scale.ps0 = denom = x*x+y*y+z*z+w*w
+    tmp7 = _psmuls1(tmp5, tmp1)
+    denom = scale[0]
+    if scale_mode == 'fdivs':
+        s = fp.fdivs(2.0, denom)
+    else:
+        est = fp.f32(_fres(denom)); r = fp.fmuls(est, fp.fnmsubs(denom, est, 2.0)); s = fp.fmuls(r, 2.0)
+    scale = [s, s]
+    tmp4 = _pssum1(tmp3, tmp4, tmp2)
+    tmp6 = _psmuls1(tmp1, tmp1)                   # [z*w, w*w]
+    tmp2 = _pssum0(tmp2, tmp2, tmp2)             # [x*x+y*y, y*y]
+    tmp8 = _psmadd(tmp0, tmp5, tmp6)             # [x*y+z*w, y*x+w*w]
+    tmp6 = _psmsub(tmp0, tmp5, tmp6)             # [x*y-z*w, y*x-w*w]
+    m = [[0.0]*4 for _ in range(3)]
+    tmp2 = _psnmsub(tmp2, scale, c_one)          # m[2][2] = 1-(xx+yy)*s
+    tmp4 = _psnmsub(tmp4, scale, c_one)          # [1-(zz+xx)*s, 1-(zz+yy)*s]
+    tmp8 = _psmul(tmp8, scale); tmp6 = _psmul(tmp6, scale)
+    m[2][2] = tmp2[0]
+    tmp5 = _psmadds0(tmp0, tmp1, tmp7)           # [x*z+y*w, y*z+x*w]
+    tmp1b = [tmp8[0], tmp4[0]]                    # [m10, m11]
+    tmp7 = _psnmsub(tmp7, c_two, tmp5)           # [x*z-y*w, y*z-x*w]
+    tmp0b = [tmp4[1], tmp6[0]]                    # [m00, m01]
+    m[1][0] = tmp1b[0]; m[1][1] = tmp1b[1]
+    tmp5 = _psmul(tmp5, scale); tmp7 = _psmul(tmp7, scale)
+    m[0][0] = tmp0b[0]; m[0][1] = tmp0b[1]; m[0][2] = tmp5[0]
+    tmp3 = [tmp7[1], c_zero[0]]                   # [m12, 0]
+    tmp9 = [tmp7[0], tmp5[1]]                     # [m20, m21]
+    m[1][2] = tmp3[0]; m[2][0] = tmp9[0]; m[2][1] = tmp9[1]
+    return m
+
+
 def mtx_quat(q, scale_mode='fres'):
-    """C_MTXQuat math (mtx.c:970), fused ops. q=(w,x,y,z). Returns 3x4 rotation matrix (trans=0)."""
+    """C_MTXQuat math (mtx.c:970), fused ops. q=(w,x,y,z). Returns 3x4 rotation matrix (trans=0).
+
+    NOTE: the CL foot chain actually uses PSMTXQuat (see psmtx_quat above) whose off-diagonal grouping
+    differs by ~1 ULP; this element-wise form is kept for the direct-euler / non-foot paths."""
     w, x, y, z = q
     denom = fp.fadds(fp.fmuls(w, w), fp.fadds(fp.fmuls(z, z), fp.fadds(fp.fmuls(x, x), fp.fmuls(y, y))))
     if scale_mode == 'fdivs':

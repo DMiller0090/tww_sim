@@ -32,19 +32,37 @@ stop](../mechanics/land-movement.md)). The **remaining residual** is in the anim
 in the FMA arithmetic. Localized against a live foot-toe oracle (read `mFootData[i].field_0x018`, the
 stored spB0 toe, per frame from player-obj `+0x3DD0`/`+0x3EE8`):
 
-- **Sin table (FIXED).** `JMAEulerToQuat` uses `JMASSin` = a *separate* console `jmaSinTable`, not a
-  −1024 view of `jmaCosTable`; the old wrap-around reconstruction was 1 ULP off at **816/4096** entries
-  and skewed the toe. Baking the real `jmaSinTable` (`tables/sin_table.bin`, `sim._SIN_TABLE`) fixed it
-  and made `roll_slow` bit-perfect. Cos was already exact.
-- **Foot-toe.z residual (OPEN, ~2.5e-5, frame-dependent).** With exact cos+sin tables the toe **x is
-  bit-exact** but **z** carries a frame-dependent ~2.5e-5 error that **survives full-f64 arithmetic** and
-  is **not** the f32 op-order, the sin/cos tables, or `jnt0.trans.z` (all verified). By elimination it is
-  the FK-from-identity assumption in `anim/fk.py`: `inverse(worldBase)·worldBase` is not bit-exact `I`, so
-  a constant base residual `E` times the frame-varying local chain leaves a frame-dependent toe error.
-  Next step: replicate the full `setBaseTRMtx`/`PSMTXInverse` (`m37B4`) instead of assuming identity, or
-  read the live `anmMtx(FOOT)` world matrix to confirm.
-- `mtx_quat` (`C_MTXQuat` element-wise) vs the retail paired-single `PSMTXQuat` differ by ~1.8e-5 but the
-  f32/f64 swap shows it is **not** the dominant remaining term. Same f32-vs-f64 discipline as swim below.
+- **Sin/cos tables (FIXED, verified bit-exact vs console).** `JMAEulerToQuat` uses `JMASSin`/`JMASCos` =
+  a *separate* console `jmaSinTable` (`jmaCosTable = jmaSinTable + 1024`, `jmaSinShift=4`, size 4096), not
+  a −1024 view; the old wrap-around reconstruction was 1 ULP off at **816/4096** entries. Baking the real
+  `jmaSinTable` (`tables/sin_table.bin`, `sim._SIN_TABLE`) fixed it and made `roll_slow` bit-perfect. Both
+  baked tables were re-verified against the live console (`jmaSinTable` ptr @ `0x803EAE28`): **0 mismatches**
+  across all 4096 sin AND cos entries. The tables are NOT a source of any remaining residual.
+- **Root cause of the foot-toe residual = WORLD-space quantization (the earlier "FK-from-identity /
+  `PSMTXInverse`" hypothesis is DISPROVEN).** `posMoveFromFootPos` computes `spB0 = m37B4 · anmMtx(FOOT) ·
+  l_toe_pos` where `anmMtx(FOOT)` is the **world-space** joint matrix (translations ≈ Link's world pos, e.g.
+  `z≈764`). Reading `m37B4` live shows it is a **bit-exact identity-rotation** matrix (base rotation is
+  identity for straight standing; translation = `−pos` with only the `m35B8` `[1][3]` tweak), so
+  `m37B4·worldBase == I` exactly — `PSMTXInverse` inexactness is NOT the cause. The real cause: each foot
+  joint's world matrix is stored f32 at ≈764 magnitude, so it is **quantized to ≈6e-5** (f32 spacing at
+  763). The sim's `anim/fk.py` does FK **from identity** (local scale ≈ tens → ≈1e-6 quantization), so it
+  **misses the world-scale rounding the game bakes in**. Confirmed with a live oracle: reading `mBaseTransformMtx`
+  (`J3DModel+0x24`), `m37B4` (`obj+0x37B4`), and `anmMtx(j)` (`mpCLModel@obj+0x32C → mpNodeMtx@+0x8C → [j]`,
+  each `Mtx` = 48 B; `LFOOT=0x22`, `RFOOT=0x27`), then `m37B4·anmMtx(FOOT)·toe` reproduces the live stored
+  `spB0` **bit-exact**. Fix = do the foot FK **in world space** (start `cur = worldBase`, concat locals,
+  then `m37B4·anmMtx·toe`); this needs the sim to build `worldBase` offline (`transS(pos)·ZXYrotM(shape_angle)`)
+  and `m37B4`. `PSMTXConcat`/`PSMTXMultVec` in `fk.py` are already bit-faithful (op-order matches the asm).
+- **`mtx_quat` grouping (FIXED, needed for the world FK).** `mDoMtx_quat` = retail **`PSMTXQuat`** (paired
+  single), NOT `C_MTXQuat`. Its off-diagonals are computed **fused then scaled** — `m[0][1] = (x·y − z·w)·s`
+  via `ps_msub` (one rounding on the product-difference) — whereas the old `quat.py` did the `C_MTXQuat`
+  element-wise `x·(y·s) − w·(z·s)` (extra roundings), which was 1–7 ULP off per off-diagonal. A literal
+  paired-single port of the `PSMTXQuat` asm is **bit-exact** for all-nonzero quats (validated element-wise
+  vs live `anmMtx(0)`). The scale `s`: on the test Dolphin the `fres`+1-Newton result equals **exact
+  `fdivs(2,denom)`** (my `_fres` estimate is ≈7 ULP low for denom just below 1, e.g. `0x3f7fffff` → use
+  `fdivs`). **OPEN (last ULP):** single-axis foot-joint rotations (**zero-component quats**, e.g. jnt29
+  `[0,16382,0]`, jnt30 `[0,0,-16384]`) still land ~1 ULP off even with grouping+`fdivs` — a sub-ULP
+  `PSMTXQuat` lane subtlety for zero inputs; jnt0/1/31/32 (nonzero) are bit-exact. This ≈1e-7/element
+  propagates to ≈4e-6 in the world toe.
 
 **This is now enforced to the byte** by two tests with distinct jobs:
 - **Live** (`tests/dolphin/run_land_tests.py`, the accuracy gate — live is the source of truth): the
