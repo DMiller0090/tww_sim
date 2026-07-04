@@ -18,5 +18,8 @@ constant-camera behaviour.
 from __future__ import annotations
 
 from .predict.camera_arbitrary import CameraArbitrary as Camera, omega_cmd, has
+from .predict.camera_manual import CameraManual, LAND_SCALE
 
-__all__ = ["Camera", "omega_cmd", "has"]
+# ``Camera`` (=CameraArbitrary) = SWIM/subject cam (live omega table); ``CameraManual`` = LAND
+# free/behind cam (bit-exact rationalBezierRatio recompute) that ``LandState`` drives. See camera.md.
+__all__ = ["Camera", "CameraManual", "LAND_SCALE", "omega_cmd", "has"]

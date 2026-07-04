@@ -37,7 +37,7 @@ from __future__ import annotations
 import math
 from . import sim as S
 from .sim import f32, cLib_addCalc, cM_scos_s16, deg_to_s16, s16_signed, _deadzone, stick_angle_deg
-from .camera import Camera
+from .camera import CameraManual, LAND_SCALE
 
 # link_state / daPyProc values (d_a_player_main.h). Walk trio + the targeting-move proc.
 WAIT = 4          # daPyProc_WAIT_e         (idle standstill)
@@ -167,15 +167,15 @@ class LandState:
 
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
-                 use_anim=True):
+                 use_anim=True, cam_scale=LAND_SCALE):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
         self.facing = int(facing) & 0xFFFF     # shape_angle.y (s16)
         self.travel = int(travel) & 0xFFFF     # current.angle.y (s16)
         self.csangle = int(csangle) & 0xFFFF   # dCam_getControledAngleY (s16); set each frame from _cam
-        # Shared camera integrator (predict.CameraArbitrary). Seeded from the frame-0 csangle; a
-        # C-stick held centered (csx=128) leaves it frozen -> csangle pinned = pre-wiring behaviour.
-        self._cam = Camera(csangle=self.csangle)
+        # LAND camera (predict.CameraManual = dCamera_c::manualCamera, bit-exact); centered C-stick
+        # -> frozen. cam_scale = styleParam[24] deg/frame (MM83 land=8.0). See camera.md.
+        self._cam = CameraManual(csangle=self.csangle, scale=cam_scale)
         self.target = 0                        # m34E8 (s16), set each frame by setStickData
         self.m34dc = int(facing) & 0xFFFF      # stick want-angle pre-csangle (m34E8 = m34dc + csangle)
         self.m34ea = int(facing) & 0xFFFF      # PREVIOUS frame's m34dc (slip stick-flip detector, 11289)

@@ -81,21 +81,35 @@ To move ΔZ laterally over a cruise, apply a tap of size X at frame F; lateral d
 time-integral of `speed·sin(Δheading)`. **Frozen-camera plans stay bit-exact**: they hold
 substickX = 128 (centered) ⇒ omega_cmd = 0 ⇒ csangle constant ⇒ zero regression.
 
-`LandState` now DRIVES `csangle` per-frame from the shared `superswim/camera.py` `Camera` (the
-`CameraArbitrary` integrator): `LandState.step(sx,sy,buttons,triggerL,csx,csy)` advances it and sets
-`self.csangle` before the stick target; a centered C-stick holds it frozen (regression bit-exact —
-13/13 live land tests). `SwimState` still holds `self.cam` constant (swim steering not yet wired).
+`LandState` DRIVES `csangle` per-frame from the LAND camera (`superswim/camera.py` `CameraManual`
+= a bit-exact port of `dCamera_c::manualCamera`): `LandState.step(sx,sy,buttons,triggerL,csx,csy)`
+advances it and sets `self.csangle` before the stick target; a centered C-stick holds it frozen
+(regression bit-exact — 13/13 live land tests). `SwimState` still holds `self.cam` constant (the
+SWIM subject cam is a different engine; swim steering not yet wired).
 
-### ⚠ omega magnitude is per-camera-STYLE (the shipped table is swim/subject-cam only)
-The `omega_table_full.csv` grid was captured on the SWIM (subject) camera and is bit-exact THERE,
-but the C-stick→yaw-rate scale depends on the **current camera style**, which `dCamera_c::Run`
-selects at runtime (`nextType/nextMode/nextStyle → __ptmf_scall`; influenced by
-checkSpecialArea/room/event/lock-on). The land free/behind cam (`dCamera_c::manualCamera`) rotates
-~2.6685× faster than the swim subject cam (cap 3°/frame=546 hw swim vs ~8°/frame=1457 hw land),
-the WHOLE curve scaling by a per-style constant `*(f32*)(0x80348610 + style·0x84)` (table base
-`0x803485ac`, stride `0x84`; subject-cam uses `0x803485fc`). So steering the LAND camera bit-exact
-needs the omega keyed on the live style index (`dCamera_c` mCurStyle @ +0x510) × the per-style
-scale, not the raw swim table. Derivation + remaining port: `_notes/handoff-2026-07-04o-camera-style-rate.md`.
+### The C-stick → yaw-rate law is per-camera-STYLE — LAND is a full analytic port (bit-exact)
+The two cameras use *different* engines. The **swim** (subject) cam's rate is the live-captured
+`omega_table_full.csv`. The **land** free/behind cam is `dCamera_c::manualCamera`, and its rate is
+NOT a scalar multiple of the swim table (truncation: swim `(166,0)=3` but land `=8`, not
+`3·2.6685`). So land is ported analytically (`superswim/predict/cam_bezier.py` +
+`camera_manual.py`), **validated 33/33 bit-exact vs live** (1-D + 2-D off-axis):
+
+    ratio      = rationalBezierRatio(_16276·mStickCPosX, _9006=2)   # ±1 saturated at |stick|≥0.75
+    cam_target = trunc(182.0444·(Degree(cam_target) + f32(ratio·scale)))   # cSGlobe::Val azimuth
+    cam_yaw   += int((s16)(cam_target − cam_yaw)/2) ; csangle = cam_yaw + 0x8000
+
+- `ratio` is the S-curve `dCamMath::rationalBezierRatio` (double precision, Newton `frsqrte` sqrt;
+  Nonmatching in decomp → ported from the disassembly). Consts `d_cam_param::_4103..4113`.
+- `mStickCPosX` = PADClamp(substick: min15/max59/xy31) → `/42` → `CStick::update` unit-circle clamp
+  (`cam_bezier.cstick_normalize`, analytic, bit-exact incl. the 2-D axis coupling).
+- `scale` = `styles[mCurStyle].styleParam[24]` (deg/frame), a **clean per-style constant**: LAND
+  walk (MM83, style 61) = **8.0**; the swim subject cam ≈ 3 (styleParam[20]). Override only in the
+  swim attention-lock branch. `styles` base `0x803485ac`, stride `0x84`, name @ `+0x80`.
+- `dCamera_c` struct base (live) = `[[0x803AD380]+0x34]+0x244`; `mStickCPosXLast`@+0x16C,
+  `mCurStyle`@+0x510, `mAngleY`(csangle)@+0x6C, `cam_target`@+0x3AE, `cam_yaw`@+0x0E.
+- Neutral (csx=128 → ratio 0) is an identity round-trip for all 65536 targets → frozen-cam exact.
+- The camera arm runs `lineBGCheck` each frame, so a pillar the arm swings into can redirect
+  `cam_target` (environment, not the rate law).
 
 ## Decomp grounding (JP/GZLJ01)
 
