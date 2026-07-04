@@ -293,6 +293,39 @@ walk pose re-morfed off `ANM_SLIP@end` inherits the scaled toe. That fixed both 
 plant-foot flip at the handoff (the scaled right-foot toe was mis-ordered vs the left). `slip` pos_z now
 d=0.005 (advancewith/advanceseq pipe noise, not sim error). **No land tech is on the position fallback now.**
 
+## Precise stopping: live-valid stick magnitudes, L-target, and the C-up speed cancel
+
+For placing Link at an exact world position (float-perfect stop) — validated live 2026-07-04:
+
+**Live-valid stick magnitudes (a sim `msd` caveat).** `_set_stick_data` uses `msd = min(hypot(deadzone)/54, 1)`.
+For **Y ≤ 191** (msd ≤ 0.889) this is bit-exact live; for **Y ∈ [192, 254]** the sim OVER-reads msd vs the
+live PADClamp (which saturates differently near the cap) — a walk at `(128,196)` gives sim v=16.38 but live
+15.76, ~1u+ divergence over a run. `(128,255)` (true full) is exact. **So any offline search over partial
+magnitudes must restrict to `Y ≤ 191 ∪ {255}`; NEVER emit 192–254** or the plan diverges live. (Same
+input-layer≠`/54` family as the [stick-angle table redump](../history/resolved-bugs.md).) From a **standstill**
+the walk needs `msd > 0.5` to move at all (the `setSpeedAndAngleNormal` `dVar9` gate `0.5 − 0.5·|v|/max`), so
+the smallest up-input that moves is **`(128,171)`** (msd 0.519 → cruises ~4.6/fr); `(128,170)` and below stay planted.
+
+**L-target forward = X-neutral low-speed access.** Holding L (Z-target; `buttons 0x40` + `triggerL 255`) + up-stick
++ centered X from a standstill → `ATN_MOVE` (state 7), direction FORWARD, facing locked, travel stays 0 → **X stays
+0**, bit-exact live. It unlocks speeds normal walk can't reach from rest (`Y=168`→3.64, `Y=170`→4.25, below the
+171 gate) and runs different accel/decel (`ATN_ACC 7.5`/`ATN_DEC 4.0`). **Hold C-DOWN (`substickY=0`) on every
+targeting frame** — otherwise the camera auto-swings during targeting (moves `csangle` → moves X); C-down keeps
+it frozen (the sim's `CameraManual` is frozen for `csy∈{0,128}`, so C-down keeps you in-model).
+
+**C-up speed cancel = the instant freeze (the float-exact enabler).** While walking (free cam): one frame
+**half-press L** (analog `triggerL≈100`, ends manual cam), then **left stick NEUTRAL + C-stick FULL UP**
+(`substickY=255`). Effect: 2 input-latency frames (still cruising) + 1 normal-decel frame, then speed **snaps to
+0 and position LOCKS** (`link_state → 1`). X stays 0. **The existing sim reproduces the freeze position with zero
+new code**: `frozen_pos = walk-sim pos 3 frames after the neutral+C-up input` (the 2-frame `INPUT_DELAY` + one
+`cLib` decel already produce it) — verified bit-exact (live froze at z=795.126 from a Y171 cruise; sim's
+3rd-neutral-frame pos = 795.1258). Because the freeze happens MID-MOTION there is no [resting dead-band](#walk--run-acceleration-baseline),
+so a slow approach + cancel places the frozen float essentially anywhere. **Float-perfect stop achieved
+deterministically**: a diverse beam over the slow-cruise approach (live-valid mags) drilled the freeze to
+**z = 2000.0001221 live = 1 float32 ULP from 2000.0** (`superswim/plan_land.py` machinery + the freeze model).
+Getting the *exact* float is limited by the sim's ~1-ULP land-position residual — see
+[model/sim: land position accumulates in f32](../model/sim.md#land-position-accumulates-in-f32-not-an-f64-running-sum).
+
 ## Values
 
 | thing | value |

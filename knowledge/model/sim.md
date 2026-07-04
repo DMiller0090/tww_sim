@@ -20,6 +20,18 @@ The GameCube is single-precision. The sim uses `ctypes.c_float` throughout — f
 different decomp expressions); the old shared ordering caused a ~2 ULP error that the
 [x598 scramble](../mechanics/pumps.md#the-x598-scramble) amplified at pump exits.
 
+## Land position accumulates in f32 (not an f64 running sum)
+
+`pos.x`/`pos.z` are **f32 fields** in the game (`cXyz`), so every frame the game re-stores the running
+total as f32: `pos.z = f32(pos.z + f32(speedF·cos))`. `LandState.step` therefore accumulates position
+in f32 too — `self.pos_z = f32(self.pos_z + f32(d·cos))`, **not** a Python-f64 `+=` running sum. An
+f64 running sum is *more* precise than the hardware and drifts ~**2.5 ULP** (~0.0003u) from the game's
+f32-accumulated position over a ~115-frame walk — precisely the wrong direction for float-exact work.
+With f32 accumulation the sim matches live to **~1 ULP** over that walk (see [land-movement: float-exact
+stop](../mechanics/land-movement.md)). The **remaining ~1 ULP** is a sub-ULP-per-frame residual in the
+anim-driven `speedF` (the foot-FK FMA chain) and/or the cos table, accumulating over the walk — the
+open target for bit-perfect land position. Same f32-vs-f64 discipline as the swim rules below.
+
 ## Console cosine table
 
 `cM_scos` indexes the **real console table** dumped live from `jmaCosTable` @ `0x80498168`, not
