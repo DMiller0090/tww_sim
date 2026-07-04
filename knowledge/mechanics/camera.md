@@ -120,6 +120,12 @@ RE'd live, not decompiled). Full address list: [reference/addresses](../referenc
 
 ## Open
 
+- **PLANNED — port the SWIM (subject) camera to analytic, like land.** The land free/behind cam is
+  now a full bit-exact port, but the SWIM camera is a *different engine* (`dCamera_c::CalcSubjectAngle`
+  @ 0x8016cf54, a BOUNDED angle offset, not this rate law), still served by the captured
+  `omega_table_full.csv` (off-grid cells raise, not universal; steering not wired into `SwimState`).
+  Porting `CalcSubjectAngle` would make swim C-stick fully analytic for any `(csx,csy)`. Scoped for a
+  later session.
 - **F32 precision** of the internal ω velocity (we read the s16 *output* exactly; ω is upstream).
 - **Auto-flip envelope** — the speed/hold-length that triggers the auto-camera flip (the "hold
   C-stick down" convention guards against it); steering must stay in a non-flipping band.
