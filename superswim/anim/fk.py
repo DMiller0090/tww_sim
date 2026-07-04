@@ -14,14 +14,18 @@ Chain of specs (all in tww/):
     fmadds partials joined by a ps_sum0 (fadds). l_toe_pos={6,3.25,0}, l_heel_pos={-6,3.25,0}
     (d_a_player_main_data.inc:18-19).
 
-WHY FK-from-identity == the game's model-local spB0 (for the XZ that f31_2 uses):
+THE FK MUST RUN IN WORLD SPACE (identity-space FK is 1-2 ULP wrong -- superseded):
   posMoveFromFootPos (d_a_player_main.cpp:2372) does spB0 = (m37B4 * anmMtx(FOOT)) * l_toe_pos.
   anmMtx(FOOT) = worldBase * localChain(FOOT) (FK starts at setBaseTRMtx(worldBase), :9580);
   m37B4 = inverse(worldBase) (:9581-82) with only m37B4[1][3]-=m35B8 (:8796) tweaking the Y row.
-  f31_2 = absXZ(spB0) uses rows 0 and 2 only -> the Y tweak is irrelevant, and inverse*worldBase
-  cancels, leaving localChain(FOOT)*toe = FK from IDENTITY (including link_root's own local TR).
-  (Assumes baseScale==1 -- true for standing Link. If inverse*worldBase isn't bit-exact identity,
-  the residual shows up here vs live; escalate to full worldBase+PSMTXInverse replication.)
+  Although m37B4*worldBase cancels ALGEBRAICALLY, it does NOT cancel in f32: the FK accumulates each
+  joint matrix at WORLD magnitude (translation ~= Link's pos.z, e.g. 764), so each is quantized to the
+  f32 spacing there (~6e-5); m37B4 removes the base afterward but the quantization is already baked in.
+  So the sim runs the chain from worldBase and applies m37B4 (fk.world_base + FootFK world mode), NOT
+  from identity. For the straight walk worldBase is a pure translation (facing==0) and pos.x==0, so only
+  the Z column is at world magnitude; turns add a Y rotation. With this + the PSMTXQuat 'newton'
+  reciprocal the leg chain is bit-exact and the walk pos_z is float-perfect. (foot_toe_local below keeps
+  the old identity-space path for reference only.) See knowledge/model/sim.md.
 
 Reads gitignored _generated anim/skeleton data (dev-supplied).
 """
@@ -72,6 +76,33 @@ def tr_matrix(rot, trans):
     m[1][3] = fp.f32(trans[1])
     m[2][3] = fp.f32(trans[2])
     return m
+
+
+def world_base(px, py, pz, facing=0):
+    """Build (worldBase, m37B4) for the CL model's setBaseTRMtx (d_a_player_main.cpp:9559-9575).
+    worldBase = transS(px,py,pz) . ZXYrotM(0, facing, 0)  (flat ground: shape_angle.x/z == 0), and
+    m37B4 = PSMTXInverse(worldBase) (the rigid inverse). For the FOOT toe f31_2 only rows 0 and 2
+    (X,Z) matter, so the Y translation (py + the m35B8 tweak) is immaterial; pass py=0.
+
+    WHY this exists: the game runs the foot FK from worldBase, so every accumulated joint matrix
+    carries a WORLD-magnitude translation (~pz, e.g. 764) and is quantized to the f32 spacing there
+    (~6e-5). m37B4 removes the base afterward, but the quantization is already baked into the toe.
+    FK-from-identity (foot_toe_local) misses this. facing == 0 => worldBase is a pure translation and
+    only the Z column is at world magnitude (px stays 0 for the straight walk)."""
+    facing = int(facing) & 0xFFFF
+    c = jma_cos(facing); s = jma_sin(facing)
+    ns = fp.f32(-s)
+    # ZXYrotM with only the Y angle: column-vector Y rotation R = [[c,0,s],[0,1,0],[-s,0,c]].
+    R = [[c, 0.0, s], [0.0, 1.0, 0.0], [ns, 0.0, c]]
+    T = (fp.f32(px), fp.f32(py), fp.f32(pz))
+    base = [[R[i][0], R[i][1], R[i][2], T[i]] for i in range(3)]
+    # Rigid inverse: R^T | -R^T.T (PSMTXInverse of a pure-rotation+translation). For facing==0 this is
+    # exact (R==I => -T); the FMA order below matches PSMTXInverse's translate build.
+    inv = [[0.0]*4 for _ in range(3)]
+    for i in range(3):
+        inv[i][0], inv[i][1], inv[i][2] = R[0][i], R[1][i], R[2][i]
+        inv[i][3] = fp.f32(-(fp.fmadds(R[2][i], T[2], fp.fmadds(R[1][i], T[1], fp.fmuls(R[0][i], T[0])))))
+    return base, inv
 
 
 def mtx_concat(a, b):

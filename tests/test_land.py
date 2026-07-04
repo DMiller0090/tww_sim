@@ -8,10 +8,13 @@ THE GOLDEN IS LIVE TRUTH, ENFORCED TO THE BYTE. speedF and position in tests/gol
 and the CASE_POSZ endpoints are the GAME's live f32 reads (uint32 hex), captured by
 tests/gen_land_golden.py. The tests assert `f32_bits(sim) == golden` (0 ULP, no tolerance), so a tech
 that is not bit-perfect vs the game shows RED here just as it does live -- the same cases fail in both.
-Today walk/ebs/face_left/brake_right/roll_slow/roll_settle/waitturn/slip FAIL (1-74 ULP off live) and
-the anim-FK speedF fails per frame; brakeslide/roll_run/roll_ebs/moveturn are bit-perfect and pass.
-This deliberately replaces the old `< 0.05` tolerance (~400 ULP wide), which hid the f64-running-sum
-bug. Regenerate the golden from live after a sim fix (Dolphin up): `python tests/gen_land_golden.py`.
+Today walk/brakeslide/face_left/roll_run/roll_slow/roll_settle/roll_ebs/moveturn are BIT-PERFECT and
+pass (walk/face_left/roll_settle went float-perfect with the world-space foot FK + PSMTXQuat 'newton'
+reciprocal, see knowledge/model/sim.md); ebs (1 ULP), brake_right (2), waitturn (2) and slip (74) still
+FAIL -- the planted-foot jnt34/39 residual (foot chain is ~1 ULP off pure anim FK, likely a foot-IK
+ground snap) and the separate slip skid. This deliberately replaces the old `< 0.05` tolerance (~400
+ULP wide), which hid the f64-running-sum bug. Regenerate the golden from live after a sim fix (Dolphin
+up): `python tests/gen_land_golden.py`.
 
 The byte-exact checks only run WHEN the copyrighted anim keyframe data is present under _generated/anim/
 (dev machines); without it LandState falls back to the calibrated stand-in and they SKIP.
@@ -105,8 +108,8 @@ def test_decel_matches_cLib_addCalc():
 
 
 def test_end_position_within_tolerance():
-    # Endpoint: BIT-EXACT vs the LIVE golden with the anim engine (fails until bit-perfect: walk is 2
-    # ULP off live); +-3 calibrated stand-in without anim data.
+    # Endpoint: BIT-EXACT vs the LIVE golden with the anim engine (walk is float-perfect since the
+    # world-space foot FK); +-3 calibrated stand-in without anim data.
     s, _ = _run()
     assert s.state == WAIT
     if _ANIM:
@@ -120,8 +123,9 @@ def test_end_position_within_tolerance():
 @pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
 def test_speedf_matches_live_bit_exact():
     """The ported foot-FK speedF must reproduce the GAME's live true_speed BYTE-FOR-BYTE. This isolates
-    the anim FK from the nspeed sim and is the KEY handoff diagnostic: it FAILS per frame (the foot-FK
-    FMA chain is sub-ULP off live), which is the root of the downstream pos_z residual. See sim.md."""
+    the anim FK from the nspeed sim. With the world-space FK it is bit-exact for almost every frame; the
+    lone residual (frame 5, 1 ULP in speedF -- absorbed by the pos_z f32 rounding, so the pos_z arc is
+    float-perfect) is the planted-foot jnt34/39 sub-ULP. See knowledge/model/sim.md."""
     golden = _load_golden()
     drv = FootSpeedF(idle_frame=70.0)
     for fr, ns, msd, spF_bits, _pz in golden:
@@ -132,9 +136,9 @@ def test_speedf_matches_live_bit_exact():
 
 @pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
 def test_pos_z_arc_matches_live_bit_exact():
-    """Full LandState walk must track the GAME's live pos_z BYTE-FOR-BYTE every frame. Fails until the
-    sim is bit-perfect (currently 2 ULP off live at the endpoint); the frame where it first diverges
-    localizes the residual. This is the guard the f64-accumulation bug slipped past. See sim.md."""
+    """Full LandState walk must track the GAME's live pos_z BYTE-FOR-BYTE every frame. Float-perfect
+    since the world-space foot FK (was 2 ULP off with the identity-space FK). This is the guard the
+    f64-accumulation bug slipped past. See knowledge/model/sim.md."""
     golden = _load_golden()
     s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
     for (sx, sy), (fr, _ns, _msd, _spF, pz_bits) in zip(WALK_STICKS, golden):
@@ -149,17 +153,17 @@ def test_pos_z_arc_matches_live_bit_exact():
 # `python tests/gen_land_golden.py endpoints`. sim!=live fails here, mirroring run_land_tests.py.
 CASE_POSZ = {
     'brakeslide' : 0x448146b3,   # 1034.2093505859375 (state 7)   bit-perfect
-    'ebs'        : 0x44aa2072,   # 1361.013916015625  (state 6)   sim off 1 ULP
-    'face_left'  : 0x44e9fa16,   # 1871.815185546875  (state 6)   sim off 1 ULP
-    'brake_right': 0x447238c3,   # 968.8869018554688  (state 4)   sim off 2 ULP
+    'ebs'        : 0x44aa2072,   # 1361.013916015625  (state 6)   sim off 1 ULP (jnt34 foot residual)
+    'face_left'  : 0x44e9fa16,   # 1871.815185546875  (state 6)   bit-perfect (world FK)
+    'brake_right': 0x447238c3,   # 968.8869018554688  (state 4)   sim off 2 ULP (jnt34 foot residual)
     'roll_run'   : 0x4486a1c6,   # 1077.055419921875  (state 30)  bit-perfect
-    'roll_slow'  : 0x4445f858,   # 791.88037109375    (state 30)  sim off 4 ULP
-    'roll_settle': 0x44be9639,   # 1524.6944580078125 (state 4)   sim off 2 ULP
+    'roll_slow'  : 0x4445f858,   # 791.88037109375    (state 30)  bit-perfect
+    'roll_settle': 0x44be9639,   # 1524.6944580078125 (state 4)   bit-perfect (world FK)
     'roll_ebs'   : 0x44d64e35,   # 1714.4439697265625 (state 6)   bit-perfect
-    'waitturn'   : 0x442c9e1e,   # 690.4705810546875  (state 6)   sim off 1 ULP
+    'waitturn'   : 0x442c9e1e,   # 690.4705810546875  (state 6)   sim off 2 ULP (jnt34 foot residual)
     'moveturn'   : 0x44086be3,   # 545.6857299804688  (state 6)   bit-perfect (live-mirror *18 seq)
     'moveturn_pos': 0x43ffd7c6,  # 511.68572998046875 (state 6)   bit-perfect (*20 seq)
-    'slip'       : 0x44756df2,   # 981.7178955078125  (state 6)   sim off 74 ULP
+    'slip'       : 0x44756df2,   # 981.7178955078125  (state 6)   sim off 74 ULP (separate skid residual)
 }
 
 

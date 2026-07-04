@@ -61,7 +61,7 @@ class MorfState:
 class FootFK:
     """Stateful driver. `anms` = {name: parsed bck}, `sk` = skeleton. Carries per-joint old pose."""
 
-    def __init__(self, anms, sk):
+    def __init__(self, anms, sk, world=True):
         self.anms = anms
         self.sk = sk
         self.parent = {j['index']: j['parent'] for j in sk['joints']}
@@ -69,6 +69,18 @@ class FootFK:
         self.old_quat = {}          # jnt -> (w,x,y,z) posed quat last frame
         self.old_trans = {}         # jnt -> (x,y,z) posed translate last frame
         self.old_scale = {}         # jnt -> (x,y,z) posed scale last frame (morf blends it too)
+        # World-space FK (the game's real path): FK from worldBase (world-magnitude quantization) then
+        # remove the base with m37B4. world=False = legacy identity FK. See knowledge/model/sim.md.
+        self.world = world
+        self.quatfn = Q.psmtx_quat if world else Q.mtx_quat   # foot chain uses PSMTXQuat (=mDoMtx_quat)
+        self.base = None            # worldBase 3x4 (set each frame by set_pos)
+        self.m37b4 = None           # PSMTXInverse(worldBase)
+
+    def set_pos(self, px, pz, py=0.0, facing=0):
+        """Set Link's world pose for the frame about to be posed. Only X/Z (and facing) affect the
+        foot toe f31_2; py is immaterial (Y column unused). No-op when world FK is disabled."""
+        if self.world:
+            self.base, self.m37b4 = fk.world_base(px, py, pz, facing)
 
     def _blend_joint(self, move0, move1, f0, f1, ratio, jnt, rate):
         """Blended (quat, trans, scale) for one joint, then oldframe-morf toward the stored old pose.
@@ -102,7 +114,7 @@ class FootFK:
         local = {}
         for jnt in CHAIN_JOINTS:
             q3, trans, scale = self._blend_joint(move0, move1, f0, f1, ratio, jnt, rate)
-            m = Q.mtx_quat(q3)                       # 3x3 rotation, trans column 0
+            m = self.quatfn(q3)                      # 3x3 rotation, trans column 0 (PSMTXQuat in world mode)
             for i in range(3):                       # M = R * diag(scale): scale column j by scale[j]
                 m[i][0] = fp.fmuls(m[i][0], scale[0])
                 m[i][1] = fp.fmuls(m[i][1], scale[1])
@@ -112,12 +124,22 @@ class FootFK:
         return local
 
     def _toe(self, local, foot_jnt, toe):
-        chain, cur = [], None
+        chain = []
         j = foot_jnt
         while j != -1:
             chain.append(j); j = self.parent[j]
-        for jnt in reversed(chain):
-            cur = local[jnt] if cur is None else fk.mtx_concat(cur, local[jnt])
+        chain.reverse()
+        if self.world and self.base is not None:
+            # World-space FK: start at worldBase, accumulate local chain (world-magnitude quantization),
+            # then anmMtx-to-model via m37B4 (posMoveFromFootPos: spB0 = m37B4 * anmMtx(FOOT) * toe).
+            cur = [row[:] for row in self.base]
+            for jnt in chain:
+                cur = fk.mtx_concat(cur, local[jnt])
+            cur = fk.mtx_concat(self.m37b4, cur)
+        else:
+            cur = None
+            for jnt in chain:
+                cur = local[jnt] if cur is None else fk.mtx_concat(cur, local[jnt])
         return fk.mtx_mult_vec(cur, toe)
 
     def seed(self, move0, f0):

@@ -27,10 +27,10 @@ total as f32: `pos.z = f32(pos.z + f32(speedF·cos))`. `LandState.step` therefor
 in f32 too — `self.pos_z = f32(self.pos_z + f32(d·cos))`, **not** a Python-f64 `+=` running sum. An
 f64 running sum is *more* precise than the hardware and drifts ~**2.5 ULP** (~0.0003u) from the game's
 f32-accumulated position over a ~115-frame walk — precisely the wrong direction for float-exact work.
-With f32 accumulation the sim matches live to **~1–2 ULP** over that walk (see [land-movement: float-exact
-stop](../mechanics/land-movement.md)). The **remaining residual** is in the anim foot-FK toe position, NOT
-in the FMA arithmetic. Localized against a live foot-toe oracle (read `mFootData[i].field_0x018`, the
-stored spB0 toe, per frame from player-obj `+0x3DD0`/`+0x3EE8`):
+With f32 accumulation + the world-space foot FK the sim is now **float-perfect (0 ULP)** over the straight
+walk (see [land-movement: float-exact stop](../mechanics/land-movement.md)); the last residuals are the
+planted-foot jnt34/39 toe (1–2 ULP on the ATN/waitturn tails) and the separate slip skid. The chain was
+localized against a live foot-toe oracle (`mBaseTransformMtx`, `m37B4`, per-joint `anmMtx`, stored spB0):
 
 - **Sin/cos tables (FIXED, verified bit-exact vs console).** `JMAEulerToQuat` uses `JMASSin`/`JMASCos` =
   a *separate* console `jmaSinTable` (`jmaCosTable = jmaSinTable + 1024`, `jmaSinShift=4`, size 4096), not
@@ -38,44 +38,45 @@ stored spB0 toe, per frame from player-obj `+0x3DD0`/`+0x3EE8`):
   `jmaSinTable` (`tables/sin_table.bin`, `sim._SIN_TABLE`) fixed it and made `roll_slow` bit-perfect. Both
   baked tables were re-verified against the live console (`jmaSinTable` ptr @ `0x803EAE28`): **0 mismatches**
   across all 4096 sin AND cos entries. The tables are NOT a source of any remaining residual.
-- **Root cause of the foot-toe residual = WORLD-space quantization (the earlier "FK-from-identity /
-  `PSMTXInverse`" hypothesis is DISPROVEN).** `posMoveFromFootPos` computes `spB0 = m37B4 · anmMtx(FOOT) ·
+- **Foot FK runs in WORLD space (FIXED).** `posMoveFromFootPos` computes `spB0 = m37B4 · anmMtx(FOOT) ·
   l_toe_pos` where `anmMtx(FOOT)` is the **world-space** joint matrix (translations ≈ Link's world pos, e.g.
-  `z≈764`). Reading `m37B4` live shows it is a **bit-exact identity-rotation** matrix (base rotation is
-  identity for straight standing; translation = `−pos` with only the `m35B8` `[1][3]` tweak), so
-  `m37B4·worldBase == I` exactly — `PSMTXInverse` inexactness is NOT the cause. The real cause: each foot
-  joint's world matrix is stored f32 at ≈764 magnitude, so it is **quantized to ≈6e-5** (f32 spacing at
-  763). The sim's `anim/fk.py` does FK **from identity** (local scale ≈ tens → ≈1e-6 quantization), so it
-  **misses the world-scale rounding the game bakes in**. Confirmed with a live oracle: reading `mBaseTransformMtx`
-  (`J3DModel+0x24`), `m37B4` (`obj+0x37B4`), and `anmMtx(j)` (`mpCLModel@obj+0x32C → mpNodeMtx@+0x8C → [j]`,
-  each `Mtx` = 48 B; `LFOOT=0x22`, `RFOOT=0x27`), then `m37B4·anmMtx(FOOT)·toe` reproduces the live stored
-  `spB0` **bit-exact**. Fix = do the foot FK **in world space** (start `cur = worldBase`, concat locals,
-  then `m37B4·anmMtx·toe`); this needs the sim to build `worldBase` offline (`transS(pos)·ZXYrotM(shape_angle)`)
-  and `m37B4`. `PSMTXConcat`/`PSMTXMultVec` in `fk.py` are already bit-faithful (op-order matches the asm).
-- **`mtx_quat` grouping (FIXED, needed for the world FK).** `mDoMtx_quat` = retail **`PSMTXQuat`** (paired
-  single), NOT `C_MTXQuat`. Its off-diagonals are computed **fused then scaled** — `m[0][1] = (x·y − z·w)·s`
-  via `ps_msub` (one rounding on the product-difference) — whereas the old `quat.py` did the `C_MTXQuat`
-  element-wise `x·(y·s) − w·(z·s)` (extra roundings), which was 1–7 ULP off per off-diagonal. A literal
-  paired-single port of the `PSMTXQuat` asm is **bit-exact** for all-nonzero quats (validated element-wise
-  vs live `anmMtx(0)`). The scale `s`: on the test Dolphin the `fres`+1-Newton result equals **exact
-  `fdivs(2,denom)`** (my `_fres` estimate is ≈7 ULP low for denom just below 1, e.g. `0x3f7fffff` → use
-  `fdivs`). **OPEN (last ULP):** single-axis foot-joint rotations (**zero-component quats**, e.g. jnt29
-  `[0,16382,0]`, jnt30 `[0,0,-16384]`) still land ~1 ULP off even with grouping+`fdivs` — a sub-ULP
-  `PSMTXQuat` lane subtlety for zero inputs; jnt0/1/31/32 (nonzero) are bit-exact. This ≈1e-7/element
-  propagates to ≈4e-6 in the world toe.
+  `z≈764`). Although `m37B4 = PSMTXInverse(worldBase)` cancels `worldBase` *algebraically*, it does NOT in
+  f32: the FK accumulates each joint matrix at world magnitude, so each is **quantized to ≈6e-5** (f32
+  spacing at 763); `m37B4` removes the base afterward but the rounding is already baked in. The old
+  identity-space FK (local scale ≈ tens → ≈1e-6 quantization) missed this → 1–2 ULP. **Fix:** the sim now
+  builds `worldBase` offline (`fk.world_base` = `transS(pos.x, 0, pos.z)·Yrot(shape_angle.y)`; base.y is 0
+  live and only Y-column, irrelevant to the XZ that `f31_2` uses) and its rigid inverse `m37B4`, runs the
+  chain from `cur = worldBase`, then applies `m37B4` (`FootFK` world mode; `LandState.step` feeds the
+  current pre-integration `pos.x/pos.z/facing` each frame via `FootSpeedF.set_pos`). Live oracle:
+  `mBaseTransformMtx` (`mpCLModel@obj+0x32C → +0x24`), `m37B4` (`obj+0x37B4`), `anmMtx(j)` (`→+0x8C → [j]`,
+  48 B `Mtx`; `LFOOT=0x22`, `RFOOT=0x27`), stored `spB0` (L `obj+0x3DB8+0x130`, R `+0x18`).
+- **`PSMTXQuat` grouping + reciprocal (FIXED).** `mDoMtx_quat` = retail **`PSMTXQuat`** (paired single),
+  NOT `C_MTXQuat`: off-diagonals are **fused then scaled** — `m[0][1]=(x·y−z·w)·s` via `ps_msub`. The scale
+  `s = 2/denom` must use the console's **`fres`+Newton reciprocal**, reproduced bit-exactly by an
+  accurate-seed Newton refine (`quat._recip2_of`, `scale_mode='newton'`, the default). This matters at
+  half-ULP division midpoints: a single-axis joint's `denom = cos²+sin² = 1 − 2⁻²⁴` (e.g. jnt29
+  `[0,16382,0]`) is exactly such a midpoint where the console gives **`fdivs − 1 ULP`**; raw `fdivs` is 1
+  ULP high and the literal `_fres` table is ≈7 ULP low. **With world FK + `newton` the leg chain jnt0..jnt33
+  is BIT-EXACT vs the live `anmMtx`, and the straight walk `pos_z` is float-perfect end-to-end.**
+- **OPEN (last ULP): the planted foot joint (jnt34/39).** Its local matrix is ~1 ULP off in the QUAT
+  (`x+1, y−1` ULP makes `concat(a33, local34)` bit-exact) — NOT the matrix arithmetic (an f64 matrix from
+  the same quat shares the residual), NOT the scale, NOT the euler angle or any FMA-fusion/euler variant
+  (none reproduce the console's quat). Only the LEFT foot (jnt34) is off at the idle frame while the RIGHT
+  (jnt39) is exact → most likely a **per-frame foot-IK ground snap** applied to the planted foot after the
+  anim. It is absorbed by the `pos_z` f32 rounding on the straight walk (float-perfect) but leaks 1–2 ULP
+  into the ATN/waitturn tails.
 
 **This is now enforced to the byte** by two tests with distinct jobs:
 - **Live** (`tests/dolphin/run_land_tests.py`, the accuracy gate — live is the source of truth): the
-  pass condition is **float-perfect, 0 ULP vs live**, with NO tolerance and NO xfail. It is currently
-  **RED**: `brakeslide/roll_run/roll_ebs/roll_slow/moveturn` pass (0 ULP), while `walk (2), ebs (1),
-  face_left (1), brake_right (2), roll_settle (2), waitturn (1), slip (74 ULP)` FAIL on the open
-  residual below. Those failures are the to-do list for a bit-perfect land position.
+  pass condition is **float-perfect, 0 ULP vs live**, with NO tolerance and NO xfail. With the world FK +
+  `newton` reciprocal it is **9 pass / 4 fail**: `walk/brakeslide/face_left/roll_run/roll_slow/roll_settle/
+  roll_ebs/moveturn` pass (0 ULP), while `ebs (1), brake_right (2), waitturn (2)` (the planted-foot
+  jnt34/39 residual) and `slip (74 ULP, a separate skid residual)` FAIL. Those are the to-do list.
 - **Offline** (`tests/test_land.py`, no Dolphin): the token-cheap **shadow** of the live gate — the
   golden (`tests/golden/land_walk_speedf.csv` + `CASE_POSZ`) is the GAME's live f32 bytes (captured by
   `tests/gen_land_golden.py`), and the tests assert `f32_bits(sim) == live`, so the SAME techs fail here
-  (9 tests red today). The per-frame walk arc localizes it: the foot-FK toe `speedF` is already off live at
-  frame 3, and `pos_z` first flips a bit at frame 33 (decel) — the anim foot-toe.z is the root (above).
-  Regenerate the golden from live after a sim fix via `python tests/gen_land_golden.py`.
+  (5 red today: `speedf` frame 5, `ebs`, `brake_right`, `waitturn`, `slip`). The walk arc is now
+  float-perfect every frame. Regenerate the golden from live after a sim fix via `python tests/gen_land_golden.py`.
 
 ## Console cosine table
 

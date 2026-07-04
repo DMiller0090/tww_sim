@@ -114,6 +114,25 @@ def _recip2(denom):
     return fp.fmuls(r, 2.0)
 
 
+def _recip2_of(denom, mode):
+    """The PSMTXQuat scale s = 2/denom, in the requested rounding model:
+      'newton' (default for the foot chain): one Newton multiply-refine `est*(2 - denom*est)` seeded by
+        an ACCURATE 1/denom, then *2. This reproduces the console's hardware `fres`+Newton reciprocal
+        BIT-EXACTLY -- the seed's sub-12-bit error washes out after the Newton step, and the final
+        multiply-refine lands the round-to-even the raw IEEE `fdivs` misses at half-ULP midpoints (e.g.
+        a pure-90deg joint's denom cos2+sin2 = 1 - 2^-24, where the console gives fdivs-1 ULP).
+      'fres': the literal `_fres` table seed (kept for provenance; the emulated table is ~7 ULP low for
+        denom just below 1, so it does NOT match the console -- do not use for the foot chain).
+      'fdivs': raw IEEE 2/denom (differs from the console by 1 ULP at those midpoints)."""
+    if mode == 'fdivs':
+        return fp.fdivs(2.0, denom)
+    if mode == 'fres':
+        return _recip2(denom)
+    est = fp.fdivs(1.0, denom)                        # accurate seed (>= console fres+refine accuracy)
+    r = fp.fmuls(est, fp.fnmsubs(denom, est, 2.0))    # est * (2 - denom*est): the console's Newton refine
+    return fp.fmuls(r, 2.0)
+
+
 # --- paired-single register ops (each reg = [ps0, ps1]); scalar single ops broadcast to both lanes ---
 def _psmul(a, c):    return [fp.fmuls(a[0], c[0]), fp.fmuls(a[1], c[1])]
 def _psmadd(a, c, b):return [fp.fmadds(a[0], c[0], b[0]), fp.fmadds(a[1], c[1], b[1])]
@@ -125,20 +144,25 @@ def _pssum0(a, c, b):return [fp.fadds(a[0], b[1]), c[1]]                        
 def _pssum1(a, c, b):return [c[0], fp.fadds(a[0], b[1])]                                   # ps0=C.ps0; ps1=A.ps0+B.ps1
 
 
-def psmtx_quat(q, scale_mode='fdivs'):
+def psmtx_quat(q, scale_mode='newton'):
     """Literal paired-single port of the retail **PSMTXQuat** asm (mtx.c:1016), which is what
     `mDoMtx_quat` (and thus the CL foot chain) actually uses -- NOT `C_MTXQuat`. The off-diagonals are
     computed **fused then scaled** (`m[0][1]=(x*y - z*w)*s` via ps_msub, one rounding on the product-
     difference), unlike `mtx_quat`'s element-wise `x*(y*s)-w*(z*s)`. This is bit-exact vs the live
     `anmMtx` rotation for all-nonzero quats (validated element-wise vs jnt0). q=(w,x,y,z) -> 3x4 (trans=0).
 
-    scale_mode: 'fdivs' (default) uses exact `2/denom` -- on the test Dolphin the HW `fres`+1-Newton step
-    yields exactly this (the `_fres` estimate here is ~7 ULP low for denom just below 1). 'fres' keeps the
-    literal asm reciprocal for provenance. See knowledge/model/sim.md (world-space quantization section).
+    scale_mode: 'newton' (default) reproduces the console's HW `fres`+Newton reciprocal BIT-EXACTLY via an
+    accurate-seed Newton refine (see _recip2_of). This matters: a pure-90-deg joint's denom = cos2+sin2 =
+    1 - 2^-24 is a half-ULP division midpoint where the console gives fdivs-1 ULP; raw 'fdivs' is 1 ULP
+    high there and 'fres' (the literal `_fres` table) is ~7 ULP low. Combined with a WORLD-space foot FK
+    (fk.world_base -- the game quantizes the foot matrices at world magnitude ~764), this makes the leg
+    chain jnt0..jnt33 BIT-EXACT vs the live anmMtx. See knowledge/model/sim.md (world-space FK section).
 
-    KNOWN GAP: single-axis (zero-component) quats (e.g. a pure-90-deg joint) are still ~1 ULP off -- a
-    sub-ULP lane subtlety for zero inputs. Wire this into a WORLD-space foot FK; identity-space FK cannot
-    match the game (the game quantizes the foot matrices at world magnitude ~764)."""
+    KNOWN GAP: the planted foot joint (jnt34/39) is still ~1 ULP off (the quat, not the matrix or scale --
+    both `psmtx` and an f64 matrix from the same quat share the residual, and no euler/fusion variant
+    reproduces the console's quat), most likely a per-frame foot-IK ground snap applied after the anim.
+    It is absorbed by the pos_z f32 rounding on the straight walk (float-perfect) but leaks 1-2 ULP into
+    the ATN/waitturn tails (ebs/brake_right/waitturn)."""
     w, x, y, z = q
     tmp0 = [x, y]; tmp1 = [z, w]
     c_one = [1.0, 1.0]
@@ -151,10 +175,7 @@ def psmtx_quat(q, scale_mode='fdivs'):
     scale = _pssum0(tmp4, tmp4, tmp4)             # scale.ps0 = denom = x*x+y*y+z*z+w*w
     tmp7 = _psmuls1(tmp5, tmp1)
     denom = scale[0]
-    if scale_mode == 'fdivs':
-        s = fp.fdivs(2.0, denom)
-    else:
-        est = fp.f32(_fres(denom)); r = fp.fmuls(est, fp.fnmsubs(denom, est, 2.0)); s = fp.fmuls(r, 2.0)
+    s = _recip2_of(denom, scale_mode)
     scale = [s, s]
     tmp4 = _pssum1(tmp3, tmp4, tmp2)
     tmp6 = _psmuls1(tmp1, tmp1)                   # [z*w, w*w]

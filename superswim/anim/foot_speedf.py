@@ -63,7 +63,8 @@ class FootSpeedF:
         except (FileNotFoundError, OSError):
             return False
 
-    def __init__(self, idle_frame=70.0, idle_anim=IDLE_ANIM):
+    def __init__(self, idle_frame=70.0, idle_anim=IDLE_ANIM, pos_x=0.0,
+                 pos_z=764.0791015625, facing=0):
         self.anm, self.sk = fk.load()                 # raises if the data is absent
         self.idle_anim = idle_anim
         self.idle_frame = float(idle_frame)
@@ -71,6 +72,12 @@ class FootSpeedF:
         self.st = UnderAnimState(move0_anim=idle_anim, move0_frame=self.idle_frame, m34C3=0)
         from .foot_fk import FootFK
         self.ff = FootFK(self.anm, self.sk)
+        # Link's world pose for the frame being posed (the foot FK runs from worldBase(pos)). LandState
+        # updates it via set_pos BEFORE each step; seeded here at the anchor rest pose.
+        self.pos_x = float(pos_x)
+        self.pos_z = float(pos_z)
+        self.facing = int(facing) & 0xFFFF
+        self.ff.set_pos(self.pos_x, self.pos_z, facing=self.facing)
         self.started = False
         self.stopped = False
         # Seed the FootFK old pose + delayed toe stream (t1=draw_{N-1}, t2=draw_{N-2}) with the
@@ -83,6 +90,17 @@ class FootSpeedF:
         self.m35B4 = 0.0                               # previous frame's mStickDistance
         self._single_entered = False                   # single-anim entry frame: hold the ctrl at start
         self._pending_morf = None                      # morf to apply on the next step (proc/walk entry)
+
+    def set_pos(self, px, pz, facing=0):
+        """LandState calls this each frame BEFORE stepping, with the CURRENT (pre-integration) world
+        pos + shape_angle.y. The foot FK poses from worldBase(pos), so the toe carries the game's
+        world-magnitude quantization for THIS frame's draw (stored into the toe stream)."""
+        self.pos_x = fp.f32(px)
+        self.pos_z = fp.f32(pz)
+        self.facing = int(facing) & 0xFFFF
+
+    def _apply_base(self):
+        self.ff.set_pos(self.pos_x, self.pos_z, facing=self.facing)
 
     def enter_single(self, anim, morf, start=0.0, end=None, rate=1.0):
         """setSingleMoveAnime(anim, rate, start, end, morf) (12794): the under-body switches to a single
@@ -176,6 +194,7 @@ class FootSpeedF:
                 # input-latency / standing frame: keep drawing the idle so its drift is carried
                 # into the toe stream; the game's m3598 here is 0 so speedF is 0 regardless.
                 self.idle_frame = fp.fadds(self.idle_frame, 1.0)
+                self._apply_base()
                 cur = self.ff.step_feet(self.idle_anim, self.idle_anim,
                                         self.idle_frame, self.idle_frame, 0.0, -1.0)
                 self._shift(cur, 0.0, msd)
@@ -201,6 +220,7 @@ class FootSpeedF:
         """The shared posMoveFromFootPos math (d_a_player_main.cpp:2372+): pose the foot, take the
         1-frame-delayed plant toe delta f31_2 with the recursive smoothing, and compose
         speedF = nspeed*(1-m3598) +/- f31_2*m3598. Used by both the walk step() and the roll step_roll()."""
+        self._apply_base()
         cur = self.ff.step_feet(state['move0'], state['move1'], state['f0'], state['f1'],
                                 state['ratio'], i_morf=morf)
         # spB0 = the toe DRAWN last frame (1-frame delay) = t1; prevStored = t2.

@@ -208,7 +208,8 @@ class LandState:
         if use_anim:
             try:
                 from .anim.foot_speedf import FootSpeedF
-                self._foot = FootSpeedF(idle_frame=float(idle_frame))
+                self._foot = FootSpeedF(idle_frame=float(idle_frame), pos_x=self.pos_x,
+                                        pos_z=self.pos_z, facing=self.facing)
             except (FileNotFoundError, OSError, ImportError):
                 self._foot = None
 
@@ -222,7 +223,8 @@ class LandState:
         if self._foot is not None and (s._foot is None or s._foot is self._foot):
             from .anim.foot_speedf import FootSpeedF
             try:
-                s._foot = FootSpeedF(idle_frame=self._foot.idle_frame)
+                s._foot = FootSpeedF(idle_frame=self._foot.idle_frame, pos_x=self.pos_x,
+                                     pos_z=self.pos_z, facing=self.facing)
             except (FileNotFoundError, OSError, ImportError):
                 s._foot = None
         return s
@@ -664,6 +666,10 @@ class LandState:
         if proc == ATN_MOVE and self.state == MOVE and self._foot is not None:
             self._foot._pending_morf = self.MOVE_REENTRY_MORF
 
+        # Before posing, set Link's CURRENT (pre-integration) world pos + shape_angle.y: the foot FK runs
+        # from worldBase(pos) to carry world-magnitude quantization. See knowledge/model/sim.md.
+        if self._foot is not None:
+            self._foot.set_pos(self.pos_x, self.pos_z, facing=self.facing)
         # speedF -> position. ROLL/SLIP = momentum; WAIT_TURN frozen; MOVE + MOVE_TURN tail + ATN_MOVE use
         # the anim engine (only the SLIP tail keeps the fallback); single-anim procs pose to warm the stream.
         if self.state == WAIT_TURN:
