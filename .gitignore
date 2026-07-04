@@ -35,3 +35,10 @@ fixtures/savestate/
 # Machine-specific Dolphin/ISO paths — never tracked. Copy dolphin.local.example.json
 # to dolphin.local.json and edit for your machine (see harness/dolphin_env.py).
 /dolphin.local.json
+
+# Cython build artifacts (regenerate with _build_fpc.py). The .pyx source IS tracked; the
+# compiled .pyd (platform-specific) and generated .c are not. fp.py falls back to pure-Python
+# ctypes when the compiled _fpc is absent (bit-identical, just slower).
+superswim/**/*.pyd
+superswim/**/*.c
+build/

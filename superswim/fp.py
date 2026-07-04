@@ -22,44 +22,41 @@ Extends the rules in memory `superswim-gekko-fp`. Reused later for the collision
 """
 from ctypes import c_float as _c_float
 
+# FAST PATH: the native Cython build (superswim/_fpc.pyx; C (float) cast, bit-identical to ctypes,
+# ~5x faster) when present, else the pure-Python ctypes fallback below (same result). Build: _build_fpc.py.
+try:
+    from ._fpc import (f32, fmuls, fadds, fsubs, fdivs, fmadds, fmsubs, fnmadds,  # noqa: F401
+                       fnmsubs)
+except ImportError:
+    def f32(x):
+        """Round an f64 result to f32 (round-half-to-even), like a single-precision store/round."""
+        return _c_float(x).value
 
-def f32(x):
-    """Round an f64 result to f32 (round-half-to-even), like a single-precision store/round."""
-    return _c_float(x).value
+    def fmuls(a, b):
+        """single a*b, rounded once."""
+        return _c_float(a * b).value
 
+    def fadds(a, b):
+        return _c_float(a + b).value
 
-def fmuls(a, b):
-    """single a*b, rounded once."""
-    return _c_float(a * b).value
+    def fsubs(a, b):
+        return _c_float(a - b).value
 
+    def fdivs(a, b):
+        return _c_float(a / b).value
 
-def fadds(a, b):
-    return _c_float(a + b).value
+    def fmadds(a, b, c):
+        """fused a*b + c, single. One rounding of the exact product-sum (f64 intermediate exact)."""
+        return _c_float(a * b + c).value
 
+    def fmsubs(a, b, c):
+        """fused a*b - c, single."""
+        return _c_float(a * b - c).value
 
-def fsubs(a, b):
-    return _c_float(a - b).value
+    def fnmadds(a, b, c):
+        """fused -(a*b + c), single. Negation is exact -> == -fmadds(a,b,c)."""
+        return _c_float(-(a * b + c)).value
 
-
-def fdivs(a, b):
-    return _c_float(a / b).value
-
-
-def fmadds(a, b, c):
-    """fused a*b + c, single. One rounding of the exact product-sum (f64 intermediate exact)."""
-    return _c_float(a * b + c).value
-
-
-def fmsubs(a, b, c):
-    """fused a*b - c, single."""
-    return _c_float(a * b - c).value
-
-
-def fnmadds(a, b, c):
-    """fused -(a*b + c), single. Negation is exact -> == -fmadds(a,b,c)."""
-    return _c_float(-(a * b + c)).value
-
-
-def fnmsubs(a, b, c):
-    """fused -(a*b - c) == c - a*b, single. Negation is exact -> == -fmsubs(a,b,c)."""
-    return _c_float(-(a * b - c)).value
+    def fnmsubs(a, b, c):
+        """fused -(a*b - c) == c - a*b, single. Negation is exact -> == -fmsubs(a,b,c)."""
+        return _c_float(-(a * b - c)).value

@@ -106,9 +106,18 @@ def _keyframe_interp(frame, count, ttype, data, base, hermite):
 
 
 # --- calcTransform: per-joint TRS at a frame (J3DAnmTransformKey::calcTransform) ---------------
+# calc_transform is PURE in (anm, joint, frame) -> memoize (walk frames recur; shared across a search).
+# Cache lives ON the anm dict (per-anm, NOT id()-keyed: id-reuse-after-GC corrupts it); result read-only.
 def calc_transform(anm, joint_idx, frame):
     """Return dict scale=[x,y,z] (f32), rotation=[x,y,z] (s16 BAM, <<decShift applied),
-    translate=[x,y,z] (f32) for the joint at fractional `frame`."""
+    translate=[x,y,z] (f32) for the joint at fractional `frame`. Memoized per-anm (pure)."""
+    _cache = anm.get('_ct_cache')
+    if _cache is None:
+        _cache = anm['_ct_cache'] = {}
+    _ck = (joint_idx, frame)
+    _cv = _cache.get(_ck)
+    if _cv is not None:
+        return _cv
     j = anm['joints'][joint_idx]
     dec = anm['dec_shift']
     sdata, rdata, tdata = anm['scale_data'], anm['rot_data'], anm['trans_data']
@@ -139,6 +148,7 @@ def calc_transform(anm, joint_idx, frame):
             out['translate'][axis] = fp.f32(tdata[off])
         else:
             out['translate'][axis] = _keyframe_interp(frame, cnt, tt, tdata, off, hermite_f32)
+    _cache[_ck] = out
     return out
 
 
