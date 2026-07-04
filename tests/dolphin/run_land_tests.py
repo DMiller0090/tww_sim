@@ -18,10 +18,16 @@ seed a `superswim.land.LandState` from the live frame-0 snapshot, step the sim o
 `advanceseq`. mNormalSpeed (signed potential_speed), the proc state machine, facing (shape_angle.y)
 and travel (current.angle.y) are all BIT-EXACT -- including roll_ebs, whose ~-23.109 preserved speed
 comes from the roll's getFrame()>17 checkNextMode(1) exit straight to ATN then the backward-flip.
-Position (pos_z) is bit-exact for the on-axis walk (stays in MOVE), mid-roll (momentum), and the full
-roll-to-standstill (roll_settle: the foot engine poses ANM_ROLLF through the roll so the toe stream is
-warm at the roll->walk tail); runs that visit ATN_MOVE use the calibrated position fallback (ANM_ATN*
-unported) and pos is not asserted. Each case also layers its tech assertions.
+
+POSITION (pos_z) IS GATED FLOAT-PERFECT -- 0 ULP vs live is the pass condition (LIVE IS THE SOURCE OF
+TRUTH; the sim must reproduce the game's pos_z byte for byte). posz_status() enforces this. Some techs
+are ALREADY float-perfect (brakeslide/roll_run/roll_ebs/moveturn) and are hard-locked at 0 ULP -- any
+drift FAILS. The rest carry a small OPEN residual (the sub-ULP speedF/cos accumulation, see
+_notes/handoff-2026-07-04r-land-precision-*), recorded in KNOWN_POSZ_GAP_ULP as EXPECTED FAILURES
+(xfail): they print "NOT float-perfect", keep the suite green, and if one reaches 0 it prints "** NOW
+float-perfect -> lock it" (delete its entry). A gap that GROWS past its ledger value is a hard FAIL.
+The goal is to empty that map. Each case also layers its tech assertions. (Runs with no anim keyframe
+data fall back to the calibrated stand-in and pos_z is not asserted.)
 
 DTM-PLAYBACK (wiggle_ebs_roll): the wiggle-EBS-into-roll chain is DENSE frame-perfect input, where
 the advanceseq pipe could jitter (bug#2). It is locked by loading a movie-active savestate fixture
@@ -43,7 +49,7 @@ Usage:
   python run_land_tests.py            # assert locked expectations (exit 0 iff all pass)
   python run_land_tests.py record=1   # print end-states to (re)lock after a DELIBERATE change
 """
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys, struct  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -57,6 +63,39 @@ from superswim.land import LandState
 ANCHOR = resolve_anchor("land_flatwalk@twwgz")
 READS = ["link_state", "potential_speed", "true_speed", "shape_angle_y",
          "travel_angle", "csangle", "pos_x", "pos_z", "anim_frame"]
+
+# Ledger of cases NOT float-perfect yet: label -> current sim-vs-live pos_z gap in f32 ULP (an OPEN
+# residual, NOT a tolerance). Gate + xfail semantics: posz_status()/module docstring. Goal: empty it.
+KNOWN_POSZ_GAP_ULP = {
+    "walk_run": 2, "ebs": 1, "face_left": 1, "brake_right": 2,
+    "roll_slow": 4, "roll_settle": 2, "waitturn": 1, "slip": 74,
+}   # (brakeslide/roll_run/roll_ebs/moveturn are already float-perfect -> not listed -> hard-locked at 0)
+
+
+def f32_bits(x):
+    """Raw uint32 bits of x rounded to float32; |bits(a)-bits(b)| is the exact ULP distance here."""
+    return struct.unpack("<I", struct.pack("<f", x))[0]
+
+
+def posz_status(sim, live, label):
+    """FLOAT-PERFECT sim-vs-live pos_z gate. Returns (kind, desc) where kind is one of
+    'ok' (0 ULP, float-perfect), 'xfail' (known open residual), 'xpass' (a listed case reached 0 --
+    lock it), 'fail' (regressed past its known gap, or a non-listed case is not 0). Returns None when
+    position isn't asserted (no anim keyframe data -> the calibrated stand-in is active)."""
+    if getattr(sim, "_pos_fallback", False) or sim._foot is None:
+        return None
+    bit = abs(f32_bits(sim.pos_z) - f32_bits(live["pos_z"]))
+    known = KNOWN_POSZ_GAP_ULP.get(label, 0)
+    tag = (f"[{bit} ULP]  sim {sim.pos_z!r} (0x{f32_bits(sim.pos_z):08x}) / "
+           f"live {live['pos_z']!r} (0x{f32_bits(live['pos_z']):08x})")
+    if bit == 0:
+        if known == 0:
+            return ("ok", f"pos_z FLOAT-PERFECT (0 ULP vs live)  {tag}")
+        return ("xpass", f"pos_z NOW FLOAT-PERFECT (was {known} ULP) -- delete '{label}' from "
+                         f"KNOWN_POSZ_GAP_ULP to lock it  {tag}")
+    if bit <= known:
+        return ("xfail", f"pos_z NOT float-perfect: known open {known}-ULP residual  {tag}")
+    return ("fail", f"pos_z REGRESSED past its known {known}-ULP gap (float-faithfulness lost)  {tag}")
 
 # DTM-playback fixture: a movie-active savestate -- loading it restores a recorded movie at frame 0
 # and `advance` replays it through the movie system (faithful for dense input). Dev-local; SKIPS if absent.
@@ -192,18 +231,12 @@ def wiggle_ebs_roll_checks(traj):
 
 def sim_checks(sim, live, note):
     """SIM-vs-LIVE core checks (ALL cases): state exact; mNormalSpeed (signed) bit-exact; facing +
-    travel bit-exact (s16). pos_z is bit-exact via the anim engine for the on-axis walk, the roll, the
-    MOVE_TURN turn-around (walk blend posed at the pre-halving speed + morf on entry/exit), the WAIT_TURN
-    pivot + walk-off (ANM_ROT pivot -> WAITS/ANM_ATNW{L,R}S idle-proc re-pose) AND now ATN_MOVE (the
-    brakeslide/EBS/face_left/brake_right strafe + backslide: setBlendAtnMoveAnime poses ANM_ATN{L,R}S/W/D
-    + ANM_ATNWB/ATNDB, warming the toe stream for the EBS-release walk tail) AND the SLIP skid->MOVE_TURN
-    handoff (ANM_SLIP posed with its jnt37 X-scale applied in the FK + carried through the morf). pos_z is
-    asserted BIT-EXACT for EVERY case now; _pos_fallback is set only when the anim keyframe data is absent.
-    See superswim/land.py step()."""
+    travel bit-exact (s16). These four are float-perfect for every land tech. pos_z is checked
+    SEPARATELY by posz_status() (the float-perfect gate + the KNOWN_POSZ_GAP_ULP xfail ledger), since
+    it is the one field with an open sub-ULP residual on some techs. See superswim/land.py step()."""
     dv = abs(sim.nspeed - live["potential_speed"])         # signed: brakeslide/EBS go negative
     dfac = abs(sdiff_deg(sim.facing, live["shape_angle_y"]))
     dtrav = abs(sdiff_deg(sim.travel, live["travel_angle"]))
-    pos_fallback = getattr(sim, "_pos_fallback", False)   # set only when anim keyframe data is absent
     checks = [
         (sim.state == int(live["link_state"]),
          f"state sim/live {sim.state}/{int(live['link_state'])}"),
@@ -214,11 +247,6 @@ def sim_checks(sim, live, note):
         (dtrav < 0.1, f"travel bit-exact  d={dtrav:.4f}deg  "
                       f"(sim {deg(sim.travel):.2f} / live {deg(live['travel_angle']):.2f})"),
     ]
-    if not pos_fallback and sim._foot is not None:  # walk / roll / turn / ATN: position bit-exact
-        dpos = abs(sim.pos_z - live["pos_z"])
-        checks.append((dpos < 0.05,
-                       f"pos_z BIT-EXACT (anim)  d={dpos:.4f}  "
-                       f"sim {sim.pos_z:.3f} / live {live['pos_z']:.3f}"))
     return checks
 
 
@@ -287,11 +315,30 @@ TURN_CASES = [
 ]
 
 
+# pos-line markers by posz_status kind: ok/xfail don't fail the case; xpass flags a lock-me; fail fails.
+_POS_MARK = {"ok": "ok ", "xfail": "xf ", "xpass": "** ", "fail": "X  "}
+
+
+def emit_case(label, note, checks, sim, live, counts):
+    """Print one SIM-vs-LIVE case: the (bit-exact) core/tech checks + the FLOAT-PERFECT pos_z gate.
+    A case FAILS iff a core/tech check fails OR pos_z regressed past its known gap. 'xfail' (a known
+    open pos residual) and 'xpass' (a residual that just reached 0) are tracked but keep the suite green."""
+    pos = posz_status(sim, live, label)
+    hard_fail = (not all(c[0] for c in checks)) or (pos is not None and pos[0] == "fail")
+    print(f"{'FAIL' if hard_fail else 'PASS'} {label:<12} (SIM-vs-LIVE: {note})")
+    for passed, desc in checks:
+        print(f"     {'ok ' if passed else 'X  '}{desc}")
+    if pos is not None:
+        print(f"     {_POS_MARK[pos[0]]}{pos[1]}")
+        counts[pos[0]] = counts.get(pos[0], 0) + 1
+    counts["fail" if hard_fail else "pass"] = counts.get("fail" if hard_fail else "pass", 0) + 1
+
+
 def main():
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
     record = o.get('record', '0') in ('1', 'true', 'yes')
     only = o.get('only')
-    npass = nfail = 0
+    counts = {"pass": 0, "fail": 0}
     for label, seqfn, note, extra_check in CASES:
         if only and only != label:
             continue
@@ -299,10 +346,11 @@ def main():
         if record:
             e = {"link_state": int(live["link_state"]), "v": abs(live["potential_speed"]),
                  "facing": deg(live["shape_angle_y"]), "travel": deg(live["travel_angle"])}
+            gap = abs(f32_bits(sim.pos_z) - f32_bits(live["pos_z"]))
             print(f"{label:<12} SIM st={sim.state} v={sim.nspeed:.3f} face={deg(sim.facing):.1f} "
                   f"trav={deg(sim.travel):.1f} pos_z={sim.pos_z:.2f}  | LIVE st={e['link_state']} "
                   f"v={live['potential_speed']:.3f} face={e['facing']:.1f} trav={e['travel']:.1f} "
-                  f"pos_z={live['pos_z']:.2f}  # {note}")
+                  f"pos_z={live['pos_z']:.2f}  posULP={gap}  # {note}")
             continue
         checks = sim_checks(sim, live, note)
         if extra_check is not None:              # layer the characteristic tech assertions on top
@@ -310,30 +358,20 @@ def main():
                  "facing": deg(live["shape_angle_y"]), "travel": deg(live["travel_angle"]),
                  "face_trav": abs(sdiff_deg(live["shape_angle_y"], live["travel_angle"]))}
             checks += extra_check(e)
-        ok = all(c[0] for c in checks)
-        npass += ok
-        nfail += (not ok)
-        print(f"{'PASS' if ok else 'FAIL'} {label:<12} (SIM-vs-LIVE: {note})")
-        for passed, desc in checks:
-            print(f"     {'ok ' if passed else 'X  '}{desc}")
+        emit_case(label, note, checks, sim, live, counts)
 
     for label, seqfn, note, check in TURN_CASES:   # ground-reversal turn procs (now SIM-vs-LIVE)
         if only and only != label:
             continue
         sim, live = replay_sim_vs_live(seqfn())
         if record:
+            gap = abs(f32_bits(sim.pos_z) - f32_bits(live["pos_z"]))
             print(f"{label:<12} SIM st={sim.state} v={sim.nspeed:.3f} face={deg(sim.facing):.1f} "
                   f"trav={deg(sim.travel):.1f} visited={sorted(sim.visited)} pos_z={sim.pos_z:.2f}  | "
                   f"LIVE st={int(live['link_state'])} v={live['potential_speed']:.3f} "
-                  f"face={deg(live['shape_angle_y']):.1f} pos_z={live['pos_z']:.2f}  # {note}")
+                  f"face={deg(live['shape_angle_y']):.1f} pos_z={live['pos_z']:.2f}  posULP={gap}  # {note}")
             continue
-        checks = sim_checks(sim, live, note) + check(sim, live)
-        ok = all(c[0] for c in checks)
-        npass += ok
-        nfail += (not ok)
-        print(f"{'PASS' if ok else 'FAIL'} {label:<12} (SIM-vs-LIVE: {note})")
-        for passed, desc in checks:
-            print(f"     {'ok ' if passed else 'X  '}{desc}")
+        emit_case(label, note, sim_checks(sim, live, note) + check(sim, live), sim, live, counts)
 
     # DTM-playback lock: the wiggle-EBS-into-roll chain (dense frame-perfect input; needs the
     # movie fixture). SKIPS cleanly when the dev-local .dtm.sav is absent.
@@ -351,14 +389,20 @@ def main():
             else:
                 checks = wiggle_ebs_roll_checks(traj)
                 ok = all(c[0] for c in checks)
-                npass += ok
-                nfail += (not ok)
+                counts["fail" if not ok else "pass"] += 1
                 print(f"{'PASS' if ok else 'FAIL'} wiggle_ebs_roll (DTM-PLAYBACK: {note})")
                 for passed, desc in checks:
                     print(f"     {'ok ' if passed else 'X  '}{desc}")
     if not record:
-        print(f"\n{npass} passed, {nfail} failed")
-        sys.exit(1 if nfail else 0)
+        xf, xp = counts.get("xfail", 0), counts.get("xpass", 0)
+        extra = ""
+        if xf:
+            extra += (f", {xf} pos_z NOT-float-perfect yet (known open residuals in "
+                      "KNOWN_POSZ_GAP_ULP)")
+        if xp:
+            extra += f", {xp} pos_z NOW float-perfect (** -> delete from KNOWN_POSZ_GAP_ULP to lock)"
+        print(f"\n{counts['pass']} passed, {counts['fail']} failed{extra}")
+        sys.exit(1 if counts["fail"] else 0)
 
 
 if __name__ == "__main__":
