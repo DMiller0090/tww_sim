@@ -101,7 +101,7 @@ def to_jsonable(anm):
     return j
 
 
-def load_from_lkanm(lkanm_bytes_or_path, names=('walk', 'dash', 'waits', 'freeb', 'rollf')):
+def load_from_lkanm(lkanm_bytes_or_path, names=('walk', 'dash', 'waits', 'freeb', 'rollf', 'rot', 'slip')):
     """Parse the named .bck anims from LkAnm.arc, given either raw arc bytes or a path."""
     if isinstance(lkanm_bytes_or_path, (bytes, bytearray)):
         raw_arc = bytes(lkanm_bytes_or_path)

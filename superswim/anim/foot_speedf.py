@@ -81,38 +81,47 @@ class FootSpeedF:
         self.t2 = draw0
         self.prev_f312 = 0.0
         self.m35B4 = 0.0                               # previous frame's mStickDistance
-        self._roll = False                             # in a FRONT_ROLL (single rollf anim) segment
-        self._roll_entered = False                     # roll entry frame: hold the ctrl at start
-        self._pending_morf = None                      # morf to apply on the next step (roll/walk entry)
+        self._single_entered = False                   # single-anim entry frame: hold the ctrl at start
+        self._pending_morf = None                      # morf to apply on the next step (proc/walk entry)
 
-    def enter_roll(self, morf=2.4, start=0.0, end=19.0, rate=1.1):
-        """procFrontRoll_init: setSingleMoveAnime(ANM_ROLLF). The under-body switches to a single
-        rollf anim (m34C3=0), so during the roll posMoveFromFootPos keeps posing the foot + updating
-        the toe stream while m3598 stays frozen (=> speedF stays = mNormalSpeed momentum). Because
-        m34C3==0, the following walk blend re-inits its frame ctrl to 0 on the roll->MOVE exit
-        (live roll_run.csv f36: move0_frame=0 at rate 2.30). Call step_roll() each FRONT_ROLL frame.
-        morf = the roll-entry oldframe-morf (mRoll.field_0x14); it decays out long before the exit."""
-        self.st.set_single('rollf', start, end, rate)
+    def enter_single(self, anim, morf, start=0.0, end=None, rate=1.0):
+        """setSingleMoveAnime(anim, rate, start, end, morf) (12794): the under-body switches to a single
+        anim (m34C3=0), so posMoveFromFootPos keeps posing the foot + updating the toe stream while m3598
+        stays frozen (=> speedF stays the proc's own value: roll/slip momentum, WaitTurn frozen at 0).
+        Because m34C3==0, the following walk blend re-inits its frame ctrl to 0 on the proc->MOVE exit.
+        Shared by procFrontRoll_init (ANM_ROLLF), procWaitTurn_init (ANM_ROT), procSlip_init (ANM_SLIP);
+        call step_single_anim() each proc frame. `end` defaults to the anim's frameMax."""
+        if end is None:
+            end = float(ANIM_META[anim][0])
+        self.st.set_single(anim, start, end, rate)
         self.started = True
-        self._roll = True
-        self._roll_entered = True                  # entry frame: don't advance the ctrl (matches land)
+        self._single_entered = True                # entry frame: don't advance the ctrl (matches land)
         self._pending_morf = float(morf) if morf is not None else None
 
-    def step_roll(self, nspeed, msd):
-        """One FRONT_ROLL frame: advance the rollf frame ctrl, pose the foot, run the posMoveFromFootPos
-        toe-stream bookkeeping (f31_2, m359C, stored toe). Returns speedF (== nspeed while m3598==0, the
-        roll momentum). Its real job is warming the toe stream so the post-roll walk tail is bit-exact."""
+    def enter_roll(self, morf=2.0, start=0.0, end=19.0, rate=1.1):
+        """procFrontRoll_init: setSingleMoveAnime(ANM_ROLLF). morf = the roll-entry oldframe-morf
+        (mRoll.field_0x14); it decays out long before the exit."""
+        self.enter_single('rollf', morf, start, end, rate)
+
+    def step_single_anim(self, nspeed, msd):
+        """One single-anim proc frame: advance the anim frame ctrl, pose the foot, run the
+        posMoveFromFootPos toe-stream bookkeeping (f31_2, m359C, stored toe). Returns speedF (which the
+        caller discards for the momentum/frozen procs). Its real job is warming the toe stream so the
+        post-proc walk tail is bit-exact."""
         nspeed = _f32(nspeed)
         msd = _f32(msd)
         morf = self._pending_morf if self._pending_morf is not None else -1.0
         self._pending_morf = None
-        if self._roll_entered:                     # entry frame: pose at frame 0 (no ctrl advance)
-            self._roll_entered = False
-            state = dict(move0='rollf', move1='rollf', f0=self.st.fc0.frame, f1=self.st.fc0.frame,
-                         ratio=0.0, m3598=self.st.m3598, morf=False)
+        if self._single_entered:                   # entry frame: pose at the start frame (no ctrl advance)
+            self._single_entered = False
+            state = dict(move0=self.st.move0, move1=self.st.move0, f0=self.st.fc0.frame,
+                         f1=self.st.fc0.frame, ratio=0.0, m3598=self.st.m3598, morf=False)
         else:
             state = self.st.step_single()
         return self._foot_speedf(nspeed, msd, state, morf)
+
+    # back-compat alias: the roll uses the shared single-anim stepper.
+    step_roll = step_single_anim
 
     def _shift(self, cur, f312, msd):
         self.m35B4 = _f32(msd)
@@ -120,11 +129,18 @@ class FootSpeedF:
         self.t1 = cur
         self.prev_f312 = f312
 
-    def step(self, nspeed, msd):
+    def step(self, nspeed, msd, anim_nspeed=None):
         """Advance one frame. `nspeed` = mNormalSpeed (bit-exact from LandState), `msd` =
-        mStickDistance (the acted-on/latency-delayed stick magnitude). Returns speedF."""
+        mStickDistance (the acted-on/latency-delayed stick magnitude). Returns speedF.
+
+        `anim_nspeed` splits the anim-blend speed from the position-integrating speed for the
+        one frame where the game poses the walk anim at a DIFFERENT mNormalSpeed than it later
+        integrates position with. This happens at procMoveTurn_init(1): setBlendMoveAnime runs
+        (posing at the full pre-turn speed) BEFORE `mNormalSpeed *= 0.5` (6616 vs 6623), and
+        posMoveFromFootPos integrates with the halved speed. Default None => same value for both."""
         nspeed = _f32(nspeed)
         msd = _f32(msd)
+        an = nspeed if anim_nspeed is None else _f32(anim_nspeed)
 
         if not self.started:
             if nspeed <= 0.0:
@@ -147,9 +163,8 @@ class FootSpeedF:
             self._pending_morf = None
         else:
             morf = -1.0
-        self._roll = False
 
-        state = self.st.step(nspeed)
+        state = self.st.step(an)
         return self._foot_speedf(nspeed, msd, state, morf)
 
     def _foot_speedf(self, nspeed, msd, state, morf):

@@ -6,8 +6,9 @@ non-attention arbiter to a turn proc -- stopped -> procWaitTurn (pivot in place)
 -> procSlip (skid then procMoveTurn), moving+slow -> procMoveTurn (turn-around). The proc is transient
 (gone by the end), so a single advanceseq end-state can't see it -- instead the SIM's `visited` set proves
 the proc was entered, while sim_checks asserts the reversed-walk end state (state/mNormalSpeed/facing/travel)
-BIT-EXACT vs the live advanceseq. Position is the calibrated fallback (ANM_ROT/ANM_SLIP/turn-blend foot
-anims unported), so pos_z is not asserted bit-exact -- the locked live distance guards the anchor instead.
+BIT-EXACT vs the live advanceseq. MOVE_TURN position is now BIT-EXACT too (the walk blend is posed at the
+pre-halving speed + re-morfed on entry/exit); WAIT_TURN (ANM_ROT->WAIT idle-proc re-pose) and the SLIP
+tail (ANM_SLIP toe stream) stay on the calibrated fallback, guarded by the locked live distance.
 
 SIM-vs-LIVE (walk_run + brakeslide/ebs/face_left/brake_right + roll_run/roll_slow/roll_settle/roll_ebs
 + waitturn/moveturn/slip):
@@ -190,10 +191,10 @@ def wiggle_ebs_roll_checks(traj):
 
 def sim_checks(sim, live, note):
     """SIM-vs-LIVE core checks (ALL cases): state exact; mNormalSpeed (signed) bit-exact; facing +
-    travel bit-exact (s16). pos_z is bit-exact via the anim engine ONLY for the on-axis walk (state
-    MOVE throughout) -- runs that visit ATN_MOVE (ANM_ATN* unported) or a ground-turn proc (_pos_fallback:
-    ANM_ROT/ANM_SLIP/turn-blend unported) use the calibrated position fallback so pos is not asserted
-    there. See superswim/land.py step() + knowledge/mechanics/land-movement.md."""
+    travel bit-exact (s16). pos_z is bit-exact via the anim engine for the on-axis walk AND the MOVE_TURN
+    turn-around (walk blend posed at the pre-halving speed + morf on entry/exit) -- runs that visit ATN_MOVE
+    (ANM_ATN* unported) or WAIT_TURN/SLIP (_pos_fallback: ANM_ROT idle-exit / ANM_SLIP tail unported) use
+    the calibrated position fallback so pos is not asserted there. See superswim/land.py step()."""
     dv = abs(sim.nspeed - live["potential_speed"])         # signed: brakeslide/EBS go negative
     dfac = abs(sdiff_deg(sim.facing, live["shape_angle_y"]))
     dtrav = abs(sdiff_deg(sim.travel, live["travel_angle"]))

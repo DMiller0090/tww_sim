@@ -272,6 +272,16 @@ def test_moveturn_below_slip_threshold():
     assert abs(_deg(s.facing) - 180.0) < 0.1
 
 
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_moveturn_position_bit_exact():
+    # Low-speed reverse -> MOVE_TURN into the reversed walk: the WHOLE arc is position bit-exact via the
+    # anim engine (pre-halving pose + entry/exit morf; see KB). Live pos_z 511.686 (explore_mt_1.csv).
+    s, _ = _run_turn([(128, 255, 0, 0)] + _DN * 20)
+    assert MOVE_TURN in s.visited and SLIP not in s.visited
+    assert s.state == MOVE
+    assert abs(s.pos_z - 511.686) < 0.05
+
+
 def test_slip_skids_forward_then_moveturn():
     # Full-speed run (speedF/max = 1.0 > 0.6) + a genuine stick flip -> procSlip: mNormalSpeed = speedF*1.1
     # (18.7, exceeds the cap), skids FORWARD (travel held) bleeding ~-1.25/frame, then hands to procMoveTurn.

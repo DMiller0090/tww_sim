@@ -158,6 +158,8 @@ class LandState:
     SLIP_DEC_SCALE = f32(0.6)       # field_0x18 = cLib_addCalc decel scale
     SLIP_DEC_MAX = f32(1.25)        # field_0x10 = cLib_addCalc decel maxStep (~-1.25/frame skid bleed)
     SLIP_DEC_MIN = f32(0.1875)      # field_0x14 = cLib_addCalc decel minStep
+    SLIP_ANIM_RATE = f32(0.4)       # field_0xC = ANM_SLIP frame-ctrl rate (skid pose)
+    SLIP_MORF = f32(1.7)            # field_0x1C = ANM_SLIP setSingleMoveAnime oldframe-morf
     # MoveTurn slip-exit re-accel seed = mMaxNormalSpeed * this (procSlip 6666); shape nudge = 0x100.
     MT_SLIP_SEED = f32(0.5)
 
@@ -188,6 +190,7 @@ class LandState:
         self.turn_shape_scale = 0              # MoveTurn shape-sweep cLib params (m34D0/m34D4/m34D6)
         self.turn_shape_max = 0
         self.turn_shape_min = 0
+        self._anim_nspeed = None               # 1-frame anim/integrate speed split (procMoveTurn_init halving)
         self._pos_fallback = False             # a turn proc (ANM_ROT/SLIP/turn-blend unported) was entered
         #                                        -> position uses the calibrated chase, not asserted bit-exact
         # 2-frame controller-input buffer (index 0 = oldest = the input acted on this frame).
@@ -504,6 +507,8 @@ class LandState:
         self.state = WAIT_TURN
         self.turn_target = self.target
         self.travel = self.facing
+        # Pivot is speedF 0; the WAIT_TURN->WAIT->MOVE walk-off needs the idle-proc setBlendMoveAnime
+        # (procWait_init ModeFlg branch, unported) -> fallback (see knowledge/mechanics/land-movement.md).
         self._pos_fallback = True
 
     def _proc_wait_turn(self, l_held):
@@ -525,12 +530,18 @@ class LandState:
         procSlip; sweep params (scale 3, max F0*2, min F0). The body then re-accelerates while facing
         catches up to the (reversed) travel."""
         self.state = MOVE_TURN
-        self._pos_fallback = True
+        # procMoveTurn_init calls setBlendMoveAnime(mBasic.field_0xC) -> re-triggers the oldframe-morf
+        # (same 2.4 as the roll->walk re-entry), so the walk blend re-warms from the pre-turn pose.
+        if self._foot is not None:
+            self._foot._pending_morf = self.MOVE_REENTRY_MORF
         if param_1 != 0:
             self.turn_shape_max = (self.F0 * 4 + 0x4A56) & 0xFFFF
             self.turn_shape_min = (self.F0 * 2) & 0xFFFF
             self.turn_shape_scale = 2
             self.travel = self.target
+            # setBlendMoveAnime (6616) poses the walk anim at the PRE-halving speed; 6623 then halves
+            # what posMoveFromFootPos integrates with (pose at _anim_nspeed, integrate at the halved).
+            self._anim_nspeed = self.nspeed
             self.nspeed = f32(self.nspeed * 0.5)
         else:
             self.turn_shape_max = (self.F0 * 2) & 0xFFFF
@@ -546,14 +557,24 @@ class LandState:
         self.facing = cLib_addCalcAngleS(self.facing, self.travel,
                                          self.turn_shape_scale, self.turn_shape_max, self.turn_shape_min)
         self._check_next_mode(l_held)
+        # MOVE_TURN -> MOVE exit routes through procMove_init, which re-triggers the oldframe-morf
+        # (setBlendMoveAnime(field_0xC), 6215) -- the walk re-warms from the turn's final pose.
+        if self.state == MOVE and self._foot is not None:
+            self._foot._pending_morf = self.MOVE_REENTRY_MORF
 
     def _proc_slip_init(self):
         """procSlip_init (6642): the skid seed. mNormalSpeed = speedF * mSlip.field_0x8 (1.1); field_0x0==0
         so no cap clamp -> the skid speed can exceed mMaxNormalSpeed (e.g. 17 -> 18.7). Anim ANM_SLIP
         (unported); position is pure momentum (speedF == mNormalSpeed) so the skid distance is exact."""
         self.state = SLIP
-        self._pos_fallback = True
         self.nspeed = f32(self.speedF * self.SLIP_ENTRY)
+        # The skid is pure momentum (speedF == mNormalSpeed) so its own position is exact; the residual
+        # is the ANM_SLIP toe stream fed into the MoveTurn tail (plant toggles), so keep the fallback.
+        self._pos_fallback = True
+        # setSingleMoveAnime(ANM_SLIP, rate=mSlip.field_0xC, morf=mSlip.field_0x1C) (6646): pose the
+        # skid anim through the slip so the toe stream is warm(er) for the MoveTurn/walk tail.
+        if self._foot is not None:
+            self._foot.enter_single('slip', self.SLIP_MORF, rate=self.SLIP_ANIM_RATE)
 
     def _proc_slip(self, l_held):
         """procSlip (6658): bleed mNormalSpeed toward 0 at the mSlip decel (~-1.25/frame) while travel is
@@ -624,19 +645,19 @@ class LandState:
         if self.state == ATN_MOVE:
             self._update_atn_direction()
 
-        # speedF -> position. FRONT_ROLL & SLIP are pure momentum (speedF == mNormalSpeed); WAIT_TURN pivots
-        # in place; clean MOVE uses the bit-exact anim engine; ATN_MOVE / turn tails use the cLib fallback.
+        # speedF -> position. FRONT_ROLL/SLIP = momentum; WAIT_TURN frozen; clean MOVE + the MOVE_TURN tail
+        # use the anim engine; ATN uses the cLib fallback. Single-anim procs pose each frame to warm the stream.
         if self.state == WAIT_TURN:
             self.speedF = 0.0
         elif self.state in (FRONT_ROLL, SLIP):
-            if self.state == FRONT_ROLL and self._foot is not None:
-                # pose rollf each frame so the foot toe stream is warm for the post-roll walk tail.
-                self._foot.step_roll(self.nspeed, self.msd)
+            if self._foot is not None:
+                self._foot.step_single_anim(self.nspeed, self.msd)
             self.speedF = self.nspeed
         elif self.state != ATN_MOVE and self._foot is not None:
-            # walk anim engine (bit-exact for a clean MOVE; a best-effort approximation for the MOVE
-            # tail after a turn proc, whose ANM_ROT/SLIP/turn-blend anims are unported -> _pos_fallback).
-            self.speedF = self._foot.step(self.nspeed, self.msd)
+            # walk anim engine (bit-exact for a clean MOVE; the MOVE_TURN tail rejoins it too). On the
+            # procMoveTurn_init(1) frame the anim is posed at the pre-halving speed (_anim_nspeed).
+            self.speedF = self._foot.step(self.nspeed, self.msd, anim_nspeed=self._anim_nspeed)
+            self._anim_nspeed = None
         else:
             sc, mx, mn = SPEEDF_CHASE
             self.speedF = cLib_addCalc(self.speedF, self.nspeed, sc, mx, mn)

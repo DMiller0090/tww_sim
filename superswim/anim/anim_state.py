@@ -35,6 +35,8 @@ ANIM_META = {
     'walk':  (32, EMode_LOOP),
     'dash':  (32, EMode_LOOP),
     'rollf': (19, EMode_NONE),   # ANM_ROLLF (forward roll); single-anim during FRONT_ROLL
+    'rot':   (9,  EMode_LOOP),   # ANM_ROT   (pivot in place); single-anim during WAIT_TURN
+    'slip':  (7,  EMode_NONE),   # ANM_SLIP  (reversal skid);  single-anim during SLIP
 }
 
 # HIO daPy_HIO_move_c0::m constants (the flat free-walk subset).
