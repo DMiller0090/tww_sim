@@ -38,10 +38,12 @@ target for bit-perfect land position. Same f32-vs-f64 discipline as the swim rul
   **RED**: `brakeslide/roll_run/roll_ebs/moveturn` pass (0 ULP), while `walk (2), ebs (1), face_left
   (1), brake_right (2), roll_slow (4), roll_settle (2), waitturn (1), slip (74 ULP)` FAIL on the open
   residual below. Those failures are the to-do list for a bit-perfect land position.
-- **Offline** (`tests/test_land.py`, no Dolphin): a deterministic **regression lock** — asserts the sim
-  reproduces its own committed f32 snapshot bit-exact, so any fp-math change (an f64-sum revert, an FMA
-  re-order, a cos edit, an imprecise seed) fails. It is NOT an accuracy claim; regenerate the snapshot
-  when the sim is deliberately changed via `python tests/gen_land_golden.py`.
+- **Offline** (`tests/test_land.py`, no Dolphin): the token-cheap **shadow** of the live gate — the
+  golden (`tests/golden/land_walk_speedf.csv` + `CASE_POSZ`) is the GAME's live f32 bytes (captured by
+  `tests/gen_land_golden.py`), and the tests assert `f32_bits(sim) == live`, so the SAME techs fail here
+  (10 tests red today). The per-frame walk arc localizes it: the foot-FK `speedF` is already off live at
+  frame 3, and `pos_z` first flips a bit at frame 33 (decel) — the anim-FK FMA chain is the root.
+  Regenerate the golden from live after a sim fix via `python tests/gen_land_golden.py`.
 
 ## Console cosine table
 

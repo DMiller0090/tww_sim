@@ -1,25 +1,20 @@
 """Offline regression for the LAND walk sim (superswim.land).
 
 Guards the BIT-EXACT part of the first land increment -- mNormalSpeed (potential_speed) and
-the FREE_WAIT->MOVE->WAIT state machine -- as a golden arc, without needing Dolphin. The
-live sim-vs-live gate is tests/dolphin/run_land_tests.py::walk_run; this is its token-cheap
-offline shadow (same walk seq, same anchor rest seed, values pinned from land_walk_gt.csv).
+the FREE_WAIT->MOVE->WAIT state machine -- as a golden arc, without needing Dolphin. This is the
+token-cheap offline SHADOW of the live accuracy gate tests/dolphin/run_land_tests.py.
 
-WHAT THIS IS (and is NOT). speedF and position are a BIT-EXACT snapshot of the SIM's OWN current f32
-output -- a deterministic REGRESSION LOCK, not an accuracy gate. The golden
-(tests/golden/land_walk_speedf.csv) and the CASE_POSZ endpoints store the sim's exact float32 bytes
-(uint32 hex) and the tests assert `f32_bits(sim) == golden` (0 ULP), so ANY fp-math change moves the
-bits and fails: an f32<->f64 accumulation swap, an FMA re-ordering in the anim FK, a cos-table edit,
-an imprecise seed. That is the guard the old `< 0.05` tolerance (~400 ULP wide) lacked when the
-f64-running-sum bug landed. It is NOT a claim that the sim is bit-perfect vs the GAME -- it is not
-(the sim is still 1-74 ULP off live on several techs). LIVE ACCURACY is gated by
-tests/dolphin/run_land_tests.py, which is RED for those open residuals until the sim is fixed. When
-that fix lands, this snapshot must be regenerated (the sim output changes): `python
-tests/gen_land_golden.py`.
+THE GOLDEN IS LIVE TRUTH, ENFORCED TO THE BYTE. speedF and position in tests/golden/land_walk_speedf.csv
+and the CASE_POSZ endpoints are the GAME's live f32 reads (uint32 hex), captured by
+tests/gen_land_golden.py. The tests assert `f32_bits(sim) == golden` (0 ULP, no tolerance), so a tech
+that is not bit-perfect vs the game shows RED here just as it does live -- the same cases fail in both.
+Today walk/ebs/face_left/brake_right/roll_slow/roll_settle/waitturn/slip FAIL (1-74 ULP off live) and
+the anim-FK speedF fails per frame; brakeslide/roll_run/roll_ebs/moveturn are bit-perfect and pass.
+This deliberately replaces the old `< 0.05` tolerance (~400 ULP wide), which hid the f64-running-sum
+bug. Regenerate the golden from live after a sim fix (Dolphin up): `python tests/gen_land_golden.py`.
 
-This only bites WHEN the copyrighted anim keyframe data is present under _generated/anim/ (dev
-machines). Without it LandState falls back to the calibrated stand-in, so the byte-exact tests SKIP
-and only the loose endpoint check runs.
+The byte-exact checks only run WHEN the copyrighted anim keyframe data is present under _generated/anim/
+(dev machines); without it LandState falls back to the calibrated stand-in and they SKIP.
 """
 import os
 import struct
@@ -110,72 +105,74 @@ def test_decel_matches_cLib_addCalc():
 
 
 def test_end_position_within_tolerance():
-    # Endpoint: BIT-EXACT vs the golden with the anim engine (byte-for-byte, the accuracy gate);
-    # +-3 calibrated stand-in without it.
+    # Endpoint: BIT-EXACT vs the LIVE golden with the anim engine (fails until bit-perfect: walk is 2
+    # ULP off live); +-3 calibrated stand-in without anim data.
     s, _ = _run()
     assert s.state == WAIT
     if _ANIM:
         want = _load_golden()[-1][4]
         assert f32_bits(s.pos_z) == want, \
-            f"end pos_z {s.pos_z!r} (0x{f32_bits(s.pos_z):08x}) != golden 0x{want:08x}"
+            f"end pos_z {s.pos_z!r} (0x{f32_bits(s.pos_z):08x}) != LIVE 0x{want:08x}"
     else:
         assert abs(s.pos_z - 1278.25) < 3.0
 
 
 @pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
-def test_speedf_matches_golden_bit_exact():
-    """speedF reproduces the golden BYTE-FOR-BYTE (0 ULP) -- isolates the anim FK from the nspeed sim,
-    so a sub-ULP FMA re-ordering in the foot chain fails here before it can accumulate into position."""
+def test_speedf_matches_live_bit_exact():
+    """The ported foot-FK speedF must reproduce the GAME's live true_speed BYTE-FOR-BYTE. This isolates
+    the anim FK from the nspeed sim and is the KEY handoff diagnostic: it FAILS per frame (the foot-FK
+    FMA chain is sub-ULP off live), which is the root of the downstream pos_z residual. See sim.md."""
     golden = _load_golden()
     drv = FootSpeedF(idle_frame=70.0)
     for fr, ns, msd, spF_bits, _pz in golden:
         got = drv.step(ns, msd)
         assert f32_bits(got) == spF_bits, \
-            f"frame {fr}: speedF {got!r} (0x{f32_bits(got):08x}) != golden 0x{spF_bits:08x}"
+            f"frame {fr}: sim speedF {got!r} (0x{f32_bits(got):08x}) != LIVE 0x{spF_bits:08x}"
 
 
 @pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
-def test_pos_z_arc_bit_exact():
-    """Full LandState walk tracks the golden pos_z BYTE-FOR-BYTE every frame -- the guard the
-    f64-accumulation bug needed (game re-rounds pos.z to f32 each frame; an f64 sum or the 764.079
-    seed both move the bytes). See knowledge/model/sim.md."""
+def test_pos_z_arc_matches_live_bit_exact():
+    """Full LandState walk must track the GAME's live pos_z BYTE-FOR-BYTE every frame. Fails until the
+    sim is bit-perfect (currently 2 ULP off live at the endpoint); the frame where it first diverges
+    localizes the residual. This is the guard the f64-accumulation bug slipped past. See sim.md."""
     golden = _load_golden()
     s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
     for (sx, sy), (fr, _ns, _msd, _spF, pz_bits) in zip(WALK_STICKS, golden):
         s.step(sx, sy)
         assert f32_bits(s.pos_z) == pz_bits, \
-            f"frame {fr}: pos_z {s.pos_z!r} (0x{f32_bits(s.pos_z):08x}) != golden 0x{pz_bits:08x}"
+            f"frame {fr}: sim pos_z {s.pos_z!r} (0x{f32_bits(s.pos_z):08x}) != LIVE 0x{pz_bits:08x}"
 
 
 # --- ATN_MOVE tier: brakeslide / EBS / facing decouple / brake -----------------------------
 
-# BIT-EXACT endpoint pos_z (exact f32 bytes) for the ATN/roll/turn cases; regenerate after a deliberate
-# fp change: `python tests/gen_land_golden.py endpoints`. (live faithfulness -> run_land_tests.py.)
+# LIVE endpoint pos_z (the game's exact f32 bytes) for the ATN/roll/turn cases; captured by
+# `python tests/gen_land_golden.py endpoints`. sim!=live fails here, mirroring run_land_tests.py.
 CASE_POSZ = {
-    'brakeslide' : 0x448146b3,   # 1034.2093505859375 (state 7)
-    'ebs'        : 0x44aa2071,   # 1361.0137939453125 (state 6)
-    'face_left'  : 0x44e9fa15,   # 1871.8150634765625 (state 6)
-    'brake_right': 0x447238c1,   # 968.8867797851562  (state 4)
-    'roll_run'   : 0x4486a1c6,   # 1077.055419921875  (state 30)
-    'roll_slow'  : 0x4445f85c,   # 791.880615234375   (state 30)
-    'roll_settle': 0x44be9637,   # 1524.6942138671875 (state 4)
-    'roll_ebs'   : 0x44d64e35,   # 1714.4439697265625 (state 6)
-    'waitturn'   : 0x442c9e1f,   # 690.4706420898438  (state 6)
-    'moveturn'   : 0x44086be3,   # 545.6857299804688  (state 6)  (live-mirror *18 seq)
-    'moveturn_pos': 0x43ffd7c6,  # 511.68572998046875 (state 6)  (position test's *20 seq)
-    'slip'       : 0x44756e3c,   # 981.722412109375   (state 6)
+    'brakeslide' : 0x448146b3,   # 1034.2093505859375 (state 7)   bit-perfect
+    'ebs'        : 0x44aa2072,   # 1361.013916015625  (state 6)   sim off 1 ULP
+    'face_left'  : 0x44e9fa16,   # 1871.815185546875  (state 6)   sim off 1 ULP
+    'brake_right': 0x447238c3,   # 968.8869018554688  (state 4)   sim off 2 ULP
+    'roll_run'   : 0x4486a1c6,   # 1077.055419921875  (state 30)  bit-perfect
+    'roll_slow'  : 0x4445f858,   # 791.88037109375    (state 30)  sim off 4 ULP
+    'roll_settle': 0x44be9639,   # 1524.6944580078125 (state 4)   sim off 2 ULP
+    'roll_ebs'   : 0x44d64e35,   # 1714.4439697265625 (state 6)   bit-perfect
+    'waitturn'   : 0x442c9e1e,   # 690.4705810546875  (state 6)   sim off 1 ULP
+    'moveturn'   : 0x44086be3,   # 545.6857299804688  (state 6)   bit-perfect (live-mirror *18 seq)
+    'moveturn_pos': 0x43ffd7c6,  # 511.68572998046875 (state 6)   bit-perfect (*20 seq)
+    'slip'       : 0x44756df2,   # 981.7178955078125  (state 6)   sim off 74 ULP
 }
 
 
 def assert_pos_bits(s, label):
-    """Bit-exact endpoint pos_z vs CASE_POSZ (only meaningful with anim data)."""
+    """Assert sim endpoint pos_z == the LIVE value bit-exact (fails until the sim is bit-perfect for
+    this tech; only meaningful with anim data)."""
     want = CASE_POSZ[label]
     assert f32_bits(s.pos_z) == want, \
-        f"{label}: pos_z {s.pos_z!r} (0x{f32_bits(s.pos_z):08x}) != golden 0x{want:08x}"
+        f"{label}: sim pos_z {s.pos_z!r} (0x{f32_bits(s.pos_z):08x}) != LIVE 0x{want:08x}"
 
 
-# Offline shadow of run_land_tests.py's ATN cases; end-states pinned from the bit-exact live
-# sim-vs-live run. Guards setSpeedAndAngleAtn/AtnBack + the mDirection machine (no Dolphin).
+# Offline shadow of run_land_tests.py's ATN cases; endpoints are the LIVE pos_z (CASE_POSZ). Guards
+# setSpeedAndAngleAtn/AtnBack + the mDirection machine (no Dolphin).
 def _deg(a):
     return (int(a) % 65536) * 360.0 / 65536.0
 
