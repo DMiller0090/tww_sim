@@ -79,9 +79,23 @@ facing follows csangle with a lag.
 
 To move ΔZ laterally over a cruise, apply a tap of size X at frame F; lateral displacement is the
 time-integral of `speed·sin(Δheading)`. **Frozen-camera plans stay bit-exact**: they hold
-substickY = 0 (freeze) ⇒ omega_cmd = 0 ⇒ csangle constant ⇒ zero regression. The sim hard-codes
-`csangle` constant today; replacing it with the evolving `(csangle, omega)` state is gated on a live
-baseline.
+substickX = 128 (centered) ⇒ omega_cmd = 0 ⇒ csangle constant ⇒ zero regression.
+
+`LandState` now DRIVES `csangle` per-frame from the shared `superswim/camera.py` `Camera` (the
+`CameraArbitrary` integrator): `LandState.step(sx,sy,buttons,triggerL,csx,csy)` advances it and sets
+`self.csangle` before the stick target; a centered C-stick holds it frozen (regression bit-exact —
+13/13 live land tests). `SwimState` still holds `self.cam` constant (swim steering not yet wired).
+
+### ⚠ omega magnitude is per-camera-STYLE (the shipped table is swim/subject-cam only)
+The `omega_table_full.csv` grid was captured on the SWIM (subject) camera and is bit-exact THERE,
+but the C-stick→yaw-rate scale depends on the **current camera style**, which `dCamera_c::Run`
+selects at runtime (`nextType/nextMode/nextStyle → __ptmf_scall`; influenced by
+checkSpecialArea/room/event/lock-on). The land free/behind cam (`dCamera_c::manualCamera`) rotates
+~2.6685× faster than the swim subject cam (cap 3°/frame=546 hw swim vs ~8°/frame=1457 hw land),
+the WHOLE curve scaling by a per-style constant `*(f32*)(0x80348610 + style·0x84)` (table base
+`0x803485ac`, stride `0x84`; subject-cam uses `0x803485fc`). So steering the LAND camera bit-exact
+needs the omega keyed on the live style index (`dCamera_c` mCurStyle @ +0x510) × the per-style
+scale, not the raw swim table. Derivation + remaining port: `_notes/handoff-2026-07-04o-camera-style-rate.md`.
 
 ## Decomp grounding (JP/GZLJ01)
 

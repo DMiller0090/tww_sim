@@ -37,6 +37,7 @@ from __future__ import annotations
 import math
 from . import sim as S
 from .sim import f32, cLib_addCalc, cM_scos_s16, deg_to_s16, s16_signed, _deadzone, stick_angle_deg
+from .camera import Camera
 
 # link_state / daPyProc values (d_a_player_main.h). Walk trio + the targeting-move proc.
 WAIT = 4          # daPyProc_WAIT_e         (idle standstill)
@@ -171,7 +172,10 @@ class LandState:
         self.pos_z = float(pos_z)
         self.facing = int(facing) & 0xFFFF     # shape_angle.y (s16)
         self.travel = int(travel) & 0xFFFF     # current.angle.y (s16)
-        self.csangle = int(csangle) & 0xFFFF   # dCam_getControledAngleY (s16)
+        self.csangle = int(csangle) & 0xFFFF   # dCam_getControledAngleY (s16); set each frame from _cam
+        # Shared camera integrator (predict.CameraArbitrary). Seeded from the frame-0 csangle; a
+        # C-stick held centered (csx=128) leaves it frozen -> csangle pinned = pre-wiring behaviour.
+        self._cam = Camera(csangle=self.csangle)
         self.target = 0                        # m34E8 (s16), set each frame by setStickData
         self.m34dc = int(facing) & 0xFFFF      # stick want-angle pre-csangle (m34E8 = m34dc + csangle)
         self.m34ea = int(facing) & 0xFFFF      # PREVIOUS frame's m34dc (slip stick-flip detector, 11289)
@@ -195,8 +199,9 @@ class LandState:
         self._pos_fallback = False             # a turn proc (ANM_ROT/SLIP/turn-blend unported) was entered
         #                                        -> position uses the calibrated chase, not asserted bit-exact
         # 2-frame controller-input buffer (index 0 = oldest = the input acted on this frame).
-        # Tuple = (stickX, stickY, buttons, triggerL) -- L/target is delayed like the stick.
-        self._inbuf = [(128, 128, 0, 0)] * INPUT_DELAY
+        # Tuple = (stickX, stickY, buttons, triggerL, csx, csy) -- L/target AND the C-stick are
+        # delivered through the same controller pipe, so all are delayed like the main stick.
+        self._inbuf = [(128, 128, 0, 0, 128, 128)] * INPUT_DELAY
         # Anim-driven speedF: the ported posMoveFromFootPos chain (bit-exact position). None when
         # disabled or the keyframe data is absent -> fall back to the SPEEDF_CHASE stand-in.
         self._foot = None
@@ -211,6 +216,7 @@ class LandState:
         s = LandState.__new__(LandState)
         s.__dict__.update(self.__dict__)
         s._inbuf = list(self._inbuf)
+        s._cam = self._cam.clone()          # s16-integer camera: clone so A* nodes never alias one
         # FootSpeedF is stateful; a shallow copy would alias it. Clones share nothing, so clone
         # cannot preserve mid-walk anim state -- only clone at rest (pre-walk) where seeding matches.
         if self._foot is not None and (s._foot is None or s._foot is self._foot):
@@ -596,13 +602,18 @@ class LandState:
                 self._check_next_mode(l_held)
 
     # --- proc dispatch + per-frame step ----------------------------------------------------
-    def step(self, sx, sy, buttons=0, triggerL=0):
-        """Advance one frame with a raw stick (sx, sy) + optional L-target (buttons 0x40 or analog
-        triggerL). Returns (d_pos, tag). csangle is held in self.csangle (set it before stepping to
-        steer the camera-relative target)."""
-        # 2-frame controller latency: act on the input (stick AND L) delivered INPUT_DELAY frames ago.
-        self._inbuf.append((int(sx), int(sy), int(buttons), int(triggerL)))
-        asx, asy, abtn, atrig = self._inbuf.pop(0)
+    def step(self, sx, sy, buttons=0, triggerL=0, csx=128, csy=128):
+        """Advance one frame with a raw main stick (sx, sy) + optional L-target (buttons 0x40 or
+        analog triggerL) + raw C-stick (csx, csy) steering the camera. Returns (d_pos, tag).
+        csangle is driven per-frame from the shared camera; a centered C-stick (csx=128, the
+        free-cam default) holds it frozen at the seed, matching straight superswims."""
+        # 2-frame controller latency: act on the input (stick, L AND C-stick) delivered INPUT_DELAY
+        # frames ago -- the whole controller poll is delivered together.
+        self._inbuf.append((int(sx), int(sy), int(buttons), int(triggerL), int(csx), int(csy)))
+        asx, asy, abtn, atrig, acsx, acsy = self._inbuf.pop(0)
+        # setStickData reads the camera value as of the START of the frame (the camera integrator
+        # advances LATER in the frame): m34E8 = m34DC(stick) + csangle[f-1]. Mirror swim_predict.
+        self.csangle = self._cam.csangle
         self._set_stick_data(asx, asy)
         l_held = bool(abtn & 0x40) or atrig >= 200      # checkAttentionLock proxy (digital/analog L)
         a_pressed = bool(abtn & 0x100)                   # doTrigger: A = the "do"/roll button
@@ -694,6 +705,9 @@ class LandState:
         self.pos_z += f32(d * S.cM_scos_s16(self.travel))
         self.m34de = self.facing                 # m34DE = shape_angle.y (end-of-frame, 11287): last facing
         self.m34ea = self.m34dc                  # m34EA = m34DC (end-of-frame, 11289): last stick want
+        # advance the shared camera for NEXT frame (its own 1-frame internal lag stacks on the
+        # controller delay above); csangle[f] read at the top of the next step.
+        self._cam.step(acsx, acsy)
         self.visited.add(self.state)
         self._l_prev = l_held
         return d, {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL", WAIT_TURN: "WAITTURN",
