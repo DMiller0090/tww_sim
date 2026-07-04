@@ -35,7 +35,11 @@ def _sin(a):
 
 
 def euler_to_quat(rx, ry, rz):
-    """(w,x,y,z) quaternion from s16 euler (JMAEulerToQuat). C `s16/2` truncates toward zero."""
+    """(w,x,y,z) quaternion from s16 euler (JMAEulerToQuat, JMath.cpp:41). C `s16/2` truncates toward
+    zero. JMAEulerToQuat is compiled WITHOUT FMA contraction: each component is `(a*b) +/- (c*d)` with
+    BOTH products separately f32-rounded, THEN added/subtracted -- NOT fused (fmadds/fnmsubs). Confirmed
+    bit-exact vs the live oldQuat array for every foot-chain joint (a fused x/y left jnt34 1 ULP off,
+    which leaked into the ATN/waitturn foot-toe tails). See knowledge/model/sim.md."""
     def half(a):
         a = int(a)
         return a // 2 if a >= 0 else -((-a) // 2)
@@ -43,10 +47,10 @@ def euler_to_quat(rx, ry, rz):
     s0, s1, s2 = _sin(half(rx)), _sin(half(ry)), _sin(half(rz))
     c1c2 = fp.fmuls(c1, c2)
     s1s2 = fp.fmuls(s1, s2)
-    w = fp.fmadds(s0, s1s2, fp.fmuls(c0, c1c2))
-    x = fp.fnmsubs(c0, s1s2, fp.fmuls(s0, c1c2))          # sin0*c1c2 - cos0*s1s2
-    y = fp.fmadds(s2, fp.fmuls(s0, c1), fp.fmuls(c2, fp.fmuls(c0, s1)))
-    z = fp.fnmsubs(c2, fp.fmuls(s0, s1), fp.fmuls(s2, fp.fmuls(c0, c1)))  # sin2*(c0c1) - cos2*(s0s1)
+    w = fp.fadds(fp.fmuls(c0, c1c2), fp.fmuls(s0, s1s2))
+    x = fp.fsubs(fp.fmuls(s0, c1c2), fp.fmuls(c0, s1s2))                     # sin0*c1c2 - cos0*s1s2
+    y = fp.fadds(fp.fmuls(c2, fp.fmuls(c0, s1)), fp.fmuls(s2, fp.fmuls(s0, c1)))
+    z = fp.fsubs(fp.fmuls(s2, fp.fmuls(c0, c1)), fp.fmuls(c2, fp.fmuls(s0, s1)))  # sin2*(c0c1) - cos2*(s0s1)
     return (w, x, y, z)
 
 
@@ -158,11 +162,14 @@ def psmtx_quat(q, scale_mode='newton'):
     (fk.world_base -- the game quantizes the foot matrices at world magnitude ~764), this makes the leg
     chain jnt0..jnt33 BIT-EXACT vs the live anmMtx. See knowledge/model/sim.md (world-space FK section).
 
-    KNOWN GAP: the planted foot joint (jnt34/39) is still ~1 ULP off (the quat, not the matrix or scale --
-    both `psmtx` and an f64 matrix from the same quat share the residual, and no euler/fusion variant
-    reproduces the console's quat), most likely a per-frame foot-IK ground snap applied after the anim.
-    It is absorbed by the pos_z f32 rounding on the straight walk (float-perfect) but leaks 1-2 ULP into
-    the ATN/waitturn tails (ebs/brake_right/waitturn)."""
+    RESOLVED (was "planted foot jnt34/39 ~1 ULP"): the residual was NOT a foot-IK ground snap (the per-foot
+    leg-angle Zrots are 0 on flat ground -- verified live) and NOT this psmtx path -- it was a 1-ULP FMA
+    fusion bug in `euler_to_quat` (JMAEulerToQuat is NON-fused). With that fixed, ALL foot-chain joint quats
+    (32/33/34, 37/38/39) are bit-exact vs the live oldQuat array at both the idle and the walk-blend frames.
+    The foot toe is fed through jointCB1: anmMtx(FOOT) = concat(anmMtx(LLEGB), Trans(oldTrans)*Quat(oldQuat)),
+    which we verified reconstructs the live anmMtx bit-exact from the (now-exact) old-frame quat/trans. A tiny
+    sub-ULP remains in the m3598-MIXED speedF frames (walk<->dash blend) from matrix-accumulation rounding at
+    world magnitude; it does not affect the (bit-exact) walk position. See knowledge/model/sim.md."""
     w, x, y, z = q
     tmp0 = [x, y]; tmp1 = [z, w]
     c_one = [1.0, 1.0]

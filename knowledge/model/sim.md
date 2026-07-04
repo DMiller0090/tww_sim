@@ -58,13 +58,27 @@ localized against a live foot-toe oracle (`mBaseTransformMtx`, `m37B4`, per-join
   `[0,16382,0]`) is exactly such a midpoint where the console gives **`fdivs − 1 ULP`**; raw `fdivs` is 1
   ULP high and the literal `_fres` table is ≈7 ULP low. **With world FK + `newton` the leg chain jnt0..jnt33
   is BIT-EXACT vs the live `anmMtx`, and the straight walk `pos_z` is float-perfect end-to-end.**
-- **OPEN (last ULP): the planted foot joint (jnt34/39).** Its local matrix is ~1 ULP off in the QUAT
-  (`x+1, y−1` ULP makes `concat(a33, local34)` bit-exact) — NOT the matrix arithmetic (an f64 matrix from
-  the same quat shares the residual), NOT the scale, NOT the euler angle or any FMA-fusion/euler variant
-  (none reproduce the console's quat). Only the LEFT foot (jnt34) is off at the idle frame while the RIGHT
-  (jnt39) is exact → most likely a **per-frame foot-IK ground snap** applied to the planted foot after the
-  anim. It is absorbed by the `pos_z` f32 rounding on the straight walk (float-perfect) but leaks 1–2 ULP
-  into the ATN/waitturn tails.
+- **`JMAEulerToQuat` is NON-fused (FIXED).** The "planted foot jnt34 ~1 ULP" residual was a real bug in
+  `euler_to_quat`: `JMAEulerToQuat` (JMath.cpp:41) computes each component as `(a·b) ± (c·d)` with BOTH
+  products **separately f32-rounded, then added/subtracted** — NOT fused into `fmadds`/`fnmsubs`. The old
+  code fused `x` and `y`, which put jnt34's quat 1 ULP off. Verified against the **live `oldQuat` array**
+  (`m_old_fdata@obj+0x31B4 → +0x20`, a `Quaternion[jnt]` of `x,y,z,w`): with the non-fused form ALL
+  foot-chain joints (32/33/34, 37/38/39) are bit-exact at both the idle and the walk-blend frames. (The
+  earlier "foot-IK ground snap" guess is WRONG — see below.)
+- **jointCB1 foot rebuild (CONFIRMED, not IK).** `daPy_lk_c::jointCB1` (a J3D node callback) rewrites the
+  leg/foot `anmMtx` after the anim calc: `anmMtx(LFOOT) = concat(anmMtx(LLEGB), Trans(oldTrans)·Quat(oldQuat)·
+  ZrotM(field_0x002))`, using the **old-frame** trans/quat (this frame's post-morf stored pose, m_Do_ext.cpp:
+  1219) and per-foot leg-angle Zrots from `footBgCheck`/`setLegAngle`. **On flat ground every leg-angle Zrot
+  (`field_0x002/006/008/00A`) is 0** (verified live), so `jointCB1` reduces to a pure rebuild that is
+  bit-exact to our FK given the (now-exact) quats — verified `concat(live_anm33, Trans·Quat[oldQuat34]) ==
+  live anm34`, 0 ULP. So there is NO foot-IK snap on flat ground.
+- **OPEN (sub-ULP): m3598-MIXED speedF frames + ATN/slip tails.** With exact quats + `set_pos` fed each
+  frame, the walk `speedF` is bit-exact EXCEPT the walk↔dash-blend frames where `0<m3598<1` (frames 5/6/34):
+  a ~1 ULP in the world-magnitude **matrix accumulation** (concat/PSMTXMultVec rounding), NOT the quat, NOT
+  the recursive smoothing (all fusion variants agree), NOT the composition. It does not affect the (bit-exact)
+  walk position. NOTE: the offline `test_speedf` does not feed per-frame `pos` to the standalone `FootSpeedF`,
+  so its `worldBase` is frozen at the anchor → feeding pos flips 5 of its 8 red frames; the LandState-based
+  position tests already feed pos. The `slip` case (74 ULP) is a separate skid modelling gap.
 
 **This is now enforced to the byte** by two tests with distinct jobs:
 - **Live** (`tests/dolphin/run_land_tests.py`, the accuracy gate — live is the source of truth): the
