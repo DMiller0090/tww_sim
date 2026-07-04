@@ -568,17 +568,17 @@ class LandState:
 
     def _proc_slip_init(self):
         """procSlip_init (6642): the skid seed. mNormalSpeed = speedF * mSlip.field_0x8 (1.1); field_0x0==0
-        so no cap clamp -> the skid speed can exceed mMaxNormalSpeed (e.g. 17 -> 18.7). Anim ANM_SLIP
-        (unported); position is pure momentum (speedF == mNormalSpeed) so the skid distance is exact."""
+        so no cap clamp -> the skid speed can exceed mMaxNormalSpeed (e.g. 17 -> 18.7). The skid is pure
+        momentum (speedF == mNormalSpeed); ANM_SLIP is posed each frame to warm the toe stream, which feeds
+        the MoveTurn walk tail bit-exact (ANM_SLIP scales jnt37 -> the FK now applies scale, see foot_fk)."""
         self.state = SLIP
         self.nspeed = f32(self.speedF * self.SLIP_ENTRY)
-        # The skid is pure momentum (speedF == mNormalSpeed) so its own position is exact; the residual
-        # is the ANM_SLIP toe stream fed into the MoveTurn tail (plant toggles), so keep the fallback.
-        self._pos_fallback = True
         # setSingleMoveAnime(ANM_SLIP, rate=mSlip.field_0xC, morf=mSlip.field_0x1C) (6646): pose the
-        # skid anim through the slip so the toe stream is warm(er) for the MoveTurn/walk tail.
+        # skid anim through the slip so the toe stream is warm for the MoveTurn/walk tail.
         if self._foot is not None:
             self._foot.enter_single('slip', self.SLIP_MORF, rate=self.SLIP_ANIM_RATE)
+        else:
+            self._pos_fallback = True         # no anim data: SLIP tail uses the calibrated chase
 
     def _proc_slip(self, l_held):
         """procSlip (6658): bleed mNormalSpeed toward 0 at the mSlip decel (~-1.25/frame) while travel is

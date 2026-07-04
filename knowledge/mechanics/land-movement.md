@@ -13,11 +13,13 @@ simulated** (`superswim.land`): `mNormalSpeed` (signed), the proc state machine,
 + the `wiggle_ebs_roll` DTM-playback lock. Position is asserted bit-exact for the on-axis walk, the
 full roll, the **MOVE_TURN turn-around** (its walk blend is posed at the pre-halving speed + re-morfed
 on entry/exit — see below), the **WAIT_TURN pivot + walk-off** (`ANM_ROT` pivot → the WAIT idle-proc
-`WAITS`/`ANM_ATNW{L,R}S` turn-step re-pose warms the toe stream — see below), **and the whole ATN_MOVE
+`WAITS`/`ANM_ATNW{L,R}S` turn-step re-pose warms the toe stream — see below), the **whole ATN_MOVE
 tier** (brakeslide / EBS-release / facing-decouple / brake: `setBlendAtnMoveAnime` poses the
-`ANM_ATN{L,R}S`/`W`/`D` strafe + `ANM_ATNWB`/`ATNDB` backslide anims — see below). **Only the SLIP tail**
-uses the calibrated position fallback (the `ANM_SLIP`-tail foot anim's plant toggles ~1u; it doesn't affect
-the velocity/state/facing physics, which are the tech). Anchor `land_flatwalk@twwgz.sav`.
+`ANM_ATN{L,R}S`/`W`/`D` strafe + `ANM_ATNWB`/`ATNDB` backslide anims — see below), **and the SLIP skid →
+MOVE_TURN handoff** (`ANM_SLIP` scales foot-chain joint 37's X by 1.2, so the FK now applies the
+scale + the oldframe-morf blends it — see below). **All land position is now bit-exact with the anim
+data present**; the calibrated fallback is used only when the keyframe data is absent.
+Anchor `land_flatwalk@twwgz.sav`.
 **Source:** live captures (`harness/capture/land_capture.py`, cross-checked advancewith == advanceseq
 == DTM movie); decomp `d_a_player_main.cpp` proc enum + `setSpeedAndAngleNormal`/`setNormalSpeedF` +
 `setSpeedAndAngleAtn`/`setSpeedAndAngleAtnBack` + `setBlendAtnMoveAnime` (mDirection machine) +
@@ -278,9 +280,18 @@ re-trigger the morf, re-warming the walk blend. **WAIT_TURN** poses `ANM_ROT` th
 MOVE1=`ANM_ATNWLS`/`ANM_ATNWRS`** at ratio `clamp(0.5 + 0.001·|Δfacing|, 0, 1)` (`m3598=0`, morf 2.4). That
 `ATNW` pose (not `WAITS`) is what makes the walk-off entry drift `f31_2 = |ATNW@0 − ROT@last|` bit-exact
 (≈3.06 on the first moving frame) — a plain `WAITS@0` is only ~1u from the pivot pose and undershoots by
-0.7u over the arc. `ANM_ATNWLS`/`ANM_ATNWRS` (frameMax 18) are added to the extracted anim set. **Only the
-SLIP tail stays on the fallback:** SLIP poses `ANM_SLIP` (position is momentum, so the skid itself is
-exact) but the toe stream fed into the MoveTurn tail is ~1u off (the skid plant toggles) — down from ~9u.
+0.7u over the arc. `ANM_ATNWLS`/`ANM_ATNWRS` (frameMax 18) are added to the extracted anim set.
+
+**SLIP → MOVE_TURN position now BIT-EXACT too.** The skid is pure momentum (position exact on its own),
+but the `ANM_SLIP` pose feeds the MOVE_TURN walk tail's toe stream. The last unported detail: **`ANM_SLIP`
+scales foot-chain joint 37's X by 1.2** (`calc_transform` returned it, but the reduced FK built the joint
+matrix from rotation + translation only). walk/dash/rollf are all identity-scale on the foot chain, which
+is why the FK ignored scale until now. Fix (`foot_fk`): build the joint matrix as **M = R·diag(scale)**
+(scale each rotation column) — a no-op for the identity-scale anims — and carry `old_scale` through the
+**oldframe-morf** (which blends scale too: `mScale·(1−rate) + oldScale·rate`, `m_Do_ext.cpp:1203`), so the
+walk pose re-morfed off `ANM_SLIP@end` inherits the scaled toe. That fixed both the wrong toe-delta and a
+plant-foot flip at the handoff (the scaled right-foot toe was mis-ordered vs the left). `slip` pos_z now
+d=0.005 (advancewith/advanceseq pipe noise, not sim error). **No land tech is on the position fallback now.**
 
 ## Values
 
@@ -316,7 +327,7 @@ exact) but the toe stream fed into the MoveTurn tail is ~1u off (the skid plant 
   `superswim.anim` (`foot_speedf.FootSpeedF` + the J3D engine) — the bit-exact walk `speedF`;
   `tests/test_land.py` (offline golden walk arc + the ATN + roll + turn end-state cases) +
   `tests/dolphin/run_land_tests.py`: **12 sim-vs-live** cases (walk + 4 ATN + 4 roll + waitturn/moveturn/slip:
-  nspeed/facing/travel bit-exact; pos_z bit-exact for the walk, mid-roll, full roll-to-standstill, the
-  MOVE_TURN turn-around, the WAIT_TURN pivot+walk-off, **and all 4 ATN techs** — only the SLIP-tail position
-  uses the calibrated fallback) **plus** the `wiggle_ebs_roll` DTM-playback lock.
+  nspeed/facing/travel bit-exact; pos_z bit-exact for **every** case — walk, roll, MOVE_TURN, WAIT_TURN,
+  the 4 ATN techs, and the SLIP skid→turn — the calibrated fallback is used only with no anim data) **plus**
+  the `wiggle_ebs_roll` DTM-playback lock.
 - `_notes/tww-sim-architecture-design.md` §5/§5b — how land folds into the generalized proc-machine sim.

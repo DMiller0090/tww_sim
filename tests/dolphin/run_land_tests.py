@@ -6,10 +6,10 @@ non-attention arbiter to a turn proc -- stopped -> procWaitTurn (pivot in place)
 -> procSlip (skid then procMoveTurn), moving+slow -> procMoveTurn (turn-around). The proc is transient
 (gone by the end), so a single advanceseq end-state can't see it -- instead the SIM's `visited` set proves
 the proc was entered, while sim_checks asserts the reversed-walk end state (state/mNormalSpeed/facing/travel)
-BIT-EXACT vs the live advanceseq. MOVE_TURN and WAIT_TURN position are now BIT-EXACT too (MOVE_TURN: walk
+BIT-EXACT vs the live advanceseq. ALL THREE turn procs' position is now BIT-EXACT too (MOVE_TURN: walk
 blend posed at the pre-halving speed + re-morfed on entry/exit; WAIT_TURN: ANM_ROT pivot -> the WAIT
-idle-proc WAITS/ANM_ATNW{L,R}S turn-step re-pose warms the toe stream for the walk-off). Only the SLIP
-tail (ANM_SLIP toe stream) stays on the calibrated fallback, guarded by the locked live distance.
+idle-proc WAITS/ANM_ATNW{L,R}S turn-step re-pose; SLIP: ANM_SLIP posed with its jnt37 X-scale 1.2 applied
+in the FK + carried through the oldframe-morf, so the MOVE_TURN walk tail's toe stream is exact).
 
 SIM-vs-LIVE (walk_run + brakeslide/ebs/face_left/brake_right + roll_run/roll_slow/roll_settle/roll_ebs
 + waitturn/moveturn/slip):
@@ -196,13 +196,14 @@ def sim_checks(sim, live, note):
     MOVE_TURN turn-around (walk blend posed at the pre-halving speed + morf on entry/exit), the WAIT_TURN
     pivot + walk-off (ANM_ROT pivot -> WAITS/ANM_ATNW{L,R}S idle-proc re-pose) AND now ATN_MOVE (the
     brakeslide/EBS/face_left/brake_right strafe + backslide: setBlendAtnMoveAnime poses ANM_ATN{L,R}S/W/D
-    + ANM_ATNWB/ATNDB, warming the toe stream for the EBS-release walk tail). Only the SLIP tail stays on
-    the calibrated fallback (_pos_fallback: the ANM_SLIP plant toggles ~1u), so pos is asserted everywhere
-    except SLIP. See superswim/land.py step()."""
+    + ANM_ATNWB/ATNDB, warming the toe stream for the EBS-release walk tail) AND the SLIP skid->MOVE_TURN
+    handoff (ANM_SLIP posed with its jnt37 X-scale applied in the FK + carried through the morf). pos_z is
+    asserted BIT-EXACT for EVERY case now; _pos_fallback is set only when the anim keyframe data is absent.
+    See superswim/land.py step()."""
     dv = abs(sim.nspeed - live["potential_speed"])         # signed: brakeslide/EBS go negative
     dfac = abs(sdiff_deg(sim.facing, live["shape_angle_y"]))
     dtrav = abs(sdiff_deg(sim.travel, live["travel_angle"]))
-    pos_fallback = getattr(sim, "_pos_fallback", False)   # a turn proc (the SLIP tail) still unported
+    pos_fallback = getattr(sim, "_pos_fallback", False)   # set only when anim keyframe data is absent
     checks = [
         (sim.state == int(live["link_state"]),
          f"state sim/live {sim.state}/{int(live['link_state'])}"),

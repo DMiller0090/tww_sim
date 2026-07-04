@@ -68,9 +68,13 @@ class FootFK:
         self.morf = MorfState()
         self.old_quat = {}          # jnt -> (w,x,y,z) posed quat last frame
         self.old_trans = {}         # jnt -> (x,y,z) posed translate last frame
+        self.old_scale = {}         # jnt -> (x,y,z) posed scale last frame (morf blends it too)
 
     def _blend_joint(self, move0, move1, f0, f1, ratio, jnt, rate):
-        """Blended (quat, trans) for one joint, then oldframe-morf toward the stored old pose."""
+        """Blended (quat, trans, scale) for one joint, then oldframe-morf toward the stored old pose.
+        Scale is blended linearly like translate; almost every foot-chain joint is identity-scale (so
+        this is a no-op vs the old R-only path), but ANM_SLIP scales jnt37.x by 1.2 -> it moves the
+        right-foot toe, so scale must be carried into the matrix (see _pose_frame)."""
         i0 = j3d_eval.calc_transform(self.anms[move0], jnt, f0)
         i1 = j3d_eval.calc_transform(self.anms[move1], jnt, f1)
         q0 = Q.euler_to_quat(*i0['rotation'])
@@ -79,21 +83,30 @@ class FootFK:
         r30 = fp.fsubs(1.0, ratio)
         trans = tuple(fp.fmadds(i1['translate'][k], ratio, fp.fmuls(i0['translate'][k], r30))
                       for k in range(3))
+        scale = tuple(fp.fmadds(i1['scale'][k], ratio, fp.fmuls(i0['scale'][k], r30))
+                      for k in range(3))
         if rate > 0.0 and MORF_START <= jnt < MORF_END and jnt in self.old_quat:
             f31 = fp.fsubs(1.0, rate)
             q3 = Q.quat_lerp(self.old_quat[jnt], q3, f31)
             ot = self.old_trans[jnt]
             trans = tuple(fp.fadds(fp.fmuls(trans[k], f31), fp.fmuls(ot[k], rate)) for k in range(3))
+            os_ = self.old_scale[jnt]
+            scale = tuple(fp.fadds(fp.fmuls(scale[k], f31), fp.fmuls(os_[k], rate)) for k in range(3))
         self.old_quat[jnt] = q3
         self.old_trans[jnt] = trans
-        return q3, trans
+        self.old_scale[jnt] = scale
+        return q3, trans, scale
 
     def _pose_frame(self, move0, move1, f0, f1, ratio, rate):
         """Pose all chain joints once, return {jnt: local 3x4 matrix}."""
         local = {}
         for jnt in CHAIN_JOINTS:
-            q3, trans = self._blend_joint(move0, move1, f0, f1, ratio, jnt, rate)
-            m = Q.mtx_quat(q3)
+            q3, trans, scale = self._blend_joint(move0, move1, f0, f1, ratio, jnt, rate)
+            m = Q.mtx_quat(q3)                       # 3x3 rotation, trans column 0
+            for i in range(3):                       # M = R * diag(scale): scale column j by scale[j]
+                m[i][0] = fp.fmuls(m[i][0], scale[0])
+                m[i][1] = fp.fmuls(m[i][1], scale[1])
+                m[i][2] = fp.fmuls(m[i][2], scale[2])
             m[0][3] = fp.f32(trans[0]); m[1][3] = fp.f32(trans[1]); m[2][3] = fp.f32(trans[2])
             local[jnt] = m
         return local

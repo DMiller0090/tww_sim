@@ -310,3 +310,13 @@ def test_slip_skids_forward_then_moveturn():
     assert s.state == MOVE
     assert abs(s.nspeed - 17.0) < 1e-4
     assert abs(_deg(s.facing) - 180.0) < 0.1 and abs(_deg(s.travel) - 180.0) < 0.1
+
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_slip_position_bit_exact():
+    # Full-speed reverse -> SLIP skid -> MOVE_TURN -> reversed walk, WHOLE arc position bit-exact: ANM_SLIP
+    # scales jnt37.x 1.2 (FK applies scale + morf blends it), so the MOVE_TURN toe stream is exact. 981.718.
+    s, _ = _run_turn([(128, 255, 0, 0)] * 15 + _DN * 30)
+    assert SLIP in s.visited and MOVE_TURN in s.visited
+    assert s.state == MOVE
+    assert abs(s.pos_z - 981.718) < 0.05
