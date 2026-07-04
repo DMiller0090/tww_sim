@@ -184,7 +184,6 @@ class LandState:
         self.direction = DIR_NONE              # mDirection (ATN physics branch selector)
         self.m34E6 = int(facing) & 0xFFFF      # facing lock captured on attention-lock engage
         self._l_prev = False                   # attention-lock (L) held last frame (rising edge)
-        self._visited_atn = False              # did this run ever enter ATN_MOVE (ATN anims unported)
         self.visited = set()                   # every proc state this run passed through (path assertions)
         self.roll_frame = 0.0                  # ANM_ROLLF frame ctrl during FRONT_ROLL (times the exit)
         self._roll_entered = False             # entry frame: don't advance the anim ctrl yet
@@ -625,7 +624,6 @@ class LandState:
         if proc in (WAIT, FREE_WAIT):
             if l_held:                           # attention lock from a standstill -> procAtnMove path
                 self.state = ATN_MOVE
-                self._visited_atn = True
                 self._set_speed_and_angle_atn()
             else:
                 self._set_speed_and_angle_normal(self.F0, attention_lock=False)
@@ -634,7 +632,6 @@ class LandState:
             self._set_speed_and_angle_normal(self.F0, attention_lock=l_held)
             self._check_next_mode(l_held)
         elif proc == ATN_MOVE:
-            self._visited_atn = True
             self._set_speed_and_angle_atn()
             self._check_next_mode(l_held)
         elif proc == WAIT_TURN:
@@ -646,12 +643,18 @@ class LandState:
         elif proc == FRONT_ROLL:
             self._proc_roll(l_held)              # checkNextMode on its exit frame
 
-        # setBlendAtnMoveAnime's direction update for a (possibly just-entered) ATN frame.
+        # setBlendAtnMoveAnime's direction update for a (possibly just-entered) ATN frame. Capture the
+        # pre-update mDirection (uVar1, 3291): the anim re-triggers the oldframe-morf when it changes.
+        prev_dir = self.direction
         if self.state == ATN_MOVE:
             self._update_atn_direction()
+        # ATN -> MOVE (L released): the next frame is procMove_init, which re-triggers the oldframe-morf
+        # (setBlendMoveAnime(mBasic.field_0xC), 6215) -- the walk re-warms from the ATN strafe pose.
+        if proc == ATN_MOVE and self.state == MOVE and self._foot is not None:
+            self._foot._pending_morf = self.MOVE_REENTRY_MORF
 
-        # speedF -> position. FRONT_ROLL/SLIP = momentum; WAIT_TURN frozen; clean MOVE + the MOVE_TURN tail
-        # use the anim engine; ATN uses the cLib fallback. Single-anim procs pose each frame to warm the stream.
+        # speedF -> position. ROLL/SLIP = momentum; WAIT_TURN frozen; MOVE + MOVE_TURN tail + ATN_MOVE use
+        # the anim engine (only the SLIP tail keeps the fallback); single-anim procs pose to warm the stream.
         if self.state == WAIT_TURN:
             if self._foot is not None:
                 self._foot.step_single_anim(self.nspeed, self.msd)   # pose ANM_ROT, warm the toe stream
@@ -668,7 +671,14 @@ class LandState:
             if self._foot is not None:
                 self._foot.step_single_anim(self.nspeed, self.msd)
             self.speedF = self.nspeed
-        elif self.state != ATN_MOVE and self._foot is not None:
+        elif self.state == ATN_MOVE and self._foot is not None:
+            # ATN_MOVE: setBlendAtnMoveAnime poses the strafe/back anim. f31 = |nspeed*cos(m34E2)|/max
+            # (cos=1 on flat); the pose warms the toe stream so an EBS-release MOVE rejoins bit-exact.
+            f31 = f32(abs(self.nspeed) / self.max_nspeed)
+            atn_morf = (self.MOVE_REENTRY_MORF if (proc != ATN_MOVE or self.direction != prev_dir)
+                        else None)
+            self.speedF = self._foot.step_atn(self.nspeed, self.msd, self.direction, f31, atn_morf)
+        elif self._foot is not None:
             # walk anim engine (bit-exact for a clean MOVE; the MOVE_TURN tail rejoins it too). On the
             # procMoveTurn_init(1) frame the anim is posed at the pre-halving speed (_anim_nspeed).
             self.speedF = self._foot.step(self.nspeed, self.msd, anim_nspeed=self._anim_nspeed)

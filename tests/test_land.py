@@ -151,6 +151,8 @@ def test_atn_brakeslide():
     assert abs(_deg(s.facing) - 0.0) < 0.1
     assert abs(_deg(s.travel) - 180.0) < 0.1
     assert abs(abs(s.nspeed) - 15.756) < 0.02
+    if _ANIM:  # ATN position bit-exact: setBlendAtnBackMoveAnime poses ANM_ATNDB (m3598=0 -> momentum)
+        assert abs(s.pos_z - 1034.209) < 0.05
 
 
 def test_atn_ebs():
@@ -160,6 +162,8 @@ def test_atn_ebs():
     assert s.state == MOVE
     assert abs(abs(s.nspeed) - 16.437) < 0.02
     assert abs(_deg(s.facing) - _deg(s.travel)) < 0.5   # facing ~ travel aligned
+    if _ANIM:  # the 1-frame ATN strafe pose (ANM_ATNDRS) warms the toe stream -> walk tail bit-exact
+        assert abs(s.pos_z - 1361.014) < 0.05
 
 
 def test_atn_facing_decouple():
@@ -170,6 +174,8 @@ def test_atn_facing_decouple():
     assert abs(_deg(s.facing) - 90.0) < 0.5
     assert abs(_deg(s.travel) - 171.32) < 0.5
     assert abs(abs(s.nspeed) - 16.650) < 0.02
+    if _ANIM:  # ATN strafe pose -> the decoupled-facing walk tail is position bit-exact
+        assert abs(s.pos_z - 1871.815) < 0.05
 
 
 def test_atn_brake_right():
@@ -177,6 +183,8 @@ def test_atn_brake_right():
     s = _run_atn(_UP * 10 + _LDN + [(128, 110, 0, 0)] + [(146, 128, 0, 0)] * 60)
     assert s.state == WAIT
     assert abs(s.nspeed) < 0.01
+    if _ANIM:  # ATN strafe pose -> the anti-cam brake-to-stop walk tail is position bit-exact
+        assert abs(s.pos_z - 968.887) < 0.05
 
 
 # --- FRONT_ROLL tier (A button) -------------------------------------------------------------

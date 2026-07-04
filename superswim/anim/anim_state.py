@@ -28,6 +28,9 @@ from superswim import fp
 # --- J3DFrameCtrl attribute modes (J3DAnimation.h) -----------------------------------------------
 EMode_NONE, EMode_RESET, EMode_LOOP, EMode_REVERSE, EMode_LOOP_REVERSE = 0, 1, 2, 3, 4
 
+# mDirection enum (daPy_lk_c::direction_e); the ATN anim machine branches on it.
+DIR_FORWARD, DIR_BACKWARD, DIR_LEFT, DIR_RIGHT, DIR_NONE = 0, 1, 2, 3, 4
+
 # anim metadata (frameMax, attribute) -- from parse_bck; small integers, not copyrighted data.
 ANIM_META = {
     'freeb': (244, EMode_NONE),
@@ -39,6 +42,12 @@ ANIM_META = {
     'slip':  (7,  EMode_NONE),   # ANM_SLIP  (reversal skid);  single-anim during SLIP
     'atnwls': (18, EMode_LOOP),  # ANM_ATNWLS (turn-in-place walk-step L); WAIT idle-proc re-pose
     'atnwrs': (18, EMode_LOOP),  # ANM_ATNWRS (turn-in-place walk-step R); WAIT idle-proc re-pose
+    'atnls': (30, EMode_LOOP),   # ANM_ATNLS  (attention strafe, standing L); setBlendAtnMoveAnime side
+    'atnrs': (30, EMode_LOOP),   # ANM_ATNRS  (attention strafe, standing R)
+    'atndls': (18, EMode_LOOP),  # ANM_ATNDLS (attention strafe, dash L)
+    'atndrs': (18, EMode_LOOP),  # ANM_ATNDRS (attention strafe, dash R)
+    'atnwb': (20, EMode_LOOP),   # ANM_ATNWB  (attention back walk); setBlendAtnBackMoveAnime
+    'atndb': (20, EMode_LOOP),   # ANM_ATNDB  (attention back dash)
 }
 
 # HIO daPy_HIO_move_c0::m constants (the flat free-walk subset).
@@ -49,6 +58,18 @@ H_38 = 1.1           # field_0x38 (regime-1 f28)
 H_40 = 0.8           # field_0x40 (f29)
 H_48 = 2.3           # field_0x48 (DASH cruise rate / regime-2 f25)
 H_60 = 1.0           # field_0x60 (free-walk f28)
+
+# daPy_HIO_atnMove_c1 (side strafe) + daPy_HIO_atnMoveB_c1 (back), d_a_player_HIO_data.inc:14/18. f29 = 1.0
+# (not heavy); the abs2XZ()>=49 -> 1.9x rate branch is inert on flat ground (observed rates are field_0x2C/0x28).
+ATN_1C = 0.01        # mAtnMove.field_0x1C  (side WAIT<->WALK f31 threshold)
+ATN_20 = 0.9         # mAtnMove.field_0x20  (side WALK<->DASH f31 threshold)
+ATN_24 = 1.25        # mAtnMove.field_0x24  (setMoveAnime rate arg)
+ATN_28 = 1.0         # mAtnMove.field_0x28  (setMoveAnime rate arg; * f29)
+ATN_2C = 1.8         # mAtnMove.field_0x2C  (side DASH single rate; * f29)
+ATNB_1C = 0.75       # mAtnMoveB.field_0x1C (back WAIT<->WALK f31 threshold)
+ATNB_20 = 1.0        # mAtnMoveB.field_0x20 (back WALK<->DASH f31 threshold)
+ATNB_24 = 0.8        # mAtnMoveB.field_0x24 (setMoveAnime rate arg)
+ATNB_28 = 0.95       # mAtnMoveB.field_0x28 (back DASH single rate)
 
 
 class FrameCtrl:
@@ -185,6 +206,58 @@ class UnderAnimState:
         morf = self._set_move_anime(ratio, 1.1, 1.0, 'waits', r27_anim, 2, i_morf)
         self.m3598 = 0.0
         return morf
+
+    def _set_atn_side_anime(self, f31, is_left, i_morf):
+        """setBlendAtnMoveAnime side branch (d_a_player_main.cpp:3343). f31 = |mNormalSpeed*cos(gndAngle)|
+        / mMaxNormalSpeed. Blends ATN{L,R}S -> ATNW{L,R}S -> ATND{L,R}S with speed; sets m3598. ATN_MOVE
+        is not ModeFlg_00000001, so the low-speed arm takes iVar6=4 / m3598=1 (idle would be 2 / 0)."""
+        if f31 < ATN_1C:
+            f1 = fp.fdivs(f31, ATN_1C)
+            m0, m1 = ('atnls', 'atnwls') if is_left else ('atnrs', 'atnwrs')
+            morf = self._set_move_anime(f1, ATN_24, ATN_28, m0, m1, 4, i_morf)
+            self.m3598 = 1.0
+        elif f31 < ATN_20:
+            f28 = fp.fdivs(fp.fsubs(f31, ATN_1C), fp.fsubs(ATN_20, ATN_1C))
+            m0, m1 = ('atnwls', 'atndls') if is_left else ('atnwrs', 'atndrs')
+            morf = self._set_move_anime(f28, ATN_28, ATN_2C, m0, m1, 4, i_morf)
+            self.m3598 = fp.fsubs(1.0, fp.fmuls(f28, self.m3598))   # uses the prior-frame m3598
+        else:
+            anim = 'atndls' if is_left else 'atndrs'
+            morf = self._set_move_anime(1.0, ATN_2C, ATN_2C, anim, anim, 4, i_morf)
+            self.m3598 = 0.0
+        return morf
+
+    def _set_atn_back_anime(self, dvar7, i_morf):
+        """setBlendAtnBackMoveAnime (d_a_player_main.cpp:3217). dvar7 = |mNormalSpeed*cos(m34E2)| /
+        mMaxNormalSpeed (cos(m34E2)=1 on flat ground). Blends WAITS -> ATNWB -> ATNDB; sets m3598."""
+        if dvar7 < ATNB_1C:
+            f1 = fp.fdivs(dvar7, ATNB_1C)
+            morf = self._set_move_anime(f1, H_38, ATNB_24, 'waits', 'atnwb', 4, i_morf)  # f28 = mMove.field_0x38
+            self.m3598 = 1.0
+        elif dvar7 < ATNB_20:
+            f1 = fp.fdivs(fp.fsubs(dvar7, ATNB_1C), fp.fsubs(ATNB_20, ATNB_1C))
+            morf = self._set_move_anime(f1, ATNB_24, ATNB_28, 'atnwb', 'atndb', 4, i_morf)
+            self.m3598 = fp.fsubs(1.0, f1)                          # back: 1 - f1 (not 1 - f1*m3598)
+        else:
+            morf = self._set_move_anime(1.0, ATNB_28, ATNB_28, 'atndb', 'atndb', 4, i_morf)
+            self.m3598 = 0.0
+        return morf
+
+    def step_atn(self, nspeed, direction, f31, i_morf=-1.0):
+        """One ATN_MOVE frame: J3DFrameCtrl update, then setBlendAtnMoveAnime dispatch on mDirection
+        (2966). DIR_FORWARD reuses the walk machine (mMaxNormalSpeed 17); DIR_BACKWARD the back-strafe
+        blend; a side direction the L/R strafe blend. `f31` = |nspeed*cos(gndAngle)|/max (the caller
+        supplies it, already bit-exact from LandState). Returns the render state like step()."""
+        self.fc0.update()
+        self.fc1.update()
+        if direction == DIR_FORWARD:
+            morf = self._set_blend_move_anime(nspeed, i_morf=i_morf)
+        elif direction == DIR_BACKWARD:
+            morf = self._set_atn_back_anime(f31, i_morf)
+        else:
+            morf = self._set_atn_side_anime(f31, direction == DIR_LEFT, i_morf)
+        return dict(move0=self.move0, move1=self.move1, f0=self.fc0.frame, f1=self.fc1.frame,
+                    ratio=self.ratio, m3598=self.m3598, morf=morf)
 
     def step_single(self):
         """Advance the single-anim frame ctrl one game frame (J3DFrameCtrl::update) and return the

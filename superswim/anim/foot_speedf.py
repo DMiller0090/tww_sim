@@ -139,6 +139,19 @@ class FootSpeedF:
         self._pending_morf = m
         return 0.0
 
+    def step_atn(self, nspeed, msd, direction, f31, morf=None):
+        """One ATN_MOVE frame (procAtnMove -> setBlendAtnMoveAnime, d_a_player_main.cpp:6249). Advances
+        the frame ctrls, poses the ATN strafe/back anim (warming the toe stream for any following MOVE),
+        and returns speedF via the same posMoveFromFootPos composition as the walk step. `direction` =
+        mDirection (post setBlendAtnMoveAnime update, from LandState); `f31` = |nspeed*cos(gndAngle)|/max.
+        `morf` = mBasic.field_0xC (2.4) on ATN entry or a direction change, else None (-1 = no morf)."""
+        nspeed = _f32(nspeed)
+        msd = _f32(msd)
+        self.started = True
+        m = float(morf) if morf is not None else -1.0
+        state = self.st.step_atn(nspeed, direction, _f32(f31), m)
+        return self._foot_speedf(nspeed, msd, state, m)
+
     def _shift(self, cur, f312, msd):
         self.m35B4 = _f32(msd)
         self.t2 = self.t1
@@ -169,8 +182,9 @@ class FootSpeedF:
                 return 0.0
             self.started = True
             morf = 2.4                                # oldframe-morf triggers at walk-proc entry
-        elif nspeed <= 0.0:
-            # MOVE proc is exiting (speed bled to 0): position update stops, speedF = 0.
+        elif abs(nspeed) <= 0.001:
+            # MOVE exit (speed bled to ~0 -> WAIT): speedF = 0. Gate on |nspeed| not sign -- the EBS runs
+            # MOVE at a large NEGATIVE mNormalSpeed and must still integrate the composition below.
             self.stopped = True
             self.m35B4 = msd
             return 0.0

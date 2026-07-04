@@ -12,11 +12,12 @@ simulated** (`superswim.land`): `mNormalSpeed` (signed), the proc state machine,
 `tests/dolphin/run_land_tests.py`: **12 sim-vs-live cases** (nspeed dv=0.00000, facing/travel d=0.0000°)
 + the `wiggle_ebs_roll` DTM-playback lock. Position is asserted bit-exact for the on-axis walk, the
 full roll, the **MOVE_TURN turn-around** (its walk blend is posed at the pre-halving speed + re-morfed
-on entry/exit — see below), **and the WAIT_TURN pivot + walk-off** (`ANM_ROT` pivot → the WAIT idle-proc
-`WAITS`/`ANM_ATNW{L,R}S` turn-step re-pose warms the toe stream — see below); runs that visit ATN_MOVE or
-the SLIP tail use the calibrated position fallback (the `ANM_ATN*` / `ANM_SLIP`-tail foot anims are not
-fully ported — they don't affect the velocity/state/facing physics, which are the tech).
-Anchor `land_flatwalk@twwgz.sav`.
+on entry/exit — see below), the **WAIT_TURN pivot + walk-off** (`ANM_ROT` pivot → the WAIT idle-proc
+`WAITS`/`ANM_ATNW{L,R}S` turn-step re-pose warms the toe stream — see below), **and the whole ATN_MOVE
+tier** (brakeslide / EBS-release / facing-decouple / brake: `setBlendAtnMoveAnime` poses the
+`ANM_ATN{L,R}S`/`W`/`D` strafe + `ANM_ATNWB`/`ATNDB` backslide anims — see below). **Only the SLIP tail**
+uses the calibrated position fallback (the `ANM_SLIP`-tail foot anim's plant toggles ~1u; it doesn't affect
+the velocity/state/facing physics, which are the tech). Anchor `land_flatwalk@twwgz.sav`.
 **Source:** live captures (`harness/capture/land_capture.py`, cross-checked advancewith == advanceseq
 == DTM movie); decomp `d_a_player_main.cpp` proc enum + `setSpeedAndAngleNormal`/`setNormalSpeedF` +
 `setSpeedAndAngleAtn`/`setSpeedAndAngleAtnBack` + `setBlendAtnMoveAnime` (mDirection machine) +
@@ -106,7 +107,9 @@ From a run, **press L (target) + full-down for 1 frame, keep L held, then hold E
   `mAtnMoveB.field_0xC`). The ~−0.14/frame bleed is *not* a decay term: it is the accel-inject branch of
   `setNormalSpeedF` adding `f1 = 2.5·mStickDistance·cos(Δtravel) ≈ +0.139` to the negative speed each frame,
   walking it toward 0 (`mAtnMoveB.field_0x8 = 2.5`, `msd = 0.0556` at the ESS magnitude).
-- **Simulated bit-exact** (`superswim.land`, `LandState.step` with L via `buttons`/`triggerL`).
+- **Simulated bit-exact incl. position** (`superswim.land`, `LandState.step` with L via `buttons`/`triggerL`):
+  the steady backslide poses `ANM_ATNDB` single (`setBlendAtnBackMoveAnime` else-branch) with **`m3598 = 0`**,
+  so `speedF == mNormalSpeed` — the backslide position is pure momentum (see *ATN position* below).
 
 ## Extended brakeslide (EBS) — release L
 
@@ -143,6 +146,28 @@ Timing matters: **ESS-down for exactly ONE frame, then ESS-left/right the very n
 makes **facing rotate to the ESS direction (~90°) and lock there while travel stays at the slide
 heading (~171°)** — a sustained ~80° facing≠travel split, speed preserved. (Holding ESS-down 3+ frames
 first instead keeps facing glued to travel.)
+
+## ATN position (the strafe/backslide foot anims) — BIT-EXACT
+
+The ATN_MOVE tier's **position** is bit-exact too (`setBlendAtnMoveAnime`, `d_a_player_main.cpp:3280`,
+ported into `superswim/anim/anim_state.py`; foot posed each ATN frame by `foot_speedf.step_atn`). Each
+ATN frame the `mDirection` machine picks the foot anim from **`f31 = |mNormalSpeed·cos(m34E2)| /
+mMaxNormalSpeed`** (on flat ground `m34E2 = getGroundAngle = 0`, so `cos = 1` ⇒ `f31 = |nspeed|/max`):
+- **side** (`DIR_LEFT/RIGHT`): blends `ANM_ATN{L,R}S` → `ANM_ATNW{L,R}S` → `ANM_ATND{L,R}S` with `f31`
+  (thresholds `mAtnMove.field_0x1C`=0.01 / `0x20`=0.9). At the slide speeds `f31 ≥ 0.9` ⇒ the single
+  `ANM_ATND{L,R}S` pose, **`m3598 = 0`**.
+- **backward** (`DIR_BACKWARD`, `setBlendAtnBackMoveAnime`): `ANM_WAITS` → `ANM_ATNWB` → `ANM_ATNDB`
+  (thresholds `mAtnMoveB.field_0x1C`=0.75 / `0x20`=1.0). The brakeslide runs the single `ANM_ATNDB` at
+  `f31 ≥ 1.0`, **`m3598 = 0`**.
+- **forward** (`DIR_FORWARD`): reuses the plain walk `setBlendMoveAnime` (cap back to 17).
+
+Because `m3598 = 0` at slide speed, `speedF == mNormalSpeed` — the ATN slide itself is **pure momentum**.
+The one thing that matters for position is that the ATN pose still **warms the toe stream**: on an
+**EBS release** (L dropped → `MOVE` next frame, `procMove_init` re-morf `mBasic.field_0xC` = 2.4), the
+first walk frame's foot-plant delta `f31_2` spans the last ATN pose → the walk pose, so the strafe anim
+must be posed exactly for the walk-off to be bit-exact (same warm-the-stream mechanism as the roll and
+WAIT_TURN tails). Locked by `run_land_tests` `brakeslide`/`ebs`/`face_left`/`brake_right` (pos_z bit-exact)
++ offline `test_atn_*` position asserts. mDirection is validated live (player+0x34B8) and drives the pose.
 
 ## Roll (FRONT_ROLL) — the fast approach movement
 
@@ -291,7 +316,7 @@ exact) but the toe stream fed into the MoveTurn tail is ~1u off (the skid plant 
   `superswim.anim` (`foot_speedf.FootSpeedF` + the J3D engine) — the bit-exact walk `speedF`;
   `tests/test_land.py` (offline golden walk arc + the ATN + roll + turn end-state cases) +
   `tests/dolphin/run_land_tests.py`: **12 sim-vs-live** cases (walk + 4 ATN + 4 roll + waitturn/moveturn/slip:
-  nspeed/facing/travel bit-exact; walk, mid-roll, full roll-to-standstill, the MOVE_TURN turn-around, and
-  the WAIT_TURN pivot+walk-off pos_z bit-exact; ATN / SLIP-tail position use the calibrated fallback) **plus**
-  the `wiggle_ebs_roll` DTM-playback lock.
+  nspeed/facing/travel bit-exact; pos_z bit-exact for the walk, mid-roll, full roll-to-standstill, the
+  MOVE_TURN turn-around, the WAIT_TURN pivot+walk-off, **and all 4 ATN techs** — only the SLIP-tail position
+  uses the calibrated fallback) **plus** the `wiggle_ebs_roll` DTM-playback lock.
 - `_notes/tww-sim-architecture-design.md` §5/§5b — how land folds into the generalized proc-machine sim.

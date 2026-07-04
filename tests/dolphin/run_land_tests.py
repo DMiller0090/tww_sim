@@ -192,16 +192,17 @@ def wiggle_ebs_roll_checks(traj):
 
 def sim_checks(sim, live, note):
     """SIM-vs-LIVE core checks (ALL cases): state exact; mNormalSpeed (signed) bit-exact; facing +
-    travel bit-exact (s16). pos_z is bit-exact via the anim engine for the on-axis walk, the MOVE_TURN
-    turn-around (walk blend posed at the pre-halving speed + morf on entry/exit) AND the WAIT_TURN pivot +
-    walk-off (ANM_ROT pivot -> WAITS/ANM_ATNW{L,R}S idle-proc re-pose) -- runs that visit ATN_MOVE (ANM_ATN*
-    unported) or the SLIP tail (_pos_fallback: ANM_SLIP toe stream unported) use the calibrated position
-    fallback so pos is not asserted there. See superswim/land.py step()."""
+    travel bit-exact (s16). pos_z is bit-exact via the anim engine for the on-axis walk, the roll, the
+    MOVE_TURN turn-around (walk blend posed at the pre-halving speed + morf on entry/exit), the WAIT_TURN
+    pivot + walk-off (ANM_ROT pivot -> WAITS/ANM_ATNW{L,R}S idle-proc re-pose) AND now ATN_MOVE (the
+    brakeslide/EBS/face_left/brake_right strafe + backslide: setBlendAtnMoveAnime poses ANM_ATN{L,R}S/W/D
+    + ANM_ATNWB/ATNDB, warming the toe stream for the EBS-release walk tail). Only the SLIP tail stays on
+    the calibrated fallback (_pos_fallback: the ANM_SLIP plant toggles ~1u), so pos is asserted everywhere
+    except SLIP. See superswim/land.py step()."""
     dv = abs(sim.nspeed - live["potential_speed"])         # signed: brakeslide/EBS go negative
     dfac = abs(sdiff_deg(sim.facing, live["shape_angle_y"]))
     dtrav = abs(sdiff_deg(sim.travel, live["travel_angle"]))
-    visited_atn = getattr(sim, "_visited_atn", False)
-    pos_fallback = getattr(sim, "_pos_fallback", False)   # a turn proc (ANM_ROT/SLIP/turn-blend unported)
+    pos_fallback = getattr(sim, "_pos_fallback", False)   # a turn proc (the SLIP tail) still unported
     checks = [
         (sim.state == int(live["link_state"]),
          f"state sim/live {sim.state}/{int(live['link_state'])}"),
@@ -212,7 +213,7 @@ def sim_checks(sim, live, note):
         (dtrav < 0.1, f"travel bit-exact  d={dtrav:.4f}deg  "
                       f"(sim {deg(sim.travel):.2f} / live {deg(live['travel_angle']):.2f})"),
     ]
-    if not visited_atn and not pos_fallback and sim._foot is not None:  # clean walk: position bit-exact
+    if not pos_fallback and sim._foot is not None:  # walk / roll / turn / ATN: position bit-exact
         dpos = abs(sim.pos_z - live["pos_z"])
         checks.append((dpos < 0.05,
                        f"pos_z BIT-EXACT (anim)  d={dpos:.4f}  "
