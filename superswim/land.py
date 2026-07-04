@@ -699,10 +699,11 @@ class LandState:
             self.speedF = cLib_addCalc(self.speedF, self.nspeed, sc, mx, mn)
             if self.nspeed == 0.0 and abs(self.speedF) < 0.5:
                 self.speedF = 0.0                # snap to a clean standstill at the WAIT edge
-        # world motion is speedF along travel (current.angle.y): speed.z = speedF*cos, x = speedF*sin.
+        # world motion is speedF along travel: speed.z = speedF*cos, x = speedF*sin. pos.{x,z} are f32
+        # fields (cXyz) re-rounded each frame -> accumulate in f32, not an f64 sum. See knowledge/model/sim.md.
         d = self.speedF
-        self.pos_x += f32(d * _cM_ssin_s16(self.travel))
-        self.pos_z += f32(d * S.cM_scos_s16(self.travel))
+        self.pos_x = f32(self.pos_x + f32(d * _cM_ssin_s16(self.travel)))
+        self.pos_z = f32(self.pos_z + f32(d * S.cM_scos_s16(self.travel)))
         self.m34de = self.facing                 # m34DE = shape_angle.y (end-of-frame, 11287): last facing
         self.m34ea = self.m34dc                  # m34EA = m34DC (end-of-frame, 11289): last stick want
         # advance the shared camera for NEXT frame (its own 1-frame internal lag stacks on the
