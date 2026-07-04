@@ -28,21 +28,35 @@ in f32 too — `self.pos_z = f32(self.pos_z + f32(d·cos))`, **not** a Python-f6
 f64 running sum is *more* precise than the hardware and drifts ~**2.5 ULP** (~0.0003u) from the game's
 f32-accumulated position over a ~115-frame walk — precisely the wrong direction for float-exact work.
 With f32 accumulation the sim matches live to **~1–2 ULP** over that walk (see [land-movement: float-exact
-stop](../mechanics/land-movement.md)). The **remaining residual** is a sub-ULP-per-frame difference in the
-anim-driven `speedF` (the foot-FK FMA chain) and/or the cos table, accumulating over the run — the open
-target for bit-perfect land position. Same f32-vs-f64 discipline as the swim rules below.
+stop](../mechanics/land-movement.md)). The **remaining residual** is in the anim foot-FK toe position, NOT
+in the FMA arithmetic. Localized against a live foot-toe oracle (read `mFootData[i].field_0x018`, the
+stored spB0 toe, per frame from player-obj `+0x3DD0`/`+0x3EE8`):
+
+- **Sin table (FIXED).** `JMAEulerToQuat` uses `JMASSin` = a *separate* console `jmaSinTable`, not a
+  −1024 view of `jmaCosTable`; the old wrap-around reconstruction was 1 ULP off at **816/4096** entries
+  and skewed the toe. Baking the real `jmaSinTable` (`tables/sin_table.bin`, `sim._SIN_TABLE`) fixed it
+  and made `roll_slow` bit-perfect. Cos was already exact.
+- **Foot-toe.z residual (OPEN, ~2.5e-5, frame-dependent).** With exact cos+sin tables the toe **x is
+  bit-exact** but **z** carries a frame-dependent ~2.5e-5 error that **survives full-f64 arithmetic** and
+  is **not** the f32 op-order, the sin/cos tables, or `jnt0.trans.z` (all verified). By elimination it is
+  the FK-from-identity assumption in `anim/fk.py`: `inverse(worldBase)·worldBase` is not bit-exact `I`, so
+  a constant base residual `E` times the frame-varying local chain leaves a frame-dependent toe error.
+  Next step: replicate the full `setBaseTRMtx`/`PSMTXInverse` (`m37B4`) instead of assuming identity, or
+  read the live `anmMtx(FOOT)` world matrix to confirm.
+- `mtx_quat` (`C_MTXQuat` element-wise) vs the retail paired-single `PSMTXQuat` differ by ~1.8e-5 but the
+  f32/f64 swap shows it is **not** the dominant remaining term. Same f32-vs-f64 discipline as swim below.
 
 **This is now enforced to the byte** by two tests with distinct jobs:
 - **Live** (`tests/dolphin/run_land_tests.py`, the accuracy gate — live is the source of truth): the
   pass condition is **float-perfect, 0 ULP vs live**, with NO tolerance and NO xfail. It is currently
-  **RED**: `brakeslide/roll_run/roll_ebs/moveturn` pass (0 ULP), while `walk (2), ebs (1), face_left
-  (1), brake_right (2), roll_slow (4), roll_settle (2), waitturn (1), slip (74 ULP)` FAIL on the open
+  **RED**: `brakeslide/roll_run/roll_ebs/roll_slow/moveturn` pass (0 ULP), while `walk (2), ebs (1),
+  face_left (1), brake_right (2), roll_settle (2), waitturn (1), slip (74 ULP)` FAIL on the open
   residual below. Those failures are the to-do list for a bit-perfect land position.
 - **Offline** (`tests/test_land.py`, no Dolphin): the token-cheap **shadow** of the live gate — the
   golden (`tests/golden/land_walk_speedf.csv` + `CASE_POSZ`) is the GAME's live f32 bytes (captured by
   `tests/gen_land_golden.py`), and the tests assert `f32_bits(sim) == live`, so the SAME techs fail here
-  (10 tests red today). The per-frame walk arc localizes it: the foot-FK `speedF` is already off live at
-  frame 3, and `pos_z` first flips a bit at frame 33 (decel) — the anim-FK FMA chain is the root.
+  (9 tests red today). The per-frame walk arc localizes it: the foot-FK toe `speedF` is already off live at
+  frame 3, and `pos_z` first flips a bit at frame 33 (decel) — the anim foot-toe.z is the root (above).
   Regenerate the golden from live after a sim fix via `python tests/gen_land_golden.py`.
 
 ## Console cosine table

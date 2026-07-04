@@ -25,12 +25,13 @@ from superswim import fp
 from superswim import sim as S
 
 
-# JMASin/JMACos on s16 BAM, from the baked console table (see fk.jma_sin/jma_cos rationale).
+# JMACos/JMASin on s16 BAM from SEPARATE baked console tables (sin is not a wrap-around view of cos;
+# 816/4096 entries differ 1 ULP -> foot-toe.z error). See sim.py _SIN_TABLE, knowledge/model/sim.md.
 def _cos(a):
     return S._COS_TABLE[(int(a) & 0xFFFF) >> 4]
 
 def _sin(a):
-    return S._COS_TABLE[(((int(a) & 0xFFFF) >> 4) - 1024) % 4096]
+    return S._SIN_TABLE[(int(a) & 0xFFFF) >> 4]
 
 
 def euler_to_quat(rx, ry, rz):

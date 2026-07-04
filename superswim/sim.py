@@ -116,6 +116,15 @@ import os as _os
 with open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'tables', 'cos_table.bin'), 'rb') as _f:
     _COS_TABLE = struct.unpack('>4096f', _f.read())   # console-libm values, big-endian f32
 
+# The SIN companion for the quaternion foot-FK: the REAL console jmaSinTable (dumped live @ 0x80497168),
+# NOT a -1024 view of cos -- those differ 1 ULP at 816/4096 entries. See knowledge/model/sim.md.
+with open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'tables', 'sin_table.bin'), 'rb') as _f:
+    _SIN_TABLE = struct.unpack('>4096f', _f.read())   # console-libm jmaSinTable[0:4096], big-endian f32
+
+def cM_ssin_s16(angle):
+    """JMASSin: jmaSinTable[(u16)angle >> 4] -- exact console value from the baked sin table."""
+    return _SIN_TABLE[(int(angle) & 0xFFFF) >> 4]
+
 _RAD2IDX = 10430.3779296875                 # 65536 / 2pi (cM_rad2s scale)
 _GAME_TWOPI = 6.283185482025146             # the f32 2pi the game wraps with
 def cM_scos(rad):

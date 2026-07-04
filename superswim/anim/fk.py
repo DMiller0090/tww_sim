@@ -38,13 +38,13 @@ from . import quat as Q
 L_TOE = (6.0, 3.25, 0.0)
 L_HEEL = (-6.0, 3.25, 0.0)
 
-# JMASin/JMACos on s16 BAM: jmaCosTable[(u16)a>>4]; sinTable[k]=cosTable[(k-1024)%4096]
-# (cosTable = sinTable+1024). Reuse the baked console table in sim (bit-exact, see sim.py:105).
+# JMACos/JMASin on s16 BAM from SEPARATE baked console tables (see sim.py _SIN_TABLE). tr_matrix/euler
+# path is unused for the foot chain but kept faithful.
 def jma_cos(a):
     return S._COS_TABLE[(int(a) & 0xFFFF) >> 4]
 
 def jma_sin(a):
-    return S._COS_TABLE[(((int(a) & 0xFFFF) >> 4) - 1024) % 4096]
+    return S._SIN_TABLE[(int(a) & 0xFFFF) >> 4]
 
 
 def tr_matrix(rot, trans):
