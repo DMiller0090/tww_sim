@@ -73,8 +73,8 @@ def quat_lerp(a, b, t):
 _FRES_BASE = [
     0x7ff800, 0x783800, 0x70ea00, 0x6a0800, 0x638800, 0x5d6200, 0x579000, 0x520800,
     0x4cc800, 0x47ca00, 0x430800, 0x3e8000, 0x3a2c00, 0x360800, 0x321400, 0x2e4a00,
-    0x2aa800, 0x272c00, 0x23d600, 0x209e00, 0x1d8800, 0x1a9000, 0x17ba00, 0x14f800,
-    0x124e00, 0x0fbe00, 0x0d4400, 0x0ae000, 0x089000, 0x065600, 0x043200, 0x022000,
+    0x2aa800, 0x272c00, 0x23d600, 0x209e00, 0x1d8800, 0x1a9000, 0x17ae00, 0x14f800,
+    0x124400, 0x0fbe00, 0x0d3800, 0x0ade00, 0x088400, 0x065000, 0x041c00, 0x020c00,
 ]
 _FRES_DEC = [
     0x3e1, 0x3a7, 0x371, 0x340, 0x313, 0x2ea, 0x2c4, 0x2a0,
@@ -120,14 +120,17 @@ def _recip2(denom):
 
 def _recip2_of(denom, mode):
     """The PSMTXQuat scale s = 2/denom, in the requested rounding model:
-      'newton' (default for the foot chain): one Newton multiply-refine `est*(2 - denom*est)` seeded by
-        an ACCURATE 1/denom, then *2. This reproduces the console's hardware `fres`+Newton reciprocal
-        BIT-EXACTLY -- the seed's sub-12-bit error washes out after the Newton step, and the final
-        multiply-refine lands the round-to-even the raw IEEE `fdivs` misses at half-ULP midpoints (e.g.
-        a pure-90deg joint's denom cos2+sin2 = 1 - 2^-24, where the console gives fdivs-1 ULP).
-      'fres': the literal `_fres` table seed (kept for provenance; the emulated table is ~7 ULP low for
-        denom just below 1, so it does NOT match the console -- do not use for the foot chain).
-      'fdivs': raw IEEE 2/denom (differs from the console by 1 ULP at those midpoints)."""
+      'fres' (default -- the true console path): the literal hardware `fres` table seed + one Newton
+        multiply-refine `est*(2 - denom*est)`, then *2, exactly as the PSMTXQuat asm (mtx.c:1016) does.
+        Bit-exact vs the live anmMtx once `_FRES_BASE` matches Dolphin's `fres_expected` (it now does;
+        the old table had 8 wrong high-index entries -> the seed was ~1 ULP off for denom<1, which only
+        the WALK<->DASH BLEND poses hit, since JMAQuatLerp doesn't renormalize -> a lerped quat's
+        denom = w2+x2+y2+z2 drops below 1 -> the high table indices. Single-anim poses have denom~=1
+        -> index 0, always correct, which is why non-blend frames looked fine with the broken table).
+      'newton': one Newton refine seeded by an ACCURATE fdivs 1/denom instead of the crude `fres` table.
+        Matches the console on most denoms but NOT the WALK<->DASH blend poses (an accurate seed refined
+        once lands on the other side of a rounding boundary from the crude fres seed there).
+      'fdivs': raw IEEE 2/denom (differs from the console by 1 ULP at half-ULP division midpoints)."""
     if mode == 'fdivs':
         return fp.fdivs(2.0, denom)
     if mode == 'fres':
@@ -148,28 +151,28 @@ def _pssum0(a, c, b):return [fp.fadds(a[0], b[1]), c[1]]                        
 def _pssum1(a, c, b):return [c[0], fp.fadds(a[0], b[1])]                                   # ps0=C.ps0; ps1=A.ps0+B.ps1
 
 
-def psmtx_quat(q, scale_mode='newton'):
+def psmtx_quat(q, scale_mode='fres'):
     """Literal paired-single port of the retail **PSMTXQuat** asm (mtx.c:1016), which is what
     `mDoMtx_quat` (and thus the CL foot chain) actually uses -- NOT `C_MTXQuat`. The off-diagonals are
     computed **fused then scaled** (`m[0][1]=(x*y - z*w)*s` via ps_msub, one rounding on the product-
     difference), unlike `mtx_quat`'s element-wise `x*(y*s)-w*(z*s)`. This is bit-exact vs the live
     `anmMtx` rotation for all-nonzero quats (validated element-wise vs jnt0). q=(w,x,y,z) -> 3x4 (trans=0).
 
-    scale_mode: 'newton' (default) reproduces the console's HW `fres`+Newton reciprocal BIT-EXACTLY via an
-    accurate-seed Newton refine (see _recip2_of). This matters: a pure-90-deg joint's denom = cos2+sin2 =
-    1 - 2^-24 is a half-ULP division midpoint where the console gives fdivs-1 ULP; raw 'fdivs' is 1 ULP
-    high there and 'fres' (the literal `_fres` table) is ~7 ULP low. Combined with a WORLD-space foot FK
-    (fk.world_base -- the game quantizes the foot matrices at world magnitude ~764), this makes the leg
-    chain jnt0..jnt33 BIT-EXACT vs the live anmMtx. See knowledge/model/sim.md (world-space FK section).
+    scale_mode: 'fres' (default -- the true console path) uses the hardware `fres` table seed + one Newton
+    refine, exactly as the asm. This is bit-exact vs the live anmMtx for ALL poses, single-anim AND
+    WALK<->DASH blend, now that `_FRES_BASE` matches Dolphin's `fres_expected` (see _recip2_of; the old
+    table's 8 wrong high-index entries only bit the blend poses, whose un-renormalized lerped quat has
+    denom<1 -> high table index). Combined with a WORLD-space foot FK (fk.world_base -- the game quantizes
+    the foot matrices at world magnitude ~764), the leg chain jnt0..jnt33 is BIT-EXACT vs the live anmMtx.
+    See knowledge/model/sim.md (world-space FK + fres sections).
 
-    RESOLVED (was "planted foot jnt34/39 ~1 ULP"): the residual was NOT a foot-IK ground snap (the per-foot
-    leg-angle Zrots are 0 on flat ground -- verified live) and NOT this psmtx path -- it was a 1-ULP FMA
-    fusion bug in `euler_to_quat` (JMAEulerToQuat is NON-fused). With that fixed, ALL foot-chain joint quats
-    (32/33/34, 37/38/39) are bit-exact vs the live oldQuat array at both the idle and the walk-blend frames.
-    The foot toe is fed through jointCB1: anmMtx(FOOT) = concat(anmMtx(LLEGB), Trans(oldTrans)*Quat(oldQuat)),
-    which we verified reconstructs the live anmMtx bit-exact from the (now-exact) old-frame quat/trans. A tiny
-    sub-ULP remains in the m3598-MIXED speedF frames (walk<->dash blend) from matrix-accumulation rounding at
-    world magnitude; it does not affect the (bit-exact) walk position. See knowledge/model/sim.md."""
+    HISTORY: the "planted foot jnt34/39 ~1 ULP" was two stacked bugs, both fixed. (1) `euler_to_quat` fused
+    x/y (JMAEulerToQuat is NON-fused). (2) the blend-frame residual that survived was NOT matrix-accumulation
+    rounding (PSMTXConcat/PSMTXMultVec were verified against the asm and are exact) -- it was the wrong
+    `_FRES_BASE` table (here) PLUS a fused translate/scale blend in foot_fk (m_Do_ext.cpp:1183 is non-fused).
+    With all three fixed, the walk-blend foot toe is bit-exact vs the live anmMtx/field_0x018. A residual
+    remains only at the ENTRY-morf frames (jnt0.z ~5 ULP, decaying with the morf rate) -- a separate
+    calc_transform/Hermite sub-ULP, not this path. See knowledge/model/sim.md."""
     w, x, y, z = q
     tmp0 = [x, y]; tmp1 = [z, w]
     c_one = [1.0, 1.0]

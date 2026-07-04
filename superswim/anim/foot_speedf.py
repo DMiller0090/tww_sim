@@ -41,6 +41,28 @@ def _f32(x):
     return fp.f32(float(x))
 
 
+def _sqrtf(x):
+    """std::sqrtf (MSL math.h): frsqrte seed + 3 Newton refines in DOUBLE, then f32(x*guess).
+    The crude frsqrte seed (~5 bits) is fully washed out by 3 Newton steps (the comment claims 32
+    sig bits, > f32's 24), so a math-accurate double seed gives the byte-identical f32 result."""
+    x = fp.f32(x)
+    if x > 0.0:
+        g = 1.0 / math.sqrt(x)                        # frsqrte seed (low bits irrelevant after Newton)
+        g = 0.5 * g * (3.0 - g * g * x)               # all 3 refines in f64
+        g = 0.5 * g * (3.0 - g * g * x)
+        g = 0.5 * g * (3.0 - g * g * x)
+        return fp.f32(x * g)                          # y = (float)(x * guess)
+    return fp.f32(x)
+
+
+def _absxz(dx, dz):
+    """cXyz::absXZ() for the toe delta (dx,0,dz): sqrtf(abs2XZ) where abs2XZ is the paired-single
+    PSVECSquareMag == fmadds(dz,dz, fmuls(dx,dx)) (f32, one fused round of dz*dz onto the f32 dx*dx),
+    NOT the double-precision math.hypot. See tww c_xyz.h / dolphin/mtx/vec.c PSVECSquareMag."""
+    sq = fp.fmadds(dz, dz, fp.fmuls(dx, dx))
+    return _sqrtf(sq)
+
+
 def _plant_of(feet):
     """m34BC on flat ground: index (0=right jnt39, 1=left jnt34) of the lower toe/heel midpoint Y."""
     midY = [_f32((feet['toe'][k][1] + feet['heel'][k][1]) * 0.5) for k in (0, 1)]
@@ -227,7 +249,7 @@ class FootSpeedF:
         plant = _plant_of(self.t1)
         dx = _f32(self.t1['toe'][plant][0] - self.t2['toe'][plant][0])
         dz = _f32(self.t1['toe'][plant][2] - self.t2['toe'][plant][2])
-        f312 = _f32(math.hypot(dx, dz))
+        f312 = _absxz(dx, dz)
         m = state['m3598']
         # recursive smoothing, gated by m3598<1 AND |prev_msd - msd| < 0.2 (stick-mag steady).
         if m < 1.0 and abs(_f32(self.m35B4 - msd)) < 0.2:

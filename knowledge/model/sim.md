@@ -50,14 +50,19 @@ localized against a live foot-toe oracle (`mBaseTransformMtx`, `m37B4`, per-join
   current pre-integration `pos.x/pos.z/facing` each frame via `FootSpeedF.set_pos`). Live oracle:
   `mBaseTransformMtx` (`mpCLModel@obj+0x32C → +0x24`), `m37B4` (`obj+0x37B4`), `anmMtx(j)` (`→+0x8C → [j]`,
   48 B `Mtx`; `LFOOT=0x22`, `RFOOT=0x27`), stored `spB0` (L `obj+0x3DB8+0x130`, R `+0x18`).
-- **`PSMTXQuat` grouping + reciprocal (FIXED).** `mDoMtx_quat` = retail **`PSMTXQuat`** (paired single),
-  NOT `C_MTXQuat`: off-diagonals are **fused then scaled** — `m[0][1]=(x·y−z·w)·s` via `ps_msub`. The scale
-  `s = 2/denom` must use the console's **`fres`+Newton reciprocal**, reproduced bit-exactly by an
-  accurate-seed Newton refine (`quat._recip2_of`, `scale_mode='newton'`, the default). This matters at
-  half-ULP division midpoints: a single-axis joint's `denom = cos²+sin² = 1 − 2⁻²⁴` (e.g. jnt29
-  `[0,16382,0]`) is exactly such a midpoint where the console gives **`fdivs − 1 ULP`**; raw `fdivs` is 1
-  ULP high and the literal `_fres` table is ≈7 ULP low. **With world FK + `newton` the leg chain jnt0..jnt33
-  is BIT-EXACT vs the live `anmMtx`, and the straight walk `pos_z` is float-perfect end-to-end.**
+- **`PSMTXQuat` grouping + reciprocal (FIXED — real `_fres` table bug).** `mDoMtx_quat` = retail
+  **`PSMTXQuat`** (paired single), NOT `C_MTXQuat`: off-diagonals are **fused then scaled** —
+  `m[0][1]=(x·y−z·w)·s` via `ps_msub`. The scale `s = 2/denom` uses the console's **`fres`+Newton
+  reciprocal** exactly as the asm (`quat._recip2_of`, `scale_mode='fres'`, the default). The `_fres`
+  emulation must match Dolphin's `fres_expected` table byte-for-byte — the sim's `_FRES_BASE` had **8 wrong
+  high-index entries** (idx 22/24/26–31), so the seed was ~1 ULP off **for `denom < 1`**. This only bit the
+  **WALK↔DASH blend** poses: `JMAQuatLerp` does NOT renormalize, so a lerped quat's `denom = w²+x²+y²+z²`
+  drops just below 1 → the high table indices; single-anim poses have `denom ≈ 1` → index 0 (always
+  correct), which is why non-blend frames looked fine with the broken table. Corrected → blend-pose
+  `anmMtx` rotation is bit-exact. (`'newton'` = accurate-seed refine, matches most denoms but lands the
+  wrong side of a rounding boundary on the blend poses; `'fdivs'` = raw 2/denom, 1 ULP high at midpoints.)
+  **With world FK + `fres` the leg chain jnt0..jnt33 is BIT-EXACT vs the live `anmMtx`, and the straight
+  walk `pos_z` is float-perfect end-to-end.**
 - **`JMAEulerToQuat` is NON-fused (FIXED).** The "planted foot jnt34 ~1 ULP" residual was a real bug in
   `euler_to_quat`: `JMAEulerToQuat` (JMath.cpp:41) computes each component as `(a·b) ± (c·d)` with BOTH
   products **separately f32-rounded, then added/subtracted** — NOT fused into `fmadds`/`fnmsubs`. The old
@@ -72,25 +77,43 @@ localized against a live foot-toe oracle (`mBaseTransformMtx`, `m37B4`, per-join
   (`field_0x002/006/008/00A`) is 0** (verified live), so `jointCB1` reduces to a pure rebuild that is
   bit-exact to our FK given the (now-exact) quats — verified `concat(live_anm33, Trans·Quat[oldQuat34]) ==
   live anm34`, 0 ULP. So there is NO foot-IK snap on flat ground.
-- **OPEN (sub-ULP): m3598-MIXED speedF frames + ATN/slip tails.** With exact quats + `set_pos` fed each
-  frame, the walk `speedF` is bit-exact EXCEPT the walk↔dash-blend frames where `0<m3598<1` (frames 5/6/34):
-  a ~1 ULP in the world-magnitude **matrix accumulation** (concat/PSMTXMultVec rounding), NOT the quat, NOT
-  the recursive smoothing (all fusion variants agree), NOT the composition. It does not affect the (bit-exact)
-  walk position. NOTE: the offline `test_speedf` does not feed per-frame `pos` to the standalone `FootSpeedF`,
-  so its `worldBase` is frozen at the anchor → feeding pos flips 5 of its 8 red frames; the LandState-based
-  position tests already feed pos. The `slip` case (74 ULP) is a separate skid modelling gap.
+- **Blend-pose translate/scale are NON-fused (FIXED).** `mDoExt_MtxCalcAnmBlendTblOld::calc`
+  (m_Do_ext.cpp:1183) blends `info1.mTranslate·f30 + info2.mTranslate·ratio` (f30=1−ratio) — compiled
+  **WITHOUT FMA contraction** (same as JMAEulerToQuat), so both products are separately f32-rounded then
+  added. The old `foot_fk._blend_joint` used a fused `fmadds`, putting some blend-frame joint translates
+  1 ULP off (e.g. jnt31.z frame 5). Verified against the **live `mOldFrameTransInfo` array**
+  (`m_old_fdata@obj+0x31B4 → +0x1C`, `J3DTransformInfo[jnt]`, translate at `+0x14`) — non-fused ⇒ bit-exact.
+  The oldframe-morf blend was already non-fused (correct).
+- **`absXZ` is `sqrtf(fmadds(z,z,x·x))` not `math.hypot` (FIXED, faithful).** The toe-delta magnitude
+  `f31_2 = cXyz::absXZ()` = `sqrtf(PSVECSquareMag)`: `abs2XZ = fmadds(dz,dz, fmuls(dx,dx))` (paired-single,
+  one fused round, f32), and `sqrtf` = `frsqrte` seed + **3 Newton refines in double** then `f32(x·guess)`
+  (MSL math.h). `foot_speedf._absxz` ports this (a math-accurate seed matches, since 3 Newton steps saturate
+  past f32). Neutral on the tested frames but the correct console form.
+- **CONCAT/MULTVEC verified exact.** `mtx_concat`/`mtx_mult_vec` were checked op-for-op against the retail
+  `PSMTXConcat`/`PSMTXMultVec` asm (accumulation order, the `+trans` via `fmadds(1,a3,accum)==fadds`, the
+  `ps_sum0` grouping) — bit-faithful. The blend-frame residual was NOT here; it was the `_fres` table + the
+  fused translate blend above. Method note: align live `anmMtx(j)` by `anim_frame` (`sim(N)==live(N)`), but
+  the stored toe `field_0x018` lags one frame (`sim toe(N)==live field_0x018(N+1)`).
+- **OPEN (sub-ULP): ENTRY-morf jnt0 + ATN endpoints + slip.** With the fres+non-fused fixes the walk-blend
+  foot toe (frames 5/6) is bit-exact. What remains: the **entry-morf frames** (first 1–2 MOVE frames) where
+  jnt0.z is ~5 ULP off (decaying with the morf rate) — seed/ratio/rate/morf-fusion all verified exact, so it
+  is a `calc_transform`/Hermite sub-ULP in the root Z-translate track. This leaks into the ATN/turn endpoint
+  positions (`ebs 1, brake_right 2, waitturn 1 ULP`). `slip` (74 ULP) is a separate skid modelling gap.
+  NOTE: offline `test_speedf` does not feed per-frame `pos` to the standalone `FootSpeedF` (frozen
+  `worldBase`) → feeding pos flips 5 of its 8 red frames; the LandState position tests already feed pos.
 
 **This is now enforced to the byte** by two tests with distinct jobs:
 - **Live** (`tests/dolphin/run_land_tests.py`, the accuracy gate — live is the source of truth): the
-  pass condition is **float-perfect, 0 ULP vs live**, with NO tolerance and NO xfail. With the world FK +
-  `newton` reciprocal it is **9 pass / 4 fail**: `walk/brakeslide/face_left/roll_run/roll_slow/roll_settle/
-  roll_ebs/moveturn` pass (0 ULP), while `ebs (1), brake_right (2), waitturn (2)` (the planted-foot
-  jnt34/39 residual) and `slip (74 ULP, a separate skid residual)` FAIL. Those are the to-do list.
+  pass condition is **float-perfect, 0 ULP vs live**, with NO tolerance and NO xfail. `walk/brakeslide/
+  face_left/roll_run/roll_slow/roll_settle/roll_ebs/moveturn` pass (0 ULP). Still failing (the entry-morf
+  jnt0 residual above, tightened this session): `ebs`, `brake_right`, `waitturn` (waitturn 2→1 ULP with the
+  `fres` fix) and `slip` (74 ULP, a separate skid residual). Those are the to-do list.
 - **Offline** (`tests/test_land.py`, no Dolphin): the token-cheap **shadow** of the live gate — the
   golden (`tests/golden/land_walk_speedf.csv` + `CASE_POSZ`) is the GAME's live f32 bytes (captured by
   `tests/gen_land_golden.py`), and the tests assert `f32_bits(sim) == live`, so the SAME techs fail here
-  (5 red today: `speedf` frame 5, `ebs`, `brake_right`, `waitturn`, `slip`). The walk arc is now
-  float-perfect every frame. Regenerate the golden from live after a sim fix via `python tests/gen_land_golden.py`.
+  (5 red: `speedf` frame 5, `ebs`, `brake_right`, `waitturn`, `slip`; 173 pass). The blend-pose foot toe
+  (frames 5/6/34) and the walk arc are now bit-exact/float-perfect; the 5 reds are the entry-morf/slip
+  residuals only. Regenerate the golden from live after a sim fix via `python tests/gen_land_golden.py`.
 
 ## Console cosine table
 

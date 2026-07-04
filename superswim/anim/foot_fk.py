@@ -93,9 +93,11 @@ class FootFK:
         q1 = Q.euler_to_quat(*i1['rotation'])
         q3 = Q.quat_lerp(q0, q1, ratio)
         r30 = fp.fsubs(1.0, ratio)
-        trans = tuple(fp.fmadds(i1['translate'][k], ratio, fp.fmuls(i0['translate'][k], r30))
+        # translate/scale blend is NON-fused (m_Do_ext.cpp:1183, like JMAEulerToQuat) -- both products
+        # separately f32-rounded then added; a fused fmadds is 1 ULP off on blend frames. See sim.md.
+        trans = tuple(fp.fadds(fp.fmuls(i0['translate'][k], r30), fp.fmuls(i1['translate'][k], ratio))
                       for k in range(3))
-        scale = tuple(fp.fmadds(i1['scale'][k], ratio, fp.fmuls(i0['scale'][k], r30))
+        scale = tuple(fp.fadds(fp.fmuls(i0['scale'][k], r30), fp.fmuls(i1['scale'][k], ratio))
                       for k in range(3))
         if rate > 0.0 and MORF_START <= jnt < MORF_END and jnt in self.old_quat:
             f31 = fp.fsubs(1.0, rate)
