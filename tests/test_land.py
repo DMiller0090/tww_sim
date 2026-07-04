@@ -30,6 +30,9 @@ from superswim.anim.foot_speedf import FootSpeedF
 
 _ANIM = FootSpeedF.available()
 _GOLDEN = os.path.join(os.path.dirname(__file__), "golden", "land_walk_speedf.csv")
+# Partial-magnitude (Y171, msd~0.52) walk golden -- the z=2000-stop regime (regime-1 cruise, toe
+# delta = speedF). See knowledge/model/sim.md "Partial-magnitude regime" for the residual + harness.
+_GOLDEN_Y171 = os.path.join(os.path.dirname(__file__), "golden", "land_walk_y171_speedf.csv")
 
 
 def f32_bits(x):
@@ -37,10 +40,10 @@ def f32_bits(x):
     return struct.unpack("<I", struct.pack("<f", x))[0]
 
 
-def _load_golden():
+def _load_golden(path=_GOLDEN):
     """(frame, ns, msd, speedF_bits, pos_z_bits) -- the two floats as exact f32 byte patterns."""
     rows = []
-    with open(_GOLDEN) as f:
+    with open(path) as f:
         for line in f:
             if line.startswith("#") or line.startswith("f,"):
                 continue
@@ -54,6 +57,8 @@ SEED_POS_Z = 764.0791015625
 
 # The walk seq the live test uses: 30 frames full-up then 20 neutral (free cam throughout).
 WALK_STICKS = [(128, 255)] * 30 + [(128, 128)] * 20
+# Partial-magnitude walk (matches gen_land_golden.py WALK_Y171): 40 frames of Y171 from rest.
+WALK_STICKS_Y171 = [(128, 171)] * 40
 
 # Golden mNormalSpeed per frame f=1..40, live-captured (land_walk_gt.csv). f1..f2 = the
 # 2-frame input latency (still FREE_WAIT); f3 accel begins; cap 17; release decel from f33.
@@ -142,6 +147,37 @@ def test_pos_z_arc_matches_live_bit_exact():
     golden = _load_golden()
     s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
     for (sx, sy), (fr, _ns, _msd, _spF, pz_bits) in zip(WALK_STICKS, golden):
+        s.step(sx, sy)
+        assert f32_bits(s.pos_z) == pz_bits, \
+            f"frame {fr}: sim pos_z {s.pos_z!r} (0x{f32_bits(s.pos_z):08x}) != LIVE 0x{pz_bits:08x}"
+
+
+# --- PARTIAL-MAGNITUDE (Y171) regime -- the z=2000 stop. Drive via LandState (raw driver from the
+# golden ns is a harness artifact). Detail: knowledge/model/sim.md "Partial-magnitude regime".
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_speedf_y171_matches_live_bit_exact():
+    """PARTIAL regime: the walk speedF (= the plant-foot toe delta, since m3598==1.0 here) must
+    reproduce the GAME's live true_speed byte-for-byte. Driven via LandState so nspeed/mStickDistance/
+    world pos are full-precision (see the block comment on why the raw driver from the %g golden is a
+    harness artifact). Residual RED frames: the entry-morf (f4-8, shared with the full-deflection
+    speedF test) and a ~0.6-ULP toe.z world-quantization residual (f27/29). See knowledge/model/sim.md."""
+    golden = _load_golden(_GOLDEN_Y171)
+    s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
+    for (sx, sy), (fr, _ns, _msd, spF_bits, _pz) in zip(WALK_STICKS_Y171, golden):
+        s.step(sx, sy)
+        assert f32_bits(s.speedF) == spF_bits, \
+            f"frame {fr}: sim speedF {s.speedF!r} (0x{f32_bits(s.speedF):08x}) != LIVE 0x{spF_bits:08x}"
+
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_pos_z_arc_y171_matches_live_bit_exact():
+    """PARTIAL regime: full LandState Y171 walk must track the GAME's live pos_z byte-for-byte every
+    frame. Currently RED -- the partial-magnitude speedF residual accumulates to ~1-2 ULP in pos_z
+    over the walk. This is the offline mirror of the walk_y171 live gate. See knowledge/model/sim.md."""
+    golden = _load_golden(_GOLDEN_Y171)
+    s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
+    for (sx, sy), (fr, _ns, _msd, _spF, pz_bits) in zip(WALK_STICKS_Y171, golden):
         s.step(sx, sy)
         assert f32_bits(s.pos_z) == pz_bits, \
             f"frame {fr}: sim pos_z {s.pos_z!r} (0x{f32_bits(s.pos_z):08x}) != LIVE 0x{pz_bits:08x}"

@@ -47,8 +47,12 @@ _NE = (128, 128, 0, 0)
 _LDN = (128, 0, 0x40, 255)          # L-target + full down
 _A = (128, 255, 0x100, 0)           # A + up
 _DN = (128, 0, 0, 0)                # full-down, no L
+_Y171 = (128, 171, 0, 0)            # partial-magnitude up (msd~0.52) -- the z=2000-stop cruise regime
 
 WALK = _els([_UP] * 30 + [_NE] * 20)
+# Partial-magnitude walk from rest (Y171, msd~0.52) -- the z=2000-stop regime (regime-1 cruise, not
+# covered by the msd-0/1 WALK golden). See knowledge/model/sim.md "Partial-magnitude regime".
+WALK_Y171 = _els([_Y171] * 40)
 
 CASE_SEQS = {
     "brakeslide":  _els([_UP] * 10 + [_LDN] + [(128, 110, 0x40, 255)] * 10),
@@ -84,25 +88,37 @@ def _warm():
     _load(WALK[:3])                       # discard the cold-boot first advanceseq
 
 
-def emit_walk_csv():
+def _emit_walk(seq, seqdesc):
+    """Per-frame walk golden for `seq`: msd from the sim (deterministic), ns/speedF/pos_z from LIVE
+    (prefix-replay: reload + advanceseq(seq[:n]) each frame -- the trustworthy method, no per-frame
+    stepping desync). Emits the CSV test_land.py pins."""
     _warm()
     seed = _load([])
-    # sim msd per frame (deterministic input magnitude; ns/speedF/pos_z come from LIVE).
     sim = LandState(pos_z=seed["pos_z"], state=FREE_WAIT, idle_frame=IDLE_FRAME)
     msd = []
-    for el in WALK:
+    for el in seq:
         sim.step(el["stickX"], el["stickY"])
         msd.append(sim.msd)
-    print("# land_flatwalk@twwgz walk_run golden (FULL float32 precision, LIVE capture = source of truth).")
+    print("# land_flatwalk@twwgz walk golden (FULL float32 precision, LIVE capture = source of truth).")
     print(f"# seed_pos_z={seed['pos_z']!r} (0x{f32_bits(seed['pos_z']):08x}) idle_frame={IDLE_FRAME:.3f}"
-          "  seq=30 up + 20 neutral (free cam)")
+          f"  seq={seqdesc} (free cam)")
     print("# speedF/pos_z are the GAME's live f32 bytes. test_land.py asserts f32_bits(sim)==these, so a")
     print("# not-yet-bit-perfect walk shows RED offline too. Regenerate (Dolphin up): python tests/gen_land_golden.py")
+    # ns/msd use repr() (full f32), NOT %g: a truncated nspeed shifts the WAITS<->WALK blend ratio
+    # and desyncs the foot pose by tens of ULP (see knowledge/model/sim.md "Partial-magnitude regime").
     print("f,ns,msd,speedF,speedF_hex,pos_z,pos_z_hex")
-    for n in range(1, len(WALK) + 1):
-        lv = _load(WALK[:n])
-        print(f"{n},{lv['potential_speed']:g},{msd[n-1]:g},{lv['true_speed']!r},"
+    for n in range(1, len(seq) + 1):
+        lv = _load(seq[:n])
+        print(f"{n},{lv['potential_speed']!r},{msd[n-1]!r},{lv['true_speed']!r},"
               f"0x{f32_bits(lv['true_speed']):08x},{lv['pos_z']!r},0x{f32_bits(lv['pos_z']):08x}")
+
+
+def emit_walk_csv():
+    _emit_walk(WALK, "30 up + 20 neutral")
+
+
+def emit_walk_y171_csv():
+    _emit_walk(WALK_Y171, "40 x Y171 (partial magnitude, msd~0.52)")
 
 
 def emit_endpoints():
@@ -116,7 +132,10 @@ def emit_endpoints():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "endpoints":
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    if arg == "endpoints":
         emit_endpoints()
+    elif arg == "y171":
+        emit_walk_y171_csv()
     else:
         emit_walk_csv()

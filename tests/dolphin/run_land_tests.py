@@ -97,6 +97,7 @@ A = 0x100                                              # GC PAD_BUTTON_A (the "d
 
 # --- the discovered sequences ---------------------------------------------------------
 def seq_walk():        return hold(128, 255, 30) + hold(128, 128, 20)                  # run -> standstill
+def seq_walk_y171():   return hold(128, 171, 40)                                        # PARTIAL-magnitude walk (msd~0.52)
 def seq_brakeslide():  return hold(128, 255, 10) + L_DOWN + hold(128, 110, 10, 0x40, 255)  # L HELD -> targeting slide
 def seq_ebs():         return hold(128, 255, 10) + L_DOWN + hold(128, 110, 30)          # L released -> extended slide
 def seq_face_left():   return hold(128, 255, 10) + L_DOWN + hold(128, 110, 1) + hold(110, 128, 60)
@@ -238,6 +239,11 @@ def sim_checks(sim, live, note):
 # anchor). ALL cases are now SIM-vs-LIVE (sim_checks) with the tech assertions layered on top.
 CASES = [
     ("walk_run", seq_walk, "run accel to cap 17 then decel to standstill", None),
+    # PARTIAL-magnitude (Y171) walk -- the z=2000 stop; regime-1 cruise (speedF = toe delta). RED on
+    # pos_z (~2 ULP, toe.z frontier); everything else bit-exact. Detail: knowledge/model/sim.md.
+    ("walk_y171", seq_walk_y171, "partial-magnitude (Y171) walk -- regime-1 cruise, pos_z ~2 ULP (RED: toe.z frontier)", lambda e: [
+        (e["link_state"] == 6, f"walking (MOVE 6)  [{e['link_state']}]"),
+    ]),
     ("brakeslide", seq_brakeslide, "L held -> targeting slide, facing locked", lambda e: [
         (e["link_state"] == 7, f"state 7 (ATN_MOVE)  [{e['link_state']}]"),
         (e["facing"] < 5 or e["facing"] > 355, f"facing locked ~0  [{e['facing']:.1f}]"),

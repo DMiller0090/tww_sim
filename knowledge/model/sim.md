@@ -27,10 +27,29 @@ total as f32: `pos.z = f32(pos.z + f32(speedF·cos))`. `LandState.step` therefor
 in f32 too — `self.pos_z = f32(self.pos_z + f32(d·cos))`, **not** a Python-f64 `+=` running sum. An
 f64 running sum is *more* precise than the hardware and drifts ~**2.5 ULP** (~0.0003u) from the game's
 f32-accumulated position over a ~115-frame walk — precisely the wrong direction for float-exact work.
-With f32 accumulation + the world-space foot FK the sim is now **float-perfect (0 ULP)** over the straight
-walk (see [land-movement: float-exact stop](../mechanics/land-movement.md)); the last residuals are the
-planted-foot jnt34/39 toe (1–2 ULP on the ATN/waitturn tails) and the separate slip skid. The chain was
-localized against a live foot-toe oracle (`mBaseTransformMtx`, `m37B4`, per-joint `anmMtx`, stored spB0):
+With f32 accumulation + the world-space foot FK the sim is **float-perfect (0 ULP)** over the straight
+**full-deflection** walk (see [land-movement: float-exact stop](../mechanics/land-movement.md)); the last
+residuals are the planted-foot jnt34/39 toe (1–2 ULP on the ATN/waitturn tails) and the separate slip skid.
+
+**Partial-magnitude regime (`Y171`, `msd`≈0.52) — the z=2000 stop rides this (verified 2026-07-04):**
+The full-deflection golden covers only `msd` 0/1, whose DASH cruise has `m3598==0` (so `speedF==nspeed`
+and the foot-toe term drops out entirely). The `Y171` cruise instead sits in **regime 1 (WAITS↔WALK,
+`m3598==1.0`)**, where `speedF` **IS the plant-foot toe delta** — making the `Y171` golden the *only*
+land test that exercises the foot-FK toe every cruise frame. Driven correctly it tracks live to
+**~1 ULP `speedF` / 2 ULP `pos_z`** — NOT the "tens/thousands of ULP" an earlier draft reported. That
+scare was a **harness artifact**: driving the raw `FootSpeedF` from the golden's `ns` column, which was
+written with `%g` (6 sig figs), fed a *truncated* nspeed (`4.57064` vs `4.5706443786`) into `f30 = ns/17`
+→ the WAITS↔WALK blend ratio shifted → the toe pose diverged. Fixed: golden `ns`/`msd` now full-precision
+(`repr`), and `test_speedf_y171` drives **LandState** (full-precision nspeed + the world position — the
+foot FK quantizes the toe at world magnitude, so the driver MUST get `set_pos` each frame; the standalone
+driver posing at the stale seed z was the other half of the artifact). The residual RED is now honest and
+small: the **entry-morf** (f4-8, the *same* jnt0.z issue the full-deflection `speedF` test fails on, which
+also leaks into ebs/brake_right/waitturn) plus a **~0.6-ULP toe.z world-quantization** at f26/27 (the toe.z
+frontier below) → the 2-ULP `pos_z`. Gated by `test_speedf_y171_matches_live_bit_exact` /
+`test_pos_z_arc_y171_matches_live_bit_exact` and the `walk_y171` case in `run_land_tests.py`. For the
+z=2000 beam search a 2-ULP `pos_z` oracle is likely already good enough (live-verify once).
+
+The chain was localized against a live foot-toe oracle (`mBaseTransformMtx`, `m37B4`, per-joint `anmMtx`, stored spB0):
 
 - **Sin/cos tables (FIXED, verified bit-exact vs console).** `JMAEulerToQuat` uses `JMASSin`/`JMASCos` =
   a *separate* console `jmaSinTable` (`jmaCosTable = jmaSinTable + 1024`, `jmaSinShift=4`, size 4096), not
@@ -62,7 +81,7 @@ localized against a live foot-toe oracle (`mBaseTransformMtx`, `m37B4`, per-join
   `anmMtx` rotation is bit-exact. (`'newton'` = accurate-seed refine, matches most denoms but lands the
   wrong side of a rounding boundary on the blend poses; `'fdivs'` = raw 2/denom, 1 ULP high at midpoints.)
   **With world FK + `fres` the leg chain jnt0..jnt33 is BIT-EXACT vs the live `anmMtx`, and the straight
-  walk `pos_z` is float-perfect end-to-end.**
+  full-deflection walk `pos_z` is float-perfect end-to-end** (partial magnitudes not yet — see the regime caveat above).
 - **`JMAEulerToQuat` is NON-fused (FIXED).** The "planted foot jnt34 ~1 ULP" residual was a real bug in
   `euler_to_quat`: `JMAEulerToQuat` (JMath.cpp:41) computes each component as `(a·b) ± (c·d)` with BOTH
   products **separately f32-rounded, then added/subtracted** — NOT fused into `fmadds`/`fnmsubs`. The old
