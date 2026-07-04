@@ -151,6 +151,7 @@ class LandState:
     TURN_MAX = 0x3CDF               # field_0x0 = cLib_addCalcAngleS max step (WaitTurn facing pivot)
     TURN_MIN = 0x1F40               # field_0x2 = min step
     TURN_SCALE = 30                 # field_0x4 = scale (diff/scale; << min so the min step rules)
+    WAIT_TURN_ANIM_RATE = f32(1.0)  # mBasic.field_0x4 = ANM_ROT frame-ctrl rate (pivot pose)
     # HIO mSlip (high-speed reversal skid), d_a_player_HIO_data.inc:106 (daPy_HIO_slip_c1). Entry from a
     # MOVE frame whose speedF/mMaxNormalSpeed exceeds the threshold AND the stick genuinely flipped.
     SLIP_THRESH = f32(0.6)          # field_0x4 = speedF/mMaxNormalSpeed slip-entry threshold
@@ -174,6 +175,7 @@ class LandState:
         self.target = 0                        # m34E8 (s16), set each frame by setStickData
         self.m34dc = int(facing) & 0xFFFF      # stick want-angle pre-csangle (m34E8 = m34dc + csangle)
         self.m34ea = int(facing) & 0xFFFF      # PREVIOUS frame's m34dc (slip stick-flip detector, 11289)
+        self.m34de = int(facing) & 0xFFFF      # PREVIOUS frame's shape_angle.y (11287; WAIT idle-anim turn-step)
         self.state = int(state)                # link_state / mCurProc
         self.nspeed = f32(nspeed)              # mNormalSpeed (potential_speed) -- bit-exact
         self.speedF = f32(speedF)              # position-integrating speed
@@ -507,9 +509,12 @@ class LandState:
         self.state = WAIT_TURN
         self.turn_target = self.target
         self.travel = self.facing
-        # Pivot is speedF 0; the WAIT_TURN->WAIT->MOVE walk-off needs the idle-proc setBlendMoveAnime
-        # (procWait_init ModeFlg branch, unported) -> fallback (see knowledge/mechanics/land-movement.md).
-        self._pos_fallback = True
+        # setSingleMoveAnime(ANM_ROT, mBasic.field_0x4, 0, -1, mBasic.field_0xC) (6574): pose the pivot
+        # anim through WAIT_TURN so the toe stream is warm for the WAIT idle-proc re-pose + walk-off.
+        if self._foot is not None:
+            self._foot.enter_single('rot', self.MOVE_REENTRY_MORF, rate=self.WAIT_TURN_ANIM_RATE)
+        else:
+            self._pos_fallback = True         # no anim data: WAIT_TURN position uses the cLib chase
 
     def _proc_wait_turn(self, l_held):
         """procWaitTurn (6584): bleed mNormalSpeed toward 0, pivot facing toward the captured target at
@@ -648,6 +653,16 @@ class LandState:
         # speedF -> position. FRONT_ROLL/SLIP = momentum; WAIT_TURN frozen; clean MOVE + the MOVE_TURN tail
         # use the anim engine; ATN uses the cLib fallback. Single-anim procs pose each frame to warm the stream.
         if self.state == WAIT_TURN:
+            if self._foot is not None:
+                self._foot.step_single_anim(self.nspeed, self.msd)   # pose ANM_ROT, warm the toe stream
+            self.speedF = 0.0
+        elif proc == WAIT_TURN and self.state == WAIT and self._foot is not None:
+            # Pivot done -> WAIT: procWait_init's idle-proc setBlendMoveAnime, facing != m34DE turn-step
+            # arm (WAITS/ANM_ATNW{L,R}S, ratio clamp(0.5+0.001|dfacing|,0,1)) -- see land-movement.md.
+            r3 = s16_signed(self.facing - self.m34de)
+            r27 = 'atnwls' if r3 > 0 else 'atnwrs'
+            ratio = min(f32(f32(0.5) + f32(0.001 * abs(r3))), 1.0)
+            self._foot.enter_wait_idle(ratio, r27, self.MOVE_REENTRY_MORF, self.msd)
             self.speedF = 0.0
         elif self.state in (FRONT_ROLL, SLIP):
             if self._foot is not None:
@@ -667,6 +682,7 @@ class LandState:
         d = self.speedF
         self.pos_x += f32(d * _cM_ssin_s16(self.travel))
         self.pos_z += f32(d * S.cM_scos_s16(self.travel))
+        self.m34de = self.facing                 # m34DE = shape_angle.y (end-of-frame, 11287): last facing
         self.m34ea = self.m34dc                  # m34EA = m34DC (end-of-frame, 11289): last stick want
         self.visited.add(self.state)
         self._l_prev = l_held

@@ -123,6 +123,22 @@ class FootSpeedF:
     # back-compat alias: the roll uses the shared single-anim stepper.
     step_roll = step_single_anim
 
+    def enter_wait_idle(self, ratio, r27_anim, morf, msd):
+        """One WAIT idle-proc frame right after a WAIT_TURN pivot (procWait_init/procWait ->
+        setBlendMoveAnime idle branch, ModeFlg_00000001, shape_angle.y != m34DE). Poses the
+        WAITS/ANM_ATNW{L,R}S turn-step blend (m3598=0) and updates the toe stream so the following
+        walk-off entry (its f31_2 = |ATNW pose - the last ROT pose|) is bit-exact. mNormalSpeed is 0
+        (WAIT) so speedF/position is 0 this frame; the pose only warms t1. Sets `_pending_morf` so
+        the next frame's walk step re-triggers the oldframe-morf (procMove_init on WAIT->MOVE, 6215)."""
+        self.started = True
+        m = float(morf)
+        self.st.set_wait_idle(ratio, r27_anim, m)
+        state = dict(move0=self.st.move0, move1=self.st.move1, f0=self.st.fc0.frame,
+                     f1=self.st.fc1.frame, ratio=self.st.ratio, m3598=self.st.m3598, morf=True)
+        self._foot_speedf(0.0, _f32(msd), state, m)   # poses ATNW@0, shifts it into the toe stream
+        self._pending_morf = m
+        return 0.0
+
     def _shift(self, cur, f312, msd):
         self.m35B4 = _f32(msd)
         self.t2 = self.t1

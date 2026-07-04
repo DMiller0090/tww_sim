@@ -37,6 +37,8 @@ ANIM_META = {
     'rollf': (19, EMode_NONE),   # ANM_ROLLF (forward roll); single-anim during FRONT_ROLL
     'rot':   (9,  EMode_LOOP),   # ANM_ROT   (pivot in place); single-anim during WAIT_TURN
     'slip':  (7,  EMode_NONE),   # ANM_SLIP  (reversal skid);  single-anim during SLIP
+    'atnwls': (18, EMode_LOOP),  # ANM_ATNWLS (turn-in-place walk-step L); WAIT idle-proc re-pose
+    'atnwrs': (18, EMode_LOOP),  # ANM_ATNWRS (turn-in-place walk-step R); WAIT idle-proc re-pose
 }
 
 # HIO daPy_HIO_move_c0::m constants (the flat free-walk subset).
@@ -171,6 +173,18 @@ class UnderAnimState:
         self.ratio = 0.0
         frame = fp.fsubs(float(end), 0.001) if rate < 0.0 else float(start)
         self.fc0.set(ANIM_META[anim][1], float(start), float(end), float(rate), frame)
+
+    def set_wait_idle(self, ratio, r27_anim, i_morf):
+        """daPy_lk_c::setBlendMoveAnime idle branch (2966), the ModeFlg_00000001 + regime-1 +
+        shape_angle.y != m34DE arm (line 3132): the WAIT idle proc, having just pivoted, poses the
+        turn-in-place walk-step. MOVE0 = ANM_WAITS, MOVE1 = ANM_ATNWLS/ATNWRS at `ratio`
+        (= clamp(0.5 + 0.001*|shape_angle.y - m34DE|, 0, 1)), r29 = 2, m3598 = 0. The frame-ctrl
+        arguments are in_f27 = mMove.field_0x38 (1.1), f29 = mAtnMove.field_0x28 (1.0). Called with
+        m34C3 == 0 (single-anim ROT preceded it), so the phase resets to frame 0. Returns whether
+        the oldframe-morf triggered."""
+        morf = self._set_move_anime(ratio, 1.1, 1.0, 'waits', r27_anim, 2, i_morf)
+        self.m3598 = 0.0
+        return morf
 
     def step_single(self):
         """Advance the single-anim frame ctrl one game frame (J3DFrameCtrl::update) and return the

@@ -262,6 +262,16 @@ def test_waitturn_pivots_in_place_then_walks():
     assert abs(_deg(s.facing) - 180.0) < 0.1 and abs(_deg(s.travel) - 180.0) < 0.1
 
 
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_waitturn_position_bit_exact():
+    # Idle full-reverse pivot (WAIT_TURN ANM_ROT -> WAIT idle-proc WAITS/ANM_ATNWRS re-pose) -> reversed
+    # walk-off: whole arc position bit-exact via the anim engine. Live pos_z 690.471 @f15 (explore_waitturn).
+    s, _ = _run_turn(_DN * 15)
+    assert WAIT_TURN in s.visited and MOVE_TURN not in s.visited and SLIP not in s.visited
+    assert s.state == MOVE
+    assert abs(s.pos_z - 690.471) < 0.05
+
+
 def test_moveturn_below_slip_threshold():
     # 1 up frame (barely moving, speedF/max << 0.6) then full reverse -> procMoveTurn(1) directly,
     # no SLIP. Halves nspeed at entry then re-accelerates while facing sweeps to the reversed travel.
