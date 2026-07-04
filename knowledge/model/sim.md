@@ -32,15 +32,16 @@ stop](../mechanics/land-movement.md)). The **remaining residual** is a sub-ULP-p
 anim-driven `speedF` (the foot-FK FMA chain) and/or the cos table, accumulating over the run — the open
 target for bit-perfect land position. Same f32-vs-f64 discipline as the swim rules below.
 
-**This is now enforced to the byte.** Land position is regression-locked two ways, so a precision drift
-like the f64-sum bug (which the old `< 0.05` tolerance — ~400 ULP wide — never caught) fails loudly:
-- **Offline** (`tests/test_land.py`, no Dolphin): every `pos_z`/`speedF` is asserted **bit-exact**
-  (`f32_bits(sim) == golden`, 0 ULP) against a full-precision snapshot golden regenerated from the exact
-  f32 seed via `tests/gen_land_golden.py`. Reverting to an f64 sum fails 11 tests with byte-level diffs.
-- **Live** (`tests/dolphin/run_land_tests.py`, source of truth): the pass condition is **float-perfect,
-  0 ULP vs live**. Techs already there (brakeslide/roll_run/roll_ebs/moveturn) are hard-locked at 0; the
-  open residuals live in `KNOWN_POSZ_GAP_ULP` as tracked xfails (walk 2, ebs/face_left/waitturn 1,
-  brake_right/roll_settle 2, roll_slow 4, slip 74 ULP). Emptying that map = bit-perfect land position.
+**This is now enforced to the byte** by two tests with distinct jobs:
+- **Live** (`tests/dolphin/run_land_tests.py`, the accuracy gate — live is the source of truth): the
+  pass condition is **float-perfect, 0 ULP vs live**, with NO tolerance and NO xfail. It is currently
+  **RED**: `brakeslide/roll_run/roll_ebs/moveturn` pass (0 ULP), while `walk (2), ebs (1), face_left
+  (1), brake_right (2), roll_slow (4), roll_settle (2), waitturn (1), slip (74 ULP)` FAIL on the open
+  residual below. Those failures are the to-do list for a bit-perfect land position.
+- **Offline** (`tests/test_land.py`, no Dolphin): a deterministic **regression lock** — asserts the sim
+  reproduces its own committed f32 snapshot bit-exact, so any fp-math change (an f64-sum revert, an FMA
+  re-order, a cos edit, an imprecise seed) fails. It is NOT an accuracy claim; regenerate the snapshot
+  when the sim is deliberately changed via `python tests/gen_land_golden.py`.
 
 ## Console cosine table
 

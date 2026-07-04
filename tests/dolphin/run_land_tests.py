@@ -20,14 +20,12 @@ and travel (current.angle.y) are all BIT-EXACT -- including roll_ebs, whose ~-23
 comes from the roll's getFrame()>17 checkNextMode(1) exit straight to ATN then the backward-flip.
 
 POSITION (pos_z) IS GATED FLOAT-PERFECT -- 0 ULP vs live is the pass condition (LIVE IS THE SOURCE OF
-TRUTH; the sim must reproduce the game's pos_z byte for byte). posz_status() enforces this. Some techs
-are ALREADY float-perfect (brakeslide/roll_run/roll_ebs/moveturn) and are hard-locked at 0 ULP -- any
-drift FAILS. The rest carry a small OPEN residual (the sub-ULP speedF/cos accumulation, see
-_notes/handoff-2026-07-04r-land-precision-*), recorded in KNOWN_POSZ_GAP_ULP as EXPECTED FAILURES
-(xfail): they print "NOT float-perfect", keep the suite green, and if one reaches 0 it prints "** NOW
-float-perfect -> lock it" (delete its entry). A gap that GROWS past its ledger value is a hard FAIL.
-The goal is to empty that map. Each case also layers its tech assertions. (Runs with no anim keyframe
-data fall back to the calibrated stand-in and pos_z is not asserted.)
+TRUTH; the sim must reproduce the game's pos_z byte for byte). posz_status() enforces this with NO
+tolerance and NO xfail: a tech that is not bit-exact shows RED. Today brakeslide/roll_run/roll_ebs/
+moveturn pass (0 ULP); walk/ebs/face_left/brake_right/roll_slow/roll_settle/waitturn/slip FAIL on an
+open sub-ULP speedF/cos accumulation residual (see the handoff to resolve it). Each case also layers
+its tech assertions. (Runs with no anim keyframe data fall back to the calibrated stand-in and pos_z
+is not asserted.)
 
 DTM-PLAYBACK (wiggle_ebs_roll): the wiggle-EBS-into-roll chain is DENSE frame-perfect input, where
 the advanceseq pipe could jitter (bug#2). It is locked by loading a movie-active savestate fixture
@@ -64,38 +62,24 @@ ANCHOR = resolve_anchor("land_flatwalk@twwgz")
 READS = ["link_state", "potential_speed", "true_speed", "shape_angle_y",
          "travel_angle", "csangle", "pos_x", "pos_z", "anim_frame"]
 
-# Ledger of cases NOT float-perfect yet: label -> current sim-vs-live pos_z gap in f32 ULP (an OPEN
-# residual, NOT a tolerance). Gate + xfail semantics: posz_status()/module docstring. Goal: empty it.
-KNOWN_POSZ_GAP_ULP = {
-    "walk_run": 2, "ebs": 1, "face_left": 1, "brake_right": 2,
-    "roll_slow": 4, "roll_settle": 2, "waitturn": 1, "slip": 74,
-}   # (brakeslide/roll_run/roll_ebs/moveturn are already float-perfect -> not listed -> hard-locked at 0)
-
-
 def f32_bits(x):
     """Raw uint32 bits of x rounded to float32; |bits(a)-bits(b)| is the exact ULP distance here."""
     return struct.unpack("<I", struct.pack("<f", x))[0]
 
 
 def posz_status(sim, live, label):
-    """FLOAT-PERFECT sim-vs-live pos_z gate. Returns (kind, desc) where kind is one of
-    'ok' (0 ULP, float-perfect), 'xfail' (known open residual), 'xpass' (a listed case reached 0 --
-    lock it), 'fail' (regressed past its known gap, or a non-listed case is not 0). Returns None when
-    position isn't asserted (no anim keyframe data -> the calibrated stand-in is active)."""
+    """FLOAT-PERFECT sim-vs-live pos_z gate. Pass condition is 0 ULP -- the sim must reproduce the
+    game's pos_z BYTE FOR BYTE (live is the source of truth). ANY nonzero gap is a hard FAIL: there is
+    no tolerance and no xfail, so a not-yet-bit-perfect tech shows RED until the sim is fixed. Returns
+    ('ok'|'fail', desc), or None when position isn't asserted (no anim data -> calibrated stand-in)."""
     if getattr(sim, "_pos_fallback", False) or sim._foot is None:
         return None
     bit = abs(f32_bits(sim.pos_z) - f32_bits(live["pos_z"]))
-    known = KNOWN_POSZ_GAP_ULP.get(label, 0)
     tag = (f"[{bit} ULP]  sim {sim.pos_z!r} (0x{f32_bits(sim.pos_z):08x}) / "
            f"live {live['pos_z']!r} (0x{f32_bits(live['pos_z']):08x})")
     if bit == 0:
-        if known == 0:
-            return ("ok", f"pos_z FLOAT-PERFECT (0 ULP vs live)  {tag}")
-        return ("xpass", f"pos_z NOW FLOAT-PERFECT (was {known} ULP) -- delete '{label}' from "
-                         f"KNOWN_POSZ_GAP_ULP to lock it  {tag}")
-    if bit <= known:
-        return ("xfail", f"pos_z NOT float-perfect: known open {known}-ULP residual  {tag}")
-    return ("fail", f"pos_z REGRESSED past its known {known}-ULP gap (float-faithfulness lost)  {tag}")
+        return ("ok", f"pos_z FLOAT-PERFECT (0 ULP vs live)  {tag}")
+    return ("fail", f"pos_z NOT float-perfect ({bit} ULP off live) -- open precision residual  {tag}")
 
 # DTM-playback fixture: a movie-active savestate -- loading it restores a recorded movie at frame 0
 # and `advance` replays it through the movie system (faithful for dense input). Dev-local; SKIPS if absent.
@@ -315,23 +299,18 @@ TURN_CASES = [
 ]
 
 
-# pos-line markers by posz_status kind: ok/xfail don't fail the case; xpass flags a lock-me; fail fails.
-_POS_MARK = {"ok": "ok ", "xfail": "xf ", "xpass": "** ", "fail": "X  "}
-
-
 def emit_case(label, note, checks, sim, live, counts):
-    """Print one SIM-vs-LIVE case: the (bit-exact) core/tech checks + the FLOAT-PERFECT pos_z gate.
-    A case FAILS iff a core/tech check fails OR pos_z regressed past its known gap. 'xfail' (a known
-    open pos residual) and 'xpass' (a residual that just reached 0) are tracked but keep the suite green."""
+    """Print one SIM-vs-LIVE case: the bit-exact core/tech checks + the FLOAT-PERFECT pos_z gate. A
+    case FAILS iff a core/tech check fails OR pos_z is not 0 ULP vs live (no tolerance, no xfail -- an
+    inaccurate tech shows RED)."""
     pos = posz_status(sim, live, label)
-    hard_fail = (not all(c[0] for c in checks)) or (pos is not None and pos[0] == "fail")
-    print(f"{'FAIL' if hard_fail else 'PASS'} {label:<12} (SIM-vs-LIVE: {note})")
+    fail = (not all(c[0] for c in checks)) or (pos is not None and pos[0] == "fail")
+    print(f"{'FAIL' if fail else 'PASS'} {label:<12} (SIM-vs-LIVE: {note})")
     for passed, desc in checks:
         print(f"     {'ok ' if passed else 'X  '}{desc}")
     if pos is not None:
-        print(f"     {_POS_MARK[pos[0]]}{pos[1]}")
-        counts[pos[0]] = counts.get(pos[0], 0) + 1
-    counts["fail" if hard_fail else "pass"] = counts.get("fail" if hard_fail else "pass", 0) + 1
+        print(f"     {'ok ' if pos[0] == 'ok' else 'X  '}{pos[1]}")
+    counts["fail" if fail else "pass"] += 1
 
 
 def main():
@@ -394,14 +373,7 @@ def main():
                 for passed, desc in checks:
                     print(f"     {'ok ' if passed else 'X  '}{desc}")
     if not record:
-        xf, xp = counts.get("xfail", 0), counts.get("xpass", 0)
-        extra = ""
-        if xf:
-            extra += (f", {xf} pos_z NOT-float-perfect yet (known open residuals in "
-                      "KNOWN_POSZ_GAP_ULP)")
-        if xp:
-            extra += f", {xp} pos_z NOW float-perfect (** -> delete from KNOWN_POSZ_GAP_ULP to lock)"
-        print(f"\n{counts['pass']} passed, {counts['fail']} failed{extra}")
+        print(f"\n{counts['pass']} passed, {counts['fail']} failed")
         sys.exit(1 if counts["fail"] else 0)
 
 

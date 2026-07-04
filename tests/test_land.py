@@ -5,16 +5,17 @@ the FREE_WAIT->MOVE->WAIT state machine -- as a golden arc, without needing Dolp
 live sim-vs-live gate is tests/dolphin/run_land_tests.py::walk_run; this is its token-cheap
 offline shadow (same walk seq, same anchor rest seed, values pinned from land_walk_gt.csv).
 
-FLOAT ACCURACY IS ENFORCED TO THE BYTE. speedF and position are a BIT-EXACT snapshot of the sim's
-f32 output: the golden (tests/golden/land_walk_speedf.csv) and the CASE_POSZ endpoints store the
-exact float32 bytes (as uint32 hex), and the tests assert `f32_bits(sim) == golden` -- ZERO ULP of
-slack. This is deliberate: the old `abs(sim - live) < 0.05` tolerance was ~400 float32 ULP wide at a
-~1000-unit magnitude, so the f64-running-sum position bug (which was ~2 ULP off) slid straight
-through. A bit-exact snapshot catches ANY fp-math change -- an f32<->f64 accumulation swap, an FMA
-re-ordering in the anim FK, a cos-table edit, or an imprecise seed. The values are decomp-faithful
-f32 (the game stores pos.{x,z} as f32 cXyz and re-rounds each frame); sim-vs-LIVE faithfulness (the
-open <=~2 ULP residual toward a bit-perfect stop) is tracked by run_land_tests.py, NOT here.
-Regenerate after a DELIBERATE fp change: `python tests/gen_land_golden.py`.
+WHAT THIS IS (and is NOT). speedF and position are a BIT-EXACT snapshot of the SIM's OWN current f32
+output -- a deterministic REGRESSION LOCK, not an accuracy gate. The golden
+(tests/golden/land_walk_speedf.csv) and the CASE_POSZ endpoints store the sim's exact float32 bytes
+(uint32 hex) and the tests assert `f32_bits(sim) == golden` (0 ULP), so ANY fp-math change moves the
+bits and fails: an f32<->f64 accumulation swap, an FMA re-ordering in the anim FK, a cos-table edit,
+an imprecise seed. That is the guard the old `< 0.05` tolerance (~400 ULP wide) lacked when the
+f64-running-sum bug landed. It is NOT a claim that the sim is bit-perfect vs the GAME -- it is not
+(the sim is still 1-74 ULP off live on several techs). LIVE ACCURACY is gated by
+tests/dolphin/run_land_tests.py, which is RED for those open residuals until the sim is fixed. When
+that fix lands, this snapshot must be regenerated (the sim output changes): `python
+tests/gen_land_golden.py`.
 
 This only bites WHEN the copyrighted anim keyframe data is present under _generated/anim/ (dev
 machines). Without it LandState falls back to the calibrated stand-in, so the byte-exact tests SKIP
