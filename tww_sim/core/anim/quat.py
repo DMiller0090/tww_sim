@@ -210,6 +210,21 @@ def psmtx_quat(q, scale_mode='fres'):
     return m
 
 
+# Optional native (bit-exact) hot quat ops (anim/_anmc.pyx); absent -> the pure-Python defs above run.
+# psmtx_quat's non-default scale modes stay on the Python path (off the foot loop). See fp-faithfulness.md.
+try:
+    from . import _anmc as _N
+    _N.init_tables(S._COS_TABLE, S._SIN_TABLE)
+    euler_to_quat = _N.euler_to_quat
+    quat_lerp = _N.quat_lerp
+    _py_psmtx_quat = psmtx_quat
+
+    def psmtx_quat(q, scale_mode='fres'):        # noqa: F811 - native dispatcher over the Python impl
+        return _N.psmtx_quat(q) if scale_mode == 'fres' else _py_psmtx_quat(q, scale_mode)
+except ImportError:
+    pass
+
+
 def mtx_quat(q, scale_mode='fres'):
     """C_MTXQuat math (mtx.c:970), fused ops. q=(w,x,y,z). Returns 3x4 rotation matrix (trans=0).
 

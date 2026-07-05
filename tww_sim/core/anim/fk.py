@@ -231,14 +231,35 @@ def foot_toe_local(anm, skeleton, frame, foot_jnt=34, toe=L_TOE):
     return mtx_mult_vec(cur, toe)
 
 
+# Optional native (bit-exact) 3x4 matrix concat / mult-vec (anim/_anmc.pyx); mtx_concat is the single
+# hottest walk-path function. Absent -> the Python defs above run unchanged. See fp-faithfulness.md.
+try:
+    from . import _anmc as _N
+    _N.init_tables(S._COS_TABLE, S._SIN_TABLE)
+    mtx_concat = _N.mtx_concat
+    mtx_mult_vec = _N.mtx_mult_vec
+except ImportError:
+    pass
+
+
+_LOAD_CACHE = None
+
 def load():
-    anm = j3d_eval.load_anim()
-    here = os.path.dirname(os.path.abspath(__file__))
-    rb = here
-    while rb != os.path.dirname(rb) and not os.path.exists(os.path.join(rb, 'pyproject.toml')):
-        rb = os.path.dirname(rb)
-    sk = json.load(open(os.path.join(rb, '_generated', 'anim', 'link_skeleton.json')))
-    return anm, sk
+    """(anim, skeleton), CACHED. Both are read-only parsed data shared across every FootSpeedF /
+    FootFK instance (and thus every A* clone) -- see load_anim. Eliminates the ~7ms/clone JSON
+    re-parse that dominated the land planner. Call j3d_eval._ANIM_CACHE.clear() / reset here only if
+    the dev-supplied data on disk changes mid-process (it never does in a run)."""
+    global _LOAD_CACHE
+    if _LOAD_CACHE is None:
+        anm = j3d_eval.load_anim()
+        here = os.path.dirname(os.path.abspath(__file__))
+        rb = here
+        while rb != os.path.dirname(rb) and not os.path.exists(os.path.join(rb, 'pyproject.toml')):
+            rb = os.path.dirname(rb)
+        with open(os.path.join(rb, '_generated', 'anim', 'link_skeleton.json')) as f:
+            sk = json.load(f)
+        _LOAD_CACHE = (anm, sk)
+    return _LOAD_CACHE
 
 
 if __name__ == '__main__':

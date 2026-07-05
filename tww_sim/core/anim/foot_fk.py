@@ -21,6 +21,13 @@ from . import j3d_eval
 from . import quat as Q
 from . import fk
 
+# Optional native fused per-joint blend (anim/_anmc.pyx); used only on the world-space FK path (its
+# quatfn is PSMTXQuat, which the native blend hardcodes). Absent -> Python path. See fp-faithfulness.md.
+try:
+    from . import _anmc as _N
+except ImportError:
+    _N = None
+
 # union of both foot chains, in joint-index (calc) order; each processed once per frame.
 CHAIN_JOINTS = [0, 1, 29, 30, 31, 32, 33, 34, 36, 37, 38, 39]
 MORF_START, MORF_END = 0, 0x2A          # initOldFrameMorf(2.4, 0, 0x2A) joint range
@@ -68,6 +75,16 @@ class FootFK:
         self.anms = anms
         self.sk = sk
         self.parent = {j['index']: j['parent'] for j in sk['joints']}
+        # Static root->foot FK chains (jnt 39 = right, 34 = left), accumulated once per foot per frame
+        # and shared by that foot's toe AND heel vectors (see _chain_mtx).
+        self._chains = {}
+        for fj in (34, 39):
+            ch = []
+            j = fj
+            while j != -1:
+                ch.append(j); j = self.parent[j]
+            ch.reverse()
+            self._chains[fj] = ch
         self.morf = MorfState()
         self.old_quat = {}          # jnt -> (w,x,y,z) posed quat last frame
         self.old_trans = {}         # jnt -> (x,y,z) posed translate last frame
@@ -117,6 +134,23 @@ class FootFK:
     def _pose_frame(self, move0, move1, f0, f1, ratio, rate):
         """Pose all chain joints once, return {jnt: local 3x4 matrix}."""
         local = {}
+        if _N is not None and self.world:
+            # Fused native path: one C call per joint does the whole blend + PSMTXQuat + scale/trans,
+            # returning the local matrix and the (quat, trans, scale) to store as the new old pose.
+            anm0 = self.anms[move0]; anm1 = self.anms[move1]
+            ct = j3d_eval.calc_transform
+            oq = self.old_quat; ot = self.old_trans; os_ = self.old_scale
+            morf_on = rate > 0.0
+            for jnt in CHAIN_JOINTS:
+                i0 = ct(anm0, jnt, f0)
+                i1 = ct(anm1, jnt, f1)
+                apply_morf = morf_on and MORF_START <= jnt < MORF_END and jnt in oq
+                m, q3, trans, scale = _N.blend_joint(
+                    i0, i1, ratio, rate, apply_morf,
+                    oq.get(jnt), ot.get(jnt), os_.get(jnt))
+                oq[jnt] = q3; ot[jnt] = trans; os_[jnt] = scale
+                local[jnt] = m
+            return local
         for jnt in CHAIN_JOINTS:
             q3, trans, scale = self._blend_joint(move0, move1, f0, f1, ratio, jnt, rate)
             m = self.quatfn(q3)                      # 3x3 rotation, trans column 0 (PSMTXQuat in world mode)
@@ -128,24 +162,26 @@ class FootFK:
             local[jnt] = m
         return local
 
-    def _toe(self, local, foot_jnt, toe):
-        chain = []
-        j = foot_jnt
-        while j != -1:
-            chain.append(j); j = self.parent[j]
-        chain.reverse()
+    def _chain_mtx(self, local, foot_jnt):
+        """The accumulated FK matrix for one foot's chain (shared by that foot's toe AND heel).
+        World mode: m37B4 * (worldBase * localChain(FOOT)); identity mode: localChain only."""
+        chain = self._chains[foot_jnt]
         if self.world and self.base is not None:
             # World-space FK: start at worldBase, accumulate local chain (world-magnitude quantization),
             # then anmMtx-to-model via m37B4 (posMoveFromFootPos: spB0 = m37B4 * anmMtx(FOOT) * toe).
+            if _N is not None:
+                return _N.chain_concat(self.base, self.m37b4, [local[j] for j in chain])
             cur = [row[:] for row in self.base]
             for jnt in chain:
                 cur = fk.mtx_concat(cur, local[jnt])
-            cur = fk.mtx_concat(self.m37b4, cur)
-        else:
-            cur = None
-            for jnt in chain:
-                cur = local[jnt] if cur is None else fk.mtx_concat(cur, local[jnt])
-        return fk.mtx_mult_vec(cur, toe)
+            return fk.mtx_concat(self.m37b4, cur)
+        cur = None
+        for jnt in chain:
+            cur = local[jnt] if cur is None else fk.mtx_concat(cur, local[jnt])
+        return cur
+
+    def _toe(self, local, foot_jnt, toe):
+        return fk.mtx_mult_vec(self._chain_mtx(local, foot_jnt), toe)
 
     def seed(self, move0, f0):
         """Populate old pose from a single anim (e.g. FREEB rest) before the first walk step."""
@@ -170,9 +206,13 @@ class FootFK:
             self.morf.init_morf(i_morf)
         rate = self.morf.rate
         local = self._pose_frame(move0, move1, f0, f1, ratio, rate)
+        # Accumulate each foot's chain matrix ONCE, then read both the toe and heel off it.
+        cur39 = self._chain_mtx(local, 39)
+        cur34 = self._chain_mtx(local, 34)
+        mv = fk.mtx_mult_vec
         out = {
-            'toe': [self._toe(local, 39, fk.L_TOE), self._toe(local, 34, fk.L_TOE)],
-            'heel': [self._toe(local, 39, fk.L_HEEL), self._toe(local, 34, fk.L_HEEL)],
+            'toe': [mv(cur39, fk.L_TOE), mv(cur34, fk.L_TOE)],
+            'heel': [mv(cur39, fk.L_HEEL), mv(cur34, fk.L_HEEL)],
         }
         self.morf.dec()
         return out

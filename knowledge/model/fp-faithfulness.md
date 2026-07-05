@@ -138,10 +138,28 @@ corrected table + Newton, the leg chain jnt0..jnt33 is bit-exact vs the live `an
 
 ## Cython fast path
 
-`core/_fpc.pyx` (`cpdef inline <float>`) is a drop-in, **bit-identical** replacement for the ctypes
-f32 ops (`fp.py` imports it, falls back to ctypes) — ~2.4× on the swim planner. Build with the
-scratch `_build_fpc.py`. Compiling the whole anim stack (`fk`/`quat`/`j3d_eval`) was faster still but
-a 32-bit-C overflow in `quat._fres` (`1<<52`) broke it — kept in ctypes for now.
+Two optional, **bit-identical** native accelerators; both fall back to pure Python when the compiled
+`.pyd` is absent (the `.pyx` source is tracked, the `.pyd`/`.c` are gitignored). Build both with
+`_build_native.py` (`python _build_native.py` = both; `… _anmc` = just the anim one).
+
+- **`core/_fpc.pyx`** (`cpdef inline <float>`) — the f32 ops (`fp.py` imports it, else ctypes). ~2.4×
+  on the swim planner.
+- **`core/anim/_anmc.pyx`** — the **land-walk anim hot loop**. The whole per-frame foot-FK / quaternion
+  / Hermite chain is the bottleneck (~95% of `LandState.step` with anim data present), and every tiny
+  `fp` op there was a Python call. `_anmc` ports the hot functions (`mtx_concat`/`mtx_mult_vec`,
+  `euler_to_quat`/`quat_lerp`/`psmtx_quat`, `hermite_s16`/`hermite_f32`) **and** a fused per-joint
+  blend (`blend_joint`: euler→quat×2 → lerp → oldframe-morf → PSMTXQuat → scale/trans in one C call)
+  and a whole-chain `chain_concat`, so `fk`/`quat`/`foot_fk` pick them up by name. **7.8× on
+  `LandState.step`** (668 → 86 µs/frame, `tests/benchmark/perf_land.py`), 0-ULP vs the golden suite.
+
+  The old blocker ("32-bit-C overflow in `quat._fres` `1<<52`") is fixed here by doing the `fres` bit
+  surgery in `unsigned long long` (64-bit). `psmtx_quat`'s non-default scale modes stay on the Python
+  path; the native fused blend is used only on the world-space FK path (whose `quatfn` is PSMTXQuat).
+
+Orthogonal but large: `anim/fk.load()` + `j3d_eval.load_anim()` now **cache** the parsed anim/skeleton
+JSON (read-only; the shared `_ct_cache` calc_transform memoize is pure). This cut `LandState.clone()`
+from ~7.8 ms to ~0.08 ms (**~97×**) — it had been re-parsing ~300 KB per clone, dominating the A* land
+planner and every anim-using test.
 
 ## Forward note (collision)
 

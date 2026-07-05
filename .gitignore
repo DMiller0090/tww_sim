@@ -39,9 +39,9 @@ knowledge/_eval/.last_eval_commit
 # to dolphin.local.json and edit for your machine (see harness/dolphin_env.py).
 /dolphin.local.json
 
-# Cython build artifacts (regenerate with _build_fpc.py). The .pyx source IS tracked; the
-# compiled .pyd (platform-specific) and generated .c are not. fp.py falls back to pure-Python
-# ctypes when the compiled _fpc is absent (bit-identical, just slower).
+# Cython build artifacts (regenerate with _build_native.py). The .pyx source IS tracked; the
+# compiled .pyd (platform-specific) and generated .c are not. The Python callers fall back to their
+# pure implementations when the compiled _fpc / _anmc are absent (bit-identical, just slower).
 tww_sim/**/*.pyd
 tww_sim/**/*.c
 build/

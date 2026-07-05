@@ -23,7 +23,7 @@ Extends the rules in memory `superswim-gekko-fp`. Reused later for the collision
 from ctypes import c_float as _c_float
 
 # FAST PATH: the native Cython build (superswim/_fpc.pyx; C (float) cast, bit-identical to ctypes,
-# ~5x faster) when present, else the pure-Python ctypes fallback below (same result). Build: _build_fpc.py.
+# ~5x faster) when present, else the pure-Python ctypes fallback below (same result). Build: _build_native.py.
 try:
     from ._fpc import (f32, fmuls, fadds, fsubs, fdivs, fmadds, fmsubs, fnmadds,  # noqa: F401
                        fnmsubs)

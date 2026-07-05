@@ -157,14 +157,34 @@ def _as_s32(x):
     return x - 0x100000000 if x >= 0x80000000 else x
 
 
+# Optional native (bit-exact) Hermite kernels (anim/_anmc.pyx); _keyframe_interp picks them up by name.
+# Absent -> the Python defs above run unchanged. See fp-faithfulness.md.
+try:
+    from . import _anmc as _N
+    hermite_s16 = _N.hermite_s16
+    hermite_f32 = _N.hermite_f32
+except ImportError:
+    pass
+
+
+_ANIM_CACHE = {}
+
 def load_anim(path=None):
+    """Parse the walk/dash BCK JSON. CACHED per path: the parsed anim is read-only truth (the only
+    mutation is the pure `_ct_cache` calc_transform memoize, which is safe -- and beneficial -- to
+    share across FootSpeedF instances). Re-parsing this ~300KB file on every LandState/clone was
+    ~7ms each and dominated the A* land planner's clone cost."""
     if path is None:
         here = os.path.dirname(os.path.abspath(__file__))
         rb = here
         while rb != os.path.dirname(rb) and not os.path.exists(os.path.join(rb, 'pyproject.toml')):
             rb = os.path.dirname(rb)
         path = os.path.join(rb, '_generated', 'anim', 'link_anim_walk_dash.json')
-    return json.load(open(path))
+    anm = _ANIM_CACHE.get(path)
+    if anm is None:
+        with open(path) as f:
+            anm = _ANIM_CACHE[path] = json.load(f)
+    return anm
 
 
 if __name__ == '__main__':
