@@ -320,10 +320,21 @@ it frozen (the sim's `CameraManual` is frozen for `csy∈{0,128}`, so C-down kee
 new code**: `frozen_pos = walk-sim pos 3 frames after the neutral+C-up input` (the 2-frame `INPUT_DELAY` + one
 `cLib` decel already produce it) — verified bit-exact (live froze at z=795.126 from a Y171 cruise; sim's
 3rd-neutral-frame pos = 795.1258). Because the freeze happens MID-MOTION there is no [resting dead-band](#walk--run-acceleration-baseline),
-so a slow approach + cancel places the frozen float essentially anywhere. **Float-perfect stop achieved
-deterministically**: a diverse beam over the slow-cruise approach (live-valid mags) drilled the freeze to
-**z = 2000.0001221 live = 1 float32 ULP from 2000.0** (`tww_sim/land/plan_land.py` machinery + the freeze model).
-Getting the *exact* float is limited by the sim's ~1-ULP land-position residual — see
+so a slow approach + cancel places the frozen float essentially anywhere.
+
+**Arrive SLOW to arrive fine (the freeze-coast constraint).** The frozen position = walk pos + the
+3-frame coast, and that coast **scales with the approach speed** (2 latency frames still cruise the
+pending sticks). So a fast arrival gives coarse ~10–17u freeze steps; only a SLOW approach gives a fine
+straddle. But you can't crawl arbitrarily slowly: msd < 0.5 collapses to a dead stop (the `dVar9` gate
+above), so the **minimum sustained crawl is msd 0.5 → nspeed≈4.25 → ~1u/frame** (once already moving;
+it can't be started from rest). The finest *sustainable* step is therefore ~1u; sub-ULP resolution
+comes from a drill that fills that 1u step, not from a slower crawl.
+
+**Float-perfect stop achieved deterministically and ROBUSTLY** (`reach_freeze`, 2026-07-05): cruise →
+sustained msd-0.5 crawl → dedup-by-freeze-position drill rests within **~1–4 float32 ULP (< 0.001u) of
+ANY on-axis target** with an all-live-valid seq (the earlier glide-based drill hit ~0.003u only at lucky
+targets — see [history](../history/land-planner-precision.md)). Getting the *exact* float is limited by
+the sim's ~1-ULP land-position residual — see
 [model/sim: land position accumulates in f32](../model/land-sim.md#land-position-accumulates-in-f32-not-an-f64-running-sum).
 
 ## Values

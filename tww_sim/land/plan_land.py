@@ -6,14 +6,19 @@ position (x, z) as an arbitrary float, produce a controller stick sequence that 
 Link there. The bit-exact forward model is `superswim.land.LandState.step` (walk/ATN/roll/turns,
 speedF-driven position); this is the search/planning layer on top of it.
 
-STATUS: milestone 1 -- straight-walk reach, BOTH live-confirmed bit-exact on the open +z corridor:
+STATUS: milestone 1 -- straight-walk reach on the open +z corridor:
   * `reach_straight` -- aim a full-deflection stick at the live bearing each frame, then release to
-    coast to rest; sweep the release frame for the min resting distance. ~0.23u stop (full+neutral
-    only, bit-exact live: SIM-vs-LIVE 0.0003u).
-  * `reach_precise` -- a proportional-speed glide that stays in motion into a crawl, then a
-    truncation search picks the release; ~0.10u stop (the smooth-walk floor), bit-exact live (0.0015u).
-Milestone 2 (C-stick curved reach), the land A* (mirror `plan.py`), roll/turn tech, tap-inch (sub-0.1u
-stops) and basin scoring are follow-ups. v1 targets OPEN GROUND -- wall/pillar collision is unported.
+    coast to rest; sweep the release frame for the min resting distance. Live-confirmed bit-exact
+    (SIM-vs-LIVE 0.0003u). NOTE: the rest is target-SENSITIVE (the 17u full-speed step + fixed ~49u
+    coast lands rest on a coarse lattice) -- 0.1-9u depending on target, not a uniform floor.
+  * `reach_precise` -- a proportional-speed glide into a crawl, then a truncation search picks the
+    release. Also target-sensitive (0.1-9u); the old "0.10u floor" held only near favourable targets.
+  * `reach_freeze` -- ROBUST float-perfect stop via the C-up speed cancel: cruise -> sustained
+    msd-0.5 crawl -> dedup drill. Rests within a few ULP (< 0.001u) of ANY on-axis target, all sticks
+    live-valid. This is the sub-0.1u tech (supersedes reach_straight/precise for exact stops). The
+    approach physics (why you must arrive slow, the msd-0.5 crawl floor) is in land-movement.md.
+Milestone 2 (C-stick curved reach), the land A* (mirror `plan.py`), roll/turn tech, off-axis freeze
+(needs the octagon clamp) and basin scoring are follow-ups. v1 targets OPEN GROUND -- collision unported.
 
 LIVE-FAITHFUL STICKS (hard-won): full deflection (255/1) and neutral (128,128) are bit-exact; a genuine
 partial magnitude (msd 0.3-0.7) is bit-exact; but the sim's msd = min(hypot/54, 1) CAPS, so near-full
@@ -216,81 +221,142 @@ def _freeze_pos(state):
     return c
 
 
-# Live-valid drill magnitudes: msd in (0, 0.889] keeps BOTH stick axes <= 191 for any bearing (the
-# bit-exact regime), plus 1.0 = the full corner; the (0.889,1) -> Y192-254 band diverges live. See KB.
-_DRILL_MSDS = tuple([i / 100.0 for i in range(13, 90)] + [1.0])
+# The min STABLE crawl: msd 0.5 sustains nspeed~4.25 -> ~1u/frame while moving; below 0.5 the walk
+# collapses to rest (movement gate), so Phase 1 cruises first. Why ~1u is the floor: land-movement.md.
+MSD_CRAWL = 0.5
 
 
-def reach_freeze(seed, tx, tz, k=0.5, min_crawl=0.043, turnback=1.0, max_frames=4000,
-                 drill_back=6, beam_width=48):
-    """FLOAT-PERFECT reach via the C-up speed cancel. Glide into a slow crawl toward (tx, tz), then
-    at the best frame issue the cancel (one half-L frame, then neutral stick + C-stick full up) to
-    FREEZE Link mid-motion: the position locks FREEZE_LATENCY frames after the cancel, which the sim
-    reads with zero new code (`_freeze_pos`). Because the freeze truncates the ~49u decel coast to a
-    hard lock, a slow approach can place the frozen float almost anywhere -- far finer than the
-    ~0.10u smooth-walk rest floor of `reach_precise`.
+def _ulp32(x):
+    """The float32 ULP near |x| (positions are f32). Sizes the drill's dedup bucket and early-exit
+    floor without assuming a fixed corridor magnitude."""
+    if x == 0.0:
+        return 2.0 ** -149
+    _, e = math.frexp(abs(x))          # 2**(e-1) <= |x| < 2**e  ->  unbiased exponent = e-1
+    return 2.0 ** (e - 24)             # ulp = 2**(exp-23) = 2**((e-1)-23)
 
-    Two stages, both O(1)-per-candidate on the bit-exact mid-walk clone: (1) sweep the cancel frame
-    over the crawl for the closest coarse freeze; (2) tail beam-drill -- from a few frames before the
-    coarse cancel, branch the next frames over the live-valid magnitude lattice (_DRILL_MSDS, aimed
-    at the live bearing), evaluating a freeze after each (cancel-within-drill) and keeping the beam
-    of states still short of the target. The drill fills the crawl-step gaps: on the open +z corridor
-    it rests ~0.003u (vs reach_precise's 0.10u) with an all-live-valid seq (glide clamped +
-    _DRILL_MSDS). Sub-ULP drilling (finer approach control) + the live re-gate are follow-ups.
 
-    SCOPE: on-axis / +z corridor (like milestone 1). An OFF-AXIS target's glide emits full-deflection
-    DIAGONAL sticks (e.g. (65,244)) that need the octagon clamp -- the separate open decode issue (see
-    the advancewith-off-axis lesson), so off-axis freeze plans are not yet live-valid.
+def _drill_candidates(state, tx, tz):
+    """The fine input lattice at a slow near-target state: NEUTRAL (keep decelerating) plus EVERY
+    distinct live-valid integer walk stick aimed at the live bearing. The magnitude is scanned finely
+    (1/1000) so no distinct integer cell is skipped; the (0.889, 1) band (stick Y in 192-254) is
+    excluded -- the sim's /54 magnitude over-reads live PADClamp there (land-movement.md)."""
+    th = world_angle_s16(tx - state.pos_x, tz - state.pos_z)
+    out = [NEUTRAL]
+    seen = {NEUTRAL}
+    for j in range(2, 1001):
+        msd = j / 1000.0
+        if 0.889 < msd < 1.0:
+            continue
+        stick = stick_for_bearing(th, state.csangle, min(msd, 1.0))
+        if stick not in seen:
+            seen.add(stick)
+            out.append(stick)
+    return out
+
+
+def reach_freeze(seed, tx, tz, coarse_gap=60.0, max_frames=4000, drill_back=8, beam_width=96):
+    """FLOAT-PERFECT reach via the C-up speed cancel: place the FROZEN float within a ULP or two of
+    (tx, tz). Issue the cancel (one half-L frame, then neutral stick + C-stick full up) mid-motion and
+    Link's position locks FREEZE_LATENCY frames later -- which the sim reads with zero new code
+    (`_freeze_pos`). Because the freeze truncates the ~49u decel coast to a hard lock, a slow approach
+    can place the frozen float almost anywhere.
+
+    THREE phases, each O(1)-per-candidate on the bit-exact mid-walk clone:
+      1. cruise full-speed until the freeze is within `coarse_gap` of the target;
+      2. a sustained msd-0.5 crawl (`MSD_CRAWL`, the min STABLE crawl ~1u/frame), snapshotting each
+         frame until the freeze crosses the target. This gives a uniform fine straddle for ANY target
+         -- unlike a proportional glide, which overshoots-at-speed on short trips and stalls to a dead
+         stop on long ones (the freeze coast scales with speed, so you must arrive SLOW to arrive fine);
+      3. a dedup-by-freeze-position beam drill from `drill_back` crawl frames before the crossing:
+         branch over `_drill_candidates` (neutral + the live-valid integer sticks), evaluate a freeze
+         after each, and keep a frontier deduped by quantized freeze position and capped to those
+         nearest the target. This fills the ~1u crawl step down to the float floor.
+
+    Robust on the open +z corridor: every target rests within ~1-4 ULP (< 0.0006u), all sticks
+    live-valid (msd<=0.889 or the full corner), and the whole seq re-simulates to the reported freeze.
+
+    SCOPE: on-axis / +z corridor (like milestone 1). An OFF-AXIS target's crawl emits full-deflection
+    DIAGONAL sticks that need the octagon clamp -- the separate open decode issue (see the
+    advancewith-off-axis lesson) -- so off-axis freeze plans are not yet live-valid.
 
     The approach + cancel hold a FROZEN camera (centered C-stick) so csangle stays put. Returns dict:
-    seq (glide prefix + the FREEZE_LATENCY cancel tail), freeze_dist, freeze_pos (x, z), end
+    seq (approach prefix + the FREEZE_LATENCY cancel tail), freeze_dist, freeze_pos (x, z), end
     (LandState frozen), n_frames. Mechanics: knowledge/mechanics/land-movement.md; model:
     knowledge/model/land-planner.md.
     """
-    walk, snaps = _glide(seed, tx, tz, k, min_crawl, turnback, max_frames, clamp_msd=True)
-    snaps = list(snaps)
+    dx, dz = tx - seed.pos_x, tz - seed.pos_z
+    norm = math.hypot(dx, dz)
+    ux, uz = (dx / norm, dz / norm) if norm > 1e-9 else (0.0, 1.0)
+
+    def proj(px, pz):                  # signed distance along the approach dir PAST the target
+        return (px - tx) * ux + (pz - tz) * uz
 
     def fdist(state):
         e = _freeze_pos(state)
         return math.hypot(tx - e.pos_x, tz - e.pos_z), e
 
-    # Stage 1 -- coarse cancel-frame sweep. Track the closest freeze and the closest one still SHORT
-    # of the target (the drill seed: extend the approach a little to close the gap from below).
+    # Phase 1 -- cruise full-speed until the freeze is within coarse_gap of the target.
+    s = seed.clone()
+    pre = []
+    while len(pre) < max_frames:
+        _, e = fdist(s)
+        if proj(e.pos_x, e.pos_z) >= -coarse_gap:
+            break
+        th = world_angle_s16(tx - s.pos_x, tz - s.pos_z)
+        stick = stick_for_bearing(th, s.csangle, 1.0)
+        s.step(*stick)
+        pre.append(stick)
+
+    # Phase 2 -- sustained msd-0.5 crawl; snapshot each frame until the freeze crosses the target.
+    snaps = [(s.clone(), list(pre))]
+    while len(pre) < max_frames:
+        th = world_angle_s16(tx - s.pos_x, tz - s.pos_z)
+        stick = stick_for_bearing(th, s.csangle, MSD_CRAWL)
+        s.step(*stick)
+        pre.append(stick)
+        snaps.append((s.clone(), list(pre)))
+        _, e = fdist(s)
+        if proj(e.pos_x, e.pos_z) > 0.0:
+            break
+
+    # closest freeze over the crawl, and the last snapshot still SHORT of the target (drill seed).
     best = None
     ci = 0
-    for i, snap in enumerate(snaps):
-        d, e = fdist(snap)
+    for i, (st, p) in enumerate(snaps):
+        d, e = fdist(st)
         if best is None or d < best[0]:
-            best = (d, e, list(walk[:len(walk) - (len(snaps) - 1) + i]))
-        # closest snapshot whose freeze has not yet passed the target (approach-from-below drill seed)
-        rem_before = math.hypot(tx - snap.pos_x, tz - snap.pos_z)
-        rem_after = math.hypot(tx - e.pos_x, tz - e.pos_z)
-        if rem_after <= rem_before:                # freeze still lands short -> keep extending
+            best = (d, e, p)
+        if proj(e.pos_x, e.pos_z) <= 0.0:
             ci = i
 
-    # Stage 2 -- tail beam-drill from `drill_back` frames before the from-below cancel point.
-    start_i = max(0, ci - drill_back)
-    walk_prefix = list(walk[:len(walk) - (len(snaps) - 1) + start_i])
-    beam = [(snaps[start_i], list(walk_prefix))]
-    for _ in range(drill_back + 8):                # depth: enough to cross the target from start_i
-        cand = []
-        for st, pre in beam:
-            th = world_angle_s16(tx - st.pos_x, tz - st.pos_z)
-            for msd in _DRILL_MSDS:
-                stick = stick_for_bearing(th, st.csangle, msd)
+    # Phase 3 -- dedup-by-freeze-position beam drill from drill_back crawl frames before the crossing.
+    ulp = _ulp32(tz)
+    bucket = ulp * 0.25                # ~1/4 ULP: dedups true duplicates, keeps distinct freezes apart
+    start = max(0, ci - drill_back)
+    st0, p0 = snaps[start]
+    _, e0 = fdist(st0)
+    frontier = {round(proj(e0.pos_x, e0.pos_z) / bucket): (st0, p0)}
+    for _ in range(drill_back + 8):
+        nxt = {}
+        for st, p in frontier.values():
+            for stick in _drill_candidates(st, tx, tz):
                 c = st.clone()
                 c.step(*stick)
                 d, e = fdist(c)
-                cand.append((d, c, pre + [stick], e))
-        if not cand:
+                if d < best[0]:
+                    best = (d, e, p + [stick])
+                pj = proj(e.pos_x, e.pos_z)
+                if pj <= 0.02:         # keep the still-short-of-target frontier
+                    key = round(pj / bucket)
+                    if key not in nxt:
+                        nxt[key] = (c, p + [stick])
+        if not nxt:
             break
-        cand.sort(key=lambda t: t[0])
-        if cand[0][0] < best[0]:
-            best = (cand[0][0], cand[0][3], cand[0][2])
-        # keep the closest states, preferring those whose freeze is still short of the target
-        below = [t for t in cand if math.hypot(tx - t[1].pos_x, tz - t[1].pos_z)
-                 >= math.hypot(tx - t[3].pos_x, tz - t[3].pos_z)][:beam_width]
-        beam = [(t[1], t[2]) for t in (below if below else cand[:beam_width])]
+        if len(nxt) > beam_width:      # cap to the freezes nearest the target (key ~ proj/bucket)
+            nxt = dict(sorted(nxt.items(), key=lambda kv: abs(kv[0]))[:beam_width])
+        frontier = nxt
+        if best[0] <= ulp * 1.01:      # hit the float floor -- no point drilling finer
+            break
 
     d, end, prefix = best
     seq = list(prefix) + [NEUTRAL] * FREEZE_LATENCY

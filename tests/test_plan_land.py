@@ -110,8 +110,8 @@ def _live_valid_stick(sx, sy):
 
 
 def test_reach_freeze_seq_live_valid_and_reproduces():
-    # On-axis (+z corridor): every emitted stick is live-valid (glide clamped + the <=0.889/1.0 drill
-    # lattice), and re-simulating the whole seq reproduces the reported freeze position exactly.
+    # On-axis (+z corridor): every emitted stick is live-valid (the msd-0.5 crawl + the <=0.889/1.0
+    # drill lattice), and re-simulating the whole seq reproduces the reported freeze position exactly.
     r = reach_freeze(_seed(), 0.0, 2000.0)
     assert all(_live_valid_stick(*st) for st in r['seq']), "non-live-valid stick in freeze plan"
     s = _seed()
@@ -120,11 +120,25 @@ def test_reach_freeze_seq_live_valid_and_reproduces():
     assert dist2d(s, 0.0, 2000.0) == pytest.approx(r['freeze_dist'], abs=1e-4)
 
 
+@pytest.mark.parametrize("tz", [900.0, 1200.0, 2000.0, 3000.0])   # short / mid / lucky / long
+def test_reach_freeze_robust_float_perfect(tz):
+    # ROBUST float-perfect across the whole corridor (not just lucky targets): rest < 8 f32-ULP-near-tz
+    # (~1e-3u), every stick live-valid, and the full seq re-simulates to the reported freeze.
+    ulp = 2.0 ** (math.frexp(tz)[1] - 1 - 23)      # float32 ULP near tz
+    r = reach_freeze(_seed(), 0.0, tz)
+    assert all(_live_valid_stick(*st) for st in r['seq']), "non-live-valid stick in freeze plan"
+    assert r['freeze_dist'] < 8 * ulp, "%.6fu = %.1f ULP" % (r['freeze_dist'], r['freeze_dist'] / ulp)
+    s = _seed()
+    for st in r['seq']:
+        s.step(*st)
+    assert dist2d(s, 0.0, tz) == pytest.approx(r['freeze_dist'], abs=1e-4)
+
+
 @pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
 def test_reach_freeze_beats_precise_rest():
-    # The C-up freeze locks mid-motion, so it places the stop far finer than the ~0.10u smooth-walk
-    # rest floor. On the open +z corridor it rests ~0.003u -- well under reach_precise's rest.
+    # The C-up freeze locks mid-motion, so it places the stop far finer than reach_precise's rest
+    # (which itself is target-sensitive, 0.1-9u). On the open +z corridor the freeze rests < 0.001u.
     precise = reach_precise(_seed(), 0.0, 2000.0)
     freeze = reach_freeze(_seed(), 0.0, 2000.0)
     assert freeze['freeze_dist'] < precise['resting_dist']
-    assert freeze['freeze_dist'] < 0.02
+    assert freeze['freeze_dist'] < 0.001

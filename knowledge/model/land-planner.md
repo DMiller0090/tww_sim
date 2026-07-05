@@ -5,8 +5,10 @@ proportional glide, the C-up freeze)? What is the live-valid stick set? How clos
 what are the current gaps (curve residual, pillar collision)? What are the two use-case accuracy bars
 (seam clips vs RTA setups)?
 **Status:** milestone 1 — straight-walk reach bit-exact live; `reach_freeze` deterministic C-up-cancel
-stop ~0.003u on the +z corridor (all-live-valid), the one-off beam reached 1 ULP at z=2000. Sweeps are
-O(n) via bit-exact mid-walk clone. Open: sub-ULP freeze drill, off-axis octagon clamp, collision, A*.
+stop now **robustly float-perfect** — within a few float32 ULP (< 0.001u) of ANY on-axis target
+(all-live-valid), not just lucky ones. Sweeps are O(n) via bit-exact mid-walk clone. Open: off-axis
+octagon clamp, collision, A*. (Note: `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u
+— use `reach_freeze` for exact stops.)
 **Source:** `tww_sim/land/plan_land.py`; live-validated via `advanceseq`. Forward model:
 [land sim](land-sim.md) · [land movement](../mechanics/land-movement.md).
 
@@ -37,11 +39,15 @@ cases set very different accuracy bars:
   live-valid set below).
 - `reach_straight(seed, tx, tz)` — aim full stick at the LIVE bearing each frame; sweep the release
   frame for minimum **resting** distance and stop at the FIRST local min (past it the re-aim orbits
-  back through turn procs). Best safe-stick stop ≈ 0.23u, bit-exact live.
+  back through turn procs). Bit-exact live, but the rest is **target-SENSITIVE** (0.1–9u): the 17u
+  full-speed step + fixed ~49u neutral coast lands rest on a coarse lattice.
 - `reach_precise(seed, tx, tz, k=0.5)` — proportional-speed glide (target speed = `k·remaining`)
-  staying IN MOTION, then truncation-search the tail cut. Rests ~0.10u from target — the smooth-walk
-  floor (min sustainable crawl); sub-0.1u needs the C-up freeze (below).
-- `reach_freeze(seed, tx, tz)` — the **float-perfect** approach via the C-up speed cancel (below).
+  staying IN MOTION, then truncation-search the tail cut. Also **target-sensitive** (0.1–9u): the
+  proportional decel LAGS, so it overshoots-at-speed on short trips and stalls to a dead stop on long
+  ones. For an exact stop use `reach_freeze`. (Older docs claimed a uniform "0.10u smooth-walk floor";
+  overturned — [history](../history/land-planner-precision.md).)
+- `reach_freeze(seed, tx, tz)` — the **robustly float-perfect** approach via the C-up speed cancel
+  (below): within a few ULP of any on-axis target.
 
 All three sweep by **cloning a snapshot** at each candidate release/cut/cancel frame rather than
 re-simulating the walk prefix — bit-exact because `LandState.clone()` is faithful **mid-walk** (it
@@ -68,17 +74,26 @@ L for one frame (ends manual cam), then neutral stick + C-stick full up → afte
 decel frame the speed snaps to 0 and position locks. The sim reproduces the freeze with **zero new
 code** — `frozen_pos = walk-sim pos 3 frames after the neutral+C-up input` (`plan_land._freeze_pos`).
 
-`reach_freeze` is the **deterministic offline planner** for this: proportional glide into a crawl,
-then a tail **beam-drill** over the live-valid magnitude lattice (`msd ≤ 0.889 ∪ {1.0}`, aimed at the
-live bearing) with cancel-within-drill, each candidate evaluated by cloning a snapshot (O(1) on the
-bit-exact mid-walk clone). On the open **+z corridor** it rests **~0.003u** with an **all-live-valid**
-seq — vs `reach_precise`'s 0.10u — and even beats it on the off-axis `(300,1400)` case (0.002u vs
-4.5u) because the freeze sidesteps the curved-walk coast residual. The earlier one-off, live-feedback
-"diverse beam" drilled a hand-tuned seq to **z = 2000.0001221 = 1 float32 ULP from 2000.0**; closing
-`reach_freeze`'s ~0.003u → sub-ULP needs finer approach control (a follow-up), bounded by the sim's
-~0-ULP land-position accuracy. **Off-axis freeze plans are not yet live-valid** — the glide emits
-full-deflection diagonal sticks needing the octagon clamp (a separate open decode issue). Mechanics of
-the cancel: [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
+`reach_freeze` is the **deterministic offline planner** for this, in **three phases** (each
+O(1)-per-candidate on the bit-exact mid-walk clone):
+
+1. **Cruise** full-speed until the freeze lands within `coarse_gap` (60u) of the target.
+2. **Sustained msd-0.5 crawl** (stick `(128,170)`, the min STABLE crawl — nspeed≈4.25 → ~1u/frame),
+   snapshotting each frame until the freeze crosses the target. This is the key to robustness: it
+   guarantees a **uniform ~1u fine straddle for ANY target**. The freeze coast scales with approach
+   speed, so you must **arrive SLOW to arrive fine** — a proportional glide overshoots-at-speed on
+   short trips and stalls on long ones, which is why the old glide-based drill was float-perfect only
+   at lucky targets.
+3. **Dedup-by-freeze-position beam drill** from a few crawl frames before the crossing: branch over
+   `NEUTRAL ∪ {live-valid integer walk sticks}` (`msd ≤ 0.889 ∪ {1.0}`, aimed at the live bearing),
+   keeping a frontier deduped by quantized freeze position and capped to those nearest the target.
+   This fills the ~1u crawl step down to the float floor.
+
+On the open **+z corridor** every on-axis target rests within **~1–4 float32 ULP (< 0.001u)** with an
+**all-live-valid** seq that re-simulates to the reported freeze — bounded only by the sim's ~0-ULP
+land-position accuracy. **Off-axis freeze plans are not yet live-valid** — an off-axis crawl emits
+diagonal sticks needing the octagon clamp (a separate open decode issue). Mechanics of the cancel:
+[land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
 
 ## Open gaps
 
