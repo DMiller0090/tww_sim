@@ -489,9 +489,10 @@ cdef inline void _mv_c(double* m, double vx, double vy, double vz, double* out) 
         out[i] = fadds(pa, pb)
 
 
-cdef class PoseEngine:
-    """C-resident foot-FK pose + toe engine (world-space path). Register the anims once, set the
-    two foot chains, then call pose_toe() per frame. Owns the old-pose + morf state internally."""
+cdef class AnimData:
+    """IMMUTABLE registered keyframe data + foot chains, shared across all PoseEngine instances (and
+    thus every A* clone). Built once per parsed anim set and cached -- avoids re-copying ~90k keyframe
+    values into C on every LandState.clone(). Read-only after set-up."""
     cdef int _meta[16][12][3][3][3]     # [anim][slot][track s0/r1/t2][axis][cnt, off, ttype]
     cdef double* _sdata[16]
     cdef double* _rdata[16]
@@ -501,21 +502,11 @@ cdef class PoseEngine:
     cdef int _n34
     cdef int _chain39[12]
     cdef int _n39
-    cdef double _oldq[12][4]
-    cdef double _oldt[12][3]
-    cdef double _olds[12][3]
-    cdef bint _has_old[12]
-    cdef double _m_counter, _m_f8, _m_rate, _m_f10, _m_f14
-    cdef double _base[12]           # worldBase (set by set_pos)
-    cdef double _inv[12]            # m37B4 = PSMTXInverse(worldBase)
 
     def __cinit__(self):
         cdef int i
         for i in range(16):
             self._sdata[i] = NULL; self._rdata[i] = NULL; self._tdata[i] = NULL
-        for i in range(12):
-            self._has_old[i] = False
-        self._m_counter = self._m_f8 = self._m_rate = self._m_f10 = self._m_f14 = 0.0
 
     def __dealloc__(self):
         cdef int i
@@ -563,6 +554,27 @@ cdef class PoseEngine:
                 if _CJ[s] == chain39[k]:
                     self._chain39[k] = s; break
 
+
+cdef class PoseEngine:
+    """C-resident foot-FK pose + toe engine (world-space path). Holds a reference to a shared, immutable
+    AnimData + the per-instance MUTABLE state (old pose, morf counter, worldBase). One per FootFK; cheap
+    to build per clone (no keyframe re-copy). Call set_pos() then pose_toe() per frame."""
+    cdef AnimData data
+    cdef double _oldq[12][4]
+    cdef double _oldt[12][3]
+    cdef double _olds[12][3]
+    cdef bint _has_old[12]
+    cdef double _m_counter, _m_f8, _m_rate, _m_f10, _m_f14
+    cdef double _base[12]           # worldBase (set by set_pos)
+    cdef double _inv[12]            # m37B4 = PSMTXInverse(worldBase)
+
+    def __cinit__(self, AnimData data):
+        cdef int i
+        self.data = data
+        for i in range(12):
+            self._has_old[i] = False
+        self._m_counter = self._m_f8 = self._m_rate = self._m_f10 = self._m_f14 = 0.0
+
     def reset_old(self):
         cdef int i
         for i in range(12):
@@ -604,25 +616,26 @@ cdef class PoseEngine:
             self._m_rate = 0.0
 
     cdef void _calc_transform_c(self, int anim, int slot, double frame,
-                                double* scale, long long* rot, double* trans) nogil:
-        cdef int axis, cnt, off, tt, dec = self._dec[anim]
+                                double* scale, long long* rot, double* trans):
+        cdef AnimData d = self.data
+        cdef int axis, cnt, off, tt, dec = d._dec[anim]
         cdef double v
-        cdef double* sd = self._sdata[anim]
-        cdef double* rd = self._rdata[anim]
-        cdef double* td = self._tdata[anim]
+        cdef double* sd = d._sdata[anim]
+        cdef double* rd = d._rdata[anim]
+        cdef double* td = d._tdata[anim]
         for axis in range(3):
-            cnt = self._meta[anim][slot][0][axis][0]
-            off = self._meta[anim][slot][0][axis][1]
-            tt = self._meta[anim][slot][0][axis][2]
+            cnt = d._meta[anim][slot][0][axis][0]
+            off = d._meta[anim][slot][0][axis][1]
+            tt = d._meta[anim][slot][0][axis][2]
             if cnt == 0:
                 scale[axis] = 1.0
             elif cnt == 1:
                 scale[axis] = f32(sd[off])
             else:
                 scale[axis] = _keyframe_interp_c(frame, cnt, tt, sd, off, 0)
-            cnt = self._meta[anim][slot][1][axis][0]
-            off = self._meta[anim][slot][1][axis][1]
-            tt = self._meta[anim][slot][1][axis][2]
+            cnt = d._meta[anim][slot][1][axis][0]
+            off = d._meta[anim][slot][1][axis][1]
+            tt = d._meta[anim][slot][1][axis][2]
             if cnt == 0:
                 rot[axis] = 0
             elif cnt == 1:
@@ -630,9 +643,9 @@ cdef class PoseEngine:
             else:
                 v = _keyframe_interp_c(frame, cnt, tt, rd, off, 1)
                 rot[axis] = _as_s32c((<long long>v) << dec)
-            cnt = self._meta[anim][slot][2][axis][0]
-            off = self._meta[anim][slot][2][axis][1]
-            tt = self._meta[anim][slot][2][axis][2]
+            cnt = d._meta[anim][slot][2][axis][0]
+            off = d._meta[anim][slot][2][axis][1]
+            tt = d._meta[anim][slot][2][axis][2]
             if cnt == 0:
                 trans[axis] = 0.0
             elif cnt == 1:
@@ -718,8 +731,9 @@ cdef class PoseEngine:
 
         cdef double cur39[12]
         cdef double cur34[12]
-        self._chain_fk(self._base, self._inv, self._chain39, self._n39, local, cur39)
-        self._chain_fk(self._base, self._inv, self._chain34, self._n34, local, cur34)
+        cdef AnimData d = self.data
+        self._chain_fk(self._base, self._inv, d._chain39, d._n39, local, cur39)
+        self._chain_fk(self._base, self._inv, d._chain34, d._n34, local, cur34)
 
         cdef double rt[3]
         cdef double lt[3]

@@ -30,6 +30,24 @@ try:
 except ImportError:
     _N = None
 
+# Cache the immutable native AnimData (registered keyframe data + chains) per parsed anim set, so every
+# clone shares it instead of re-copying ~90k keyframe values into C. See fp-faithfulness.md.
+_ANIMDATA_CACHE = {}
+
+
+def _shared_anim_data(anms, chains):
+    key = id(anms)
+    hit = _ANIMDATA_CACHE.get(key)
+    if hit is not None:
+        return hit[0], hit[1]
+    data = _N.AnimData()
+    anim_idx = {}
+    for i, (name, a) in enumerate(anms.items()):
+        data.add_anim(i, a); anim_idx[name] = i
+    data.set_chains(chains[34], chains[39])
+    _ANIMDATA_CACHE[key] = (data, anim_idx, anms)   # keep anms alive so id(anms) can't be reused
+    return data, anim_idx
+
 # union of both foot chains, in joint-index (calc) order; each processed once per frame.
 CHAIN_JOINTS = [0, 1, 29, 30, 31, 32, 33, 34, 36, 37, 38, 39]
 MORF_START, MORF_END = 0, 0x2A          # initOldFrameMorf(2.4, 0, 0x2A) joint range
@@ -99,12 +117,10 @@ class FootFK:
         # morf state internally, so seed()/step_feet() become a single native call. Bit-exact fallback.
         self._engine = None
         if _N is not None and world and len(anms) <= 16:
-            eng = _N.PoseEngine()
-            self._anim_idx = {}
-            for i, (name, a) in enumerate(anms.items()):
-                eng.add_anim(i, a); self._anim_idx[name] = i
-            eng.set_chains(self._chains[34], self._chains[39])
-            self._engine = eng
+            data, self._anim_idx = _shared_anim_data(anms, self._chains)
+            # AnimData (keyframe data) is shared + cached across instances; only the per-instance
+            # mutable engine (old pose / morf / worldBase) is built here -> clone() stays cheap.
+            self._engine = _N.PoseEngine(data)
         self.base = None            # worldBase 3x4 (set each frame by set_pos)
         self.m37b4 = None           # PSMTXInverse(worldBase)
 
