@@ -333,10 +333,14 @@ comes from a drill that fills that 1u step, not from a slower crawl.
 **Float-perfect stop achieved deterministically and ROBUSTLY** (`reach_freeze`, 2026-07-05): cruise →
 sustained msd-0.5 crawl → dedup-by-freeze-position drill rests within **~1–4 float32 ULP (< 0.001u) of
 ANY on-axis target** with an all-live-valid seq (the earlier glide-based drill hit ~0.003u only at lucky
-targets — see [history](../history/land-planner-precision.md)). The residual ~1–4 ULP is the **drill's
-lattice granularity** (whether the exact target f32 is reachable), NOT a sim inaccuracy: the sim
-reproduces live `pos_z` at **0 ULP** (byte-for-byte), enforced by the zero-tolerance `posz_status` gate
-in `run_land_tests` — so an offline *exact* freeze would reproduce exactly live. Position path:
+targets — see [history](../history/land-planner-precision.md)). The residual ~1–4 ULP is **NOT a sim
+inaccuracy** (the sim reproduces live `pos_z` at **0 ULP** byte-for-byte, enforced by the zero-tolerance
+`posz_status` gate in `run_land_tests`, so an offline *exact* freeze reproduces exactly live) — it is the
+**production beam under-exploring the tail** (it dedups by freeze POSITION, collapsing the momentum
+diversity that fills the last ULP). A **windowed-deepening** search (keep every distinct STATE near the
+target, deepen only those) hits the EXACT target float within depth-4 for every target tried — **live-
+proven: console froze at exactly `2000.0` (`0x44fa0000`) and `1800.0` (`0x44e10000`)** — see
+[land-planner exact-float reachability](../model/land-planner.md#float-perfect-stop--the-c-up-speed-cancel). Position path:
 [model/sim: land position accumulates in f32](../model/land-sim.md#land-position-accumulates-in-f32-not-an-f64-running-sum).
 **LIVE-CONFIRMED 0 ULP (2026-07-05):** driving whole `reach_freeze` plans in Dolphin (approach
 `advanceseq`, then the real cancel — one half-L frame re-issuing `prefix[-1]` at `triggerL=100`, then

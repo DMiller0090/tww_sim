@@ -90,13 +90,26 @@ O(1)-per-candidate on the bit-exact mid-walk clone):
    keeping a frontier deduped by quantized freeze position and capped to those nearest the target.
    This fills the ~1u crawl step down to the float floor.
 
-On the open **+z corridor** every on-axis target rests within **~1–4 float32 ULP (< 0.001u)** with an
-**all-live-valid** seq that re-simulates to the reported freeze. That residual is the **drill's lattice
-granularity** — whether the exact target f32 is reachable — NOT sim error: the sim reproduces live
-`pos_z` at **0 ULP** ([land-sim](land-sim.md), gated no-tolerance by `run_land_tests`), so an offline
-*exact* freeze lands exactly live — **confirmed 2026-07-05** by driving whole plans in Dolphin (approach
-`advanceseq`, then the real cancel), which froze `pos_z` byte-for-byte at the sim's `freeze_pos.z` for
-every reachable on-axis target (z = 1500 / 2000 / 2500 all 0 ULP, `pos_x` = 0). **Off-axis freeze plans are not yet live-valid** — an off-axis
+On the open **+z corridor** the production beam rests within **~1–4 float32 ULP (< 0.001u)** with an
+**all-live-valid** seq. That residual is **NOT sim error** — the sim reproduces live `pos_z` at **0 ULP**
+([land-sim](land-sim.md), gated no-tolerance by `run_land_tests`), so an offline *exact* freeze lands
+exactly live (**confirmed 2026-07-05** by driving whole plans in Dolphin: `pos_z` froze byte-for-byte at
+the sim's `freeze_pos.z` for z = 1500 / 2000 / 2500, `pos_x` = 0).
+
+**Exact-float freeze IS reachable (resolved 2026-07-05c) — live-proven for `2000.0` AND `1800.0`.** The
+~1–4 ULP is the **production beam UNDER-EXPLORING the tail**, NOT a lattice floor: the beam dedups by
+freeze POSITION (+ a `beam_width` cap), which collapses the **momentum diversity** that fills the last
+ULP. Two fixes recover it: (a) let the last few frames vary FULLY (unpruned over the live-valid stick
+set) — depth-3 already hits many targets exactly; (b) better, a **windowed-deepening** search that keeps
+every distinct STATE still short of the target within a small window (dedup by momentum, NOT position)
+and deepens only those — the near-target frontier stays small, so depth-4/5/6 is cheap (~16 s, not the
+~65⁴/snapshot ≈ 30 min a naïve deep drill would cost). This hit **every target tried exactly within
+depth-4**, including z = 1800 / 2000.5 that a depth-3 unpruned drill misses. Since the sim is 0-ULP vs
+live, the offline-exact solve lands exact on console: **verified — console froze at EXACTLY `2000.0`
+(`0x44fa0000`) and `1800.0` (`0x44e10000`), `pos_x` = 0** (offline solves seconds–~16 s, early-exit).
+Not yet productionised into `reach_freeze` (would be an `exact=`/windowed-deepening mode + offline & live
+gates). A *universal* all-f32 reachability PROOF is still open, but empirically every target hits by
+depth-4. **Off-axis freeze plans are not yet live-valid** — an off-axis
 crawl emits diagonal sticks needing the octagon clamp (a separate open decode issue). Mechanics of the cancel:
 [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
 
