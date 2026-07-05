@@ -40,6 +40,7 @@ from ..core.mathlib import f32, cLib_addCalc, cM_scos_s16, deg_to_s16, s16_signe
 from ..core.camera import CameraManual, LAND_SCALE
 
 # link_state / daPyProc values (d_a_player_main.h). Walk trio + the targeting-move proc.
+SUBJECTIVITY = 1  # daPyProc_SUBJECTIVITY_e (first-person view; the C-up-cancel FREEZE: mNormalSpeed=0)
 WAIT = 4          # daPyProc_WAIT_e         (idle standstill)
 FREE_WAIT = 5     # daPyProc_FREE_WAIT_e    (anchor's resting proc)
 MOVE = 6          # daPyProc_MOVE_e         (ground locomotion)
@@ -199,7 +200,7 @@ class LandState:
 
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
-                 use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True):
+                 use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True, foot_native=True):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
         # Vertical state for the ballistic hops. pos_y accumulates in f32; ground_y = the jump-entry
@@ -249,7 +250,7 @@ class LandState:
             try:
                 from ..core.anim.foot_speedf import FootSpeedF
                 self._foot = FootSpeedF(idle_frame=float(idle_frame), pos_x=self.pos_x,
-                                        pos_z=self.pos_z, facing=self.facing)
+                                        pos_z=self.pos_z, facing=self.facing, native=foot_native)
             except (FileNotFoundError, OSError, ImportError):
                 self._foot = None
         # Native land physics: when the fused C engine is present, the whole per-frame step runs in one
@@ -758,6 +759,48 @@ class LandState:
             self._check_next_mode(l_held)
 
     # --- proc dispatch + per-frame step ----------------------------------------------------
+    # --- SUBJECTIVITY freeze (B-cancel chained-freeze): C-up -> WAITS/WALK blend (m34C3=2) -> B-cancel
+    # -> resume with the anim phase carried. Live 0-ULP. Decomp/why: knowledge/mechanics/land-movement.md.
+    def enter_freeze(self):
+        """procSubjectivity_init (d_a_player_main.cpp:5948): mNormalSpeed=0 (freeze) + the WAITS/WALK
+        idle blend with the walk phase preserved. Call AFTER the approach has decelerated Link to the
+        freeze position (the reach_freeze cancel tail leaves it there). Position holds from here.
+        Runs natively (fused LandCore) when present -- the chained-freeze planner searches at C speed."""
+        if self._foot is None:
+            raise RuntimeError("enter_freeze needs the anim foot engine")
+        if self._core is not None:
+            self._core.enter_freeze()
+            self._sync_from_core()
+            return
+        self.nspeed = 0.0
+        self.speedF = 0.0
+        self.state = SUBJECTIVITY
+        self._foot.enter_subjectivity(self.msd)
+        self.visited.add(self.state)
+
+    def hold_freeze(self):
+        """One SUBJECTIVITY (or post-B WAIT) hold frame: position frozen, the WAITS anim advances at
+        1.1/frame (procSubjectivity only setBodyAngleToCamera). Each hold frame shifts the carried
+        resume phase -- the chained planner's lever for tuning the re-walk-from-rest trajectory."""
+        if self._core is not None:
+            self._core.hold_freeze()
+            self._sync_from_core()
+            return
+        self.speedF = 0.0
+        self._foot.step_subjectivity(self.msd)
+
+    def resume_walk(self):
+        """Exit the freeze into MOVE (procMove_init, 6210): setBlendMoveAnime re-triggers the
+        oldframe-morf and, because m34C3=2, PRESERVES the carried WAITS phase. After this, step() with
+        a forward stick walks from rest bit-exactly (the 2-frame input latency still applies)."""
+        if self._core is not None:
+            self._core.resume_walk()
+            self._sync_from_core()
+            return
+        self.state = MOVE
+        self.nspeed = 0.0
+        self._foot._pending_morf = self.MOVE_REENTRY_MORF
+
     def step(self, sx, sy, buttons=0, triggerL=0, csx=128, csy=128):
         """Advance one frame with a raw main stick (sx, sy) + optional L-target (buttons 0x40 or
         analog triggerL) + raw C-stick (csx, csy) steering the camera. Returns (d_pos, tag).

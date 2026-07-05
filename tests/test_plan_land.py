@@ -9,6 +9,7 @@ Anchor seed = land_flatwalk@twwgz (flat wall-free room, Link idle at pos_z 764.0
 csangle 0) -- the same rest seed the live land tests use.
 """
 import math
+import struct
 
 import pytest
 
@@ -142,3 +143,43 @@ def test_reach_freeze_beats_precise_rest():
     freeze = reach_freeze(_seed(), 0.0, 2000.0)
     assert freeze['freeze_dist'] < precise['resting_dist']
     assert freeze['freeze_dist'] < 0.001
+
+
+# --- SUBJECTIVITY freeze -> B-cancel -> re-walk-from-rest (the chained-freeze tech) --------------
+def _bits(x):
+    return struct.unpack('<I', struct.pack('<f', float(x)))[0]
+
+
+# Live-verified (0 ULP, gate_subj_live.py) pos_z bits: the coarse freeze, then the carried-phase
+# re-walk (2 frozen input-latency frames first). Mechanics: knowledge/mechanics/land-movement.md.
+_FREEZE_BITS = 1150042034   # 1121.990479
+_REWALK_BITS = [1150042034, 1150042034, 1150043226, 1150053054, 1150083308, 1150166309, 1150305573]
+
+
+def _run_subjectivity_freeze(foot_native):
+    s = LandState(native=foot_native, foot_native=foot_native, pos_z=764.0791015625, facing=0,
+                  travel=0, csangle=0, state=FREE_WAIT, nspeed=0.0, idle_frame=70.0)
+    for _ in range(22):
+        s.step(128, 255)                  # cruise to full speed
+    s.step(128, 255)                      # halfL (re-issues the last approach stick)
+    for _ in range(3):
+        s.step(128, 128)                  # C-up cancel decel frames (cup0..cup2)
+    s.enter_freeze()                      # procSubjectivity_init: freeze + WAITS/WALK blend
+    freeze = _bits(s.pos_z)
+    for _ in range(8):
+        s.hold_freeze()                   # subj + post-B WAIT (position frozen, WAITS advances)
+    held = _bits(s.pos_z)
+    s.resume_walk()                       # WAIT -> MOVE, carried phase
+    walk = [(_bits(s.step(128, 255)[0]), _bits(s.pos_z))[1] for _ in range(len(_REWALK_BITS))]
+    return freeze, held, walk
+
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+@pytest.mark.parametrize("foot_native", [False, True])   # pure-Python AND fused native LandCore
+def test_subjectivity_freeze_rewalk_bit_exact(foot_native):
+    # Coarse freeze -> hold -> re-walk with the CARRIED anim phase (m34C3=2). Both the pure-Python foot
+    # path and the fused native LandCore must reproduce the live-proven pos_z bits (see land-movement.md).
+    freeze, held, walk = _run_subjectivity_freeze(foot_native)
+    assert freeze == _FREEZE_BITS, hex(freeze)
+    assert held == _FREEZE_BITS, hex(held)      # position stays locked through the hold
+    assert walk == _REWALK_BITS, [hex(w) for w in walk]

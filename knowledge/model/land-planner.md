@@ -120,11 +120,22 @@ The min-frame exact plan is ~14% over the pure full-speed travel floor; the over
 freeze** (see [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel))
 can shave those ~7–10 frames: **coarse-freeze from FULL speed** (0-ULP-modeled, lands on a ~17u lattice) →
 **B-cancel** (actionable in ~2 frames) → resume walking **from rest** (already slow — no decel needed) →
-short fine-walk → **fine-freeze** on the exact float. Blocker to model: the post-B-cancel re-walk inherits
-the freeze's **foot-anim phase**, so its position path differs from a cold rest walk (same nspeed, ~2×
-smaller `dz` at low speed) — the [foot engine](../model/land-sim.md) must be seeded with the carried anim
-state, not a fresh idle. Capture that state live (`harness/anim/foot_probe.py`) before extending
-`plan_land` with a freeze-lock + B-cancel + resume transition.
+short fine-walk → **fine-freeze** on the exact float.
+
+**The freeze/B-cancel/re-walk state machine is now MODELED and live-proven 0 ULP** (2026-07-05). The
+former blocker — the post-B-cancel re-walk inheriting the freeze's **foot-anim phase** (same nspeed, ~2×
+smaller low-speed `dz` than a cold walk) — is solved: it's the `m34C3 = 2` phase-preservation of the
+subjectivity/WAIT blend (root cause + decomp cites in [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel)).
+The [foot engine](../model/land-sim.md) reproduces the carried phase exactly: `LandState.enter_freeze /
+hold_freeze / resume_walk` (both pure-Python and the fused-native `PoseEngine`, ~5–6× faster for
+searches), gated by `test_subjectivity_freeze_rewalk_bit_exact` + the live gate
+`_notes/chained-freeze-probes/gate_subj_live.py`. The **#hold frames is a planner lever** (each +1
+advances the carried WAITS phase by 1.1, reshaping the re-walk-from-rest trajectory).
+
+**Remaining: the chained PLANNER search.** Given a target: choose the cruise length / coarse-freeze
+lattice point nearest-below, then windowed-deepen over the (hold-count, fine-walk-from-rest) tail to hit
+the exact float in fewest total frames. Compare frame count vs `deep_solve` (~138 for z≈2810; expect
+~128). Live-prove via `spotcheck_freeze.py`.
 
 ## Open gaps
 

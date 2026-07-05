@@ -18,12 +18,15 @@ tier** (brakeslide / EBS-release / facing-decouple / brake: `setBlendAtnMoveAnim
 `ANM_ATN{L,R}S`/`W`/`D` strafe + `ANM_ATNWB`/`ATNDB` backslide anims — see below), **and the SLIP skid →
 MOVE_TURN handoff** (`ANM_SLIP` scales foot-chain joint 37's X by 1.2, so the FK now applies the
 scale + the oldframe-morf blends it — see below). **All land position is now bit-exact with the anim
-data present**; the calibrated fallback is used only when the keyframe data is absent.
+data present**; the calibrated fallback is used only when the keyframe data is absent. The **C-up
+freeze (`daPyProc_SUBJECTIVITY_e`) + B-cancel re-walk-from-rest** is also modeled and **live-proven
+0 ULP** (both the pure-Python and fused-native paths; 2026-07-05) — see the C-up-cancel section below.
 Anchor `land_flatwalk@twwgz.sav`.
 **Source:** live captures (`harness/capture/land_capture.py`, cross-checked advancewith == advanceseq
 == DTM movie); decomp `d_a_player_main.cpp` proc enum + `setSpeedAndAngleNormal`/`setNormalSpeedF` +
 `setSpeedAndAngleAtn`/`setSpeedAndAngleAtnBack` + `setBlendAtnMoveAnime` (mDirection machine) +
-`checkNextMode` (MOVE↔ATN_MOVE) + `posMoveFromFootPos` + `mDoExt_MtxCalcAnmBlendTblOld` (foot anim).
+`checkNextMode` (MOVE↔ATN_MOVE) + `posMoveFromFootPos` + `mDoExt_MtxCalcAnmBlendTblOld` (foot anim) +
+`procSubjectivity_init`/`checkSubjectEnd`/`setBlendMoveAnime` (the C-up freeze + B-cancel re-walk).
 
 > First land-movement page. Land is the next target after superswim; see the architecture forward-plan
 > `_notes/tww-sim-architecture-design.md` §5b. Fields logged via `dolphin_mem` named reads
@@ -384,17 +387,35 @@ from ANY approach speed — full-speed cruise included: live froze at z=1121.990
 cruise, sim `_freeze_pos` = same bits. The halfL frame RE-ISSUES the last approach stick, it does not add
 a frame.)
 
+**The freeze IS `daPyProc_SUBJECTIVITY_e` (first-person view).** `link_state → 1` is proc 1, and
+`procSubjectivity_init` (`d_a_player_main.cpp:5948`) does two things: `mNormalSpeed = 0.0` (the position
+lock) and `setBlendMoveAnime(field_0xC)`. On-axis that hits the `ModeFlg_00000001` idle arm (line 3114)
+→ `setMoveAnime(f27=0, f28=1.1, f25=0.8, ANM_WAITS, ANM_WALK, r29=2, morf)`: **MOVE0 = WAITS (rate 1.1),
+MOVE1 = WALK (rate (1/60)·1.1·32 = 0.587), `m34C3 = 2`, ratio 0, `m3598 = 0`**, and the walk phase is
+PRESERVED (`f31 = fc0.frame/frameMax`, since the walk's `m34C3 = 1 ∉ {0,9,10}`). `procSubjectivity`
+itself only `setBodyAngleToCamera`s each frame, so the WAITS frame-ctrl just advances at 1.1/frame.
+
 **B cancels the freeze recovery (~2 frames vs ~8) — the chained coarse+fine primitive (TAS).** After the
-freeze locks (`link_state → 1`), Link plays a **~8-frame recovery animation** before becoming actionable
-(state 1 → 4 → walk). **Pressing B (`PAD_BUTTON_B` 0x200) interrupts it: actionable in ~2 frames** (that's
-just the 2-frame `INPUT_DELAY` — effectively immediate), MOVING from rest at frame 3. Measured
-2026-07-05c; **C-down did NOT speed recovery (still ~8), only B did.** This enables a **coarse-freeze →
-B-cancel → short fine-walk-from-rest → fine-freeze** approach: freeze from FULL speed (fast stop, lands
-on a coarse ~17u lattice), B-cancel back to rest (already slow, so it SKIPS the ~7-frame decel a crawl
-needs), then a few fine frames to the exact float. **Modeling caveat:** the post-B-cancel re-walk is NOT
-a cold rest walk — same `nspeed` but the **foot-anim phase carries over** from the freeze (per-frame `dz`
-≈ 2× smaller than cold at low speed), so the re-walk's position path must be modeled from the carried
-anim state, not a fresh idle. See [land-planner: chained-freeze roadmap](../model/land-planner.md#float-perfect-stop--the-c-up-speed-cancel).
+freeze locks, Link plays a **~8-frame recovery** before actionable. **Pressing B (`PAD_BUTTON_B` 0x200)
+interrupts it** via `checkSubjectEnd` (`5694`: `mItemTrigger & (BTN_A|BTN_B)`) → `changeWaitProc` → WAIT
+(state 1 → 4), registered ~2 frames later (just `INPUT_DELAY`). Measured 2026-07-05c; **C-down did NOT
+speed recovery (still ~8), only B did.** This enables **coarse-freeze → B-cancel → short fine-walk-from-
+rest → fine-freeze**: freeze from FULL speed (fast stop on a coarse ~17u lattice), B-cancel to rest
+(SKIPS the ~7-frame decel a crawl needs), then a few fine frames to the exact float.
+
+**Why the re-walk ≠ a cold walk (SOLVED + modeled, 2026-07-05).** The post-B-cancel re-walk has the same
+`nspeed` ramp but ~2× smaller low-speed `dz` — because the **foot-anim phase is CARRIED**, not reset. A
+cold walk resumes from FREE_WAIT, which plays a SINGLE anim (`m34C3 = 0`), so `procMove_init`'s
+`setMoveAnime` forces `f31 = 0` → the walk restarts at anim frame 0. The re-walk resumes from the
+subjectivity/WAIT blend (`m34C3 = 2`), so `f31 = fc0.frame/frameMax` is preserved → the walk re-warms at
+the carried WAITS phase. Live proof: first MOVE frame `fc0 = 0.000` (cold) vs `43.499` (re-walk), every
+other field identical. **The sim models this exactly** (`LandState.enter_freeze / hold_freeze /
+resume_walk`; the anim primitives are `FootSpeedF.enter_subjectivity / step_subjectivity`, and the fused
+native twin `PoseEngine.w_enter_subjectivity / w_step_subjectivity`) — **live-proven 0 ULP** across the
+whole cruise → freeze → hold → re-walk sequence, both the pure-Python and fused-native paths (test
+`test_subjectivity_freeze_rewalk_bit_exact`; live gate `_notes/chained-freeze-probes/gate_subj_live.py`).
+The **#hold frames is the planner's lever** for the resume phase (each +1 advances WAITS by 1.1). See
+[land-planner: chained-freeze](../model/land-planner.md#float-perfect-stop--the-c-up-speed-cancel).
 
 **Float-perfect stop achieved deterministically and ROBUSTLY** (`reach_freeze`, 2026-07-05): cruise →
 sustained msd-0.5 crawl → dedup-by-freeze-position drill rests within **~1–4 float32 ULP (< 0.001u) of

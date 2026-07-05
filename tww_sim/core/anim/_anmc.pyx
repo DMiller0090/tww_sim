@@ -1139,6 +1139,34 @@ cdef class PoseEngine:
         self._pending_morf = morf; self._has_pending = True
         return 0.0
 
+    def w_enter_subjectivity(self, double msd, double morf):
+        """procSubjectivity_init on-axis (5948) -- the C-up-cancel FREEZE. Advance the walk ctrl one
+        frame, then setMoveAnime(0, H_38, H_40, WAITS, WALK, 2): MOVE0=WAITS(1.1), MOVE1=WALK, m34C3=2,
+        ratio 0, m3598=0, phase preserved. Pose (nspeed=0) to warm the toe stream. Port of
+        FootSpeedF.enter_subjectivity."""
+        self._started = True
+        _fc_update(self._fc0_attr, self._fc0_start, self._fc0_end, self._fc0_loop,
+                   &self._fc0_frame, &self._fc0_rate)
+        _fc_update(self._fc1_attr, self._fc1_start, self._fc1_end, self._fc1_loop,
+                   &self._fc1_frame, &self._fc1_rate)
+        self._anim_set_move(0.0, _H_38, _H_40, C_WAITS, C_WALK, 2)
+        self._m3598 = 0.0
+        self._foot_speedf_c(0.0, f32(msd), self._move0, self._move1,
+                            self._fc0_frame, self._fc1_frame, self._a_ratio, self._m3598, morf)
+        return 0.0
+
+    def w_step_subjectivity(self, double msd):
+        """One SUBJECTIVITY / post-B WAIT hold frame: the WAITS/WALK ctrls advance (no re-pose),
+        the foot poses at the frozen ratio (pure WAITS); position frozen. Port of
+        FootSpeedF.step_subjectivity."""
+        _fc_update(self._fc0_attr, self._fc0_start, self._fc0_end, self._fc0_loop,
+                   &self._fc0_frame, &self._fc0_rate)
+        _fc_update(self._fc1_attr, self._fc1_start, self._fc1_end, self._fc1_loop,
+                   &self._fc1_frame, &self._fc1_rate)
+        self._foot_speedf_c(0.0, f32(msd), self._move0, self._move1,
+                            self._fc0_frame, self._fc1_frame, self._a_ratio, self._m3598, -1.0)
+        return 0.0
+
     def w_set_pending(self, v):
         """land.py sets FootSpeedF._pending_morf directly on some proc transitions; route into C."""
         if v is None:
@@ -1295,6 +1323,7 @@ def cam_step_target(cam_target_s16, stick_x, scale):
 # engine is present, syncing output fields back for tests/planners. The pure-Python LandState body stays
 # as the bit-identical fallback (proven by the perf_land fingerprint with the .pyd hidden).
 # link_state / daPyProc + mDirection enums (mirror land.py).
+DEF LS_SUBJECTIVITY=1
 DEF LS_WAIT=4
 DEF LS_FREE_WAIT=5
 DEF LS_MOVE=6
@@ -1537,6 +1566,25 @@ cdef class LandCore:
         c._cam_yaw = self._cam_yaw; c._cam_target = self._cam_target
         c._cam_scale = self._cam_scale; c._cam_pending_posx = self._cam_pending_posx
         return c
+
+    # --- SUBJECTIVITY freeze (chained-freeze tech); mirrors LandState.enter_freeze/hold_freeze/resume_walk.
+    def enter_freeze(self):
+        """procSubjectivity_init: mNormalSpeed=0 (freeze) + the WAITS/WALK idle blend (phase preserved)."""
+        self.nspeed = 0.0
+        self.speedF = 0.0
+        self.state = LS_SUBJECTIVITY
+        self._pe.w_enter_subjectivity(self.msd, _L_MOVE_REENTRY_MORF)
+
+    def hold_freeze(self):
+        """One SUBJECTIVITY / post-B WAIT hold frame: position frozen, the WAITS anim advances."""
+        self.speedF = 0.0
+        self._pe.w_step_subjectivity(self.msd)
+
+    def resume_walk(self):
+        """procMove_init on WAIT->MOVE: setBlendMoveAnime preserves the carried WAITS phase (m34C3=2)."""
+        self.state = LS_MOVE
+        self.nspeed = 0.0
+        self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
 
     # --- stick layer (setStickData, 10530) ---
     cdef void _set_stick_data(self, int sx, int sy):

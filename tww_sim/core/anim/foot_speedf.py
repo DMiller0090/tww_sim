@@ -30,7 +30,7 @@ import os
 from .. import fp
 from . import fk
 from .anim_state import (UnderAnimState, ANIM_META, ANIM_CODE, ANIM_ORDER,
-                         NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO)
+                         NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO, H_38, H_40)
 
 # Optional native composition (anim/_anmc.foot_compose); bit-exact with _py_foot_compose below.
 try:
@@ -114,7 +114,7 @@ class FootSpeedF:
             return False
 
     def __init__(self, idle_frame=70.0, idle_anim=IDLE_ANIM, pos_x=0.0,
-                 pos_z=764.0791015625, facing=0):
+                 pos_z=764.0791015625, facing=0, native=True):
         self.anm, self.sk = fk.load()                 # raises if the data is absent
         self.idle_anim = idle_anim
         self._core = None                             # fused native engine (set up below if available)
@@ -143,12 +143,16 @@ class FootSpeedF:
         self._pending_py = None                        # morf to apply on the next step (Python fallback store)
         # Fused native path (one C call/frame): the Python seeding above already left the engine's
         # old-pose correct + produced draw0; w_init captures the toe stream. Python st/ff = fallback.
-        if _N is not None and getattr(self.ff, '_engine', None) is not None:
+        if native and _N is not None and getattr(self.ff, '_engine', None) is not None:
             _N.init_anim_consts(NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO)   # idempotent
             code2idx = [self.ff._anim_idx[name] for name in ANIM_ORDER]
             self._core = self.ff._engine
             self._core.init_anim(code2idx)
             self._core.w_init(ANIM_CODE[idle_anim], self._idle_frame_py, draw0)
+        elif not native:
+            # Force the pure-Python st/ff path (drop only the C-resident STATE; native math accel stays)
+            # -- the SUBJECTIVITY freeze lives on the Python UnderAnimState. draw0/seed above left t1/t2 exact.
+            self.ff._engine = None
 
     def clone(self):
         """State-copy clone (mid-walk-safe). Shares the immutable parsed anim/skeleton; deep-copies
@@ -270,6 +274,45 @@ class FootSpeedF:
                      f1=self.st.fc1.frame, ratio=self.st.ratio, m3598=self.st.m3598, morf=True)
         self._foot_speedf(0.0, _f32(msd), state, m)   # poses ATNW@0, shifts it into the toe stream
         self._pending_morf = m
+        return 0.0
+
+    def enter_subjectivity(self, msd, morf=2.4):
+        """procSubjectivity_init on-axis (d_a_player_main.cpp:5948) -- the C-up-cancel FREEZE.
+        The J3DFrameCtrl advances the walk one frame (actor execute), then setBlendMoveAnime's
+        ModeFlg_00000001 idle arm (line 3114) re-poses as
+        setMoveAnime(f27=0, f28=H_38, f25=H_40, ANM_WAITS, ANM_WALK, r29=2, field_0xC):
+        MOVE0=WAITS (rate 1.1), MOVE1=WALK (rate (1/60)*1.1*32=0.587), m34C3=2, ratio 0, m3598=0,
+        phase f31 PRESERVED from the walk (old m34C3=1). mNormalSpeed=0 so speedF/position is frozen;
+        the pose warms the toe stream at the carried WAITS phase so the eventual re-walk is bit-exact
+        (its f31 is preserved BECAUSE m34C3=2, vs a cold FREE_WAIT walk's m34C3=0 -> f31=0 reset).
+        Python-path only (the native fused engine has no subjectivity proc)."""
+        if self._core is not None:
+            raise NotImplementedError("subjectivity freeze needs the pure-Python foot path (native=False)")
+        self.started = True
+        msd = _f32(msd)
+        m = float(morf) if morf is not None else -1.0
+        self.st.fc0.update()                        # actor execute advances the walk ctrl this frame
+        self.st.fc1.update()
+        self.st._set_move_anime(0.0, H_38, H_40, 'waits', 'walk', 2, m)
+        self.st.m3598 = 0.0
+        state = dict(move0='waits', move1='walk', f0=self.st.fc0.frame, f1=self.st.fc1.frame,
+                     ratio=self.st.ratio, m3598=0.0, morf=(m >= 0.0))
+        self._foot_speedf(0.0, msd, state, m)
+        return 0.0
+
+    def step_subjectivity(self, msd):
+        """One SUBJECTIVITY (or the post-B WAIT) HOLD frame. procSubjectivity only setBodyAngleToCamera,
+        so the WAITS/WALK ctrls just advance (no re-pose/remap) and the foot poses at the frozen ratio
+        (0 -> pure WAITS). mNormalSpeed=0 -> speedF 0 (position frozen); the pose keeps warming the toe
+        stream so the carried phase stays bit-exact when MOVE resumes. Python-path only."""
+        if self._core is not None:
+            raise NotImplementedError("subjectivity freeze needs the pure-Python foot path (native=False)")
+        msd = _f32(msd)
+        self.st.fc0.update()
+        self.st.fc1.update()
+        state = dict(move0=self.st.move0, move1=self.st.move1, f0=self.st.fc0.frame,
+                     f1=self.st.fc1.frame, ratio=self.st.ratio, m3598=self.st.m3598, morf=False)
+        self._foot_speedf(0.0, msd, state, -1.0)
         return 0.0
 
     def step_atn(self, nspeed, msd, direction, f31, morf=None):
