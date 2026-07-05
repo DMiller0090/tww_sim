@@ -73,10 +73,13 @@ and the [`pos_x` sine-leak fix](../history/resolved-bugs.md#deep-release-speedf-
 tail, roll, slip, and `brake_right` are all bit-exact. What remains is the genuine **world-magnitude
 quantization frontier** — none of it reaches a gameplay-relevant position:
 
-- **`Y171` (partial-magnitude walk).** `pos_x` is now clean (0 = live), so the residual is the
-  **toe.z world-quantization** (~0.6 ULP at f27 → 1 ULP `pos_z`) plus a `speedF` miss (~3 ULP at f17)
-  in the partial-mag smoothing/blend regime (`m3598 == 1.0`, the only cruise that exercises the toe
-  every frame). Gated by `test_speedf_y171` / `test_pos_z_arc_y171` and live `walk_y171`.
+- **`Y171` (partial-magnitude walk).** `pos_x` is now clean (0 = live, per-joint verified), so the
+  residual is a **jnt0 root-translate sub-ULP that grows through the WAITS↔WALK blend** — a per-joint
+  `anmMtx` decomposition shows the foot rotation is 0 ULP everywhere but the model-space jnt0 X-translate
+  drifts (≤~1e2 ULP at root magnitude), diluting to a ≤3-ULP `speedF` (f17) and ≤1-ULP `pos_z` (f27) at
+  the toe. This is the blend-regime cousin of the entry-morf jnt0.z Hermite residual (`m3598 == 1.0`,
+  the only cruise that exercises the toe every frame). Gated by `test_speedf_y171` /
+  `test_pos_z_arc_y171` and live `walk_y171`.
 - **`ebs` / `waitturn` (turn transients, ≤1 ULP `pos_z`).** After the pivot/strafe transient the
   sim's `pos_x` differs from live by a sub-ULP amount, shifting the world-X quantization by 1 ULP.
 - **Entry-morf jnt0 (sub-ULP).** The first 1–2 MOVE frames have jnt0.z ~5 ULP off (decaying with the
