@@ -10,9 +10,11 @@ bit-exact). The two entry-transient residuals were root-caused + fixed 2026-07-0
 constant leaks, NOT the suspected Hermite/foot-IK frontier): the oldframe-morf counter was f64 (→
 jnt0.z entry-morf now bit-exact) and the `f31_2` smoothing used f64 `0.3`/`0.7` (→ speedF frames 5/6
 now bit-exact) — see [history/resolved-bugs](../history/resolved-bugs.md#walk-entry-transient--two-f64-vs-f32-constant-bugs-not-a-hermitefoot-ik-frontier).
-Still open (all sub-ULP foot-FK-chain frontier, none reaching position): deep-release `speedF` f37/f39
-(1 ULP, root-caused below), ATN/turn endpoints (ebs/brake_right/waitturn 1–2 ULP), slip skid (74 ULP),
-Y171 toe.z.
+The full-speed **slip** skid + reversed-walk arc is now `pos_z` bit-exact too — it was NOT a FK
+residual but a missing `speedF < 0.05 -> 0` snap (`posMoveFromFootPos`, d_a_player_main.cpp:2418);
+see [land-sim](land-sim.md#speedf-snaps-to-0-below-005-the-slip-skid-tail). Still open (all sub-ULP
+foot-FK-chain frontier, none reaching position): deep-release `speedF` f37/f39 (1 ULP, root-caused
+below), ATN/turn endpoints (ebs/brake_right/waitturn 1–2 ULP), Y171 toe.z.
 **Source:** `tww_sim/core/anim/{j3d_eval,fk,foot_fk,quat,foot_speedf,anim_state}.py`; decomp
 (`J3DAnimation.cpp`, `J3DJoint.cpp`, `m_Do_ext.cpp`, `d_a_player_main`) + live foot-toe oracle.
 This engine is **core** (generic, FP-faithful); only [land](land-sim.md) consumes it today, but it is

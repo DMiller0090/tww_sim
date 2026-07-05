@@ -686,8 +686,10 @@ class LandState:
             self.speedF = 0.0
         elif self.state in (FRONT_ROLL, SLIP):
             if self._foot is not None:
-                self._foot.step_single_anim(self.nspeed, self.msd)
-            self.speedF = self.nspeed
+                self._foot.step_single_anim(self.nspeed, self.msd)   # warm the toe stream
+            # m3598==0 here so speedF == mNormalSpeed, but posMoveFromFootPos still snaps |speedF|<0.05
+            # to 0 (d_a_player_main.cpp:2418) -- the slip decel tail. See land-sim.md (slip-skid tail).
+            self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
         elif self.state == ATN_MOVE and self._foot is not None:
             # ATN_MOVE: setBlendAtnMoveAnime poses the strafe/back anim. f31 = |nspeed*cos(m34E2)|/max
             # (cos=1 on flat); the pose warms the toe stream so an EBS-release MOVE rejoins bit-exact.

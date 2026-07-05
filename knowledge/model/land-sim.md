@@ -3,9 +3,10 @@
 **Answers:** How does the land sim accumulate position (why f32, not an f64 running sum)? What is the
 partial-magnitude (`Y171`) regime and why does it exercise the foot toe? How accurate is it — what
 are the remaining ULP residuals and which tests gate them?
-**Status:** float-perfect (0 ULP) on the straight full-deflection walk; ~1 ULP `speedF` / 2 ULP
-`pos_z` on the `Y171` partial cruise. Open residuals: planted-foot toe + entry-morf jnt0 + slip skid
-(7 red `tests/test_land.py` cases).
+**Status:** float-perfect (0 ULP) on the straight full-deflection walk, the front-roll, and the
+full-speed **slip** skid + reversed-walk arc; ~1 ULP `speedF` / 2 ULP `pos_z` on the `Y171` partial
+cruise. Open residuals: planted-foot toe + entry-morf jnt0 sub-ULP FK-X frontier (6 red
+`tests/test_land.py` cases: `Y171` speedF/pos, ATN `ebs`/`brake_right`, `waitturn`, deep-release f37).
 **Source:** `tww_sim/land/land.py`; the [anim engine](anim-engine.md) (foot FK → `speedF`) and the
 [FP contract](fp-faithfulness.md). History: [history/resolved-bugs](../history/resolved-bugs.md).
 
@@ -26,7 +27,20 @@ f64 running sum is *more* precise than the hardware and drifts ~**2.5 ULP** (~0.
 f32-accumulated position over a ~115-frame walk — precisely the wrong direction for float-exact work.
 With f32 accumulation + the world-space foot FK the sim is **float-perfect (0 ULP)** over the straight
 **full-deflection** walk (see [land movement: float-exact stop](../mechanics/land-movement.md)); the
-last residuals are the planted-foot toe (1–2 ULP on the ATN/waitturn tails) and the separate slip skid.
+last residuals are the planted-foot toe (1–2 ULP on the ATN/waitturn tails, the sub-ULP FK-X frontier).
+
+## `speedF` snaps to 0 below 0.05 (the slip-skid tail)
+
+`posMoveFromFootPos` (`d_a_player_main.cpp:2418`) snaps the composed speed to zero every frame:
+`if (fabsf(sp7C.z) < 0.05f) { speedF = 0; speed.x = speed.z = 0; }`. This runs for **all** grounded
+procs, but only bites where the sim previously drove position from raw `mNormalSpeed`. The **slip**
+skid bleeds `mNormalSpeed` via `cLib_addCalc` (`minStep 0.1875`), which lands one frame at ≈`0.0045`
+before the hand-off to `MOVE_TURN`; the game reads `speedF == 0` there (`m3598 == 0`, so `sp7C.z ==
+mNormalSpeed < 0.05`), so the skid does **not** creep that last sub-0.05 step. Omitting the snap left
+a constant ≈0.0045u forward leak → the reported **74-ULP** endpoint drift (74, not 37, only because
+`pos_z` had crossed `1024` where the ULP halves). The front-roll floors at `ROLL_MIN` (5.0) so it
+never reaches the snap. The `0.05` threshold is modeled in `foot_speedf._foot_speedf`
+([anim engine](anim-engine.md)) and applied in `LandState.step`'s SLIP/ROLL branch.
 
 ## Partial-magnitude regime (`Y171`, `msd`≈0.52)
 

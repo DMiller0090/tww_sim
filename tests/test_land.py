@@ -8,11 +8,12 @@ THE GOLDEN IS LIVE TRUTH, ENFORCED TO THE BYTE. speedF and position in tests/gol
 and the CASE_POSZ endpoints are the GAME's live f32 reads (uint32 hex), captured by
 tests/gen_land_golden.py. The tests assert `f32_bits(sim) == golden` (0 ULP, no tolerance), so a tech
 that is not bit-perfect vs the game shows RED here just as it does live -- the same cases fail in both.
-Today walk/brakeslide/face_left/roll_run/roll_slow/roll_settle/roll_ebs/moveturn are BIT-PERFECT and
-pass (walk/face_left/roll_settle went float-perfect with the world-space foot FK + PSMTXQuat 'newton'
-reciprocal, see knowledge/model/sim.md); ebs (1 ULP), brake_right (2), waitturn (2) and slip (74) still
-FAIL -- the planted-foot jnt34/39 residual (foot chain is ~1 ULP off pure anim FK, likely a foot-IK
-ground snap) and the separate slip skid. This deliberately replaces the old `< 0.05` tolerance (~400
+Today walk/brakeslide/face_left/roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip are BIT-PERFECT
+and pass (walk/face_left/roll_settle went float-perfect with the world-space foot FK + PSMTXQuat
+'newton' reciprocal, see knowledge/model/sim.md; slip's skid tail went bit-perfect with the
+posMoveFromFootPos |speedF| < 0.05 -> 0 snap); ebs (1 ULP), brake_right (2) and waitturn (2) still
+FAIL -- the planted-foot jnt34/39 sub-ULP FK-X residual (foot chain is ~1 ULP off pure anim FK).
+This deliberately replaces the old `< 0.05` tolerance (~400
 ULP wide), which hid the f64-running-sum bug. Regenerate the golden from live after a sim fix (Dolphin
 up): `python tests/gen_land_golden.py`.
 
@@ -207,7 +208,7 @@ CASE_POSZ = {
     'waitturn'   : 0x442c9e1e,   # 690.4705810546875  (state 6)   sim off 2 ULP (jnt34 foot residual)
     'moveturn'   : 0x44086be3,   # 545.6857299804688  (state 6)   bit-perfect (live-mirror *18 seq)
     'moveturn_pos': 0x43ffd7c6,  # 511.68572998046875 (state 6)   bit-perfect (*20 seq)
-    'slip'       : 0x44756df2,   # 981.7178955078125  (state 6)   sim off 74 ULP (separate skid residual)
+    'slip'       : 0x44756df2,   # 981.7178955078125  (state 6)   bit-perfect (speedF<0.05 skid snap)
 }
 
 

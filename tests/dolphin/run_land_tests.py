@@ -23,9 +23,10 @@ comes from the roll's getFrame()>17 checkNextMode(1) exit straight to ATN then t
 
 POSITION (pos_z) IS GATED FLOAT-PERFECT -- 0 ULP vs live is the pass condition (LIVE IS THE SOURCE OF
 TRUTH; the sim must reproduce the game's pos_z byte for byte). posz_status() enforces this with NO
-tolerance and NO xfail: a tech that is not bit-exact shows RED. Today brakeslide/roll_run/roll_ebs/
-moveturn pass (0 ULP); walk/ebs/face_left/brake_right/roll_slow/roll_settle/waitturn/slip FAIL on an
-open sub-ULP speedF/cos accumulation residual (see the handoff to resolve it). Each case also layers
+tolerance and NO xfail: a tech that is not bit-exact shows RED. Today walk_run/brakeslide/face_left/
+roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip pass (0 ULP; slip went bit-perfect with the
+posMoveFromFootPos |speedF| < 0.05 -> 0 skid snap, d_a_player_main.cpp:2418); walk_y171/ebs/
+brake_right/waitturn FAIL on the open sub-ULP planted-foot jnt34/39 FK-X residual. Each case also layers
 its tech assertions. (Runs with no anim keyframe data fall back to the calibrated stand-in and pos_z
 is not asserted.)
 
