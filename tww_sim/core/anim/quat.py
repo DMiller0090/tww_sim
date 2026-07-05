@@ -21,8 +21,8 @@ matching Dolphin's Interpreter fres. See _fres below.
 """
 import struct
 
-from superswim import fp
-from superswim import sim as S
+from .. import fp
+from .. import mathlib as S
 
 
 # JMACos/JMASin on s16 BAM from SEPARATE baked console tables (sin is not a wrap-around view of cos;

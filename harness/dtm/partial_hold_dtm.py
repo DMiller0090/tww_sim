@@ -18,8 +18,8 @@ if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 
-from superswim import sim as S
-from superswim import actions as A
+from tww_sim.swim import sim as S
+from tww_sim.swim import actions as A
 from harness.dtm.run_dtm import run_dtm, sticks_from_actions
 
 COLD_ANIM = 0.06392288208007812

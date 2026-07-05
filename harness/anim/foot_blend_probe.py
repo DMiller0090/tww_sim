@@ -14,11 +14,11 @@ Player member offset -> pointer offset = struct_offset - 0xD8 (P = deref 0x803AD
 DEV tool; reads gitignored _generated anim/skeleton data.
 """
 import os, sys, math, struct
-sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/superswim'))
+sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tww_sim'))
 sys.path.append(os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tools'))
 import dolphin_mem as dm
 from harness.dtm.run_dtm import resolve_anchor
-from superswim.anim import fk
+from tww_sim.core.anim import fk
 
 # pointer offsets (struct - 0xD8)
 O = dict(

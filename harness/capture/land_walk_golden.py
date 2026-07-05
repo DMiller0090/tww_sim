@@ -2,14 +2,14 @@
 
 Writes tests/golden/land_walk_speedf.csv with per-frame (f, ns, msd, speedF, pos_z) over the
 walk_run seq from land_flatwalk@twwgz, plus the anchor's idle FREEB frame in a header comment.
-The offline regression (tests/test_land.py) feeds (ns, msd) into superswim.anim.foot_speedf and
+The offline regression (tests/test_land.py) feeds (ns, msd) into tww_sim.core.anim.foot_speedf and
 asserts speedF matches this golden, and runs the full LandState walk and asserts pos_z tracks it.
 
 These are DERIVED scalars (speed/position), not keyframe data -- safe to commit, like the stick
 tables. Re-run only after a DELIBERATE change to the walk model. DEV tool (needs Dolphin + twwgz).
 """
 import os, sys, struct
-sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/superswim'))
+sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tww_sim'))
 sys.path.append(os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tools'))
 import dolphin_mem as dm
 from harness.dtm.run_dtm import resolve_anchor

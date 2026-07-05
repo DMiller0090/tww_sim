@@ -35,9 +35,9 @@ release decel starts on the 3rd neutral-frame (live land_walk_gt.csv).
 """
 from __future__ import annotations
 import math
-from . import sim as S
-from .sim import f32, cLib_addCalc, cM_scos_s16, deg_to_s16, s16_signed, _deadzone, stick_angle_deg
-from .camera import CameraManual, LAND_SCALE
+from ..core import mathlib as S
+from ..core.mathlib import f32, cLib_addCalc, cM_scos_s16, deg_to_s16, s16_signed, _deadzone, stick_angle_deg
+from ..core.camera import CameraManual, LAND_SCALE
 
 # link_state / daPyProc values (d_a_player_main.h). Walk trio + the targeting-move proc.
 WAIT = 4          # daPyProc_WAIT_e         (idle standstill)
@@ -207,7 +207,7 @@ class LandState:
         self._foot = None
         if use_anim:
             try:
-                from .anim.foot_speedf import FootSpeedF
+                from ..core.anim.foot_speedf import FootSpeedF
                 self._foot = FootSpeedF(idle_frame=float(idle_frame), pos_x=self.pos_x,
                                         pos_z=self.pos_z, facing=self.facing)
             except (FileNotFoundError, OSError, ImportError):
@@ -221,7 +221,7 @@ class LandState:
         # FootSpeedF is stateful; a shallow copy would alias it. Clones share nothing, so clone
         # cannot preserve mid-walk anim state -- only clone at rest (pre-walk) where seeding matches.
         if self._foot is not None and (s._foot is None or s._foot is self._foot):
-            from .anim.foot_speedf import FootSpeedF
+            from ..core.anim.foot_speedf import FootSpeedF
             try:
                 s._foot = FootSpeedF(idle_frame=self._foot.idle_frame, pos_x=self.pos_x,
                                      pos_z=self.pos_z, facing=self.facing)

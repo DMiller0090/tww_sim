@@ -5,7 +5,7 @@ superswim_plan.py - Unified-DP full-swim planner (skeleton).
 ONE shortest-path / forward-DP search over the whole swim, replacing the stacked
 per-phase optimizers in superswim_optimize.py. Phases are *transition functions*
 on a shared SwimState (superswim_sim.py), NOT nested search loops: adding a phase
-== adding actions, ~free. See HANDOFF.md "NEXT BIG ITEM" and SUPERSWIM_KNOWLEDGE.md
+== adding actions, ~free. See HANDOFF.md "NEXT BIG ITEM" and KNOWLEDGE.md
 §5 for the agreed design.
 
 WHY THIS IS A DAG (clean forward DP):
@@ -38,7 +38,7 @@ ACTIONS / PHASES (pluggable):
   ENDGAME  = neu          drag-free |v| neutral dash; also encodes the ESS->neutral
                           EXIT and the neutral->ESS PUMP via the 1-frame state lag in
                           SwimState. Keeping 'neu' in the set prices the exit-phase
-                          penalty automatically (SUPERSWIM_KNOWLEDGE PLANNING PRINCIPLE:
+                          penalty automatically (KNOWLEDGE PLANNING PRINCIPLE:
                           the search holds ESS to a good exit phase when that beats
                           dashing immediately).
   FRONTEND = arrow*       charge / arrow-swim toward the target (cos-penalised charge,
@@ -77,7 +77,7 @@ swim is therefore a strict PREFIX (charge/arrow + reorients) then a cruise/dash 
 plan_with_frontend() searches the prefix (alpha-gear x arrow length), prices both
 hand-off reorients via the facing-BFS (reorient_chain), and composes with the validated
 plan_min_frames() cruise. Front-end per-frame physics are the live-validated arrow
-formulas (arrow_charge_rate / arrow_cross_drift). See SUPERSWIM_KNOWLEDGE §5.3."""
+formulas (arrow_charge_rate / arrow_cross_drift). See KNOWLEDGE §5.3."""
 
 
 def resolve_actions(phase_names):
@@ -665,7 +665,7 @@ def selfcheck(dest, v, anim, air):
     """Prove the skeleton hasn't regressed the validated min-frames optimizer:
     the DP (cruise+endgame) must match superswim_optimize.beam_search_to_dest frame
     count on the same seed. (That result was live-confirmed frame-exact, 2026-06-27.)"""
-    from superswim_optimize import beam_search_to_dest
+    from .optimize import beam_search_to_dest
     r = plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
                         rank='forward', allow_pump=True, verbose=False)
     _, ofr, _, _ = beam_search_to_dest(dest, v, anim, air, beam=8000)

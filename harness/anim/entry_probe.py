@@ -10,7 +10,7 @@ whether spB0 at the first moving frame is the FREEB pose or the first walk-blend
 DEV tool.
 """
 import os, sys, struct, math
-sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/superswim'))
+sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tww_sim'))
 sys.path.append(os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tools'))
 import dolphin_mem as dm
 from harness.dtm.run_dtm import resolve_anchor

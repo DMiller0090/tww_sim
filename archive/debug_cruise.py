@@ -10,7 +10,7 @@ doesn't, the cruise model is correct and the residual is purely the prefix anim 
 Usage: python debug_cruise.py [v=-120] [air=900] [dest=20000] [slot=10]
 """
 import sys, struct, math
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)

@@ -7,7 +7,7 @@ If pumps cover noticeably more distance at the oscillating seed but not the stro
 model captures the tech (and the min-frames A* heuristic was hiding it). Forward-rank
 prune (NOT the speed-biased _hcost) so the neutral-primary branch isn't penalised."""
 import sys, math
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -15,8 +15,8 @@ if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 
-from superswim import sim as S
-from superswim.optimize import sig
+from tww_sim.swim import sim as S
+from tww_sim.swim.optimize import sig
 
 
 def maxdist_dp(v, anim, air, N, frontier=4000, allow_pump=True):

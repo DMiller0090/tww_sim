@@ -10,7 +10,7 @@ while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pypr
 if _rb not in sys.path:
     sys.path.insert(0, _rb)
 
-from superswim import actions as A
+from tww_sim.swim import actions as A
 from viz.build_path_viz import TEMPLATE
 from viz.build_path_ab import build   # trace+classify wrapper (ColdStart mrate 0.5)
 

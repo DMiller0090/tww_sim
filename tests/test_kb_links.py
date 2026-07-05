@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 SCAN = sorted((REPO / "knowledge").rglob("*.md")) + [
-    REPO / "SUPERSWIM_KNOWLEDGE.md",
+    REPO / "KNOWLEDGE.md",
     REPO / "README.md",
 ]
 

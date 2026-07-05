@@ -2,8 +2,9 @@
 
 Replays each baseline action sequence LIVE via `advanceseq` (race-free, ONE pipe
 call per test) from the slot-10 cold start, then compares the FINAL game state
-(potential_speed, anim_frame, air, link_state) against a `superswim_sim.SwimState`
+(potential_speed, anim_frame, air, link_state) against a `tww_sim.swim.SwimState`
 seeded identically. One compact line per test, no per-frame dump -> token-cheap.
+Dolphin command reference: ../../tools/DOLPHIN_CONTROL.md (the single source of truth).
 
 Why end-state and not per-frame: the game is deterministic, so any per-frame
 physics regression propagates into the final speed/anim. A single advanceseq is
@@ -24,7 +25,7 @@ Usage:
 Exit code 0 iff every non-xfail baseline matches (xfail mismatches don't fail the run).
 """
 import struct, math
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -32,9 +33,9 @@ if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 import dolphin_mem as D
-from superswim import sim as S
-from superswim.coldstart import ColdStartSwimState
-from superswim.actions import expand, acts_to_seq, animdiff
+from tww_sim.swim import sim as S
+from tww_sim.swim.coldstart import ColdStartSwimState
+from tww_sim.swim.actions import expand, acts_to_seq, animdiff
 from harness.live import wnamed
 from harness import dolphin_env as ENV
 
@@ -67,7 +68,7 @@ SUITE = [
     ("test_lowspeed_seq.txt",  "bug1 v>=0 tail", True, "v>=0 forward-swim gain (setNormalSpeedF)"),
 ]
 
-# expand / acts_to_seq / animdiff now live in superswim.actions; wnamed in harness.live
+# expand / acts_to_seq / animdiff now live in tww_sim.swim.actions; wnamed in harness.live
 # (both imported above) so the ~30 scripts that reused them no longer depend on this harness.
 
 

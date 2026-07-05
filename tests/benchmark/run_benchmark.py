@@ -38,7 +38,7 @@ while _ROOT != os.path.dirname(_ROOT) and not os.path.exists(os.path.join(_ROOT,
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from superswim import optimize
+from tww_sim.swim import optimize
 from tests.benchmark import cases as C
 from tests.benchmark import record as R
 

@@ -1,5 +1,5 @@
 import struct, math
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)

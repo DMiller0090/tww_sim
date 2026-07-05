@@ -1,6 +1,6 @@
 # Comment, Commit & Naming Style
 
-Follow this so new code reads like the surrounding superswim code — terse, factual, about the
+Follow this so new code reads like the surrounding tww_sim code — terse, factual, about the
 *why* — not like generated boilerplate. The codebase's value is its decomp-grounded physics
 rationale; comment to preserve that, not to narrate the obvious.
 
@@ -10,7 +10,7 @@ rationale; comment to preserve that, not to narrate the obvious.
 
 - Python `#` line comments for inline rationale. **Module/class/function docstrings (triple-quoted)
   are the right home for longer "what this is / how to use it" prose** — they are not gated and
-  match the existing files (see `superswim/sim.py`, `tests/golden_harness.py`).
+  match the existing files (see `tww_sim/swim/sim.py`, `tests/golden_harness.py`).
 - 4-space indent; ~100-char lines (`.editorconfig` enforces). Wrap long `#` comments across lines.
 - No new copyright/header banners on files.
 

@@ -1,7 +1,8 @@
-# Superswim knowledge base
+# tww_sim knowledge base
 
-The retrieval-first knowledge base for TWW superswim mechanics, strategy, and the sim/planner
-model. **Start here** — find your question below, follow the link, read one small page.
+The retrieval-first knowledge base for TWW player physics — **superswimming** (swim) and **land**
+movement — plus strategy, the shared engine, and the sim/planner model. **Start here** — find your
+question below, follow the link, read one small page.
 
 ## How this is organized
 
@@ -11,7 +12,7 @@ Knowledge is split by **layer** — different kinds of fact with different lifes
 |-------|------|----------|
 | [`mechanics/`](mechanics/) | Game truth — formulas, constants, decomp-grounded behavior | timeless |
 | [`strategy/`](strategy/) | TAS heuristics — reboost, dips, phase ordering | evolves |
-| [`model/`](model/) | How the sim/planner implements it (precision, traps, predictors) | tracks code |
+| [`model/`](model/) | How the sim/planner implements it — engine (FP, anim), swim, land | tracks code |
 | [`reference/`](reference/) | [Constants](reference/constants.md), [addresses](reference/addresses.md), [glossary](reference/glossary.md), [commands](reference/commands.md), [data](reference/data.md) | lookup |
 | [`history/`](history/) | Provenance, dead ends, superseded conclusions, open questions | frozen |
 
@@ -62,10 +63,18 @@ you can triage in one glance.
 - **How does walking accelerate / what are the two movement angles (facing vs travel)?** → [mechanics/land-movement.md](mechanics/land-movement.md)
 - **What is a brakeslide / extended brakeslide (EBS) / why does ESS left-or-right hold speed almost forever?** → is *facing* (not travel) relative to `csangle` → [land-movement.md#camera-relative-speed-preservation-the-ebs-payoff](mechanics/land-movement.md#camera-relative-speed-preservation-the-ebs-payoff)
 
-### Model (sim / planner)
-- **Why f32 / the console cosine table / CHARGE_DISP_FACTOR / cold-start mRate?** → [model/sim.md](model/sim.md)
+### Model — engine (core)
+- **Why f32/ctypes / op-order / `_F32_PI` / `cM_rad2s` truncation / the baked cos+sin tables / which matrix-quat ops are FMA-fused?** → [model/fp-faithfulness.md](model/fp-faithfulness.md)
+- **How does the J3D anim runtime work / the 42-joint skeleton / Hermite keyframes / world-space foot FK / `PSMTXQuat` / how does the toe become `speedF`?** → [model/anim-engine.md](model/anim-engine.md)
+
+### Model — swim
+- **Why f32 / the console cosine table / CHARGE_DISP_FACTOR / cold-start mRate?** → [model/swim-sim.md](model/swim-sim.md)
 - **How does the planner search / why are mid-swim pumps off by default / the crossover decomposition / the speed-retention prune?** → [model/planner.md](model/planner.md)
 - **What are the predict/ modules / the off-axis residual?** → [model/predictors.md](model/predictors.md)
+
+### Model — land
+- **How does the land sim accumulate position (f32) / the `Y171` partial regime / the 7 red ULP tests?** → [model/land-sim.md](model/land-sim.md)
+- **How does the land planner reach a target (x,z) / the live-valid stick set / the C-up freeze to z=2000 / seam-clip vs RTA bars?** → [model/land-planner.md](model/land-planner.md)
 
 ### Provenance & open work
 - **Was <bug> a physics issue or an artifact?** (bug#2, 554, off-axis, omega grid, cosine table) → [history/resolved-bugs.md](history/resolved-bugs.md)

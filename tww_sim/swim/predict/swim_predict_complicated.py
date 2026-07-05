@@ -25,7 +25,7 @@ import sys, csv, math
 from .. import sim as S
 from . import swim_exact as E
 from . import stick_angle as SA
-from .camera_arbitrary import CameraArbitrary
+from ...core.camera.camera_arbitrary import CameraArbitrary
 from .swim_arbitrary import ArbitrarySwimState
 
 

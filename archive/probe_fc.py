@@ -7,7 +7,7 @@ the SWIMING/SWIMWAIT controller phase is doing at the wait=1 vs wait=2 boundary.
 Usage: python probe_fc.py [seq=test_pumptrans_seq.txt] [lo=393] [hi=400] [slot=10]
 """
 import sys
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)

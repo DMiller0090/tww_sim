@@ -5,8 +5,8 @@ full precision. See _notes handoff + knowledge/mechanics/camera.md. These lock t
 a future edit can't silently regress it."""
 import math
 import pytest
-from superswim.predict import cam_bezier as CB
-from superswim.predict.camera_manual import CameraManual, LAND_SCALE
+from tww_sim.core.camera import cam_bezier as CB
+from tww_sim.core.camera.camera_manual import CameraManual, LAND_SCALE
 
 
 def test_land_scale_is_mm83():

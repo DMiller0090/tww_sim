@@ -6,7 +6,7 @@ forever"? Is speed preservation governed by facing or travel?
 **Status:** validated live (2026-07-04). The **flat-ground walk, the ATN_MOVE tier (brakeslide /
 EBS / facing decouple / brake), the forward roll (FRONT_ROLL — entry→standstill and the frame-perfect
 roll-EBS exit), AND the big-reversal ground-turn procs (WAIT_TURN / MOVE_TURN / SLIP) are fully
-simulated** (`superswim.land`): `mNormalSpeed` (signed), the proc state machine, **facing
+simulated** (`tww_sim.land`): `mNormalSpeed` (signed), the proc state machine, **facing
 (`shape_angle.y`) and travel (`current.angle.y`) are all BIT-EXACT** vs live, and the walk + roll
 `speedF`/position is bit-exact too (d≈0.0001, via the ported J3D anim engine — see below). Locked by
 `tests/dolphin/run_land_tests.py`: **12 sim-vs-live cases** (nspeed dv=0.00000, facing/travel d=0.0000°)
@@ -49,14 +49,14 @@ From idle (state 5/4), full stick accelerates straight to the run cap **`mMaxNor
 units/frame via `setNormalSpeedF` — **no walk-before-run plateau** (an apparent ~16-frame 5.0 plateau
 in an early capture was a phantom **front roll**, state 30, from a stray button — not a mechanic).
 - **2-frame input latency** on both press AND release (the game acts on the stick delivered 2 frames
-  earlier — one constant reproduces both edges; `superswim.land.INPUT_DELAY`).
+  earlier — one constant reproduces both edges; `tww_sim.land.INPUT_DELAY`).
 - **Accel = +3.5/frame** exactly: `dVar9 = cM_scos(0)·field_0x14·msd²` (`field_0x14 = 3.5`), injected
   straight into `mNormalSpeed` by `setNormalSpeedF`, clamped to the cap.
 - **Decel on release = `cLib_addCalc(mNormalSpeed, 0, 0.6, 2.5, 1.8)`** (HIO `field_0x24/0x1C/0x20`):
   `17→14.5→12→9.5→7→4.5→2→0.2→0` — the constant `−2.5/frame` while far from 0, then the cLib min-step
   snap tail (not a flat −2.5). Clean stop (state 4).
 - proc = `daPyProc_MOVE_e` (state **6**). On flat, wall-free ground, collision (`mAcch` wall/slope) is
-  inert, so `mNormalSpeed` is pure 1-D physics — **transcribed bit-exact** in `superswim.land`.
+  inert, so `mNormalSpeed` is pure 1-D physics — **transcribed bit-exact** in `tww_sim.land`.
 
 **Position ≠ `mNormalSpeed`.** The pos integrates **`speedF`** (true_speed), a **blend** of the
 potential speed and the foot-plant delta. The composition is now known **bit-exact** (verified 0-ULP
@@ -75,15 +75,15 @@ speedF = f32( mNormalSpeed·(1 − m3598)  +  f31_2·m3598 )
 - **`f31_2`** = the **planted foot's XZ displacement** this frame (`foot_delta_prev` / `m359C`,
   pointer-off `0x34C4`) — the genuinely animation-driven term (`posMoveFromFootPos` reads the WALK/DASH
   foot-joint matrices; plant = the foot with lower Y). It is a per-frame *delta* of a joint world
-  position, so it is reproduced by the **ported J3D animation runtime** (`superswim.anim`), not a table.
+  position, so it is reproduced by the **ported J3D animation runtime** (`tww_sim.core.anim`), not a table.
 
-**The foot-plant subsystem is now BUILT and bit-exact** (`superswim.anim`, FMA-faithful: single
-fused-multiply-add via an f64 intermediate, `superswim.fp`). The chain, all offline: `UnderAnimState` (the `setBlendMoveAnime`/`setMoveAnime`/`J3DFrameCtrl`
+**The foot-plant subsystem is now BUILT and bit-exact** (`tww_sim.core.anim`, FMA-faithful: single
+fused-multiply-add via an f64 intermediate, `tww_sim.core.fp`). The chain, all offline: `UnderAnimState` (the `setBlendMoveAnime`/`setMoveAnime`/`J3DFrameCtrl`
 state machine → which anims fill MOVE0/MOVE1, their frame-ctrl frames, the blend ratio, and `m3598`,
 driven by the bit-exact `mNormalSpeed`) → `FootFK` (reduced foot-chain forward kinematics: BCK Hermite
 keyframe eval → euler→quat → `QuatLerp` blend → `PSMTXQuat`/`Concat`/`MultVec`, plus the walk-entry
 **oldframe-morf**) → `posMoveFromFootPos` (plant select, the 1-frame-delayed toe delta `f31_2`, the
-recursive smoothing gate, and the `speedF` composition). `superswim.anim.foot_speedf.FootSpeedF` is the
+recursive smoothing gate, and the `speedF` composition). `tww_sim.core.anim.foot_speedf.FootSpeedF` is the
 whole thing; `LandState` drives it each frame → **`speedF` matches live to ~1e-5 across accel/cruise/
 decel including the standing→walk entry and the stop; final `pos_z` bit-exact (d=0.0000)**.
 - The steady-walk pose is the **DASH** anim (cruise = both slots DASH, ratio 1); the arc is
@@ -109,7 +109,7 @@ From a run, **press L (target) + full-down for 1 frame, keep L held, then hold E
   `mAtnMoveB.field_0xC`). The ~−0.14/frame bleed is *not* a decay term: it is the accel-inject branch of
   `setNormalSpeedF` adding `f1 = 2.5·mStickDistance·cos(Δtravel) ≈ +0.139` to the negative speed each frame,
   walking it toward 0 (`mAtnMoveB.field_0x8 = 2.5`, `msd = 0.0556` at the ESS magnitude).
-- **Simulated bit-exact incl. position** (`superswim.land`, `LandState.step` with L via `buttons`/`triggerL`):
+- **Simulated bit-exact incl. position** (`tww_sim.land`, `LandState.step` with L via `buttons`/`triggerL`):
   the steady backslide poses `ANM_ATNDB` single (`setBlendAtnBackMoveAnime` else-branch) with **`m3598 = 0`**,
   so `speedF == mNormalSpeed` — the backslide position is pure momentum (see *ATN position* below).
 
@@ -152,7 +152,7 @@ first instead keeps facing glued to travel.)
 ## ATN position (the strafe/backslide foot anims) — BIT-EXACT
 
 The ATN_MOVE tier's **position** is bit-exact too (`setBlendAtnMoveAnime`, `d_a_player_main.cpp:3280`,
-ported into `superswim/anim/anim_state.py`; foot posed each ATN frame by `foot_speedf.step_atn`). Each
+ported into `tww_sim/core/anim/anim_state.py`; foot posed each ATN frame by `foot_speedf.step_atn`). Each
 ATN frame the `mDirection` machine picks the foot anim from **`f31 = |mNormalSpeed·cos(m34E2)| /
 mMaxNormalSpeed`** (on flat ground `m34E2 = getGroundAngle = 0`, so `cos = 1` ⇒ `f31 = |nspeed|/max`):
 - **side** (`DIR_LEFT/RIGHT`): blends `ANM_ATN{L,R}S` → `ANM_ATNW{L,R}S` → `ANM_ATND{L,R}S` with `f31`
@@ -192,7 +192,7 @@ Press **A** (the "do" button, `dActStts_ATTACK_e`) while moving on the ground �
   (huge negative speed from a roll) is a prime seam-clip setup.
 - Rolling **into a wall** → `procFrontRollCrash` (needs `speedF ≥ 10` = `field_0x3C`); inert on flat
   wall-free ground.
-- **Simulated** (`superswim.land`, `step` with A = button `0x100`): the roll is **fully bit-exact,
+- **Simulated** (`tww_sim.land`, `step` with A = button `0x100`): the roll is **fully bit-exact,
   entry to standstill AND the roll-EBS exit** (`roll_run`/`roll_slow`/`roll_settle`/`roll_ebs` are all
   sim-vs-live, pos_z d≈0.0001, roll-EBS speed −23.109 bit-exact). Duration = the `ANM_ROLLF` frame ctrl
   running 0→`field_0x0` (19) at rate 1.1 (~18 frames). Two exits: with a **neutral** stick the
@@ -208,7 +208,7 @@ Press **A** (the "do" button, `dActStts_ATTACK_e`) while moving on the ground �
     the walk blend re-inits its frame ctrl to **frame 0** *because* `m34C3 == 0` (not phase-continued),
     and `procMove_init` re-triggers the oldframe-morf (`mBasic.field_0xC` = 2.4). The first `m3598>0`
     frame then reads the correct roll-warmed `m359C` via the 0.3/0.7 recursive smoothing. Foot engine:
-    `superswim/anim/foot_speedf.py` `enter_roll`/`step_roll`; `rollf` keyframe data added to the
+    `tww_sim/core/anim/foot_speedf.py` `enter_roll`/`step_roll`; `rollf` keyframe data added to the
     gitignored `_generated/anim/` set (frameMax 19, `EMode_NONE`, decShift 2).
 
 ## Wiggle EBS + L+Up cancel → chained roll (speed-preservation combo)
@@ -257,7 +257,7 @@ never fire on-axis):
   through the skid; once it bleeds to ~0 it flips travel by 0x8000, re-seeds `mNormalSpeed = cap·0.5`, and
   hands to `MOVE_TURN`. So a full-speed reverse is **SLIP → MOVE_TURN → MOVE**.
 
-**Status:** fully simulated in `superswim.land` (`checkNextMode`'s `!attention_lock` arbiter +
+**Status:** fully simulated in `tww_sim.land` (`checkNextMode`'s `!attention_lock` arbiter +
 `procWaitTurn`/`procMoveTurn`/`procSlip`), **bit-exact** `mNormalSpeed`/state/facing/travel vs live.
 The reversal early-return in `setSpeedAndAngleNormal` (2766) hinges on `ModeFlg_00000001` (set for the
 idle procs WAIT/FREE_WAIT/WAIT_TURN, *not* MOVE/MOVE_TURN/SLIP): while idle a reversal is inert (angles
@@ -322,9 +322,9 @@ new code**: `frozen_pos = walk-sim pos 3 frames after the neutral+C-up input` (t
 3rd-neutral-frame pos = 795.1258). Because the freeze happens MID-MOTION there is no [resting dead-band](#walk--run-acceleration-baseline),
 so a slow approach + cancel places the frozen float essentially anywhere. **Float-perfect stop achieved
 deterministically**: a diverse beam over the slow-cruise approach (live-valid mags) drilled the freeze to
-**z = 2000.0001221 live = 1 float32 ULP from 2000.0** (`superswim/plan_land.py` machinery + the freeze model).
+**z = 2000.0001221 live = 1 float32 ULP from 2000.0** (`tww_sim/land/plan_land.py` machinery + the freeze model).
 Getting the *exact* float is limited by the sim's ~1-ULP land-position residual — see
-[model/sim: land position accumulates in f32](../model/sim.md#land-position-accumulates-in-f32-not-an-f64-running-sum).
+[model/sim: land position accumulates in f32](../model/land-sim.md#land-position-accumulates-in-f32-not-an-f64-running-sum).
 
 ## Values
 
@@ -354,13 +354,17 @@ Getting the *exact* float is limited by the sim's ~1-ULP land-position residual 
 
 - [ESS](ess.md) — the same `(128,110)`-class stick position (land reuses the swim ESS coordinate).
 - [Camera](camera.md) — `csangle` / `dCam_getControledAngleY`, here a live per-frame movement input.
-- `superswim.land` (`LandState`) — the walk, **ATN_MOVE, roll, and the ground-turn procs** sim
+- `tww_sim.land` (`LandState`) — the walk, **ATN_MOVE, roll, and the ground-turn procs** sim
   (`setSpeedAndAngleAtn`/`AtnBack` + the `mDirection` machine + `checkNextMode`'s full reversal arbiter +
   `procWaitTurn`/`procMoveTurn`/`procSlip`; `step(sx, sy, buttons, triggerL)`);
-  `superswim.anim` (`foot_speedf.FootSpeedF` + the J3D engine) — the bit-exact walk `speedF`;
+  `tww_sim.core.anim` (`foot_speedf.FootSpeedF` + the J3D engine) — the bit-exact walk `speedF`;
   `tests/test_land.py` (offline golden walk arc + the ATN + roll + turn end-state cases) +
   `tests/dolphin/run_land_tests.py`: **12 sim-vs-live** cases (walk + 4 ATN + 4 roll + waitturn/moveturn/slip:
   nspeed/facing/travel bit-exact; pos_z bit-exact for **every** case — walk, roll, MOVE_TURN, WAIT_TURN,
   the 4 ATN techs, and the SLIP skid→turn — the calibrated fallback is used only with no anim data) **plus**
   the `wiggle_ebs_roll` DTM-playback lock.
+- [model/land-sim](../model/land-sim.md) (position precision + the 7 ULP tests) ·
+  [model/land-planner](../model/land-planner.md) (target→inputs) ·
+  [model/anim-engine](../model/anim-engine.md) (foot FK → `speedF`) ·
+  [model/fp-faithfulness](../model/fp-faithfulness.md) (the FP contract).
 - `_notes/tww-sim-architecture-design.md` §5/§5b — how land folds into the generalized proc-machine sim.

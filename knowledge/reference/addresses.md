@@ -1,5 +1,12 @@
 # GZLJ01 (twwgz.iso, JP) function addresses — from framework.map
 
+**Answers:** What is the JP/GZLJ01 live address of `<function>`? Why don't the decomp comment
+addresses match the running game?
+**Status:** reference (JP `framework.map`).
+**Source:** JP `framework.map` (a local TWW decomp/extract). Live-verified against Dolphin.
+
+---
+
 ⚠️ The decomp `tww/.inc` comment addresses are a DIFFERENT version (US/GZLE01).
 The LIVE game is JP/GZLJ01. Use THESE (from the JP `framework.map`, a local TWW decomp/extract)
 for any live breakpoint. Example mismatch: procSwimWait_init decomp=0x8013DB24 vs JP=0x8013a8a4.

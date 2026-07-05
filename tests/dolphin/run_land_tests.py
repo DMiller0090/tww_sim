@@ -1,6 +1,8 @@
 """LAND-movement regression, two categories: SIM-vs-LIVE (walk + 4 ATN techs + 4 roll cases + 3 ground-
 reversal turn procs) and DTM-PLAYBACK (the wiggle-EBS-into-roll combo).
 
+Dolphin command reference: ../../tools/DOLPHIN_CONTROL.md (the single source of truth).
+
 TURN PROCS (waitturn/moveturn/slip), now SIMULATED: a >0x7800 stick reversal routes through checkNextMode's
 non-attention arbiter to a turn proc -- stopped -> procWaitTurn (pivot in place), moving+fast+genuine flip
 -> procSlip (skid then procMoveTurn), moving+slow -> procMoveTurn (turn-around). The proc is transient
@@ -13,7 +15,7 @@ in the FK + carried through the oldframe-morf, so the MOVE_TURN walk tail's toe 
 
 SIM-vs-LIVE (walk_run + brakeslide/ebs/face_left/brake_right + roll_run/roll_slow/roll_settle/roll_ebs
 + waitturn/moveturn/slip):
-seed a `superswim.land.LandState` from the live frame-0 snapshot, step the sim over the input burst
+seed a `tww_sim.land.land.LandState` from the live frame-0 snapshot, step the sim over the input burst
 (stick + L-target + A), and compare the END state against the game replayed via one race-free
 `advanceseq`. mNormalSpeed (signed potential_speed), the proc state machine, facing (shape_angle.y)
 and travel (current.angle.y) are all BIT-EXACT -- including roll_ebs, whose ~-23.109 preserved speed
@@ -47,7 +49,7 @@ Usage:
   python run_land_tests.py            # assert locked expectations (exit 0 iff all pass)
   python run_land_tests.py record=1   # print end-states to (re)lock after a DELIBERATE change
 """
-import os, sys, struct  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys, struct  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -56,7 +58,7 @@ _tb = os.path.join(os.path.dirname(_rb), 'tools')  # locate tools/
 if _tb not in sys.path: sys.path.append(_tb)
 import dolphin_mem as D
 from harness.dtm.run_dtm import resolve_anchor
-from superswim.land import LandState
+from tww_sim.land.land import LandState
 
 ANCHOR = resolve_anchor("land_flatwalk@twwgz")
 READS = ["link_state", "potential_speed", "true_speed", "shape_angle_y",
@@ -264,7 +266,7 @@ CASES = [
         (e["link_state"] == 4, f"state 4 (idle/stopped)  [{e['link_state']}]"),
         (e["v"] < 0.5, f"|v|~0 braked  [{e['v']:.2f}]"),
     ]),
-    # roll (FRONT_ROLL) is now SIMULATED (superswim.land) -- these end MID-ROLL so nspeed/state and
+    # roll (FRONT_ROLL) is now SIMULATED (tww_sim.land.land) -- these end MID-ROLL so nspeed/state and
     # the momentum position are bit-exact (roll speed = clamp(speedF*1.5+0.5, 5, 26) set at entry).
     ("roll_run", seq_roll_run, "full-run roll -> state 30 at the 26 cap (mid-roll)", lambda e: [
         (e["link_state"] == 30, f"state 30 (FRONT_ROLL)  [{e['link_state']}]"),

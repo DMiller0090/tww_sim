@@ -17,7 +17,7 @@ from __future__ import annotations
 import os, csv
 from .. import sim as S
 
-_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tables")
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "core", "tables")
 # Complete live grid (65536 cells) of MAIN_STICK_ANGLE (0x80398314), gold-dumped via
 # harness/capture/stick_grid_redump.py; integrity locked by tests/test_stick_table_integrity.py.
 _TABLE_PATH = os.path.join(_HERE, "stick_angle_table.csv")

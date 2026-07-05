@@ -31,8 +31,8 @@ Reads gitignored _generated anim/skeleton data (dev-supplied).
 """
 import os, sys, json
 
-from superswim import fp
-from superswim import sim as S
+from .. import fp
+from .. import mathlib as S
 
 from . import j3d_eval
 from . import quat as Q

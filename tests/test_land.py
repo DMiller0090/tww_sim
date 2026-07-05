@@ -1,4 +1,4 @@
-"""Offline regression for the LAND walk sim (superswim.land).
+"""Offline regression for the LAND walk sim (tww_sim.land.land).
 
 Guards the BIT-EXACT part of the first land increment -- mNormalSpeed (potential_speed) and
 the FREE_WAIT->MOVE->WAIT state machine -- as a golden arc, without needing Dolphin. This is the
@@ -24,9 +24,9 @@ import struct
 
 import pytest
 
-from superswim.land import (LandState, WAIT, FREE_WAIT, MOVE, ATN_MOVE, FRONT_ROLL,
+from tww_sim.land.land import (LandState, WAIT, FREE_WAIT, MOVE, ATN_MOVE, FRONT_ROLL,
                              WAIT_TURN, MOVE_TURN, SLIP)
-from superswim.anim.foot_speedf import FootSpeedF
+from tww_sim.core.anim.foot_speedf import FootSpeedF
 
 _ANIM = FootSpeedF.available()
 _GOLDEN = os.path.join(os.path.dirname(__file__), "golden", "land_walk_speedf.csv")

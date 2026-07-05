@@ -9,7 +9,7 @@ import random
 
 import pytest
 
-from superswim import fp
+from tww_sim.core import fp
 
 
 def _to_f32(x):

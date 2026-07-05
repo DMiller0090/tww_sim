@@ -23,7 +23,7 @@ HIO tuning constants (daPy_HIO_move_c0::m, d_a_player_HIO_data.inc) used here:
   field_0x48 = 2.3 (DASH cruise rate) ; field_0x60 (f28 free) = 1.0.
 Anim frame maxima are plain metadata (not copyrighted keyframe data).
 """
-from superswim import fp
+from .. import fp
 
 # --- J3DFrameCtrl attribute modes (J3DAnimation.h) -----------------------------------------------
 EMode_NONE, EMode_RESET, EMode_LOOP, EMode_REVERSE, EMode_LOOP_REVERSE = 0, 1, 2, 3, 4

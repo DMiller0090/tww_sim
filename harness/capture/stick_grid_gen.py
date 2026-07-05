@@ -19,14 +19,14 @@ Usage:
 """
 import os, sys, csv, math, ctypes
 
-# >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+# >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
 if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')  # locate tools/
 if _tb not in sys.path: sys.path.append(_tb)
-from superswim import sim as S   # S.f32 = ctypes c_float round; S._RAD2IDX = 10430.3779296875
+from tww_sim.swim import sim as S   # S.f32 = ctypes c_float round; S._RAD2IDX = 10430.3779296875
 
 f32 = S.f32
 _RAD2IDX = S._RAD2IDX            # f32 value of 10430.379f (65536/2pi), already in sim.py

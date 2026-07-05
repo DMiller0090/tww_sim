@@ -1,0 +1,356 @@
+<title>Superswim — Skeleton Viewer</title>
+<style>
+  :root{
+    --ground:#0c1a24; --panel:#0f2029cc; --panel-solid:#102530; --edge:#204353;
+    --ink:#dce9ee; --ink-dim:#8fa9b3; --ink-faint:#5f7c86;
+    --accent:#f0b429;        /* validated toe points */
+    --bone:#5fd0d6;          /* unverified skeleton */
+    --joint:#9fe4e8;
+    --chrome-bg:#0a151d; --chrome-ink:#dce9ee; --chrome-edge:#1c3947;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --chrome-bg:#e8eef0; --chrome-ink:#12252f; --chrome-edge:#c2d2d8; --panel:#ffffffd9; --panel-solid:#ffffff; --edge:#cbdae0; --ink:#16303c; --ink-dim:#4a6772; --ink-faint:#7c98a2; }
+  }
+  :root[data-theme="dark"]{ --chrome-bg:#0a151d; --chrome-ink:#dce9ee; --chrome-edge:#1c3947; --panel:#0f2029cc; --panel-solid:#102530; --edge:#204353; --ink:#dce9ee; --ink-dim:#8fa9b3; --ink-faint:#5f7c86; }
+  :root[data-theme="light"]{ --chrome-bg:#e8eef0; --chrome-ink:#12252f; --chrome-edge:#c2d2d8; --panel:#ffffffd9; --panel-solid:#ffffff; --edge:#cbdae0; --ink:#16303c; --ink-dim:#4a6772; --ink-faint:#7c98a2; }
+
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--chrome-bg); color:var(--chrome-ink);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  #stage{position:fixed; inset:0}
+  canvas{display:block; width:100%; height:100%; cursor:grab; touch-action:none}
+  canvas.drag{cursor:grabbing}
+
+  .mono{font-family:ui-monospace,"SFMono-Regular","Cascadia Mono",Menlo,Consolas,monospace}
+
+  /* ---- title plate ---- */
+  #title{
+    position:fixed; top:16px; left:18px; pointer-events:none; user-select:none;
+  }
+  #title h1{
+    margin:0; font-size:15px; font-weight:650; letter-spacing:.02em; color:var(--ink);
+    text-shadow:0 1px 8px rgba(0,0,0,.5);
+  }
+  #title p{
+    margin:3px 0 0; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-dim);
+  }
+
+  /* ---- HUD (frame + legend) ---- */
+  #hud{
+    position:fixed; top:16px; right:18px; text-align:right; pointer-events:none; user-select:none;
+  }
+  #frameno{ font-size:34px; font-weight:600; color:var(--ink); line-height:1;
+            font-variant-numeric:tabular-nums; text-shadow:0 1px 10px rgba(0,0,0,.55);}
+  #frameno small{font-size:14px; color:var(--ink-dim); font-weight:500}
+  #legend{ margin-top:12px; display:inline-flex; flex-direction:column; gap:5px; align-items:flex-end}
+  .leg{display:flex; align-items:center; gap:7px; font-size:11px; color:var(--ink-dim)}
+  .leg i{width:16px; height:0; border-top:2px solid; border-radius:2px}
+  .leg .dot{width:8px;height:8px;border-radius:50%;border:0}
+
+  /* ---- control rail ---- */
+  #rail{
+    position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
+    display:flex; align-items:center; gap:14px;
+    background:var(--panel); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border:1px solid var(--edge); border-radius:14px;
+    padding:10px 16px; box-shadow:0 8px 32px rgba(0,0,0,.4);
+    max-width:calc(100vw - 32px); flex-wrap:wrap; justify-content:center;
+  }
+  #rail .grp{display:flex; align-items:center; gap:9px}
+  .sep{width:1px; align-self:stretch; background:var(--edge); margin:2px 0}
+
+  button{font:inherit; color:var(--ink); background:transparent; border:1px solid var(--edge);
+    border-radius:9px; padding:7px 11px; cursor:pointer; line-height:1; transition:background .12s,border-color .12s}
+  button:hover{background:color-mix(in srgb, var(--bone) 12%, transparent); border-color:var(--bone)}
+  button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  button.play{width:40px; height:36px; display:grid; place-items:center; color:var(--accent); border-color:color-mix(in srgb,var(--accent) 45%, var(--edge))}
+  button.tog[aria-pressed="true"]{background:color-mix(in srgb,var(--bone) 18%, transparent); border-color:var(--bone); color:var(--ink)}
+
+  label.field{display:flex; align-items:center; gap:7px; font-size:11px; letter-spacing:.05em;
+    text-transform:uppercase; color:var(--ink-dim)}
+  select{font:inherit; font-size:12px; color:var(--ink); background:var(--panel-solid);
+    border:1px solid var(--edge); border-radius:8px; padding:6px 8px; cursor:pointer; text-transform:none; letter-spacing:0}
+  select:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+
+  input[type=range]{-webkit-appearance:none; appearance:none; width:min(46vw,340px); height:4px;
+    background:linear-gradient(var(--edge),var(--edge)) no-repeat; background-size:var(--fill,0%) 100%;
+    border-radius:3px; outline:none; cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:4px; background:transparent; border-radius:3px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:15px;height:15px;
+    margin-top:-5.5px; border-radius:50%; background:var(--accent); border:2px solid var(--panel-solid); box-shadow:0 1px 4px rgba(0,0,0,.5)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--panel-solid)}
+  input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--accent);outline-offset:2px}
+
+  .note{position:fixed; left:18px; bottom:20px; max-width:230px; font-size:10.5px; line-height:1.5;
+    color:var(--ink-faint); pointer-events:none; user-select:none}
+  @media (max-width:720px){ #title,.note{display:none} #hud{top:12px;right:12px} }
+</style>
+
+<div id="stage"><canvas id="c"></canvas></div>
+
+<div id="title">
+  <h1>Link — cl skeleton</h1>
+  <p id="subtitle">Wind Waker · land sim FK</p>
+</div>
+
+<div id="hud">
+  <div id="frameno" class="mono">0.0<small> / 0</small></div>
+  <div id="legend">
+    <span class="leg"><i style="border-color:var(--bone)"></i>skeleton bones (42 joints)</span>
+    <span class="leg"><span class="dot" style="background:var(--accent)"></span>foot toe · console-exact</span>
+  </div>
+</div>
+
+<div id="rail">
+  <div class="grp">
+    <button class="play" id="play" title="Play / pause (Space)" aria-label="Play">▶</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <input type="range" id="scrub" min="0" max="1" step="1" value="0" aria-label="Frame">
+    <span id="scrublbl" class="mono" style="font-size:11px;color:var(--ink-dim);min-width:64px">f 0.0</span>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <label class="field">Clip
+      <select id="anim"></select>
+    </label>
+    <label class="field">Speed
+      <select id="speed">
+        <option value="0.25">0.25×</option>
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button class="tog" id="spin" aria-pressed="true" title="Auto-orbit">Spin</button>
+    <button class="tog" id="grid" aria-pressed="true" title="Ground grid">Grid</button>
+    <button class="tog" id="lbl" aria-pressed="false" title="Joint dots">Joints</button>
+    <button id="reset" title="Reset view">Reset</button>
+  </div>
+</div>
+
+<div class="note">
+  Drag to orbit · scroll to zoom. Bones use the same FK as the sim's foot-toe term but are
+  <em>console-unverified</em>; only the amber toe points are validated bit-exact.
+</div>
+
+<script>
+const DATA = __DATA__;
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W=0,H=0,DPR=1;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize);
+
+// ---- theme-aware canvas colors (read from CSS tokens) ----
+function tok(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+let COL = {};
+function refreshColors(){
+  COL.bone = tok('--bone'); COL.joint = tok('--joint'); COL.accent = tok('--accent');
+  const light = matchMedia('(prefers-color-scheme: light)').matches;
+  const attr = document.documentElement.getAttribute('data-theme');
+  const isLight = attr ? attr==='light' : light;
+  COL.bg0 = isLight ? '#dfe9ec' : '#0c1a24';
+  COL.bg1 = isLight ? '#c3d5db' : '#050d13';
+  COL.grid = isLight ? 'rgba(40,80,95,0.16)' : 'rgba(95,208,214,0.10)';
+  COL.gridAxis = isLight ? 'rgba(40,80,95,0.34)' : 'rgba(95,208,214,0.26)';
+  COL.ink = isLight;
+}
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', refreshColors);
+new MutationObserver(refreshColors).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+// ---- camera (orbit) ----
+const cam = { yaw:0.9, pitch:0.32, dist:210, tx:0, ty:52, tz:0, focal:640 };
+const DEF = {...cam};
+let spin = true;
+
+function project(p){
+  let x=p[0]-cam.tx, y=p[1]-cam.ty, z=p[2]-cam.tz;
+  const cy=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
+  let x1 =  x*cy + z*sy;
+  let z1 = -x*sy + z*cy;
+  const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  let y1 = y*cp - z1*sp;
+  let z2 = y*sp + z1*cp;
+  let depth = cam.dist - z2;
+  if(depth < 1) depth = 1;
+  const s = cam.focal/depth;
+  return { x: W/2 + x1*s, y: H/2 - y1*s, d: depth, s };
+}
+
+// ---- state ----
+let anims = Object.keys(DATA.anims);
+let curAnim = anims.includes('walk') ? 'walk' : anims[0];
+let frameIdx = 0;
+let playing = true;
+let speed = 1;
+let showGrid=true, showJoints=false;
+
+function clip(){ return DATA.anims[curAnim]; }
+function nframes(){ return clip().frames.length; }
+
+// ---- draw ----
+function drawGround(){
+  if(!showGrid) return;
+  const R=110, step=22;
+  ctx.lineWidth=1;
+  for(let gx=-R; gx<=R; gx+=step){
+    const a=project([gx,0,-R]), b=project([gx,0,R]);
+    ctx.strokeStyle = gx===0 ? COL.gridAxis : COL.grid;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+  for(let gz=-R; gz<=R; gz+=step){
+    const a=project([-R,0,gz]), b=project([R,0,gz]);
+    ctx.strokeStyle = gz===0 ? COL.gridAxis : COL.grid;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+}
+
+function hexA(hex,a){
+  hex=hex.replace('#',''); if(hex.length===3) hex=hex.split('').map(c=>c+c).join('');
+  const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function render(){
+  // background gradient
+  const g = ctx.createRadialGradient(W*0.5,H*0.42,60, W*0.5,H*0.5,Math.max(W,H)*0.75);
+  g.addColorStop(0,COL.bg0); g.addColorStop(1,COL.bg1);
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+  drawGround();
+
+  const fr = clip().frames[frameIdx];
+  const P = fr.p;
+  // project all joints
+  const scr = P.map(project);
+
+  // bones: depth-sort (far first) for correct overlap
+  const bones = DATA.bones.map(([a,b])=>{
+    const pa=scr[a], pb=scr[b];
+    return {pa,pb,d:(pa.d+pb.d)/2};
+  }).sort((u,v)=>v.d-u.d);
+
+  for(const bn of bones){
+    const t = Math.max(0, Math.min(1, (bn.d-120)/180)); // depth cue 0..1
+    const alpha = 0.95 - t*0.6;
+    const w = Math.max(1.1, bn.pa.s*2.1);
+    ctx.strokeStyle = hexA(COL.bone, alpha);
+    ctx.lineWidth = w;
+    ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(bn.pa.x,bn.pa.y); ctx.lineTo(bn.pb.x,bn.pb.y); ctx.stroke();
+  }
+
+  if(showJoints){
+    for(const s of scr){
+      const r=Math.max(1.3, s.s*1.6);
+      ctx.fillStyle=hexA(COL.joint,0.9);
+      ctx.beginPath(); ctx.arc(s.x,s.y,r,0,7); ctx.fill();
+    }
+  }
+
+  // validated toe points (amber, glow)
+  for(const key of ['ltoe','rtoe']){
+    const s=project(fr[key]);
+    const r=Math.max(3, s.s*3.4);
+    ctx.save();
+    ctx.shadowColor=COL.accent; ctx.shadowBlur=14;
+    ctx.fillStyle=COL.accent;
+    ctx.beginPath(); ctx.arc(s.x,s.y,r,0,7); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle=hexA(COL.accent,0.35); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(s.x,s.y,r+3.5,0,7); ctx.stroke();
+  }
+
+  // HUD frame number
+  document.getElementById('frameno').innerHTML =
+    fr.f.toFixed(1)+'<small> / '+clip().frame_max+'</small>';
+}
+
+// ---- loop ----
+let last=0, acc=0;
+const FPS=24; // TWW anim frame rate feel
+function tick(ts){
+  if(!last) last=ts;
+  const dt=(ts-last)/1000; last=ts;
+  if(playing){
+    acc += dt*FPS*speed;
+    while(acc>=1){ frameIdx=(frameIdx+1)%nframes(); acc-=1; syncScrub(); }
+  }
+  if(spin){ cam.yaw += dt*0.28; }
+  render();
+  requestAnimationFrame(tick);
+}
+
+// ---- controls ----
+const scrub=document.getElementById('scrub');
+const scrublbl=document.getElementById('scrublbl');
+function syncScrub(){
+  scrub.max=nframes()-1; scrub.value=frameIdx;
+  scrub.style.setProperty('--fill',(frameIdx/(nframes()-1)*100)+'%');
+  scrublbl.textContent='f '+clip().frames[frameIdx].f.toFixed(1);
+}
+scrub.addEventListener('input',()=>{ frameIdx=+scrub.value; playing=false; setPlay(); render(); syncScrub(); });
+
+const playBtn=document.getElementById('play');
+function setPlay(){ playBtn.textContent=playing?'❚❚':'▶'; playBtn.setAttribute('aria-label',playing?'Pause':'Play'); }
+playBtn.addEventListener('click',()=>{ playing=!playing; setPlay(); });
+
+const animSel=document.getElementById('anim');
+const LABELS={walk:'Walk',dash:'Dash',rollf:'Roll (front)',slip:'Slip',waits:'Idle turn'};
+for(const a of anims){ const o=document.createElement('option'); o.value=a; o.textContent=LABELS[a]||a; if(a===curAnim)o.selected=true; animSel.appendChild(o); }
+animSel.addEventListener('change',()=>{ curAnim=animSel.value; frameIdx=0; syncScrub(); document.getElementById('subtitle').textContent='Wind Waker · '+(LABELS[curAnim]||curAnim); });
+
+document.getElementById('speed').addEventListener('change',e=>speed=+e.target.value);
+
+function toggle(id,init,fn){
+  const b=document.getElementById(id); let v=init;
+  const set=()=>{b.setAttribute('aria-pressed',v);fn(v);};
+  b.addEventListener('click',()=>{v=!v;set();}); set();
+}
+toggle('spin',true,v=>spin=v);
+toggle('grid',true,v=>showGrid=v);
+toggle('lbl',false,v=>showJoints=v);
+document.getElementById('reset').addEventListener('click',()=>{ Object.assign(cam,DEF); });
+
+// keyboard
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space'){ e.preventDefault(); playing=!playing; setPlay(); }
+  else if(e.code==='ArrowRight'){ playing=false; setPlay(); frameIdx=(frameIdx+1)%nframes(); syncScrub(); render(); }
+  else if(e.code==='ArrowLeft'){ playing=false; setPlay(); frameIdx=(frameIdx-1+nframes())%nframes(); syncScrub(); render(); }
+});
+
+// ---- mouse / touch orbit ----
+let dragging=false, px=0, py=0;
+function down(x,y){ dragging=true; spin=false; document.getElementById('spin').setAttribute('aria-pressed',false); px=x;py=y; cv.classList.add('drag'); }
+function move(x,y){ if(!dragging)return; cam.yaw+=(x-px)*0.008; cam.pitch+=(y-py)*0.008;
+  cam.pitch=Math.max(-1.3,Math.min(1.3,cam.pitch)); px=x;py=y; }
+function up(){ dragging=false; cv.classList.remove('drag'); }
+cv.addEventListener('mousedown',e=>down(e.clientX,e.clientY));
+window.addEventListener('mousemove',e=>move(e.clientX,e.clientY));
+window.addEventListener('mouseup',up);
+cv.addEventListener('touchstart',e=>{const t=e.touches[0];down(t.clientX,t.clientY);},{passive:true});
+cv.addEventListener('touchmove',e=>{const t=e.touches[0];move(t.clientX,t.clientY);e.preventDefault();},{passive:false});
+cv.addEventListener('touchend',up);
+cv.addEventListener('wheel',e=>{ e.preventDefault(); cam.dist*=(1+Math.sign(e.deltaY)*0.08); cam.dist=Math.max(70,Math.min(520,cam.dist)); },{passive:false});
+
+// ---- go ----
+refreshColors(); resize(); syncScrub(); setPlay();
+document.getElementById('subtitle').textContent='Wind Waker · '+(LABELS[curAnim]||curAnim);
+requestAnimationFrame(tick);
+</script>

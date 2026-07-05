@@ -8,14 +8,14 @@ seq vocabulary (ess/neu/chg) into the per-frame stick states that writer consume
 Usage: python make_dtm.py seq=cruise_pump300k_seq.txt [out=...] [template=cruise_pump300k_rec.dtm]
        [polls=4] [seed=1]
 """
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
 if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
-from superswim import actions as A
+from tww_sim.swim import actions as A
 import dtm_make as M
 
 

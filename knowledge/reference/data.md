@@ -1,6 +1,14 @@
-# Superswim — Raw Measurement Data (live Dolphin, 2026-06-26)
+# Raw measurement data (live Dolphin, 2026-06-26)
 
-Raw tables behind the conclusions in SUPERSWIM_KNOWLEDGE.md, so a new session can
+**Answers:** What are the raw per-frame measurement tables behind the swim conclusions (ESS pump entry
+tax, decay, displacement)? What was the capture setup?
+**Status:** reference (live Dolphin, 2026-06-26).
+**Source:** live Dolphin, flat-water slot-10 slate. Feeds the [swim mechanics](../mechanics/overview.md)
+pages.
+
+---
+
+Raw tables behind the conclusions in the [knowledge base](../README.md), so a new session can
 re-analyze WITHOUT re-running. All from the flat-water slot-10 slate (24763,1,
 -197306). Stick held with substickY=0 (free-cam). ESS = (128,110), neutral =
 (128,128). First frame after charge→hold is a −3 facing-flip transient.

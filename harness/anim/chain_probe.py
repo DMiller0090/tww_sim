@@ -9,12 +9,12 @@ can see exactly which frames need the oldframe-morf blend (task 4) that this cha
 DEV tool; reads gitignored _generated anim/skeleton data.
 """
 import os, sys, struct
-sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/superswim'))
+sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tww_sim'))
 sys.path.append(os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tools'))
 import dolphin_mem as dm
 from harness.dtm.run_dtm import resolve_anchor
-from superswim.anim import fk
-from superswim.anim.anim_state import UnderAnimState
+from tww_sim.core.anim import fk
+from tww_sim.core.anim.anim_state import UnderAnimState
 
 def f32(x): return struct.unpack('>f', struct.pack('>f', float(x)))[0]
 

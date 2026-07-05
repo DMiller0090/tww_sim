@@ -1,7 +1,7 @@
-"""Unit tests for the pure leaf helpers in superswim.sim.
+"""Unit tests for the pure leaf helpers in tww_sim.swim.sim.
 
 These assert specific derived values where the decomp pins exact constants/laws
-(documented in SUPERSWIM_KNOWLEDGE.md and the sim's own comments). They are the
+(documented in KNOWLEDGE.md and the sim's own comments). They are the
 finest-grained regression lock: a change to any physics primitive trips here with a
 precise message before it propagates into a golden trace.
 
@@ -10,7 +10,7 @@ Pure offline. 3.7-compatible.
 import math
 import pytest
 
-from superswim import sim as S
+from tww_sim.swim import sim as S
 
 
 # ---------------------------------------------------------------------------

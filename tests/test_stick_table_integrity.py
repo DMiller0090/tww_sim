@@ -15,11 +15,11 @@ absorbs that rounding; a real latency mismatch is off by tens–thousands).
 import os, csv, math
 import pytest
 
-from superswim import sim as S
-from superswim.predict import stick_angle as SA
+from tww_sim.swim import sim as S
+from tww_sim.swim.predict import stick_angle as SA
 
 TABLE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                     "superswim", "tables", "stick_angle_table.csv")
+                     "tww_sim", "core", "tables", "stick_angle_table.csv")
 RAD2S = 10430.3779296875     # 0x8000/pi (the f32 constant 10430.379f)
 TOL = 2                      # s16 slack for the CSV's 7-sig-fig x/y rounding
 

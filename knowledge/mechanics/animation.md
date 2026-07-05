@@ -63,4 +63,4 @@ speed-independent. The 23↔26 difference is the source of the [x598 scramble](p
 ## See also
 
 - [Constants](../reference/constants.md#animation) · [Strobo](strobo.md) ·
-  [model/sim](../model/sim.md) (f32 + console cosine precision).
+  [model/fp-faithfulness](../model/fp-faithfulness.md) (f32 + console cosine precision).

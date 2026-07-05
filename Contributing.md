@@ -1,4 +1,4 @@
-# Contributing to superswim
+# Contributing to tww_sim
 
 Short, repo-specific conventions. The source of truth for mechanics/strategy/model is the knowledge
 base under [`knowledge/`](knowledge/) — start at [`knowledge/README.md`](knowledge/README.md).
@@ -25,7 +25,7 @@ git config core.hooksPath .githooks                      # enable the tracked pr
 The pre-commit hook (`.githooks/`) is tracked, so `core.hooksPath` wires it for every clone — no
 per-file copy needed.
 
-## Tests — run both before and after any `superswim/sim.py` change
+## Tests — run both before and after any `tww_sim/swim/sim.py` or `tww_sim/land/land.py` change
 
 ```bash
 pytest                              # offline unit + golden suite (no Dolphin), runs anywhere/CI

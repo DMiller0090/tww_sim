@@ -22,7 +22,7 @@ net distance is reached long before death and the planner only runs v<0.
 """
 import sys, struct, os, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -30,10 +30,10 @@ if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 import dolphin_mem as D
-from superswim import sim as S
-from superswim import actions as A
+from tww_sim.swim import sim as S
+from tww_sim.swim import actions as A
 from harness import live as L
-from superswim.coldstart import ColdStartSwimState
+from tww_sim.swim.coldstart import ColdStartSwimState
 
 ESS=(128,110); NEU=(128,128); CHG_UP,CHG_DN=(128,255),(128,0)
 

@@ -19,9 +19,9 @@ import os
 import json
 import math
 
-from superswim import sim as S
-from superswim.coldstart import ColdStartSwimState
-from superswim.actions import expand
+from tww_sim.swim import sim as S
+from tww_sim.swim.coldstart import ColdStartSwimState
+from tww_sim.swim.actions import expand
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)

@@ -23,7 +23,7 @@ import platform
 import subprocess
 import sys
 
-# >>> repo bootstrap: locate superswim/ package
+# >>> repo bootstrap: locate tww_sim/ package
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = _HERE
 while _ROOT != os.path.dirname(_ROOT) and not os.path.exists(os.path.join(_ROOT, 'pyproject.toml')):
@@ -31,7 +31,7 @@ while _ROOT != os.path.dirname(_ROOT) and not os.path.exists(os.path.join(_ROOT,
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from superswim import plan, optimize
+from tww_sim.swim import plan, optimize
 
 SCHEMA_VERSION = 3
 RESULTS_PATH = os.path.join(_HERE, "results.jsonl")

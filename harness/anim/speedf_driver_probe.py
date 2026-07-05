@@ -1,4 +1,4 @@
-"""speedf_driver_probe.py - validate superswim.anim.foot_speedf.FootSpeedF vs live over a full
+"""speedf_driver_probe.py - validate tww_sim.core.anim.foot_speedf.FootSpeedF vs live over a full
 walk arc INCLUDING the standing->walk entry and the stop. This is the packaged-driver check that
 supersedes speedf_probe.py's inline pipeline (which used the wrong REST prevStored at the entry).
 
@@ -6,11 +6,11 @@ Drives the flat walk from land_flatwalk@twwgz with the same 2-frame input latenc
 so the (nspeed, msd) fed to the driver matches what LandState will feed it. DEV tool.
 """
 import os, sys, struct, math
-sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/superswim'))
+sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tww_sim'))
 sys.path.append(os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tools'))
 import dolphin_mem as dm
 from harness.dtm.run_dtm import resolve_anchor
-from superswim.anim.foot_speedf import FootSpeedF
+from tww_sim.core.anim.foot_speedf import FootSpeedF
 
 def main():
     h, mem1 = dm.attach()

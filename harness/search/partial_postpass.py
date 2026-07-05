@@ -26,7 +26,7 @@ seed-fidelity question (live-exact ColdState math is irrelevant to a relative co
 Usage: python partial_postpass.py [dest=20000] [passes=4]
 """
 import sys
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -34,8 +34,8 @@ if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 
-from superswim import sim as S
-from superswim.plan import plan_min_frames
+from tww_sim.swim import sim as S
+from tww_sim.swim.plan import plan_min_frames
 
 COLD_ANIM = 0.06392288208007812          # live fresh cold-start display anim (golden_harness)
 

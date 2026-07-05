@@ -11,7 +11,7 @@ Does NOT modify run_tests.py or superswim_sim.py. New file.
   python validate_coldstart.py only=pump_seq.txt
 """
 import sys, struct
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -19,9 +19,9 @@ if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 import dolphin_mem as D
-from superswim import sim as S
-from superswim.coldstart import ColdStartSwimState
-from superswim.actions import expand, acts_to_seq, animdiff
+from tww_sim.swim import sim as S
+from tww_sim.swim.coldstart import ColdStartSwimState
+from tww_sim.swim.actions import expand, acts_to_seq, animdiff
 from harness.live import wnamed
 
 SUITE = [

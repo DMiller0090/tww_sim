@@ -1,10 +1,10 @@
-"""Unit tests for superswim.actions: expand / acts_to_seq / animdiff.
+"""Unit tests for tww_sim.swim.actions: expand / acts_to_seq / animdiff.
 
 Pure offline. 3.7-compatible.
 """
 import pytest
 
-from superswim import actions as A
+from tww_sim.swim import actions as A
 
 
 # ---------------------------------------------------------------------------

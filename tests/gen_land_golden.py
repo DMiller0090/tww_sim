@@ -20,7 +20,7 @@ import os
 import struct
 import sys
 
-# >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+# >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -32,7 +32,7 @@ if _tb not in sys.path:
 
 import dolphin_mem as D
 from harness.dtm.run_dtm import resolve_anchor
-from superswim.land import LandState, FREE_WAIT
+from tww_sim.land.land import LandState, FREE_WAIT
 
 ANCHOR = resolve_anchor("land_flatwalk@twwgz")
 IDLE_FRAME = 70.0

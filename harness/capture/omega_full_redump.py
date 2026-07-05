@@ -21,7 +21,7 @@ Re-run until it prints DONE (writes <repo>/superswim/tables/omega_table_full.csv
 """
 import os, sys, csv, struct, time
 
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -30,7 +30,7 @@ _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 import dolphin_mem as dm
 
-OUT = os.path.join(_rb, "superswim", "tables", "omega_table_full.csv")
+OUT = os.path.join(_rb, "tww_sim", "core", "tables", "omega_table_full.csv")
 CSX_VALS = list(range(16))          # the shipped grid's csx axis (0..15)
 CSY_VALS = list(range(256))
 # parallel sharding: each Dolphin instance (DOLPHIN_PID) dumps a csx range to its own out= file;

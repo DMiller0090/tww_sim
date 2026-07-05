@@ -12,7 +12,7 @@ arrive (optimistic upper bound for pumps); if neutral ties it, pumps save 0 sub-
 Usage: python partial_frame_check.py [prefix=ab_synced_seq.txt] [dest=200000] [front=120000]
 """
 import sys
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -20,10 +20,10 @@ if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 
-from superswim import sim as S
-from superswim import plan as P            # noqa (keeps sig import path consistent)
-from superswim.optimize import sig
-from superswim import actions as A
+from tww_sim.swim import sim as S
+from tww_sim.swim import plan as P            # noqa (keeps sig import path consistent)
+from tww_sim.swim.optimize import sig
+from tww_sim.swim import actions as A
 
 
 def handoff(prefix_file):

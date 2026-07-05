@@ -2,7 +2,7 @@
 to test whether the anim curve is piecewise-LINEAR between integer frames (table+lerp works)
 or smooth/Hermite (must port the Bck evaluator)."""
 import os, sys, struct
-sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/superswim'))
+sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tww_sim'))
 sys.path.append(os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tools'))
 import dolphin_mem as dm
 from harness.dtm.run_dtm import resolve_anchor

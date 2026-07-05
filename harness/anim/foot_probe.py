@@ -3,7 +3,7 @@ reconstruct f31_2 from them, to validate the plant-select + delta + smoothing + 
 math (posMoveFromFootPos) independently of the skeleton FK that produces the positions.
 """
 import os, sys, math, struct
-sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/superswim'))
+sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tww_sim'))
 sys.path.append(os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tools'))
 import dolphin_mem as dm
 from harness.dtm.run_dtm import resolve_anchor

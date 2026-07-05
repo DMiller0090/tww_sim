@@ -14,7 +14,7 @@ Pure offline. 3.7-compatible.
 import hashlib
 import pytest
 
-from superswim import plan, optimize
+from tww_sim.swim import plan, optimize
 
 COLD_ANIM = 0.06392288208007812
 
@@ -78,7 +78,7 @@ def test_frames_to_dest_pure_ess():
 
 
 def test_seq_string_roundtrip():
-    from superswim.actions import expand
+    from tww_sim.swim.actions import expand
     seq = "ess,3;chg,2;neu,1"
     assert optimize.seq_string(expand(seq)) == seq
 

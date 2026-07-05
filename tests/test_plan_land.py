@@ -1,4 +1,4 @@
-"""Offline regression for the LAND input planner (superswim.plan_land) -- milestone 1.
+"""Offline regression for the LAND input planner (tww_sim.land.plan_land) -- milestone 1.
 
 Guards the geometry primitives (world bearing <-> full-deflection stick inverse) and the
 STRAIGHT-WALK reach: given an init LandState + a world target (x, z), the produced input seq
@@ -12,12 +12,12 @@ import math
 
 import pytest
 
-from superswim.land import LandState, FREE_WAIT, WAIT
-from superswim.plan_land import (world_angle_s16, stick_for_bearing, dist2d, reach_straight,
+from tww_sim.land.land import LandState, FREE_WAIT, WAIT
+from tww_sim.land.plan_land import (world_angle_s16, stick_for_bearing, dist2d, reach_straight,
                                  reach_precise)
-from superswim.sim import _deadzone
+from tww_sim.swim.sim import _deadzone
 import math
-from superswim.anim.foot_speedf import FootSpeedF
+from tww_sim.core.anim.foot_speedf import FootSpeedF
 
 _ANIM = FootSpeedF.available()
 

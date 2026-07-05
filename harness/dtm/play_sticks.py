@@ -14,7 +14,7 @@ Usage:
 """
 import os, sys
 
-_rb = os.path.dirname(os.path.abspath(__file__))  # >>> repo bootstrap: locate superswim/ + ../tools/
+_rb = os.path.dirname(os.path.abspath(__file__))  # >>> repo bootstrap: locate tww_sim/ + ../tools/
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
 if _rb not in sys.path: sys.path.insert(0, _rb)

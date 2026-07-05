@@ -40,7 +40,7 @@ _TOOLS = os.path.join(os.path.dirname(_ROOT), 'tools')   # locate tools/ (dolphi
 if os.path.isdir(_TOOLS) and _TOOLS not in sys.path:
     sys.path.append(_TOOLS)
 
-from superswim import actions as A
+from tww_sim.swim import actions as A
 from tests.benchmark import record as R
 
 # The cold-start anchor these cases seed. Its logged mRate (0.5) must equal the case's
@@ -64,7 +64,7 @@ def expected_from_record(rec):
     (deterministic, no search) rather than re-running the planner -- re-planning at frontier
     8000 costs minutes per case and is redundant: the seq fully determines the trajectory.
     (facing not modelled by SwimState -> omitted from the compare.)"""
-    from superswim import actions as _A
+    from tww_sim.swim import actions as _A
     acts = _A.expand(rec['seq'])
     seed = R._seed_from_params(rec['params'])
     es = R.plan._trajectory(seed, acts)[-1]

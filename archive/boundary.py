@@ -11,7 +11,7 @@ Usage: python boundary.py [v=780] [alo=490] [ahi=520] [slot=10] [settle=5]
    or  python boundary.py vsweep=600,700,780,850
 """
 import sys
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)

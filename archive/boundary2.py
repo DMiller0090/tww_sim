@@ -8,7 +8,7 @@ cadence at their natural fixture values and varies ONLY air -> isolates the air 
 Usage: python boundary2.py [alo=496] [ahi=560] [pre=394] [npump=395] [slot=10]
 """
 import sys
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)

@@ -16,7 +16,7 @@ Seed the old pose with the FREEB (rest) pose at the entry frame before the first
 the game (which stores old every frame, standing included).
 Reads gitignored _generated anim/skeleton data (dev-supplied).
 """
-from superswim import fp
+from .. import fp
 from . import j3d_eval
 from . import quat as Q
 from . import fk

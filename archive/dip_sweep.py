@@ -10,7 +10,7 @@ bug#2 = sim re-enters ESS one frame early for SHORT dips (neu,1) but pump_seq
 Usage: python dip_sweep.py [build=chg,60;ess,24] [A=6] [B=10] [Ns=1,2,3,4,5,8] [slot=10]
 """
 import sys
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)

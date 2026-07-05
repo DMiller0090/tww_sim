@@ -6,7 +6,7 @@ off the position deltas, so neither check needs the (unrecorded) live anim.
 Run: python validate_arrow.py
 """
 import math, os, csv
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -14,7 +14,7 @@ if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 
-from superswim import sim as S
+from tww_sim.swim import sim as S
 
 # (xbias, alpha_deg_from_facing_geometry, measured_charge_rate, measured dx, dz)
 # alpha from the facing snap: Delta-facing = 180-2*alpha -> alpha = (180-|dface|)/2.

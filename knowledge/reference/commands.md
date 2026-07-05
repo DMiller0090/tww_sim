@@ -3,7 +3,7 @@
 **Answers:** How do I run the sim / planner? How do I A/B a reboost live? How do I validate a plan
 against Dolphin?
 **Status:** reference.
-**Source:** `superswim/`, `harness/`, `../tools/dolphin_mem.py`. Read [`../tools/DOLPHIN_CONTROL.md`]
+**Source:** `tww_sim/`, `harness/`, `../tools/dolphin_mem.py`. Read [`../tools/DOLPHIN_CONTROL.md`]
 before driving Dolphin.
 
 ---
@@ -12,16 +12,16 @@ before driving Dolphin.
 
 ```bash
 # Simulate an action sequence (one action = one game frame). ess|chg|neu, ess:<rawY>.
-python -m superswim.sim seq "ess,20;chg,1;chg,1" v=-1630 air=900 anim=17.9 [every=N] [viz=out.html]
+python -m tww_sim.swim.sim seq "ess,20;chg,1;chg,1" v=-1630 air=900 anim=17.9 [every=N] [viz=out.html]
 
 # Closed-loop reboost (fires a boost when anim enters [LO,HI]); see strategy/reboost.md.
-python -m superswim.sim essloop frames=150 trig=13,16 boost=4 v=-1630 air=900 anim=17.9
+python -m tww_sim.swim.sim essloop frames=150 trig=13,16 boost=4 v=-1630 air=900 anim=17.9
 
 # Beam-search the optimal ESS/charge schedule (prints schedule + a seq string).
-python -m superswim.optimize frames=N v=-1630 air=900 anim=18.148 [beam=K] [viz=opt.html]
+python -m tww_sim.swim.optimize frames=N v=-1630 air=900 anim=18.148 [beam=K] [viz=opt.html]
 
 # Plan the minimum-frame route to a destination.
-python -c "from superswim import plan_min_frames; print(plan_min_frames(dest=200000, v=0.0, anim=0.06392288208007812, air=900)['frames'])"
+python -c "from tww_sim.swim import plan_min_frames; print(plan_min_frames(dest=200000, v=0.0, anim=0.06392288208007812, air=900)['frames'])"
 ```
 
 `viz=out.html` emits a self-contained animated top-down viewer (play/scrub, efficiency-colored

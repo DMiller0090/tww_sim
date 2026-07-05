@@ -23,7 +23,7 @@ import sys, csv, math
 
 from .. import sim as S
 from . import swim_exact as E
-from .camera_exact import CameraExact
+from ...core.camera.camera_exact import CameraExact
 from ..coldstart import ColdStartSwimState
 from .swim_predict_exact import stick_to_action
 

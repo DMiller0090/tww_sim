@@ -13,8 +13,8 @@ import os, csv
 import pytest
 
 TBL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FULL = os.path.join(TBL, "superswim", "tables", "omega_table_full.csv")
-FINE = os.path.join(TBL, "superswim", "tables", "omega_table.csv")
+FULL = os.path.join(TBL, "tww_sim", "core", "tables", "omega_table_full.csv")
+FINE = os.path.join(TBL, "tww_sim", "core", "tables", "omega_table.csv")
 
 
 def _load(p):
@@ -55,7 +55,7 @@ def test_camera_exact_omega_cmd_matches_grid(full):
     """camera_exact.omega_cmd's hand-transcribed _OMEGA_POS/_OMEGA_NEG dicts + saturation must equal
     the authoritative full grid on the pure-horizontal row (csy=128) for every csx. Locks against
     silent drift — the dict was missing csx 109..112 (=-1), fixed 2026-07-01."""
-    from superswim.predict import camera_exact as CE
+    from tww_sim.core.camera import camera_exact as CE
     bad = [(csx, full[(csx, 128)], CE.omega_cmd(csx, 128))
            for csx in range(256) if CE.omega_cmd(csx, 128) != full[(csx, 128)]]
     assert not bad, f"{len(bad)} csx: omega_cmd != grid[csx,128]: {bad[:15]}"

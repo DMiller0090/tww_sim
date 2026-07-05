@@ -3,7 +3,7 @@
 superswim_sim.py - Offline physics sim for TWW superswimming (Phase A + B).
 
 Pure-python reproduction of the swim physics validated live against Dolphin
-(see SUPERSWIM_KNOWLEDGE.md). Lets us test reboost / peak-hold theories in
+(see KNOWLEDGE.md). Lets us test reboost / peak-hold theories in
 milliseconds before burning Dolphin frames. Mirrors the `seq` and `essloop`
 commands in dolphin_mem.py so results are directly A/B-comparable.
 
@@ -34,124 +34,22 @@ Usage:
 Both print a SUMMARY line matching dolphin_mem.py:  frames path net path/fr net/fr.
 """
 import sys, math, json, struct
-import numpy as np
+from ..core.fp import f32
+from ..core.mathlib import (  # console math primitives, re-exported for `import sim as S` callers
+    nfmod, fc_update, cLib_addCalc, cM_ssin_s16, cM_scos, cM_scos_s16,
+    deg_to_s16, s16_signed, _F32_PI, _RAD2IDX, _GAME_TWOPI,
+    ARROW_STICK_DEADZONE, angdiff_deg, _deadzone, stick_angle_deg,
+    _COS_TABLE, _SIN_TABLE,
+)
 
 MAX_AIR = 900
 
-# The GameCube runs all of this in IEEE-754 SINGLE precision (f32). Python floats are
-# f64, so a 480-frame swim accumulates ~0.01 anim drift that the high-speed exit af_drag
-# amplifies ~30x. f32() rounds each result to f32 so the REAL game values (potential
-# speed, anim) match bit-for-bit. Op ORDER matches the decomp (left-to-right, no FMA).
-# PERF: this is the planner's hottest function (~45% of plan_min_frames time, ~60M calls
-# for one cold-start DP). `float(np.float32(x))` pays numpy scalar-construction overhead on
-# every call. ctypes `c_float` rounds with the SAME IEEE-754 round-half-to-even and SAME
-# overflow->inf behaviour (verified bit-identical over 200k random + edge values incl
-# inf/overflow/-0.0) at ~2x the speed. Bit-identity keeps every live-validated baseline.
-from ctypes import c_float as _c_float
-def f32(x):
-    return _c_float(x).value
 
 # decomp constants (d_a_player_HIO.h: mSwim field_0x50/54/74 = 0.6/1.1/1.0).
 _RATE_SLOPE = f32(f32(1.1) - f32(0.6))           # (0x54 - 0x50) in f32 = 0.5
 _MAX_NSPEED = f32(18.0)                            # mMaxNormalSpeed (0.5/18 == 1/36)
 _TIMER_K = f32(0.0011111111)                       # getSwimTimerRate per-air coefficient
 
-def nfmod(a, n):
-    return a - math.floor(a / n) * n
-
-def fc_update(frame, rate, end, start=0.0, loop=0.0):
-    """Faithful J3DFrameCtrl::update() LOOP mode (J3DAnimation.cpp:143-186): advance by
-    mRate, then loop by REPEATED f32 subtraction of (mEnd - mLoop) -- NOT a single modulo.
-    For frames already in [start, end+rate) this is one subtraction == nfmod (so the no-pump
-    baselines stay bit-exact). It ONLY differs after the x598 pump scramble, where mFrame
-    is ~15232 and the game subtracts (end-loop) ~662 times in f32: that accumulated f32
-    rounding is the ~0.004 entry residual that compounded across pump cycles under nfmod.
-    SWIMING/SWIMWAIT both use mStart=0, mLoop=0 -> the loop subtracts `end` each step."""
-    f = f32(frame + rate)
-    span_lo = loop - start
-    while f < start and span_lo > 0.0:
-        f = f32(f + span_lo)
-    span_hi = end - loop
-    if span_hi <= 0.0:
-        return f
-    while f >= end:
-        f = f32(f - span_hi)
-    return f
-
-def cLib_addCalc(value, target, scale, max_step, min_step):
-    """Faithful cLib_addCalc (c_lib.cpp): chase `value` toward `target`. step = scale*(target
-    -value); if |step|>=min_step clamp to +-max_step and apply; else snap by +-min_step
-    (clamped so it doesn't overshoot target). All f32. Used for the neutral speed decay."""
-    if value == target:
-        return value
-    step = f32(scale * f32(target - value))
-    if step >= min_step or step <= -min_step:
-        if step > max_step:
-            step = max_step
-        if step < -max_step:
-            step = -max_step
-        return f32(value + step)
-    if step > 0.0:
-        if step < min_step:
-            nv = f32(value + min_step)
-            return target if nv > target else nv
-    else:
-        ms = -min_step
-        if step > ms:
-            nv = f32(value + ms)
-            return target if nv < target else nv
-    return value
-
-# The game's cosine is cM_scos(cM_rad2s(x)): a 4096-entry table indexed by the s16 angle
-# with the low 4 bits TRUNCATED (index >> 4) -- NO interpolation (JMASCos, JMATrigonometric.h:
-# jmaCosTable[(u16)v >> jmaSinShift], jmaSinShift=4). That truncation is the ~5e-4 vs math.cos.
-# CRITICAL: the table is built ON THE CONSOLE at runtime (JMANewSinTable, JMath.cpp:32-36):
-#   jmaSinTable[i] = (f32)sin( ((M_PI*2.0)/4096) * i );  jmaCosTable = jmaSinTable + 1024
-# i.e. cosTable[k] = f32(sin(step*(k+1024))). The PowerPC libm sin differs from x86 math.cos
-# by 1-2 ULP at 2964/4096 entries (max 4.17e-7). A direct f32(cos(...)) recompute therefore
-# mismatched the console at most entries; x598-amplified across pumps that 1 ULP became a
-# 0.07 potential-speed jump at exits (cos-table-boundary crossing). FIX: bake the ACTUAL
-# console table (dumped live from jmaCosTable @ 0x80498168 -> cos_table.bin) and index it.
-import os as _os
-with open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'tables', 'cos_table.bin'), 'rb') as _f:
-    _COS_TABLE = struct.unpack('>4096f', _f.read())   # console-libm values, big-endian f32
-
-# The SIN companion for the quaternion foot-FK: the REAL console jmaSinTable (dumped live @ 0x80497168),
-# NOT a -1024 view of cos -- those differ 1 ULP at 816/4096 entries. See knowledge/model/sim.md.
-with open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'tables', 'sin_table.bin'), 'rb') as _f:
-    _SIN_TABLE = struct.unpack('>4096f', _f.read())   # console-libm jmaSinTable[0:4096], big-endian f32
-
-def cM_ssin_s16(angle):
-    """JMASSin: jmaSinTable[(u16)angle >> 4] -- exact console value from the baked sin table."""
-    return _SIN_TABLE[(int(angle) & 0xFFFF) >> 4]
-
-_RAD2IDX = 10430.3779296875                 # 65536 / 2pi (cM_rad2s scale)
-_GAME_TWOPI = 6.283185482025146             # the f32 2pi the game wraps with
-def cM_scos(rad):
-    value = rad % _GAME_TWOPI
-    index = int(value * _RAD2IDX)
-    if index < -32768:
-        index += 65536
-    elif index > 32767:
-        index -= 65536
-    index >>= 4                              # 65536 angles -> 4096 entries, low bits dropped
-    if index < 0:
-        index = 4096 + index
-    return _COS_TABLE[index]                  # exact console table value (was f32(cos(...)))
-
-def cM_scos_s16(angle):
-    """The game's cM_scos applied DIRECTLY to an s16 angle (no cM_rad2s). This is what
-    setSpeedAndAngleSwim uses: cM_scos(shape_angle.y - oldAngleY) where the arg is already
-    s16. JMASCos: jmaCosTable[(u16)angle >> 4] -- exact console value from the baked table."""
-    index = (int(angle) & 0xFFFF) >> 4          # 65536 angles -> 4096 entries, low bits drop
-    return _COS_TABLE[index]
-
-def deg_to_s16(deg):
-    return int(round(deg / 360.0 * 65536.0)) & 0xFFFF
-
-def s16_signed(a):
-    a &= 0xFFFF
-    return a - 65536 if a >= 32768 else a
 
 def incr(v, air):
     # SWIMING anim rate = setSwimMoveAnime: |v|*(0x54-0x50)/mMaxNormalSpeed + 0x50
@@ -162,9 +60,6 @@ def incr(v, air):
     return f32(rate + f32(timer * f32(1.0)))
 
 _F60 = f32(0.4)                 # field_0x60 (HIO mSwim.m.field_0x60)
-# Console loads M_PI SINGLE (lfs) then fmuls -> cos args use f32 pi, not double math.pi; the
-# 1-ULP diff flips cM_rad2s's truncated cell at knife-edges. Rationale: memory superswim-gekko-fp.
-_F32_PI = f32(math.pi)          # 3.1415927410125732 -- what `lfs M_PI` loads
 
 def af_drag(v, anim):
     # head-bob: (speedF*(1-0x60) + 0x60*speedF*|cM_scos(rad2s(pi*moveFrame/moveEnd))|)
@@ -252,37 +147,6 @@ ARROW_SPINUP_FRAMES = 2
 # arrow-west drift (alpha~8, charge -2.88/fr, net bearing west). See validate_arrow.py.
 ARROW_SNAP_DEG = 135.0      # 0x6000 backward-snap cone half-not: |Δ|>135 snaps
 ARROW_TURN_RATE = 7.0       # gradual (non-snap) turn deg/frame (cLib_addCalcAngleS approx)
-# Per-axis stick dead-zone: each axis is offset by 15 before the angle/magnitude are
-# taken (same 15 as ess_decay). This compresses the MINOR axis on partial deflections,
-# so e.g. (0,96) reads alpha~8 (live) not ~14 (raw atan2). Pinned on the slot-9 capture:
-# (0,96)/(255,96) span 162.8deg with dz=15 vs live 164 (raw gave 152). Full-deflection
-# rotation frames also improve (f2 (255,80) -> 163.6 vs live 164, raw gave 159).
-ARROW_STICK_DEADZONE = 15.0
-
-def angdiff_deg(a, b):
-    """Signed minimal a-b in (-180, 180]."""
-    return ((a - b + 180.0) % 360.0) - 180.0
-
-def _deadzone(c, dz=ARROW_STICK_DEADZONE):
-    """Per-axis: subtract the dead-zone, keep sign, clamp at 0."""
-    o = c - 128.0
-    m = abs(o) - dz
-    return 0.0 if m <= 0 else math.copysign(m, o)
-
-def stick_angle_deg(sx, sy):
-    """Stick direction in the decomp convention (deg), or None for neutral.
-    0=down, 90=right, 180=up, 270=left. Per-axis dead-zoned. Slot-9 validated.
-
-    Neutral (no swim input) uses the game's actual gate: mStickDistance =
-    min(hypot(dz)/54, 1) <= 0.05  (d_a_player_main gates swim on mStickDistance > 0.05f).
-    This supersedes the old square-deadzone test (both dz axes 0); they agree everywhere
-    except a thin ring just outside the dz-15 square (0 < hypot <= 2.7), where the game
-    blocks a tiny gain the square test would let through. Bit-identical to the gold stick
-    table's `value <= 0.05` gate on all 65536 cells (verified), so no table dep needed."""
-    ax, ay = _deadzone(sx), _deadzone(sy)
-    if min(math.hypot(ax, ay) / 54.0, 1.0) <= 0.05:
-        return None
-    return math.degrees(math.atan2(ax, -ay)) % 360.0
 
 def stick_dist(sx, sy, gate=128.0 - ARROW_STICK_DEADZONE):
     """Normalized (dead-zoned) stick magnitude, clamped to 1 (full deflection). The

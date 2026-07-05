@@ -8,7 +8,7 @@ Pure offline. 3.7-compatible.
 """
 import math
 
-from superswim import sim as S
+from tww_sim.swim import sim as S
 from tests import golden_harness as G
 
 

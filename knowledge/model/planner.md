@@ -3,7 +3,7 @@
 **Answers:** How does the planner search? What's the objective? Why are mid-swim pumps disabled?
 Why the crossover (build + cruise) decomposition? What's the balloon-swim option?
 **Status:** validated (live-confirmed plans, frame-exact via DTM).
-**Source:** `superswim/plan.py`, `superswim/optimize.py`; the legacy C# `SwimEnvironment`/PSO.
+**Source:** `tww_sim/swim/plan.py`, `tww_sim/swim/optimize.py`; the legacy C# `SwimEnvironment`/PSO.
 
 ---
 
@@ -98,7 +98,7 @@ it retains is genuinely frame-relevant (mf=1000→2000 gains real frames), so it
 
 **Bottom line:** frontier saturation is intrinsic and cannot be reduced *algorithmically* without
 losing frames — the "shrink/reshape the frontier" line is closed. Work is linear in frontier, so the
-only remaining cost levers are **cheaper per-expansion** ([Cython](sim.md), the durable ~2–3×, needs a
+only remaining cost levers are **cheaper per-expansion** ([Cython](fp-faithfulness.md#cython-fast-path), the durable ~2–3×, needs a
 build step) or **parallelizing the per-layer expansion** (embarrassingly parallel within a layer, but
 Python pickling of ~2000 states × ~700 layers is a real risk) — neither reduces the frontier itself.
 
@@ -204,6 +204,6 @@ sim-optimality via minute-long uncapped runs — see [frontier § saturation](#s
 
 ## See also
 
-- [Sim precision](sim.md) · [Pumps / x598](../mechanics/pumps.md) ·
+- [Swim sim](swim-sim.md) · [Pumps / x598](../mechanics/pumps.md) ·
   [strategy/reboost](../strategy/reboost.md) · [strategy/phase-ordering](../strategy/phase-ordering.md)
   · [history/resolved-bugs](../history/resolved-bugs.md) (bug#2 / DTM delivery).

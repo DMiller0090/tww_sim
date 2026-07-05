@@ -5,7 +5,7 @@ optional EXPECTED endpoint; it handles the rest: author a clean-cadence DTM, cop
 savestate anchor, (re)launch Dolphin to a stopped game list, play the movie, read the
 live endpoint, and compare. This is the trustworthy live check (movie playback flips
 WantDeterminism on and polls at the game's natural cadence -- no advanceseq pipe jitter,
-see pt-21 / SUPERSWIM_KNOWLEDGE bug#2).
+see pt-21 / KNOWLEDGE bug#2). Dolphin command reference: ../../tools/DOLPHIN_CONTROL.md.
 
 Generalizes harness/validate/validate_dtm.py, which was hardwired to action-seq files, the
 cold anchor, and a SwimState compare. Here:
@@ -37,7 +37,7 @@ CLI:
                       [expect_pos_z=1095.42] [expect_state=5] [watch=1]
 """
 import sys, os, time, math, json, shutil, subprocess
-# >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+# >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -46,8 +46,8 @@ _tb = os.path.join(os.path.dirname(_rb), 'tools')  # locate tools/
 if _tb not in sys.path: sys.path.append(_tb)
 import glob
 import dolphin_mem as D
-from superswim import actions as A
-from superswim import sim as S
+from tww_sim.swim import actions as A
+from tww_sim.swim import sim as S
 import dtm_make as DM
 from harness import dolphin_env as ENV
 

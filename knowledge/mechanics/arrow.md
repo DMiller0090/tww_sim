@@ -2,7 +2,7 @@
 
 **Answers:** What is arrow swimming? How much speed do you lose by tilting? What's the tilt
 limit before it breaks? How does the cross-track drift scale? What is the arrow spin-up cost?
-**Status:** validated (decomp + live, closed-form in `superswim/predict/swim_arbitrary.py` /
+**Status:** validated (decomp + live, closed-form in `tww_sim/swim/predict/swim_arbitrary.py` /
 `ArrowState`).
 **Source:** decomp `setSpeedAndAngleSwim` (d_a_player_swim.inc:41,66); live 2026-06-27 (slot 9).
 

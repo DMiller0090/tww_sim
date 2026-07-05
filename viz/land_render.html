@@ -1,0 +1,288 @@
+<title>Superswim — EBS-out-of-roll, in-game camera</title>
+<style>
+  :root{
+    --chrome-bg:#0a151d; --chrome-ink:#dce9ee; --edge:#204353;
+    --panel:#0f2029cc; --panel-solid:#102530;
+    --ink:#dce9ee; --ink-dim:#8fa9b3; --ink-faint:#5f7c86;
+    --accent:#f0b429; --bone:#5fd0d6; --joint:#9fe4e8;
+    --hot:#ff7a59;   /* EBS / reversed-speed highlight */
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --chrome-bg:#e8eef0; --chrome-ink:#12252f; --edge:#c2d2d8; --panel:#ffffffd9; --panel-solid:#fff;
+           --ink:#16303c; --ink-dim:#4a6772; --ink-faint:#7c98a2; }
+  }
+  :root[data-theme="dark"]{ --chrome-bg:#0a151d; --chrome-ink:#dce9ee; --edge:#204353; --panel:#0f2029cc; --panel-solid:#102530; --ink:#dce9ee; --ink-dim:#8fa9b3; --ink-faint:#5f7c86; }
+  :root[data-theme="light"]{ --chrome-bg:#e8eef0; --chrome-ink:#12252f; --edge:#c2d2d8; --panel:#ffffffd9; --panel-solid:#fff; --ink:#16303c; --ink-dim:#4a6772; --ink-faint:#7c98a2; }
+
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--chrome-bg); color:var(--chrome-ink);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif; overflow:hidden; -webkit-font-smoothing:antialiased}
+  #stage{position:fixed; inset:0}
+  canvas{display:block; width:100%; height:100%; cursor:default; touch-action:none}
+  canvas.orbit{cursor:grab} canvas.orbit.drag{cursor:grabbing}
+  .mono{font-family:ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace}
+
+  #title{position:fixed; top:16px; left:18px; pointer-events:none; user-select:none}
+  #title h1{margin:0; font-size:15px; font-weight:650; letter-spacing:.01em; color:var(--ink); text-shadow:0 1px 8px rgba(0,0,0,.5)}
+  #title p{margin:3px 0 0; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-dim)}
+
+  #hud{position:fixed; top:14px; right:18px; text-align:right; pointer-events:none; user-select:none}
+  #phase{font-size:20px; font-weight:650; letter-spacing:.01em; color:var(--bone); line-height:1.1; text-shadow:0 1px 10px rgba(0,0,0,.5)}
+  #phase.hot{color:var(--hot)}
+  #stats{margin-top:6px; font-size:12px; color:var(--ink-dim); line-height:1.5; font-variant-numeric:tabular-nums}
+  #stats b{color:var(--ink); font-weight:600}
+  #frameno{font-size:30px; font-weight:600; color:var(--ink); line-height:1; font-variant-numeric:tabular-nums; margin-top:8px}
+  #frameno small{font-size:13px; color:var(--ink-dim); font-weight:500}
+  #legend{margin-top:12px; display:inline-flex; flex-direction:column; gap:5px; align-items:flex-end}
+  .leg{display:flex; align-items:center; gap:7px; font-size:11px; color:var(--ink-dim)}
+  .leg i{width:16px; border-top:2px solid; border-radius:2px} .leg .dot{width:8px;height:8px;border-radius:50%}
+
+  #rail{position:fixed; left:50%; bottom:20px; transform:translateX(-50%); display:flex; align-items:center; gap:13px;
+    background:var(--panel); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border:1px solid var(--edge); border-radius:14px; padding:10px 16px; box-shadow:0 8px 32px rgba(0,0,0,.4);
+    max-width:calc(100vw - 32px); flex-wrap:wrap; justify-content:center}
+  #rail .grp{display:flex; align-items:center; gap:9px}
+  .sep{width:1px; align-self:stretch; background:var(--edge); margin:2px 0}
+  button{font:inherit; color:var(--ink); background:transparent; border:1px solid var(--edge); border-radius:9px;
+    padding:7px 11px; cursor:pointer; line-height:1; transition:background .12s,border-color .12s}
+  button:hover{background:color-mix(in srgb,var(--bone) 12%,transparent); border-color:var(--bone)}
+  button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  button.play{width:40px; height:36px; display:grid; place-items:center; color:var(--accent); border-color:color-mix(in srgb,var(--accent) 45%,var(--edge))}
+  button.tog[aria-pressed="true"]{background:color-mix(in srgb,var(--bone) 18%,transparent); border-color:var(--bone); color:var(--ink)}
+  label.field{display:flex; align-items:center; gap:7px; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-dim)}
+  select{font:inherit; font-size:12px; color:var(--ink); background:var(--panel-solid); border:1px solid var(--edge); border-radius:8px; padding:6px 8px; cursor:pointer; text-transform:none; letter-spacing:0}
+  select:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:min(42vw,320px); height:4px;
+    background:linear-gradient(var(--edge),var(--edge)) no-repeat; background-size:var(--fill,0%) 100%; border-radius:3px; outline:none; cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:4px; background:transparent}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:15px; height:15px; margin-top:-5.5px; border-radius:50%; background:var(--accent); border:2px solid var(--panel-solid); box-shadow:0 1px 4px rgba(0,0,0,.5)}
+  input[type=range]::-moz-range-thumb{width:14px; height:14px; border-radius:50%; background:var(--accent); border:2px solid var(--panel-solid)}
+
+  .note{position:fixed; left:18px; bottom:20px; max-width:250px; font-size:10.5px; line-height:1.5; color:var(--ink-faint); pointer-events:none; user-select:none}
+  @media (max-width:760px){ #title,.note{display:none} #hud{top:10px;right:12px} }
+</style>
+
+<div id="stage"><canvas id="c"></canvas></div>
+
+<div id="title">
+  <h1>Frame-perfect EBS out of a roll</h1>
+  <p id="subtitle">Wind Waker · land sim · reconstructed free camera</p>
+</div>
+
+<div id="hud">
+  <div id="phase">Idle</div>
+  <div id="stats"></div>
+  <div id="frameno" class="mono">0<small> / 0</small></div>
+  <div id="legend">
+    <span class="leg"><i style="border-color:var(--bone)"></i>skeleton (42 joints)</span>
+    <span class="leg"><span class="dot" style="background:var(--accent)"></span>foot toe · console-exact</span>
+  </div>
+</div>
+
+<div id="rail">
+  <button class="play" id="play" title="Play / pause (Space)" aria-label="Play">▶</button>
+  <div class="sep"></div>
+  <div class="grp">
+    <input type="range" id="scrub" min="0" max="1" step="1" value="0" aria-label="Frame">
+    <span id="scrublbl" class="mono" style="font-size:11px;color:var(--ink-dim);min-width:46px">0</span>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <label class="field">Clip <select id="clip"></select></label>
+    <label class="field">View <select id="view"><option value="game" selected>Game cam</option><option value="orbit">Free orbit</option></select></label>
+    <label class="field">Speed <select id="speed">
+      <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option><option value="2">2×</option></select></label>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button class="tog" id="trail" aria-pressed="true" title="Ground path">Trail</button>
+    <button class="tog" id="grid" aria-pressed="true" title="Ground grid">Grid</button>
+    <button id="reset" title="Reset orbit">Reset</button>
+  </div>
+</div>
+
+<div class="note">
+  The skeleton is posed by the sim's real per-frame anim-blend state; the amber toe points are the
+  console-validated ones. Camera is a reconstructed free/follow cam (fixed yaw + lagged position),
+  not the bit-exact spring. Switch to <em>Free orbit</em> to inspect from any angle.
+</div>
+
+<script>
+const DATA = __DATA__;
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1,FOCAL=600;
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2); W=cv.clientWidth; H=cv.clientHeight;
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR); ctx.setTransform(DPR,0,0,DPR,0,0);
+  FOCAL=(H/2)/Math.tan(50*Math.PI/180/2);   // ~50° vertical FOV
+}
+window.addEventListener('resize',resize);
+
+// theme-aware canvas colors
+function tok(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+let COL={};
+function refreshColors(){
+  COL.bone=tok('--bone'); COL.joint=tok('--joint'); COL.accent=tok('--accent'); COL.hot=tok('--hot');
+  const attr=document.documentElement.getAttribute('data-theme');
+  const isLight=attr?attr==='light':matchMedia('(prefers-color-scheme: light)').matches;
+  COL.bg0=isLight?'#dfe9ec':'#0c1a24'; COL.bg1=isLight?'#c3d5db':'#050d13';
+  COL.grid=isLight?'rgba(40,80,95,0.15)':'rgba(95,208,214,0.09)';
+  COL.axis=isLight?'rgba(40,80,95,0.30)':'rgba(95,208,214,0.22)';
+  COL.trail=isLight?'rgba(240,180,41,0.55)':'rgba(240,180,41,0.5)';
+}
+matchMedia('(prefers-color-scheme: light)').addEventListener('change',refreshColors);
+new MutationObserver(refreshColors).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+// ---- vec + lookAt camera ----
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+function norm(a){const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];}
+function view(eye,tgt){
+  const f=norm(sub(tgt,eye)); const r=norm(cross(f,[0,1,0])); const u=cross(r,f);
+  return {eye,r,u,f};
+}
+function project(vw,p){
+  const d=sub(p,vw.eye); const x=dot(d,vw.r), y=dot(d,vw.u); let z=dot(d,vw.f);
+  if(z<1)z=1; const s=FOCAL/z; return {x:W/2+x*s, y:H/2-y*s, z, s};
+}
+
+// ---- orbit state ----
+const orbit={yaw:0.7,pitch:0.34,dist:520};
+const ORB0={...orbit};
+function currentCam(fr){
+  if(viewMode==='game') return view(fr.cam.eye, fr.cam.tgt);
+  const t=[fr.pos[0], 55, fr.pos[1]];   // orbit around Link's chest
+  const cp=Math.cos(orbit.pitch), sp=Math.sin(orbit.pitch);
+  const eye=[ t[0]+orbit.dist*cp*Math.sin(orbit.yaw), t[1]+orbit.dist*sp, t[2]+orbit.dist*cp*Math.cos(orbit.yaw) ];
+  return view(eye,t);
+}
+
+// ---- state ----
+let frameIdx=0, playing=true, speed=1, viewMode='game', showTrail=true, showGrid=true;
+const clipKeys=Object.keys(DATA.clips);
+let curClip=clipKeys.includes('roll_ebs')?'roll_ebs':clipKeys[0];
+let CLIP=DATA.clips[curClip], N=CLIP.frames.length;
+
+function hexA(hex,a){hex=hex.replace('#','');if(hex.length===3)hex=hex.split('').map(c=>c+c).join('');
+  return `rgba(${parseInt(hex.slice(0,2),16)},${parseInt(hex.slice(2,4),16)},${parseInt(hex.slice(4,6),16)},${a})`;}
+
+function drawGrid(vw){
+  if(!showGrid) return;
+  const [cx,cz]=CLIP.center, R=420, step=60;
+  ctx.lineWidth=1;
+  for(let gx=-R; gx<=R; gx+=step){
+    const a=project(vw,[cx+gx,0,cz-R]), b=project(vw,[cx+gx,0,cz+R]);
+    if(a.z<1&&b.z<1)continue;
+    ctx.strokeStyle=(gx===0)?COL.axis:COL.grid; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+  for(let gz=-R; gz<=R; gz+=step){
+    const a=project(vw,[cx-R,0,cz+gz]), b=project(vw,[cx+R,0,cz+gz]);
+    if(a.z<1&&b.z<1)continue;
+    ctx.strokeStyle=(gz===0)?COL.axis:COL.grid; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+}
+function drawTrail(vw){
+  if(!showTrail) return;
+  ctx.strokeStyle=COL.trail; ctx.lineWidth=2; ctx.lineCap='round'; ctx.beginPath();
+  let started=false;
+  for(let i=0;i<=frameIdx;i++){
+    const f=CLIP.frames[i]; const s=project(vw,[f.pos[0],1.5,f.pos[1]]);
+    if(s.z<1){started=false;continue;}
+    if(!started){ctx.moveTo(s.x,s.y);started=true;} else ctx.lineTo(s.x,s.y);
+  }
+  ctx.stroke();
+}
+
+function render(){
+  const g=ctx.createRadialGradient(W*0.5,H*0.4,60,W*0.5,H*0.5,Math.max(W,H)*0.75);
+  g.addColorStop(0,COL.bg0); g.addColorStop(1,COL.bg1); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+  const fr=CLIP.frames[frameIdx];
+  const vw=currentCam(fr);
+  drawGrid(vw); drawTrail(vw);
+
+  const scr=fr.p.map(p=>project(vw,p));
+  const hot=(fr.state===6 && fr.nspeed<0) || fr.state===30;   // roll or reversed-speed slide
+  const boneCol=hot?COL.hot:COL.bone;
+
+  const bones=DATA.bones.map(([a,b])=>({pa:scr[a],pb:scr[b],d:(scr[a].z+scr[b].z)/2}))
+    .filter(bn=>bn.pa.z>1&&bn.pb.z>1).sort((u,v)=>v.d-u.d);
+  for(const bn of bones){
+    const t=Math.max(0,Math.min(1,(bn.d-260)/420));
+    ctx.strokeStyle=hexA(boneCol,0.95-t*0.6);
+    ctx.lineWidth=Math.max(1.1,bn.pa.s*2.4); ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(bn.pa.x,bn.pa.y); ctx.lineTo(bn.pb.x,bn.pb.y); ctx.stroke();
+  }
+  // toe points (validated)
+  for(const key of['ltoe','rtoe']){
+    const s=project(vw,fr[key]); if(s.z<1)continue;
+    const r=Math.max(2.5,s.s*3.2);
+    ctx.save(); ctx.shadowColor=COL.accent; ctx.shadowBlur=13; ctx.fillStyle=COL.accent;
+    ctx.beginPath(); ctx.arc(s.x,s.y,r,0,7); ctx.fill(); ctx.restore();
+  }
+
+  // HUD
+  const ph=document.getElementById('phase');
+  let label,cls=false;
+  if(fr.state===30){label='Forward roll';cls=true;}
+  else if(fr.state===6 && fr.nspeed<0){label='EBS slide';cls=true;}
+  else if(fr.state===6){label='Run';}
+  else if(fr.state===7){label='Targeting slide';}
+  else{label='Idle';}
+  ph.textContent=label; ph.classList.toggle('hot',cls);
+  document.getElementById('stats').innerHTML=
+    'mNormalSpeed <b>'+fr.nspeed.toFixed(2)+'</b><br>facing <b>'+(fr.facing*360/65536).toFixed(1)+'°</b>';
+  document.getElementById('frameno').innerHTML=frameIdx+'<small> / '+(N-1)+'</small>';
+}
+
+// ---- loop ----
+let last=0,acc=0; const FPS=24;
+function tick(ts){
+  if(!last)last=ts; const dt=(ts-last)/1000; last=ts;
+  if(playing){ acc+=dt*FPS*speed; while(acc>=1){ frameIdx=(frameIdx+1)%N; acc-=1; syncScrub(); } }
+  render(); requestAnimationFrame(tick);
+}
+
+// ---- controls ----
+const scrub=document.getElementById('scrub'), scrublbl=document.getElementById('scrublbl');
+scrub.max=N-1;
+function syncScrub(){ scrub.value=frameIdx; scrub.style.setProperty('--fill',(frameIdx/(N-1)*100)+'%'); scrublbl.textContent=frameIdx; }
+scrub.addEventListener('input',()=>{frameIdx=+scrub.value; playing=false; setPlay(); syncScrub(); render();});
+const playBtn=document.getElementById('play');
+function setPlay(){playBtn.textContent=playing?'❚❚':'▶'; playBtn.setAttribute('aria-label',playing?'Pause':'Play');}
+playBtn.addEventListener('click',()=>{playing=!playing; setPlay();});
+document.getElementById('speed').addEventListener('change',e=>speed=+e.target.value);
+document.getElementById('view').addEventListener('change',e=>{viewMode=e.target.value; cv.classList.toggle('orbit',viewMode==='orbit');});
+
+// clip selector
+const clipSel=document.getElementById('clip');
+const CLIP_LABELS={roll_ebs:'EBS out of roll', face_left:'Face-left EBS'};
+for(const k of clipKeys){const o=document.createElement('option'); o.value=k; o.textContent=CLIP_LABELS[k]||k; if(k===curClip)o.selected=true; clipSel.appendChild(o);}
+function setClip(k){
+  curClip=k; CLIP=DATA.clips[k]; N=CLIP.frames.length; frameIdx=0;
+  scrub.max=N-1; syncScrub();
+  document.querySelector('#title h1').textContent=CLIP.title;
+  Object.assign(orbit,ORB0);
+}
+clipSel.addEventListener('change',e=>setClip(e.target.value));
+document.querySelector('#title h1').textContent=CLIP.title;
+function toggle(id,init,fn){const b=document.getElementById(id);let v=init;const set=()=>{b.setAttribute('aria-pressed',v);fn(v);};b.addEventListener('click',()=>{v=!v;set();});set();}
+toggle('trail',true,v=>showTrail=v); toggle('grid',true,v=>showGrid=v);
+document.getElementById('reset').addEventListener('click',()=>Object.assign(orbit,ORB0));
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault(); playing=!playing; setPlay();}
+  else if(e.code==='ArrowRight'){playing=false; setPlay(); frameIdx=(frameIdx+1)%N; syncScrub(); render();}
+  else if(e.code==='ArrowLeft'){playing=false; setPlay(); frameIdx=(frameIdx-1+N)%N; syncScrub(); render();}
+});
+// orbit drag (only in orbit mode)
+let dragging=false,px=0,py=0;
+cv.addEventListener('mousedown',e=>{if(viewMode!=='orbit')return; dragging=true;px=e.clientX;py=e.clientY;cv.classList.add('drag');});
+window.addEventListener('mousemove',e=>{if(!dragging)return; orbit.yaw-=(e.clientX-px)*0.008; orbit.pitch=Math.max(-1.2,Math.min(1.3,orbit.pitch+(e.clientY-py)*0.008)); px=e.clientX;py=e.clientY;});
+window.addEventListener('mouseup',()=>{dragging=false;cv.classList.remove('drag');});
+cv.addEventListener('wheel',e=>{if(viewMode!=='orbit')return; e.preventDefault(); orbit.dist=Math.max(150,Math.min(1100,orbit.dist*(1+Math.sign(e.deltaY)*0.08)));},{passive:false});
+
+refreshColors(); resize(); syncScrub(); setPlay(); requestAnimationFrame(tick);
+</script>

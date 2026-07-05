@@ -31,8 +31,7 @@ from __future__ import annotations
 import heapq
 import math
 
-from . import sim as S
-from .sim import deg_to_s16, s16_signed, ARROW_STICK_DEADZONE
+from ..core.mathlib import deg_to_s16, s16_signed, ARROW_STICK_DEADZONE
 from .land import LandState, WAIT, FREE_WAIT
 
 # Dead-zoned deflection magnitude (per axis) before the 15-unit dead zone is added back per axis (see

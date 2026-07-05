@@ -11,7 +11,7 @@ and re-run with a FINER sig bucket to prove the frame count isn't a bucket artif
 Usage: python neutral_boost_search.py [prefix=ab_nopump_seq.txt] [dest=200000]
 """
 import sys, math
-import os, sys  # >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+import os, sys  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -19,10 +19,10 @@ if _rb not in sys.path: sys.path.insert(0, _rb)
 _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 
-from superswim import sim as S
-from superswim import plan as P
-from superswim import optimize as O
-from superswim import actions as A
+from tww_sim.swim import sim as S
+from tww_sim.swim import plan as P
+from tww_sim.swim import optimize as O
+from tww_sim.swim import actions as A
 
 def fine_sig(st):
     """Much finer than O.sig (0.005 anim / 0.02 v) to test bucket sensitivity."""

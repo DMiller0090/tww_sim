@@ -7,7 +7,7 @@ LONGER latency than that assumed, so some cells recorded a stale neighbour's val
   - stick_dist: the WHOLE column is shifted ~2 rows (mStickDistance lagged ~2 frames);
   - angle: ~6% of off-axis cells are wrong (worst at exact-diagonal cells, e.g. (160,160)=24260
     shipped vs 24576 live, (160,112)=15162 vs 15771). angle is the ONE column the sim reads
-    (superswim.predict.stick_angle), so those errors cause a real sim-vs-live facing desync
+    (tww_sim.swim.predict.stick_angle), so those errors cause a real sim-vs-live facing desync
     (confirmed via a clean-DTM negative-v test).
 
 FIX (root cause): hold each stick for SETTLE frames so every field fully converges, and VERIFY
@@ -30,7 +30,7 @@ Merge:
 """
 import os, sys, csv, struct, time
 
-# >>> repo bootstrap: locate superswim/ package + ../tools/ (dolphin_mem)
+# >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -174,7 +174,7 @@ def main():
     opts = dict(t.split("=", 1) for t in sys.argv[1:] if "=" in t)
     if "merge" in sys.argv:
         shards = [opts[k] for k in sorted(opts) if k.startswith("shard")]
-        merge(shards, opts.get("out", os.path.join(_rb, "superswim", "tables", "stick_angle_full.csv")))
+        merge(shards, opts.get("out", os.path.join(_rb, "tww_sim", "core", "tables", "stick_angle_full.csv")))
         return
 
     if "pid" in opts:

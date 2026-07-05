@@ -4,7 +4,7 @@
 fixed cadence lose? What's the optimal schedule and does it transfer?
 **Status:** validated (live + beam search). **Reboost saves time ONLY when phase-triggered, not on
 a fixed cadence** — see the reversal note below.
-**Source:** live 2026-06-26 (`essloop`); beam search `superswim/optimize.py`.
+**Source:** live 2026-06-26 (`essloop`); beam search `tww_sim/swim/optimize.py`.
 
 ---
 
@@ -53,7 +53,7 @@ recovery is the rescue move for when you've already let anim slide deep.
 
 ## Optimal schedule — searched, not guessed
 
-`superswim/optimize.py` beam-searches the full per-frame {ESS, charge} space. Band-2, 200-frame
+`tww_sim/swim/optimize.py` beam-searches the full per-frame {ESS, charge} space. Band-2, 200-frame
 window (−1630, air 900): converged (beam 2000 = 4000 = 8000) to **3 minimal up-downs (length-2)**
 at frames 2 / 44 / 110 → **+15% net/fr**; **live-verified +15.7%** (sim predicted +15.1%). The
 search independently rediscovered that the **minimal 2-frame up-down is the optimal boost**.
@@ -71,5 +71,5 @@ search independently rediscovered that the **minimal 2-frame up-down is the opti
 
 - [Strobo bands](../mechanics/strobo.md) — the mechanism reboost exploits.
 - [Turnaround](../mechanics/turnaround.md) — the snap that costs the per-boost tax.
-- Tooling: `essloop` (closed-loop live), `superswim/optimize.py` (beam search). Command refs live
+- Tooling: `essloop` (closed-loop live), `tww_sim/swim/optimize.py` (beam search). Command refs live
   in the reference layer (migrating).

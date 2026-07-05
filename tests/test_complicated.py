@@ -19,7 +19,7 @@ import os, sys, csv, math
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
-from superswim.predict import swim_predict_complicated as F
+from tww_sim.swim.predict import swim_predict_complicated as F
 
 # bit-exact thresholds (POS allowed up to the single-ULP f32 floor at ~4e4 coords)
 TOL_CAM_HW = 0      # camera must be exact s16

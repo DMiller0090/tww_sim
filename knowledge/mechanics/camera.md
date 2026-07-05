@@ -2,7 +2,7 @@
 
 **Answers:** How does the camera yaw affect movement? What's the per-frame camera-rate law? How do
 you steer finely with the C-stick? Is omega speed-dependent?
-**Status:** validated (live RE + exact integer recurrence in `superswim/predict/camera_exact.py`;
+**Status:** validated (live RE + exact integer recurrence in `tww_sim/core/camera/camera_exact.py`;
 the ω lookup is now the complete 65536-cell grid, offline-locked by `tests/test_omega_table_integrity.py`).
 F32-precision of the internal ω and the auto-flip envelope are open.
 **Source:** live RE 2026-06-28; grid completed 2026-07-01; decomp symbols below. Research log: [history/camera-predict-history](../history/camera-predict-history.md).
@@ -81,7 +81,7 @@ To move ΔZ laterally over a cruise, apply a tap of size X at frame F; lateral d
 time-integral of `speed·sin(Δheading)`. **Frozen-camera plans stay bit-exact**: they hold
 substickX = 128 (centered) ⇒ omega_cmd = 0 ⇒ csangle constant ⇒ zero regression.
 
-`LandState` DRIVES `csangle` per-frame from the LAND camera (`superswim/camera.py` `CameraManual`
+`LandState` DRIVES `csangle` per-frame from the LAND camera (`tww_sim/core/camera/__init__.py` `CameraManual`
 = a bit-exact port of `dCamera_c::manualCamera`): `LandState.step(sx,sy,buttons,triggerL,csx,csy)`
 advances it and sets `self.csangle` before the stick target; a centered C-stick holds it frozen
 (regression bit-exact — 13/13 live land tests). `SwimState` still holds `self.cam` constant (the
@@ -91,7 +91,7 @@ SWIM subject cam is a different engine; swim steering not yet wired).
 The two cameras use *different* engines. The **swim** (subject) cam's rate is the live-captured
 `omega_table_full.csv`. The **land** free/behind cam is `dCamera_c::manualCamera`, and its rate is
 NOT a scalar multiple of the swim table (truncation: swim `(166,0)=3` but land `=8`, not
-`3·2.6685`). So land is ported analytically (`superswim/predict/cam_bezier.py` +
+`3·2.6685`). So land is ported analytically (`tww_sim/core/camera/cam_bezier.py` +
 `camera_manual.py`), **validated 33/33 bit-exact vs live** (1-D + 2-D off-axis):
 
     ratio      = rationalBezierRatio(_16276·mStickCPosX, _9006=2)   # ±1 saturated at |stick|≥0.75

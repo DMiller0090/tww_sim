@@ -3,6 +3,7 @@
 ``wnamed`` writes a value to a NAMED_ADDRS field in the running game (used to seed air /
 potential_speed before a replay). Lifted out of run_tests.py, where ~40 scripts referenced it.
 Depends on ``dolphin_mem`` from the parent ``../tools/`` (reached via the bootstrap below).
+Dolphin command reference: ../tools/DOLPHIN_CONTROL.md (the single source of truth).
 """
 import os, sys, struct
 

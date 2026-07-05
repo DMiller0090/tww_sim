@@ -114,7 +114,7 @@ MBP 80160a0c Write16 ffffc110 ...            # = 49424, the full-right ramp
 ## Resolved: the omega (camera-rate) grid was off by +1 (input-path corruption)
 
 For arbitrary C-stick (csy != 128) `omega_cmd` is a 2-D lookup, not the csx-only table above.
-The shipped grid `superswim/tables/omega_table_full.csv` (csx 0..15 x csy 0..255, the
+The shipped grid `tww_sim/core/tables/omega_table_full.csv` (csx 0..15 x csy 0..255, the
 deep-negative-X band) had been dumped via the in-Dolphin `controller.set_gc_buttons` (calibrated)
 path. That path recorded the negative-saturation omega as **-546** where the raw-byte
 `advancewith` path the swim/tests/DTM actually use gives **-547** — 1816 of 4096 cells off by +1
@@ -132,7 +132,7 @@ independently-captured fine table on 100% of overlap cells, and both charge case
 The `omega_full_redump.py` grid above still only covered csx 0..15 × csy 0..255 (4096 cells), so
 `camera_arbitrary.CameraArbitrary` raised KeyError for any off-grid (csx, csy) with csy ≠ 128.
 Completed 2026-07-01 to the **full csx 0..255 × csy 0..255 = 65536 grid** in
-`superswim/tables/omega_table_full.csv` — no more off-grid gaps. Offline-locked by
+`tww_sim/core/tables/omega_table_full.csv` — no more off-grid gaps. Offline-locked by
 `tests/test_omega_table_integrity.py` (completeness + bounded + saturation constants + gold-overlap match).
 
 - **omega = the steady per-frame d(cam_target)** while a C-stick is held with a **neutral main stick**

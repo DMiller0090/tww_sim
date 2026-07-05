@@ -1,5 +1,7 @@
 """dolphin_env.py -- machine-specific Dolphin/ISO paths + one-call live warm-up.
 
+Dolphin command reference: ../tools/DOLPHIN_CONTROL.md (dolphin_mem.py -- the single source of truth).
+
 Two jobs so a live run is a single command with zero manual setup:
 
 1. PATHS. The Dolphin binary, the ISO directory, and the cold-start slate vary per machine, so
@@ -22,7 +24,7 @@ from __future__ import annotations
 import os, sys, json, time, subprocess
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)                       # superswim repo root
+_ROOT = os.path.dirname(_HERE)                       # tww_sim repo root
 _SPEEDRUN = os.path.dirname(_ROOT)                   # speedrunning/
 _CONFIG = os.path.join(_ROOT, "dolphin.local.json")  # gitignored; see dolphin.local.example.json
 

@@ -3,11 +3,11 @@
 **Answers:** What are the predict/ modules and how do they relate? How is arbitrary-direction gain
 priced? Why a live stick-angle grid instead of atan2? What was the off-axis charge residual?
 **Status:** validated bit-exact (`tests/test_complicated.py`, `tests/test_stick_table_integrity.py`).
-**Source:** `superswim/predict/*`; live RE 2026-06-27/28, stick-grid gold re-dump 2026-07-01. Full log: [history/camera-predict-history](../history/camera-predict-history.md).
+**Source:** `tww_sim/swim/predict/*` (swim + stick-angle), `tww_sim/core/camera/*` (camera yaw); live RE 2026-06-27/28, stick-grid gold re-dump 2026-07-01. Full log: [history/camera-predict-history](../history/camera-predict-history.md).
 
 ---
 
-The base [sim](sim.md) is bit-exact for v/anim/air/state under one assumption: **C-stick held down
+The base [swim sim](swim-sim.md) is bit-exact for v/anim/air/state under one assumption: **C-stick held down
 (camera frozen)**. The `predict/` modules remove that assumption to predict the **camera (csangle)**
 and **Link's position (x/z)** bit-exactly under arbitrary main-stick + C-stick. They import the sim
 read-only.
@@ -50,7 +50,7 @@ all 65536 cells, exact-diagonals on the 45° grid — is locked offline.
 ## Stick-angle table corruption (resolved)
 
 The shipped `stick_angle_table.csv` carried two live-dump artifacts, both now fixed by a settle-and-
-verify gold re-dump (`superswim/harness/capture/stick_grid_redump.py`):
+verify gold re-dump (`harness/capture/stick_grid_redump.py`):
 
 - **Input-path** (older, [resolved-bugs](../history/resolved-bugs.md)): x/y/`value` had been dumped via
   Dolphin's **calibrated `set_gc_buttons`** path instead of the **raw-byte `advancewith`** path the
@@ -73,4 +73,4 @@ in-place superswimmer; 4-instance parallel orchestration via `run_parallel_dump.
 ## See also
 
 - [Camera](../mechanics/camera.md) · [Arrow](../mechanics/arrow.md) (`ArrowState` 2-D stepper) ·
-  [Sim](sim.md) · [history/camera-predict-history](../history/camera-predict-history.md).
+  [Swim sim](swim-sim.md) · [history/camera-predict-history](../history/camera-predict-history.md).

@@ -22,7 +22,7 @@ _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
 if _rb not in sys.path: sys.path.insert(0, _rb)
-from superswim import sim as S            # S.f32 = ctypes-backed f32 rounding
+from tww_sim.swim import sim as S            # S.f32 = ctypes-backed f32 rounding
 
 RAD2S = 10430.3779296875                  # 0x8000/pi (the f32 constant 10430.379f rounds here)
 
@@ -54,9 +54,9 @@ def load(path):
 
 def main():
     o = dict(t.split("=", 1) for t in sys.argv[1:] if "=" in t)
-    new = load(o.get("new", os.path.join(_rb, "superswim", "tables", "stick_angle_full.csv")))
+    new = load(o.get("new", os.path.join(_rb, "tww_sim", "core", "tables", "stick_angle_full.csv")))
     tol = int(o.get("tol", "2"))
-    oldp = o.get("old", os.path.join(_rb, "superswim", "tables", "stick_angle_table.csv"))
+    oldp = o.get("old", os.path.join(_rb, "tww_sim", "core", "tables", "stick_angle_table.csv"))
     old = load(oldp) if os.path.exists(oldp) else {}
 
     print("cells: %d" % len(new))

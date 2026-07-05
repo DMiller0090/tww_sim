@@ -22,7 +22,7 @@ delta = mStickDistance · 3.0 · cM_scos(shape_angle.y − oldAngleY)
 the charge axis changes the **cosine**, not the magnitude.
 
 `cM_scos` is the [console cosine table](../reference/glossary.md#cm_scos), not `math.cos` — this
-matters for bit-exactness, see [model/sim](../model/sim.md#console-cosine-table).
+matters for bit-exactness, see [model/sim](../model/fp-faithfulness.md#console-cosine-and-sine-tables).
 
 ## Charging nets ~zero progress on its own
 

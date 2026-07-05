@@ -25,9 +25,9 @@ import os, csv, math
 
 import pytest
 
-from superswim.predict import stick_angle as SA
-from superswim.predict.swim_arbitrary import ArbitrarySwimState
-from superswim import sim as S
+from tww_sim.swim.predict import stick_angle as SA
+from tww_sim.swim.predict.swim_arbitrary import ArbitrarySwimState
+from tww_sim.swim import sim as S
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CAP = os.path.join(HERE, "partial_onaxis_cap.csv")
@@ -79,7 +79,7 @@ def test_grid_stick_dist_matches_closed_form(monkeypatch):
     column regressing to the old latency-corrupted values (which diverged ~0.22)."""
     # build the live stick_dist lookup straight from the shipped grid
     tbl = {}
-    grid = os.path.join(HERE, "..", "superswim", "tables", "stick_angle_table.csv")
+    grid = os.path.join(HERE, "..", "tww_sim", "core", "tables", "stick_angle_table.csv")
     for r in csv.DictReader(open(grid)):
         tbl[(int(r["sx"]), int(r["sy"]))] = float(r["stick_dist"])
 

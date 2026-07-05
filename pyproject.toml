@@ -3,28 +3,28 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "superswim"
-version = "0.1.0"
-description = "Bit-exact offline simulation and route planner for TWW (GZLJ01/JP) superswimming"
+name = "tww_sim"
+version = "0.2.0"
+description = "Bit-exact offline simulation of TWW (GZLJ01/JP) player physics (core/swim/land) + route planners"
 readme = "README.md"
 requires-python = ">=3.7"
 license = { text = "MIT" }
 authors = [{ name = "Dereck Miller" }]
-dependencies = ["numpy"]
+dependencies = []  # pure standard library (ctypes-backed f32); no third-party deps
 
 [project.urls]
-Repository = "https://github.com/DMiller0090/superswim"
+Repository = "https://github.com/DMiller0090/tww_sim"
 
 [project.optional-dependencies]
 test = ["pytest"]
 
-[tool.setuptools]
-# The importable library is the `superswim` package (+ its predict/ subpackage). The live-Dolphin
-# harness/, tests/, viz/ and archive/ are dev tooling, run from a checkout, not shipped on install.
-packages = ["superswim", "superswim.predict"]
+[tool.setuptools.packages.find]
+# The importable library is the `tww_sim` package (core/swim/land). The live-Dolphin harness/,
+# tests/, viz/ and archive/ are dev tooling, run from a checkout, not shipped on install.
+include = ["tww_sim*"]
 
 [tool.setuptools.package-data]
-superswim = ["tables/*"]
+"tww_sim.core" = ["tables/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

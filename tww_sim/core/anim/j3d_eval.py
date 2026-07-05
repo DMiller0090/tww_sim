@@ -28,7 +28,7 @@ Reads gitignored _generated anim data (dev-supplied). Rotations are returned as 
 """
 import os, sys, json, struct
 
-from superswim import fp
+from .. import fp
 
 
 # --- s16 Hermite: exact port of the inline asm (J3DAnimation.cpp:342-363) ---------------------

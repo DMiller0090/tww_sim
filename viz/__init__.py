@@ -1,1 +1,1 @@
-"""superswim viz — HTML/JSON trajectory artifact builders (offline)."""
+"""tww_sim viz — HTML/JSON trajectory artifact builders (offline)."""

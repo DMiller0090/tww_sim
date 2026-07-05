@@ -18,7 +18,7 @@ is unbiased. **Dense plans are valid.** → [reference/commands](../reference/co
 > LOCKED clean-DTM sync, bit-exact. A one-session "sim over-bleeds pump exits" scare was a
 > **seed mismatch** (the sim seeded with the slot-10 slate's mRate 0.5472 while validated against
 > the anchor's cold start, real mRate 0.5); seeded correctly the sim is bit-exact. The mRate rule
-> and the [554 cold-start seeding](../model/sim.md#cold-start-seeding-the-mrate-rule) stand. Lesson
+> and the [554 cold-start seeding](../model/swim-sim.md#cold-start-seeding-the-mrate-rule) stand. Lesson
 > in [tests/dolphin/README](../../tests/dolphin/README.md#locked-tests-are-immutable-hard-rule).
 
 ## bug3 — partial-hold gain dropped at a hold→charge boundary
@@ -34,14 +34,14 @@ hold→charge boundary the steady holds had self-applied, so nothing was pending
 overwrote the slot. **Fix:** defer the swim gain ONE frame UNIFORMLY for ESS and charge (the
 discipline `ArrowState` already used). Validated bit-exact via clean DTM (110 **and** 77);
 `run_tests.py bug3 partial hold` is now a baseline. Repro: `harness/dtm/partial_hold_dtm.py`. →
-[model/sim](../model/sim.md#charge-frame-model-four-1-frame-lags), [mechanics/decay-curve](../mechanics/decay-curve.md).
+[model/sim](../model/swim-sim.md#charge-frame-model-four-1-frame-lags), [mechanics/decay-curve](../mechanics/decay-curve.md).
 
 ## 554 / "anim drifts ~3 fr by f400" — truncated-seed artifact
 
 A phantom ~3-frame anim drift by f400 was a **truncated cold-start seed** (anim 8.9417 vs true
 8.941699028…); the cold-start [×598 scramble](../mechanics/pumps.md#the-x598-scramble) amplified the
 sub-ULP error ~600×. With the full-precision seed the sim is bit-exact per-frame. Fix: never seed a
-truncated anim. → [model/sim](../model/sim.md#cold-start-seeding-the-mrate-rule).
+truncated anim. → [model/sim](../model/swim-sim.md#cold-start-seeding-the-mrate-rule).
 
 ## Off-axis charge v residual — corrupt stick-angle table (input path)
 
@@ -63,7 +63,7 @@ a **real** sim-vs-live facing desync (3.35° at (160,112), confirmed via a clean
 superswim test; corrected cell → 0.00°). `test_complicated` missed it — its inputs (sx 98–157,
 sy∈{0,255}) never reach the sx≥160 / diagonal region.
 
-Fixed by a settle-and-verify gold re-dump (`superswim/harness/capture/stick_grid_redump.py` +
+Fixed by a settle-and-verify gold re-dump (`harness/capture/stick_grid_redump.py` +
 `run_parallel_dump.py`): hold each stick through a multi-frame settle, verify stability across two
 consecutive settled frames (0 unstable / 65536), per-frame air/speed/pos re-lock. New table: `angle`
 bit-consistent with `atan2f(x,−y)` for all 65536 cells, exact-diagonals on the 45° grid, and
@@ -88,7 +88,7 @@ Dump method history and the fast in-place redump are in
 
 x86 `cos()` differs from the console `jmaCosTable` at 2964/4096 entries; ×598-amplified, a 1 ULP
 became a 0.07 v jump at pump exits. Fixed by baking the live table from `0x80498168`. →
-[model/sim](../model/sim.md#console-cosine-table).
+[model/sim](../model/fp-faithfulness.md#console-cosine-and-sine-tables).
 
 ## release_ess_speed — 2-increment phase error
 
