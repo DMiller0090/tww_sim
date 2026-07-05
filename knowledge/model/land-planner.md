@@ -5,9 +5,10 @@ proportional glide, the C-up freeze)? What is the live-valid stick set? How clos
 what are the current gaps (curve residual, pillar collision)? What are the two use-case accuracy bars
 (seam clips vs RTA setups)?
 **Status:** milestone 1 — straight-walk reach bit-exact live; `reach_freeze` deterministic C-up-cancel
-stop now **robustly float-perfect** — within a few float32 ULP (< 0.001u) of ANY on-axis target
-(all-live-valid), not just lucky ones. Sweeps are O(n) via bit-exact mid-walk clone. Open: off-axis
-octagon clamp, collision, A*. (Note: `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u
+stop now **robustly float-perfect AND live-re-gated 0 ULP** (2026-07-05) — freezes byte-for-byte at the
+sim's `freeze_pos.z` for every reachable on-axis target, and within a few float32 ULP (< 0.001u) of ANY
+on-axis target offline (all-live-valid), not just lucky ones. Sweeps are O(n) via bit-exact mid-walk
+clone. Open: off-axis octagon clamp, collision, A*. (Note: `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u
 — use `reach_freeze` for exact stops.)
 **Source:** `tww_sim/land/plan_land.py`; live-validated via `advanceseq`. Forward model:
 [land sim](land-sim.md) · [land movement](../mechanics/land-movement.md).
@@ -93,7 +94,9 @@ On the open **+z corridor** every on-axis target rests within **~1–4 float32 U
 **all-live-valid** seq that re-simulates to the reported freeze. That residual is the **drill's lattice
 granularity** — whether the exact target f32 is reachable — NOT sim error: the sim reproduces live
 `pos_z` at **0 ULP** ([land-sim](land-sim.md), gated no-tolerance by `run_land_tests`), so an offline
-*exact* freeze would land exactly live. **Off-axis freeze plans are not yet live-valid** — an off-axis
+*exact* freeze lands exactly live — **confirmed 2026-07-05** by driving whole plans in Dolphin (approach
+`advanceseq`, then the real cancel), which froze `pos_z` byte-for-byte at the sim's `freeze_pos.z` for
+every reachable on-axis target (z = 1500 / 2000 / 2500 all 0 ULP, `pos_x` = 0). **Off-axis freeze plans are not yet live-valid** — an off-axis
 crawl emits diagonal sticks needing the octagon clamp (a separate open decode issue). Mechanics of the cancel:
 [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
 
@@ -105,7 +108,10 @@ crawl emits diagonal sticks needing the octagon clamp (a separate open decode is
   dead-straight; turn tests are big reversals). NOT the camera (csangle stays 0). Fine for flavor B
   (unit-scale basins); must be closed before flavor-A clip planning.
 - **Wall/pillar collision (unported).** A diagonal target that crosses a pillar mispredicts by ~36u.
-  v1 targets OPEN GROUND only (the +z corridor is clear to ~2000). Collision is the flavor-A
+  v1 targets OPEN GROUND only. Because the sim has NO collision, a plan can silently target past a
+  wall: on the `land_flatwalk` anchor the +z corridor ends at a **wall at `pos_z ≈ 2932.4294`
+  (`0x453746df`)** — a plan for z ≥ 3000 freezes AT the wall, not the requested z (live-observed
+  2026-07-05). Keep on-axis targets in `(764.08, 2932.43)` on this anchor. Collision is the flavor-A
   centerpiece (see above).
 
 ## Roadmap

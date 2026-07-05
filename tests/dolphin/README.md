@@ -46,7 +46,16 @@ python tests/dolphin/run_tests.py            # full suite
 python tests/dolphin/run_tests.py dtm=1      # re-run the clean-DTM baselines LIVE (relaunches Dolphin)
 python tests/dolphin/run_tests.py quick=1    # skip the long 200k case
 python tests/dolphin/verify_state.py seq=... # per-frame divergence locator
+python tests/dolphin/run_land_tests.py       # LAND sim-vs-live (walk/ATN/roll/turns), 0-ULP pos_z gate
+python tests/dolphin/spotcheck_freeze.py     # LAND C-up-cancel freeze: reach_freeze plans, 0-ULP live
 ```
+
+**`run_land_tests.py` — `roll_slow` is order-sensitive (harness, not sim).** `roll_slow` (a dense
+2-frame stick → roll) reads a DIFFERENT live `pos_z` in the full suite (~785.88) than in isolation
+(`only=roll_slow` → 791.88, which is 0 ULP vs sim). The sim is byte-untouched (offline 212 green,
+`perf_land` fingerprint unchanged); the divergence is advanceseq-pipe cadence sensitivity on the dense
+roll start when a prior case's `advanceseq` precedes it (bug#2 family). Trust the isolated result;
+`only=roll_slow` is the ground truth for this case.
 
 The PASS baselines (cold-start 3k, 4/8-pump, pump-transition, bug3 partial hold) are **clean-DTM
 syncs**: `run_tests.py` compares the sim to each recorded DTM truth offline (no emulator), seeded at

@@ -338,8 +338,15 @@ lattice granularity** (whether the exact target f32 is reachable), NOT a sim ina
 reproduces live `pos_z` at **0 ULP** (byte-for-byte), enforced by the zero-tolerance `posz_status` gate
 in `run_land_tests` — so an offline *exact* freeze would reproduce exactly live. Position path:
 [model/sim: land position accumulates in f32](../model/land-sim.md#land-position-accumulates-in-f32-not-an-f64-running-sum).
-(The C-up freeze itself is not yet in the 14 locked live cases — one live re-gate still pending — but it
-rides the same 0-ULP-gated `LandState.step` position path.)
+**LIVE-CONFIRMED 0 ULP (2026-07-05):** driving whole `reach_freeze` plans in Dolphin (approach
+`advanceseq`, then the real cancel — one half-L frame re-issuing `prefix[-1]` at `triggerL=100`, then
+neutral + C-UP full `substickY=255`) froze `pos_z` at the sim's `freeze_pos.z` **byte-for-byte** for
+every reachable on-axis target (z = 1500 / 2000 / 2500 all 0 ULP), `pos_x` = 0, `link_state → 1`.
+The freeze thus rides the same 0-ULP-gated `LandState.step` path as the 14 locked cases — no longer
+"pending". **Reachability caveat:** the sim has NO collision geometry, so a plan can target past a
+wall. The `land_flatwalk` anchor's +z corridor hits a **wall at `pos_z ≈ 2932.4294` (`0x453746df`)**:
+targets beyond it (z = 3000 / 4000) freeze AT the wall, not the requested z — a physical limit, not a
+sim error. On-axis freeze targets must lie in `(764.08, 2932.43)` on this anchor.
 
 ## Values
 
