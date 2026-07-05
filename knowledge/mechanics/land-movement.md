@@ -20,7 +20,9 @@ MOVE_TURN handoff** (`ANM_SLIP` scales foot-chain joint 37's X by 1.2, so the FK
 scale + the oldframe-morf blends it — see below). **All land position is now bit-exact with the anim
 data present**; the calibrated fallback is used only when the keyframe data is absent. The **C-up
 freeze (`daPyProc_SUBJECTIVITY_e`) + B-cancel re-walk-from-rest** is also modeled and **live-proven
-0 ULP** (both the pure-Python and fused-native paths; 2026-07-05) — see the C-up-cancel section below.
+0 ULP** (both the pure-Python and fused-native paths; 2026-07-05) — and as of 2026-07-05f the whole
+gesture (C-up cancel, the B button, the resume) is driven directly from the RAW controller stream in
+`step()`, so a freeze plan is just an input sequence that plays back 1:1 — see the C-up-cancel section below.
 Anchor `land_flatwalk@twwgz.sav`.
 **Source:** live captures (`harness/capture/land_capture.py`, cross-checked advancewith == advanceseq
 == DTM movie); decomp `d_a_player_main.cpp` proc enum + `setSpeedAndAngleNormal`/`setNormalSpeedF` +
@@ -409,12 +411,46 @@ cold walk resumes from FREE_WAIT, which plays a SINGLE anim (`m34C3 = 0`), so `p
 `setMoveAnime` forces `f31 = 0` → the walk restarts at anim frame 0. The re-walk resumes from the
 subjectivity/WAIT blend (`m34C3 = 2`), so `f31 = fc0.frame/frameMax` is preserved → the walk re-warms at
 the carried WAITS phase. Live proof: first MOVE frame `fc0 = 0.000` (cold) vs `43.499` (re-walk), every
-other field identical. **The sim models this exactly** (`LandState.enter_freeze / hold_freeze /
-resume_walk`; the anim primitives are `FootSpeedF.enter_subjectivity / step_subjectivity`, and the fused
-native twin `PoseEngine.w_enter_subjectivity / w_step_subjectivity`) — **live-proven 0 ULP** across the
-whole cruise → freeze → hold → re-walk sequence, both the pure-Python and fused-native paths (test
-`test_subjectivity_freeze_rewalk_bit_exact`; live gate `_notes/chained-freeze-probes/gate_subj_live.py`).
-The **#hold frames is the planner's lever** for the resume phase (each +1 advances WAITS by 1.1). See
+other field identical.
+
+**`step()` models the whole gesture from the RAW stream (input-driven, 2026-07-05f).** The C-up cancel,
+the B button, L, C-DOWN, and the resume are all handled INSIDE `LandState.step()` (pure-Python AND
+fused-native) — a plan is just an input sequence and playback is 1:1 (feed the identical controller stream
+to sim + Dolphin, no `enter_freeze`/`hold_freeze`/`resume_walk` translation). The full state machine, each
+piece **live-proven 0 ULP** (`spotcheck_subj_inputdriven.py`, both paths):
+- **Entry (C-up → freeze):** the C-up gesture (near-neutral main stick + C-stick pushed UP; the sim reads
+  the same normalized `cstick_normalize` posY the camera does, `d_camera.cpp:1096`) routes through the
+  CAMERA, so it lands **3 frames** after the C-up poll — the 2-frame `INPUT_DELAY` **plus one camera
+  frame**. The last MOVE frame still decelerates one step; `procSubjectivity_init` freezes on the next.
+- **Exits (`checkSubjectEnd`, 5694), three of them:**
+  - **A/B** = `mItemTrigger` **rising EDGE** — a B *held* from before `procSubjectivity`'s body runs
+    (lock+1) MISSES the edge and does NOT exit (live-confirmed). Player-direct, **no floor**: a fresh B
+    exits on the first body frame it is acted (+INPUT_DELAY).
+  - **L held** = `mItemButton & BTN_L` (BTN_L = `0x20` internal; hardware L = `0x40`). Player-direct, no
+    floor. **⚠ Not reproducible via `advanceseq` OR the current DTM tooling** (neither injects the digital
+    L that `checkSubjectEnd` reads — DTM omits pad bits 6-11); modeled from decomp + hand-confirmed on a
+    real controller, live-0-ULP-validation pending better L injection (see `../tools/DOLPHIN_CONTROL.md`).
+  - **C-DOWN** = C-stick pushed DOWN (`mStickCPosY < −0.74`) → the camera's subject state machine sets
+    `dCamAttnStts_00002000_e` (`d_camera.cpp:4230`, needs 2 frames of C-down). The camera can't report it
+    until the `SUBJ_VIEW_IN` transition finishes, so it is **FLOORED**: exit ≈ `max(lock+9, C-down_poll+4)`.
+    B beats it (no floor).
+- **The freeze PERSISTS while C-up is re-requested.** If you keep holding C-up after an exit fires, the
+  camera re-requests subjectivity and you **re-enter cup-cam** (stuck first-person). A re-walk needs C-up
+  **released** first. The exit-to-`WAIT` is its own hold frame (`changeWaitProc` → `WAIT`, THEN
+  `checkNextMode` → MOVE), so a re-walk resumes the frame AFTER the freeze has ended, not the exit frame.
+- **Re-walk (forward stick → MOVE):** once ended + C-up released, a forward stick re-enters `procMove_init`
+  (`m34C3 = 2`, phase carried). Position stays frozen throughout the freeze; subjectivity-hold and post-exit
+  WAIT-hold advance the WAITS anim IDENTICALLY (`fc0 +1.1`/frame), so both use `step_subjectivity` — the sim
+  keeps `state == SUBJECTIVITY` through both (a cosmetic tag difference vs live's `link_state 4`;
+  position/anim bit-identical). *Caveat:* holding a forward stick **simultaneously through** a C-DOWN exit
+  leaves a ~0.15u residual (a `procMove_init`-vs-body 1-frame subtlety); the tech separates exit from walk.
+
+The manual `enter_freeze`/`hold_freeze`/`resume_walk` API (and the anim primitives
+`FootSpeedF.enter_subjectivity / step_subjectivity`, fused native twin `PoseEngine.w_enter_subjectivity /
+w_step_subjectivity`) is retained for the planner's fast re-simulation. Live gates: tracked
+`tests/dolphin/spotcheck_subj_inputdriven.py` (input-driven, varied timings + fiat guards for held-B and
+re-entry — the raw stream drives both sides) and `spotcheck_freeze.py` (frozen position via the planner
+API); offline `test_subjectivity_freeze_rewalk_bit_exact`. See
 [land-planner: chained-freeze](../model/land-planner.md#float-perfect-stop--the-c-up-speed-cancel).
 
 **Float-perfect stop achieved deterministically and ROBUSTLY** (`reach_freeze`, 2026-07-05): cruise →

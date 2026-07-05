@@ -1341,6 +1341,13 @@ DEF LD_NONE=4
 # math.degrees factor: x * (180.0 / pi) in double, exactly as CPython math_degrees.
 DEF _DEG_PER_RAD = 57.29577951308232
 
+# C-up-cancel (subjectivity freeze) input gates -- mirror land.py CUP_POSY / CUP_MAIN_MAX / C-DOWN.
+DEF _CUP_POSY = 0.5
+DEF _CUP_MAIN_MAX = 0.5
+DEF _CDOWN_POSY = -0.74
+DEF _SUBJ_CAM_FLOOR = 9
+DEF _CDOWN_RUN = 3
+
 # HIO tuning constants copied from LandState (one canonical source) via land_init_consts.
 cdef double _L_MAX_NSPEED, _L_F14, _L_F1C, _L_F20, _L_F24
 cdef long long _L_F0, _L_F4, _L_F6
@@ -1484,6 +1491,18 @@ cdef double _cstick_posx_c(int csx, int csy) nogil:
     return posx
 
 
+cdef double _cstick_posy_c(int csx, int csy) nogil:
+    """cam_bezier.cstick_normalize -> mStickCPosY only (the C-up-cancel subjectivity gesture)."""
+    cdef int px, py
+    _clamp_stick_c(csx - 128, csy - 128, &px, &py)
+    cdef double posx = f32(px / 42.0)
+    cdef double posy = f32(py / 42.0)
+    cdef double val = f32(_c_sqrt(f32(posx * posx) + f32(posy * posy)))
+    if val > 1.0:
+        posy = f32(posy / val)
+    return posy
+
+
 cdef class LandCore:
     """C-resident LandState physics engine. Holds a reference to the shared PoseEngine (for speedF) and
     owns all per-frame physics/stick/camera state. `setup` seeds it; `step` advances one frame and
@@ -1496,6 +1515,8 @@ cdef class LandCore:
     cdef public int state, direction
     cdef public double nspeed, speedF, msd, max_nspeed, roll_frame
     cdef public bint _roll_entered, _l_prev, _pos_fallback
+    cdef public bint _subj_arm, _subj_ended
+    cdef int _abtn_prev, _subj_frames, _cdown_run
     cdef double _anim_nspeed
     cdef bint _has_anim_nspeed
     cdef int _inbuf[2][6]
@@ -1531,6 +1552,11 @@ cdef class LandCore:
         self._roll_entered = False
         self._l_prev = False
         self._pos_fallback = False
+        self._subj_arm = False
+        self._subj_ended = False
+        self._subj_frames = 0
+        self._cdown_run = 0
+        self._abtn_prev = 0
         self._anim_nspeed = 0.0
         self._has_anim_nspeed = False
         for i in range(2):
@@ -1559,6 +1585,8 @@ cdef class LandCore:
         c.max_nspeed = self.max_nspeed; c.roll_frame = self.roll_frame
         c._roll_entered = self._roll_entered; c._l_prev = self._l_prev
         c._pos_fallback = self._pos_fallback
+        c._subj_arm = self._subj_arm; c._subj_ended = self._subj_ended
+        c._abtn_prev = self._abtn_prev; c._subj_frames = self._subj_frames; c._cdown_run = self._cdown_run
         c._anim_nspeed = self._anim_nspeed; c._has_anim_nspeed = self._has_anim_nspeed
         for i in range(2):
             for j in range(6):
@@ -1895,7 +1923,64 @@ cdef class LandCore:
         self._set_stick_data(asx, asy)
         cdef bint l_held = ((abtn & 0x40) != 0) or (atrig >= 200)
         cdef bint a_pressed = (abtn & 0x100) != 0
+        # mItemTrigger A/B rising edge (checkSubjectEnd needs the EDGE, not a held button -- a B held
+        # from before procSubjectivity's body runs misses it and does NOT exit). See land.py step().
+        cdef bint ab_edge = ((abtn & ~self._abtn_prev) & 0x300) != 0
+        self._abtn_prev = abtn
         cdef bint moving = self.msd > 0.05
+        # --- SUBJECTIVITY freeze (C-up cancel), input-driven -- mirrors land.py step() (see there for
+        # the full model + decomp cites). C-up entry armed 1 frame (camera path); exits: A/B edge, L
+        # held (no floor), C-DOWN 0x2000 (floored at lock+SUBJ_CAM_FLOOR). Freeze persists while C-up is
+        # re-requested (re-enter cup-cam); the exit-to-WAIT is its own hold frame; re-walk needs C-up
+        # released + a forward stick, phase carried (m34C3=2). Position frozen throughout.
+        cdef double posy = _cstick_posy_c(acsx, acsy)
+        cdef bint cup_now = (self.msd < _CUP_MAIN_MAX and posy > _CUP_POSY)
+        cdef bint was_ended
+        if self._subj_arm:
+            self._subj_arm = False
+            self.state = LS_SUBJECTIVITY
+            self.nspeed = 0.0
+            self.speedF = 0.0
+            self._subj_ended = False
+            self._subj_frames = 0
+            self._cdown_run = 0
+            self._pe.w_enter_subjectivity(self.msd, _L_MOVE_REENTRY_MORF)
+            self.m34de = self.facing
+            self.m34ea = self.m34dc
+            self._cam_step(acsx, acsy)
+            self._l_prev = l_held
+            return 0.0
+        if self.state == LS_SUBJECTIVITY:
+            self._subj_frames += 1
+            was_ended = self._subj_ended
+            if cup_now:
+                self._subj_ended = False
+                self._cdown_run = 0
+            else:
+                if ab_edge or l_held:
+                    self._subj_ended = True
+                if posy < _CDOWN_POSY:
+                    self._cdown_run += 1
+                    if self._cdown_run >= _CDOWN_RUN and self._subj_frames >= _SUBJ_CAM_FLOOR:
+                        self._subj_ended = True
+                else:
+                    self._cdown_run = 0
+            if was_ended and (not cup_now) and self.msd > 0.05:
+                self.state = LS_MOVE
+                self.nspeed = 0.0
+                self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
+            else:
+                self.speedF = 0.0
+                self._pe.w_step_subjectivity(self.msd)
+                self.m34de = self.facing
+                self.m34ea = self.m34dc
+                self._cam_step(acsx, acsy)
+                self._l_prev = l_held
+                return 0.0
+        elif ((self.state == LS_MOVE or self.state == LS_WAIT or self.state == LS_FREE_WAIT
+               or self.state == LS_ATN_MOVE) and cup_now):
+            self._subj_arm = True
+
         if l_held and not self._l_prev:
             self.m34E6 = self.facing
         if a_pressed and moving and (self.state == LS_MOVE or self.state == LS_ATN_MOVE):

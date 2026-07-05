@@ -58,6 +58,7 @@ BACK_JUMP_LAND = 0x23  # daPyProc_BACK_JUMP_LAND_e  (backflip recovery -> WAIT)
 
 _STATE_TAG = {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL", WAIT_TURN: "WAITTURN",
               MOVE_TURN: "MOVETURN", SLIP: "SLIP", WAIT: "WAIT", FREE_WAIT: "WAIT",
+              SUBJECTIVITY: "SUBJ",
               SIDE_STEP: "SIDEHOP", SIDE_STEP_LAND: "SIDEHOPLAND",
               BACK_JUMP: "BACKFLIP", BACK_JUMP_LAND: "BACKFLIPLAND"}
 
@@ -71,6 +72,14 @@ DIR_NONE = 4
 
 # Frames of controller-input latency: physics at frame f acts on the stick from frame f-2.
 INPUT_DELAY = 2
+
+# C-up-cancel (subjectivity freeze) gates + the three checkSubjectEnd exits. Full model + decomp
+# cites: knowledge/mechanics/land-movement.md (subjectivity freeze). C-up entry: camera path, +1 frame.
+CUP_POSY = 0.5          # C-stick posY (up) the camera reads as a subjective-view request (d_camera.cpp:1096)
+CUP_MAIN_MAX = 0.5      # main-stick magnitude below which the C-up request is accepted (mStickMainValueLast)
+CDOWN_POSY = -0.74      # C-stick posY (down) hard threshold that arms the 0x2000 subject-exit (d_camera.cpp:4230)
+SUBJ_CAM_FLOOR = 9      # body frames after lock before the CAMERA (C-DOWN) exit can fire (SUBJ_VIEW_IN)
+CDOWN_RUN = 3           # acted C-down frames the m3C4 0->1->2 + report needs (== poll+4 with INPUT_DELAY)
 
 # speedF->pos FALLBACK: calibrated cLib chase toward mNormalSpeed, used only when the anim engine
 # (superswim.anim.foot_speedf) lacks keyframe data (endpoint +-3). With data, speedF is bit-exact.
@@ -229,6 +238,11 @@ class LandState:
         self.direction = DIR_NONE              # mDirection (ATN physics branch selector)
         self.m34E6 = int(facing) & 0xFFFF      # facing lock captured on attention-lock engage
         self._l_prev = False                   # attention-lock (L) held last frame (rising edge)
+        self._subj_arm = False                 # C-up gesture seen -> enter SUBJECTIVITY next frame
+        self._subj_ended = False               # B/A/L/C-DOWN ended the freeze (checkSubjectEnd) -> stick re-walks
+        self._subj_frames = 0                  # body frames since the freeze locked (C-DOWN camera floor)
+        self._cdown_run = 0                    # consecutive acted C-down frames (0x2000 subject-exit arming)
+        self._abtn_prev = 0                    # acted buttons last frame (for the A/B mItemTrigger edge)
         self.visited = set()                   # every proc state this run passed through (path assertions)
         self.roll_frame = 0.0                  # ANM_ROLLF frame ctrl during FRONT_ROLL (times the exit)
         self._roll_entered = False             # entry frame: don't advance the anim ctrl yet
@@ -412,6 +426,12 @@ class LandState:
             if temp * temp2 <= 0:
                 self.facing = self.travel
         self._set_normal_speed_f(dVar9, self.F24, self.F1C, self.F20)
+
+    def _cstick_posy(self, csx, csy):
+        """Normalized C-stick posY (same cstick_normalize the yaw path uses): >0 up (subjective-view
+        request, d_camera.cpp:1096), <0 down (0x2000 subject-exit, 4230). See camera_manual."""
+        from ..core.camera import cam_bezier as CB
+        return CB.cstick_normalize(int(csx), int(csy))[1]
 
     # --- setSpeedAndAngleAtn (2851): the targeting-move dispatch ----------------------------
     def _get_dir_from_angle(self, angle):
@@ -820,8 +840,68 @@ class LandState:
         self._set_stick_data(asx, asy)
         l_held = bool(abtn & 0x40) or atrig >= 200      # checkAttentionLock proxy (digital/analog L)
         a_pressed = bool(abtn & 0x100)                   # doTrigger: A = the "do"/roll button
+        # mItemTrigger A/B RISING EDGE (checkSubjectEnd 5698): a HELD B misses it -> no exit. See KB.
+        ab_edge = ((abtn & ~self._abtn_prev) & 0x300) != 0
+        self._abtn_prev = abtn
 
         moving = self.msd > 0.05
+        # --- SUBJECTIVITY freeze (C-up cancel), fully input-driven (no enter_freeze/hold/resume API).
+        # Full state machine + decomp cites: knowledge/mechanics/land-movement.md (subjectivity freeze).
+        posy = self._cstick_posy(acsx, acsy)
+        cup_now = (self.msd < CUP_MAIN_MAX and posy > CUP_POSY)   # C-up still requested this frame
+        if self._subj_arm:                       # armed last frame by the C-up gesture -> init the freeze
+            self._subj_arm = False
+            self.state = SUBJECTIVITY
+            self.nspeed = 0.0
+            self.speedF = 0.0
+            self._subj_ended = False
+            self._subj_frames = 0
+            self._cdown_run = 0
+            if self._foot is not None:
+                self._foot.enter_subjectivity(self.msd)   # procSubjectivity_init: WAITS/WALK blend, phase kept
+            self.m34de = self.facing
+            self.m34ea = self.m34dc
+            self._cam.step(acsx, acsy)
+            self.visited.add(SUBJECTIVITY)
+            self._l_prev = l_held
+            return 0.0, "SUBJ"
+        if self.state == SUBJECTIVITY:
+            self._subj_frames += 1
+            # exit-to-WAIT is its OWN hold frame -> resume only if ALREADY ended on a PRIOR frame
+            # (changeWaitProc->WAIT one frame, THEN checkNextMode->MOVE); matters when exit + fwd coincide.
+            was_ended = self._subj_ended
+            if cup_now:
+                # C-up still held -> camera re-requests subjectivity; prior exit void, stay frozen (re-enter cup-cam).
+                self._subj_ended = False
+                self._cdown_run = 0
+            else:
+                if ab_edge or l_held:            # A/B mItemTrigger edge | L held (mItemButton) -- no floor
+                    self._subj_ended = True
+                if posy < CDOWN_POSY:            # C-DOWN -> camera 0x2000, but only past the SUBJ_VIEW_IN floor
+                    self._cdown_run += 1
+                    if self._cdown_run >= CDOWN_RUN and self._subj_frames >= SUBJ_CAM_FLOOR:
+                        self._subj_ended = True
+                else:
+                    self._cdown_run = 0
+            if was_ended and not cup_now and self.msd > 0.05:
+                # procMove_init on WAIT->MOVE: re-enter the walk with the carried WAITS phase (m34C3=2).
+                # Fall through to the MOVE dispatch below so this frame is the first re-walk step.
+                self.state = MOVE
+                self.nspeed = 0.0
+                if self._foot is not None:
+                    self._foot._pending_morf = self.MOVE_REENTRY_MORF
+            else:                                # hold: freeze position, advance the WAITS anim (warm phase)
+                self.speedF = 0.0
+                if self._foot is not None:
+                    self._foot.step_subjectivity(self.msd)
+                self.m34de = self.facing
+                self.m34ea = self.m34dc
+                self._cam.step(acsx, acsy)
+                self.visited.add(SUBJECTIVITY)
+                self._l_prev = l_held
+                return 0.0, "SUBJ"
+        elif self.state in (MOVE, WAIT, FREE_WAIT, ATN_MOVE) and cup_now:
+            self._subj_arm = True                # C-up from a grounded MOVE/WAIT -> freeze NEXT frame
         # Attention-lock engage: capture the facing lock (m34E6 = shape_angle.y, 2067) on the rising
         # edge; it stays frozen because the ATN path writes shape_angle.y = m34E6 every frame.
         if l_held and not self._l_prev:

@@ -8,7 +8,10 @@ what are the current gaps (curve residual, pillar collision)? What are the two u
 stop now **robustly float-perfect AND live-re-gated 0 ULP** (2026-07-05) — freezes byte-for-byte at the
 sim's `freeze_pos.z` for every reachable on-axis target, and within a few float32 ULP (< 0.001u) of ANY
 on-axis target offline (all-live-valid), not just lucky ones. Sweeps are O(n) via bit-exact mid-walk
-clone. Open: off-axis octagon clamp, collision, A*. (Note: `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u
+clone. The C-up freeze + B-cancel + re-walk is now **input-driven in `step()`** (raw stream, 0 ULP live;
+2026-07-05f) — a freeze plan is just an input sequence. Open: redo the chained planner over real input
+streams (measured chained savings are modest, ~1–3f vs single-freeze — see roadmap), off-axis octagon
+clamp, collision, A*. (Note: `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u
 — use `reach_freeze` for exact stops.)
 **Source:** `tww_sim/land/plan_land.py`; live-validated via `advanceseq`. Forward model:
 [land sim](land-sim.md) · [land movement](../mechanics/land-movement.md).
@@ -115,27 +118,35 @@ crawl emits diagonal sticks needing the octagon clamp (a separate open decode is
 
 ## Roadmap: chained coarse+fine freeze (B-cancel) — fewest frames (TAS)
 
-The min-frame exact plan is ~14% over the pure full-speed travel floor; the overhead is the slow approach
-(you must arrive at ~crawl speed for a fine freeze, and decel from 17→crawl costs ~7 frames). The **B-cancel
-freeze** (see [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel))
-can shave those ~7–10 frames: **coarse-freeze from FULL speed** (0-ULP-modeled, lands on a ~17u lattice) →
-**B-cancel** (actionable in ~2 frames) → resume walking **from rest** (already slow — no decel needed) →
-short fine-walk → **fine-freeze** on the exact float.
+The yardstick is the **pure full-up travel floor** ≈ `(target − 764.08)/17` frames (hold full-up the whole
+way). An exact-float stop costs ~12–17 frames over that floor either way (you must decelerate and land on
+the exact float). The idea of the **B-cancel chained freeze** (see [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel)):
+**coarse-freeze from FULL speed** (0-ULP, lands on a ~17u lattice) → **B-cancel** → resume walking **from
+rest** → short fine-walk → **fine-freeze** on the exact float — trades the single-freeze's slow approach
+for a coarse stop + short re-walk.
 
-**The freeze/B-cancel/re-walk state machine is now MODELED and live-proven 0 ULP** (2026-07-05). The
-former blocker — the post-B-cancel re-walk inheriting the freeze's **foot-anim phase** (same nspeed, ~2×
-smaller low-speed `dz` than a cold walk) — is solved: it's the `m34C3 = 2` phase-preservation of the
+**The freeze/B-cancel/re-walk mechanic is now MODELED, input-driven, and live-proven 0 ULP** (2026-07-05f).
+The former blocker — the post-B-cancel re-walk inheriting the freeze's **foot-anim phase** (same nspeed,
+~2× smaller low-speed `dz` than a cold walk) — is solved: it's the `m34C3 = 2` phase-preservation of the
 subjectivity/WAIT blend (root cause + decomp cites in [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel)).
-The [foot engine](../model/land-sim.md) reproduces the carried phase exactly: `LandState.enter_freeze /
-hold_freeze / resume_walk` (both pure-Python and the fused-native `PoseEngine`, ~5–6× faster for
-searches), gated by `test_subjectivity_freeze_rewalk_bit_exact` + the live gate
-`_notes/chained-freeze-probes/gate_subj_live.py`. The **#hold frames is a planner lever** (each +1
-advances the carried WAITS phase by 1.1, reshaping the re-walk-from-rest trajectory).
+`LandState.step()` now consumes the **raw controller stream** — the C-up cancel gesture, the B button, and
+the resume all fall out of the input + `INPUT_DELAY` (+1 camera frame on entry), so a plan is just an input
+sequence that plays 1:1 on sim + Dolphin. Tracked live gate `tests/dolphin/spotcheck_subj_inputdriven.py`
+(varied timings, 0 ULP both paths); the manual `enter_freeze/hold_freeze/resume_walk` API is retained for
+fast planner re-simulation.
 
-**Remaining: the chained PLANNER search.** Given a target: choose the cruise length / coarse-freeze
-lattice point nearest-below, then windowed-deepen over the (hold-count, fine-walk-from-rest) tail to hit
-the exact float in fewest total frames. Compare frame count vs `deep_solve` (~138 for z≈2810; expect
-~128). Live-prove via `spotcheck_freeze.py`.
+**Measured savings (chained_solve prototype, 2026-07-05e/f) — modest, NOT the optimistic ~7–10.** Best
+chained plans vs the single-freeze baseline: **z=2000 → 86f** (vs 89), **z=2810.98 → 135f** (vs 138),
+**z=1800 → ~74f** (vs 74). So the chain shaves only **~1–3 frames** vs single-freeze, and sits **~+12–14
+over the full-up floor**. The exact-float stop is intrinsically expensive; the coarse+fine split barely
+beats a good single freeze.
+
+**Remaining: redo the chained PLANNER search over REAL input streams** (now that `step()` is input-driven).
+Search cruise length × B-cancel timing × re-walk sticks × fine-cancel point; objective = frames over the
+full-up floor, **excluding the final cancel's lock frames** (those are the "stop", not travel). Constrain
+B-cancel to the realizable region (≥~3-frame resume latency). Playback is then the same stream (live gate
+trivial). Compare honestly vs single-freeze — if the win stays ~1–3 frames, it may not be worth
+productionising into `plan_land.py`.
 
 ## Open gaps
 
