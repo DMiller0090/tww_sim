@@ -299,10 +299,12 @@ class LandState:
                 else:
                     self.travel = cLib_addCalcAngleS(self.travel, self.target, self.F6, param_1, self.F4)
             else:
-                sVar6 = int(param_1 * dVar11)
+                # sVar6/sVar7 are s16 = (f32 product) truncated (decomp 2792/2796): quantize before
+                # int() -- an f64 product can truncate 1 unit off at a boundary, drifting the travel angle.
+                sVar6 = int(f32(param_1 * dVar11))
                 if sVar6 < 10:
                     sVar6 = 10
-                sVar7 = int(self.F4 * dVar11)
+                sVar7 = int(f32(self.F4 * dVar11))
                 if sVar7 < 1:
                     sVar7 = 1
                 self.travel = cLib_addCalcAngleS(self.travel, self.target, self.F6, sVar6, sVar7)

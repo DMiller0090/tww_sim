@@ -23,15 +23,16 @@ comes from the roll's getFrame()>17 checkNextMode(1) exit straight to ATN then t
 
 POSITION (pos_z) IS GATED FLOAT-PERFECT -- 0 ULP vs live is the pass condition (LIVE IS THE SOURCE OF
 TRUTH; the sim must reproduce the game's pos_z byte for byte). posz_status() enforces this with NO
-tolerance and NO xfail: a tech that is not bit-exact shows RED. Today walk_run/brakeslide/face_left/
-roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip/brake_right pass (0 ULP; slip went bit-perfect
-with the posMoveFromFootPos |speedF| < 0.05 -> 0 skid snap, d_a_player_main.cpp:2418; brake_right +
-the deep-release walk speedF went bit-perfect with the pos_x sine-leak fix -- cM_ssin must use JMASSin,
-not a cos-table offset, or the on-axis walk leaks a spurious px that flips the world-magnitude foot
-toe X 1 ULP; see knowledge/history/resolved-bugs.md). walk_y171/ebs/waitturn FAIL on the open genuine
-world-magnitude quantization frontier (Y171 toe.z; ebs/waitturn turn-transient px, all <=1 ULP, none
-reaching gameplay-relevant position). Each case also layers its tech assertions. (Runs with no anim
-keyframe data fall back to the calibrated stand-in and pos_z is not asserted.)
+tolerance and NO xfail: a tech that is not bit-exact shows RED. Today walk_run/walk_y171/brakeslide/
+face_left/roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip/brake_right pass (0 ULP; slip went
+bit-perfect with the posMoveFromFootPos |speedF| < 0.05 -> 0 skid snap, d_a_player_main.cpp:2418;
+brake_right + the deep-release walk speedF with the pos_x sine-leak fix -- cM_ssin must use JMASSin,
+not a cos-table offset; walk_y171 with the daPy_HIO_move_c0 f64->f32 frame-rate constant fix; see
+knowledge/history/resolved-bugs.md). ebs/waitturn FAIL on the open genuine toe-FK/blend frontier
+(ebs = backward-walk speedF 1-3 ULP, travel exact; waitturn = walk-reentry speedF -192 ULP at the
+first post-pivot MOVE frame, all <=1 ULP pos_z, none reaching gameplay-relevant position). Each case
+also layers its tech assertions. (Runs with no anim keyframe data fall back to the calibrated
+stand-in and pos_z is not asserted.)
 
 DTM-PLAYBACK (wiggle_ebs_roll): the wiggle-EBS-into-roll chain is DENSE frame-perfect input, where
 the advanceseq pipe could jitter (bug#2). It is locked by loading a movie-active savestate fixture
@@ -245,9 +246,9 @@ def sim_checks(sim, live, note):
 # anchor). ALL cases are now SIM-vs-LIVE (sim_checks) with the tech assertions layered on top.
 CASES = [
     ("walk_run", seq_walk, "run accel to cap 17 then decel to standstill", None),
-    # PARTIAL-magnitude (Y171) walk -- the z=2000 stop; regime-1 cruise (speedF = toe delta). RED on
-    # pos_z (~2 ULP, toe.z frontier); everything else bit-exact. Detail: knowledge/model/sim.md.
-    ("walk_y171", seq_walk_y171, "partial-magnitude (Y171) walk -- regime-1 cruise, pos_z ~2 ULP (RED: toe.z frontier)", lambda e: [
+    # PARTIAL-magnitude (Y171) walk -- the z=2000 stop; regime-1 cruise (speedF = toe delta). BIT-EXACT
+    # since the daPy_HIO_move_c0 f64->f32 frame-rate constant fix. Detail: knowledge/history/resolved-bugs.md.
+    ("walk_y171", seq_walk_y171, "partial-magnitude (Y171) walk -- regime-1 cruise (bit-exact)", lambda e: [
         (e["link_state"] == 6, f"walking (MOVE 6)  [{e['link_state']}]"),
     ]),
     ("brakeslide", seq_brakeslide, "L held -> targeting slide, facing locked", lambda e: [

@@ -8,12 +8,13 @@ THE GOLDEN IS LIVE TRUTH, ENFORCED TO THE BYTE. speedF and position in tests/gol
 and the CASE_POSZ endpoints are the GAME's live f32 reads (uint32 hex), captured by
 tests/gen_land_golden.py. The tests assert `f32_bits(sim) == golden` (0 ULP, no tolerance), so a tech
 that is not bit-perfect vs the game shows RED here just as it does live -- the same cases fail in both.
-Today walk/brakeslide/face_left/roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip are BIT-PERFECT
-and pass (walk/face_left/roll_settle went float-perfect with the world-space foot FK + PSMTXQuat
-'newton' reciprocal, see knowledge/model/sim.md; slip's skid tail went bit-perfect with the
-posMoveFromFootPos |speedF| < 0.05 -> 0 snap); ebs (1 ULP), brake_right (2) and waitturn (2) still
-FAIL -- the planted-foot jnt34/39 sub-ULP FK-X residual (foot chain is ~1 ULP off pure anim FK).
-This deliberately replaces the old `< 0.05` tolerance (~400
+Today walk/walk_y171/brakeslide/face_left/brake_right/roll_run/roll_slow/roll_settle/roll_ebs/moveturn/
+slip are BIT-PERFECT and pass (walk/face_left/roll_settle went float-perfect with the world-space foot
+FK + PSMTXQuat 'newton' reciprocal; slip's skid tail with the posMoveFromFootPos |speedF| < 0.05 -> 0
+snap; brake_right with the pos_x sine-leak fix; walk_y171 with the daPy_HIO_move_c0 f64->f32 frame-rate
+constant fix -- see knowledge/history/resolved-bugs.md); ebs (backward-walk speedF 1-3 ULP) and waitturn
+(walk-reentry speedF -192 ULP at the first post-pivot MOVE frame) still FAIL -- the toe-FK/blend
+frontier (both <=1 ULP pos_z, gameplay-neutral). This deliberately replaces the old `< 0.05` tolerance (~400
 ULP wide), which hid the f64-running-sum bug. Regenerate the golden from live after a sim fix (Dolphin
 up): `python tests/gen_land_golden.py`.
 
@@ -168,8 +169,8 @@ def test_speedf_y171_matches_live_bit_exact():
     """PARTIAL regime: the walk speedF (= the plant-foot toe delta, since m3598==1.0 here) must
     reproduce the GAME's live true_speed byte-for-byte. Driven via LandState so nspeed/mStickDistance/
     world pos are full-precision (see the block comment on why the raw driver from the %g golden is a
-    harness artifact). Residual RED frames: the entry-morf (f4-8, shared with the full-deflection
-    speedF test) and a ~0.6-ULP toe.z world-quantization residual (f27/29). See knowledge/model/sim.md."""
+    harness artifact). BIT-EXACT (0 ULP) since the daPy_HIO_move_c0 f64->f32 frame-rate constant fix
+    (field_0x38=1.1/field_0x40=0.8; see knowledge/history/resolved-bugs.md #Y171)."""
     golden = _load_golden(_GOLDEN_Y171)
     s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
     for (sx, sy), (fr, _ns, _msd, spF_bits, _pz) in zip(WALK_STICKS_Y171, golden):
@@ -181,8 +182,8 @@ def test_speedf_y171_matches_live_bit_exact():
 @pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
 def test_pos_z_arc_y171_matches_live_bit_exact():
     """PARTIAL regime: full LandState Y171 walk must track the GAME's live pos_z byte-for-byte every
-    frame. Currently RED -- the partial-magnitude speedF residual accumulates to ~1-2 ULP in pos_z
-    over the walk. This is the offline mirror of the walk_y171 live gate. See knowledge/model/sim.md."""
+    frame. BIT-EXACT (0 ULP) since the daPy_HIO_move_c0 f64->f32 frame-rate constant fix -- the offline
+    mirror of the walk_y171 live gate. See knowledge/model/land-sim.md + history/resolved-bugs.md."""
     golden = _load_golden(_GOLDEN_Y171)
     s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
     for (sx, sy), (fr, _ns, _msd, _spF, pz_bits) in zip(WALK_STICKS_Y171, golden):
@@ -197,14 +198,14 @@ def test_pos_z_arc_y171_matches_live_bit_exact():
 # `python tests/gen_land_golden.py endpoints`. sim!=live fails here, mirroring run_land_tests.py.
 CASE_POSZ = {
     'brakeslide' : 0x448146b3,   # 1034.2093505859375 (state 7)   bit-perfect
-    'ebs'        : 0x44aa2072,   # 1361.013916015625  (state 6)   sim off 1 ULP (turn-transient px world-quant)
+    'ebs'        : 0x44aa2072,   # 1361.013916015625  (state 6)   sim off 1 ULP (backward-walk speedF 1-3 ULP; travel exact)
     'face_left'  : 0x44e9fa16,   # 1871.815185546875  (state 6)   bit-perfect (world FK)
     'brake_right': 0x447238c3,   # 968.8869018554688  (state 4)   bit-perfect (pos_x sine-leak fix)
     'roll_run'   : 0x4486a1c6,   # 1077.055419921875  (state 30)  bit-perfect
     'roll_slow'  : 0x4445f858,   # 791.88037109375    (state 30)  bit-perfect
     'roll_settle': 0x44be9639,   # 1524.6944580078125 (state 4)   bit-perfect (world FK)
     'roll_ebs'   : 0x44d64e35,   # 1714.4439697265625 (state 6)   bit-perfect
-    'waitturn'   : 0x442c9e1e,   # 690.4705810546875  (state 6)   sim off 1 ULP (turn-transient px world-quant)
+    'waitturn'   : 0x442c9e1e,   # 690.4705810546875  (state 6)   sim off 1 ULP (walk-reentry speedF -192 ULP @ 1st post-pivot MOVE frame)
     'moveturn'   : 0x44086be3,   # 545.6857299804688  (state 6)   bit-perfect (live-mirror *18 seq)
     'moveturn_pos': 0x43ffd7c6,  # 511.68572998046875 (state 6)   bit-perfect (*20 seq)
     'slip'       : 0x44756df2,   # 981.7178955078125  (state 6)   bit-perfect (speedF<0.05 skid snap)

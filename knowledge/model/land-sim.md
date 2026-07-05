@@ -3,10 +3,10 @@
 **Answers:** How does the land sim accumulate position (why f32, not an f64 running sum)? What is the
 partial-magnitude (`Y171`) regime and why does it exercise the foot toe? How accurate is it — what
 are the remaining ULP residuals and which tests gate them?
-**Status:** float-perfect (0 ULP) on the straight full-deflection walk, the front-roll, and the
-full-speed **slip** skid + reversed-walk arc; ~1 ULP `speedF` / 2 ULP `pos_z` on the `Y171` partial
-cruise. Open residuals: planted-foot toe + entry-morf jnt0 sub-ULP FK-X frontier (6 red
-`tests/test_land.py` cases: `Y171` speedF/pos, ATN `ebs`/`brake_right`, `waitturn`, deep-release f37).
+**Status:** float-perfect (0 ULP) on the straight full-deflection walk, the **partial-magnitude
+(`Y171`)** walk, the front-roll, and the full-speed **slip** skid + reversed-walk arc. Open residuals
+(2 red `tests/test_land.py` cases): `ebs` (backward-walk `speedF` 1–3 ULP) and `waitturn` (walk-reentry
+`speedF` -192 ULP at the first post-pivot MOVE frame) — both toe-FK/blend frontier, ≤1 ULP `pos_z`.
 **Source:** `tww_sim/land/land.py`; the [anim engine](anim-engine.md) (foot FK → `speedF`) and the
 [FP contract](fp-faithfulness.md). History: [history/resolved-bugs](../history/resolved-bugs.md).
 
@@ -68,20 +68,26 @@ of the artifact). For the z=2000 beam a 2-ULP `pos_z` oracle is likely already g
 ## Open residuals (4 red offline / 3 red live)
 
 With the [fres + non-fused fixes](fp-faithfulness.md), the [slip skid snap](#speedf-snaps-to-0-below-005-the-slip-skid-tail),
-and the [`pos_x` sine-leak fix](../history/resolved-bugs.md#deep-release-speedf-f37f39--brake_right--a-spurious-pos_x-sine-leak-not-a-foot-fk-x-residual)
-(which closed the deep-release `speedF` f37/f39 and `brake_right`), the straight walk arc, the release
-tail, roll, slip, and `brake_right` are all bit-exact. What remains is the genuine **world-magnitude
-quantization frontier** — none of it reaches a gameplay-relevant position:
+the [`pos_x` sine-leak fix](../history/resolved-bugs.md#deep-release-speedf-f37f39--brake_right--a-spurious-pos_x-sine-leak-not-a-foot-fk-x-residual)
+(which closed the deep-release `speedF` f37/f39 and `brake_right`), and the
+[`Y171` HIO-constant fix](../history/resolved-bugs.md#y171-partial-magnitude-speedf--f64-hio-frame-rate-constants-not-a-jnt0-hermite-frontier)
+(which closed the partial-magnitude walk), the straight walk arc, the release tail, the partial-magnitude
+(`Y171`) walk, roll, slip, and `brake_right` are all bit-exact. What remains is the genuine
+**world-magnitude quantization frontier** — none of it reaches a gameplay-relevant position:
 
-- **`Y171` (partial-magnitude walk).** `pos_x` is now clean (0 = live, per-joint verified), so the
-  residual is a **jnt0 root-translate sub-ULP that grows through the WAITS↔WALK blend** — a per-joint
-  `anmMtx` decomposition shows the foot rotation is 0 ULP everywhere but the model-space jnt0 X-translate
-  drifts (≤~1e2 ULP at root magnitude), diluting to a ≤3-ULP `speedF` (f17) and ≤1-ULP `pos_z` (f27) at
-  the toe. This is the blend-regime cousin of the entry-morf jnt0.z Hermite residual (`m3598 == 1.0`,
-  the only cruise that exercises the toe every frame). Gated by `test_speedf_y171` /
-  `test_pos_z_arc_y171` and live `walk_y171`.
-- **`ebs` / `waitturn` (turn transients, ≤1 ULP `pos_z`).** After the pivot/strafe transient the
-  sim's `pos_x` differs from live by a sub-ULP amount, shifting the world-X quantization by 1 ULP.
+- **`ebs` (backward-walk `speedF`, ≤1 ULP `pos_z`).** NOT a travel-angle transient — a per-frame
+  live comparison (`harness/capture/atn_ebs.csv`) shows `travel` is bit-exact every frame, but `speedF`
+  is **1–3 ULP off on ~half the frames** of the backward walk, and those errors accumulate to a 1-ULP
+  `pos_z` at f39+. `ebs` runs the DIR_BACKWARD `setBlendAtnBackMoveAnime` blend (`m3598 ≈ 0.16`, a
+  toe/momentum mix), so the residual is in the ATNWB↔ATNDB backward-anim toe FK or the `m3598` blend
+  arithmetic. Gated by `test_atn_ebs` and live `ebs`.
+- **`waitturn` (walk re-entry `speedF`, ≤1 ULP `pos_z`).** NOT a turn-transient `pos_x` — `travel`
+  reaches `0x8000` bit-exact and the tiny live `pos_x ≈ -2.9e-5` (the `sin(0x8000)` table asymmetry) is
+  reproduced. The divergence enters **sharply at the first MOVE frame after the pivot** (f9): `speedF`
+  is **-192 ULP** there, then `pos_z` stays 1 ULP off. This is a walk **re-entry** toe-stream transient
+  — the preceding WAIT idle-proc posed the `ANM_ATNW{L,R}S` turn-step (not a plain idle), so the
+  first WALK-blend toe delta comes off that pose; the `_pending_morf` re-arm alone does not close it
+  (foot-FK toe-stream frontier). Gated by `test_waitturn_position_bit_exact` and live `waitturn`.
 - **Entry-morf jnt0 (sub-ULP).** The first 1–2 MOVE frames have jnt0.z ~5 ULP off (decaying with the
   morf rate) — a `calc_transform`/Hermite sub-ULP in the root Z-translate track.
 
@@ -91,13 +97,13 @@ red until the sim closes the gap; never edit the test/golden to pass.
 ## Enforced to the byte by two tests
 
 - **Live** (`tests/dolphin/run_land_tests.py`, the accuracy gate — live is the source of truth): pass
-  condition is **0 ULP vs live**, no tolerance, no xfail. `walk/brakeslide/face_left/brake_right/
-  roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip` pass (**11 pass**); `walk_y171/ebs/waitturn`
-  are the to-do list (**3 fail**).
+  condition is **0 ULP vs live**, no tolerance, no xfail. `walk/walk_y171/brakeslide/face_left/
+  brake_right/roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip` pass (**11 pass**); `ebs/waitturn`
+  are the to-do list (**2 fail**).
 - **Offline** (`tests/test_land.py`, no Dolphin): the token-cheap **shadow** — the golden
   (`tests/golden/land_walk_speedf.csv` + `CASE_POSZ`) is the GAME's live f32 bytes (captured by
   `tests/gen_land_golden.py`), and the tests assert `f32_bits(sim) == live`, so the SAME techs fail
-  (**4 red**: `speedf_y171`, `pos_z_arc_y171`, `ebs`, `waitturn`; **182 pass**). Regenerate the golden
+  (**2 red**: `ebs`, `waitturn`; **184 pass**). Regenerate the golden
   from live after a sim fix via `python tests/gen_land_golden.py`.
 
 ## See also

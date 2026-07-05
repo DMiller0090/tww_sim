@@ -31,6 +31,15 @@ expressions); sharing one ordering left a ~2 ULP error that the
 [x598 scramble](../mechanics/pumps.md#the-x598-scramble) amplified into a 0.07 speed jump at pump
 exits.
 
+**A constant that mirrors a game f32 field/param must be `f32`-quantized at the site** — `fp.fmuls`/
+`fadds`/`fsubs`/`fdivs` do NOT quantize their *operands*, only the result, so a Python f64 literal like
+`1.1`/`0.8`/`0.3`/`2.4` fed to one of them multiplies at f64 and rounds the product 1 ULP off. This
+exact leak has masqueraded as a "sub-ULP FK/Hermite frontier" **three times** — the entry-morf f64
+counter, the `f31_2` f64 `0.3`/`0.7` smoothing, and the [`Y171` f64 HIO frame-rate constants](../history/resolved-bugs.md#y171-partial-magnitude-speedf--f64-hio-frame-rate-constants-not-a-jnt0-hermite-frontier)
+(`daPy_HIO_move_c0` 1.1/0.8). Before decomposing an FK chain for a residual, sweep the regime's
+constants for un-quantized f64 literals; a residual that a bit-exact neighbouring regime never triggers
+points at a constant only that regime uses.
+
 ## `M_PI` in a cos/sin arg is SINGLE precision (`_F32_PI`)
 
 The compiler emits `f32_expr * M_PI` as `lfs f, M_PI; fmuls` — a **float** constant load + a

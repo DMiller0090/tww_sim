@@ -107,6 +107,34 @@ gameplay): `Y171` speedF/pos_z (px now clean → the toe.z Z-quantization + the 
 regime), and `ebs`/`waitturn` (turn transients, ≤1 ULP).
 → [model/anim-engine](../model/anim-engine.md), [model/land-sim](../model/land-sim.md).
 
+## `Y171` partial-magnitude speedF — f64 HIO frame-rate constants (NOT a jnt0 Hermite frontier)
+
+The partial-magnitude (`Y171`, `msd`≈0.52) walk was `speedF`-RED at f17 (≤3 ULP) and `pos_z`-RED at f27
+(1 ULP). The prior hypothesis (recorded on the land-sim truth page, now overturned) was a **"jnt0
+root-translate sub-ULP that grows through the WAITS↔WALK blend"** — a per-joint `anmMtx` decomposition
+had shown the foot rotation 0 ULP everywhere but the model-space jnt0 X-translate drifting, so the
+residual was attributed to a `calc_transform`/Hermite sub-ULP in the root translate track. **That
+attribution was wrong** — it was the third "sub-ULP FK/Hermite frontier" in a row that turned out to be
+a plain **f64-constant leak** (after the [entry-morf](#walk-entry-transient--two-f64-vs-f32-constant-bugs-not-a-hermitefoot-ik-frontier)
+and [pos_x sine-leak](#deep-release-speedf-f37f39--brake_right--a-spurious-pos_x-sine-leak-not-a-foot-fk-x-residual) cases).
+
+Root cause: the `daPy_HIO_move_c0` frame-rate constants (`field_0x38` = 1.1, `field_0x40` = 0.8, and the
+side/back `atnMove`/`atnMoveB` fields) are **f32 members** in the game, but the sim held them as Python
+**f64 literals** and fed them straight into `fp.fmuls`/`fadds`/`fdivs` — which do NOT quantize their
+operands. `setMoveAnime`'s new-MOVE0 rate `f27r = f28 + f27*(f25*f3/f26 - f28)` (with `f28`=1.1,
+`f25`=0.8) then rounded 1 ULP off, drifting the frame-ctrl phase → the WAITS↔WALK blend toe → `speedF`.
+The full-deflection walk never sees these (it cruises in regime 3, `field_0x48`=2.3 with `f3==f26`, so the
+rate collapses to an exactly-reproduced value), which is why only the partial regime was red. **Fix:**
+`fp.f32(...)` every `daPy_HIO_move_c0`/`atnMove`/`atnMoveB` constant at definition (a no-op for the
+exactly-representable 0.5/1.0/17.0/1.25; corrects 1.1/0.8/2.3/0.9/1.8/0.95/…). `walk_y171` went 0 ULP
+offline (both `speedf`/`pos_z` tests) **and** live (per-frame bit-exact).
+
+**Lesson (a third time):** before decomposing an FK chain for a "sub-ULP Hermite/translate frontier",
+sweep the regime's constants for f64 literals fed to `fp` ops. A regime-specific residual that the
+bit-exact neighbouring regime never triggers points at a **constant only that regime uses**, not the
+shared FK. → [model/land-sim](../model/land-sim.md), [model/anim-engine](../model/anim-engine.md),
+[model/fp-faithfulness](../model/fp-faithfulness.md).
+
 ## 554 / "anim drifts ~3 fr by f400" — truncated-seed artifact
 
 A phantom ~3-frame anim drift by f400 was a **truncated cold-start seed** (anim 8.9417 vs true

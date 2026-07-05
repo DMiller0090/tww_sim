@@ -17,8 +17,12 @@ see [land-sim](land-sim.md#speedf-snaps-to-0-below-005-the-slip-skid-tail). The 
 leaked a spurious on-axis `pos_x` (a cos-table sine reconstruction instead of `JMASSin`), and the
 foot FK quantizes at world magnitude so that tiny px flipped the plant-toe X 1 ULP (see
 [history/resolved-bugs](../history/resolved-bugs.md#deep-release-speedf-f37f39--brake_right--a-spurious-pos_x-sine-leak-not-a-foot-fk-x-residual)).
-Still open (genuine world-magnitude frontier, none reaching gameplay-relevant position): Y171
-speedF/toe.z, ATN/turn endpoints (ebs/waitturn ≤1 ULP).
+The **partial-magnitude (`Y171`)** walk is now bit-exact too — a THIRD "sub-ULP Hermite frontier" that
+was really an f64-constant leak: the `daPy_HIO_move_c0` frame-rate fields (1.1/0.8/…) were f64 literals
+fed to `fp.fmuls` (see [history/resolved-bugs](../history/resolved-bugs.md#y171-partial-magnitude-speedf--f64-hio-frame-rate-constants-not-a-jnt0-hermite-frontier)).
+Still open (genuine world-magnitude frontier, none reaching gameplay-relevant position): the `ebs`
+backward-walk `speedF` (1–3 ULP, ATNWB↔ATNDB toe/`m3598` blend) and `waitturn` (walk-reentry `speedF`
+-192 ULP at the first post-pivot MOVE frame; toe stream off the WAIT-idle turn-step pose).
 **Source:** `tww_sim/core/anim/{j3d_eval,fk,foot_fk,quat,foot_speedf,anim_state}.py`; decomp
 (`J3DAnimation.cpp`, `J3DJoint.cpp`, `m_Do_ext.cpp`, `d_a_player_main`) + live foot-toe oracle.
 This engine is **core** (generic, FP-faithful); only [land](land-sim.md) consumes it today, but it is

@@ -50,26 +50,27 @@ ANIM_META = {
     'atndb': (20, EMode_LOOP),   # ANM_ATNDB  (attention back dash)
 }
 
-# HIO daPy_HIO_move_c0::m constants (the flat free-walk subset).
-H_MAXSPEED = 17.0     # mMaxNormalSpeed
-H_2C = 0.5            # WAITS<->WALK regime threshold (field_0x2C)
-H_30 = 1.0           # WALK<->DASH regime threshold (field_0x30)
-H_38 = 1.1           # field_0x38 (regime-1 f28)
-H_40 = 0.8           # field_0x40 (f29)
-H_48 = 2.3           # field_0x48 (DASH cruise rate / regime-2 f25)
-H_60 = 1.0           # field_0x60 (free-walk f28)
+# HIO daPy_HIO_move_c0::m constants (flat free-walk subset), f32 members in the game -- keep them f32:
+# fp.fmuls/fadds don't quantize operands, so an f64 literal (1.1) leaks 1 ULP to the rate (resolved-bugs).
+H_MAXSPEED = fp.f32(17.0)     # mMaxNormalSpeed
+H_2C = fp.f32(0.5)            # WAITS<->WALK regime threshold (field_0x2C)
+H_30 = fp.f32(1.0)           # WALK<->DASH regime threshold (field_0x30)
+H_38 = fp.f32(1.1)           # field_0x38 (regime-1 f28)
+H_40 = fp.f32(0.8)           # field_0x40 (f29)
+H_48 = fp.f32(2.3)           # field_0x48 (DASH cruise rate / regime-2 f25)
+H_60 = fp.f32(1.0)           # field_0x60 (free-walk f28)
 
 # daPy_HIO_atnMove_c1 (side strafe) + daPy_HIO_atnMoveB_c1 (back), d_a_player_HIO_data.inc:14/18. f29 = 1.0
 # (not heavy); the abs2XZ()>=49 -> 1.9x rate branch is inert on flat ground (observed rates are field_0x2C/0x28).
-ATN_1C = 0.01        # mAtnMove.field_0x1C  (side WAIT<->WALK f31 threshold)
-ATN_20 = 0.9         # mAtnMove.field_0x20  (side WALK<->DASH f31 threshold)
-ATN_24 = 1.25        # mAtnMove.field_0x24  (setMoveAnime rate arg)
-ATN_28 = 1.0         # mAtnMove.field_0x28  (setMoveAnime rate arg; * f29)
-ATN_2C = 1.8         # mAtnMove.field_0x2C  (side DASH single rate; * f29)
-ATNB_1C = 0.75       # mAtnMoveB.field_0x1C (back WAIT<->WALK f31 threshold)
-ATNB_20 = 1.0        # mAtnMoveB.field_0x20 (back WALK<->DASH f31 threshold)
-ATNB_24 = 0.8        # mAtnMoveB.field_0x24 (setMoveAnime rate arg)
-ATNB_28 = 0.95       # mAtnMoveB.field_0x28 (back DASH single rate)
+ATN_1C = fp.f32(0.01)        # mAtnMove.field_0x1C  (side WAIT<->WALK f31 threshold)
+ATN_20 = fp.f32(0.9)         # mAtnMove.field_0x20  (side WALK<->DASH f31 threshold)
+ATN_24 = fp.f32(1.25)        # mAtnMove.field_0x24  (setMoveAnime rate arg)
+ATN_28 = fp.f32(1.0)         # mAtnMove.field_0x28  (setMoveAnime rate arg; * f29)
+ATN_2C = fp.f32(1.8)         # mAtnMove.field_0x2C  (side DASH single rate; * f29)
+ATNB_1C = fp.f32(0.75)       # mAtnMoveB.field_0x1C (back WAIT<->WALK f31 threshold)
+ATNB_20 = fp.f32(1.0)        # mAtnMoveB.field_0x20 (back WALK<->DASH f31 threshold)
+ATNB_24 = fp.f32(0.8)        # mAtnMoveB.field_0x24 (setMoveAnime rate arg)
+ATNB_28 = fp.f32(0.95)       # mAtnMoveB.field_0x28 (back DASH single rate)
 
 
 class FrameCtrl:
