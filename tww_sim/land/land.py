@@ -49,6 +49,9 @@ MOVE_TURN = 24    # daPyProc_MOVE_TURN_e    (turn-around reversal, low speed / p
 SLIP = 25         # daPyProc_SLIP_e         (high-speed reversal skid, hands to MOVE_TURN)
 FRONT_ROLL = 30   # daPyProc_FRONT_ROLL_e   (A-button forward roll)
 
+_STATE_TAG = {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL", WAIT_TURN: "WAITTURN",
+              MOVE_TURN: "MOVETURN", SLIP: "SLIP", WAIT: "WAIT", FREE_WAIT: "WAIT"}
+
 # mDirection enum (d_a_player_main.h daPy_lk_c::direction_e). getDirectionFromAngle buckets the
 # stick-vs-heading angle into these; ATN physics branches on it (fwd->Normal, back->AtnBack, side).
 DIR_FORWARD = 0
@@ -721,9 +724,7 @@ class LandState:
         self._cam.step(acsx, acsy)
         self.visited.add(self.state)
         self._l_prev = l_held
-        return d, {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL", WAIT_TURN: "WAITTURN",
-                   MOVE_TURN: "MOVETURN", SLIP: "SLIP",
-                   WAIT: "WAIT", FREE_WAIT: "WAIT"}.get(self.state, "?")
+        return d, _STATE_TAG.get(self.state, "?")
 
 
 def _is_zero(x):

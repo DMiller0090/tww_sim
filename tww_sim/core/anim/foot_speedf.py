@@ -29,7 +29,8 @@ import os
 
 from .. import fp
 from . import fk
-from .anim_state import UnderAnimState, ANIM_META
+from .anim_state import (UnderAnimState, ANIM_META, ANIM_CODE, ANIM_ORDER,
+                         NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO)
 
 # Optional native composition (anim/_anmc.foot_compose); bit-exact with _py_foot_compose below.
 try:
@@ -116,7 +117,8 @@ class FootSpeedF:
                  pos_z=764.0791015625, facing=0):
         self.anm, self.sk = fk.load()                 # raises if the data is absent
         self.idle_anim = idle_anim
-        self.idle_frame = float(idle_frame)
+        self._core = None                             # fused native engine (set up below if available)
+        self._idle_frame_py = float(idle_frame)       # backing store for the idle_frame property
         self.idle_end = float(ANIM_META[idle_anim][0])
         self.st = UnderAnimState(move0_anim=idle_anim, move0_frame=self.idle_frame, m34C3=0)
         from .foot_fk import FootFK
@@ -138,7 +140,37 @@ class FootSpeedF:
         self.prev_f312 = 0.0
         self.m35B4 = 0.0                               # previous frame's mStickDistance
         self._single_entered = False                   # single-anim entry frame: hold the ctrl at start
-        self._pending_morf = None                      # morf to apply on the next step (proc/walk entry)
+        self._pending_py = None                        # morf to apply on the next step (Python fallback store)
+        # Fused native path (one C call/frame): the Python seeding above already left the engine's
+        # old-pose correct + produced draw0; w_init captures the toe stream. Python st/ff = fallback.
+        if _N is not None and getattr(self.ff, '_engine', None) is not None:
+            _N.init_anim_consts(NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO)   # idempotent
+            code2idx = [self.ff._anim_idx[name] for name in ANIM_ORDER]
+            self._core = self.ff._engine
+            self._core.init_anim(code2idx)
+            self._core.w_init(ANIM_CODE[idle_anim], self._idle_frame_py, draw0)
+
+    @property
+    def idle_frame(self):
+        """The (drifting) standing-idle frame. Fused mode tracks it in C; clone reads it here so a
+        clone taken mid input-latency drift re-seeds at the right phase (matches the Python path)."""
+        return self._core.w_get_idle_frame() if self._core is not None else self._idle_frame_py
+
+    @idle_frame.setter
+    def idle_frame(self, v):
+        # Only the Python fallback mutates this (fused w_step owns the C copy).
+        self._idle_frame_py = float(v)
+
+    @property
+    def _pending_morf(self):
+        return self._core.w_get_pending() if self._core is not None else self._pending_py
+
+    @_pending_morf.setter
+    def _pending_morf(self, v):
+        if self._core is not None:
+            self._core.w_set_pending(v)
+        else:
+            self._pending_py = v
 
     def set_pos(self, px, pz, facing=0):
         """LandState calls this each frame BEFORE stepping, with the CURRENT (pre-integration) world
@@ -147,6 +179,8 @@ class FootSpeedF:
         self.pos_x = fp.f32(px)
         self.pos_z = fp.f32(pz)
         self.facing = int(facing) & 0xFFFF
+        if self._core is not None:
+            self._core.set_pos(self.pos_x, 0.0, self.pos_z, self.facing)
 
     def _apply_base(self):
         self.ff.set_pos(self.pos_x, self.pos_z, facing=self.facing)
@@ -160,6 +194,11 @@ class FootSpeedF:
         call step_single_anim() each proc frame. `end` defaults to the anim's frameMax."""
         if end is None:
             end = float(ANIM_META[anim][0])
+        if self._core is not None:
+            self.started = True
+            self._core.w_enter_single(ANIM_CODE[anim], float(morf) if morf is not None else 0.0,
+                                      float(start), float(end), float(rate), morf is not None)
+            return
         self.st.set_single(anim, start, end, rate)
         self.started = True
         self._single_entered = True                # entry frame: don't advance the ctrl (matches land)
@@ -175,6 +214,8 @@ class FootSpeedF:
         posMoveFromFootPos toe-stream bookkeeping (f31_2, m359C, stored toe). Returns speedF (which the
         caller discards for the momentum/frozen procs). Its real job is warming the toe stream so the
         post-proc walk tail is bit-exact."""
+        if self._core is not None:
+            return self._core.w_step_single(_f32(nspeed), _f32(msd))
         nspeed = _f32(nspeed)
         msd = _f32(msd)
         morf = self._pending_morf if self._pending_morf is not None else -1.0
@@ -199,6 +240,8 @@ class FootSpeedF:
         the next frame's walk step re-triggers the oldframe-morf (procMove_init on WAIT->MOVE, 6215)."""
         self.started = True
         m = float(morf)
+        if self._core is not None:
+            return self._core.w_enter_wait_idle(float(ratio), ANIM_CODE[r27_anim], m, _f32(msd))
         self.st.set_wait_idle(ratio, r27_anim, m)
         state = dict(move0=self.st.move0, move1=self.st.move1, f0=self.st.fc0.frame,
                      f1=self.st.fc1.frame, ratio=self.st.ratio, m3598=self.st.m3598, morf=True)
@@ -212,6 +255,10 @@ class FootSpeedF:
         and returns speedF via the same posMoveFromFootPos composition as the walk step. `direction` =
         mDirection (post setBlendAtnMoveAnime update, from LandState); `f31` = |nspeed*cos(gndAngle)|/max.
         `morf` = mBasic.field_0xC (2.4) on ATN entry or a direction change, else None (-1 = no morf)."""
+        if self._core is not None:
+            self.started = True
+            return self._core.w_step_atn(_f32(nspeed), _f32(msd), int(direction), _f32(f31),
+                                         float(morf) if morf is not None else 0.0, morf is not None)
         nspeed = _f32(nspeed)
         msd = _f32(msd)
         self.started = True
@@ -234,6 +281,10 @@ class FootSpeedF:
         integrates position with. This happens at procMoveTurn_init(1): setBlendMoveAnime runs
         (posing at the full pre-turn speed) BEFORE `mNormalSpeed *= 0.5` (6616 vs 6623), and
         posMoveFromFootPos integrates with the halved speed. Default None => same value for both."""
+        if self._core is not None:
+            return self._core.w_step(_f32(nspeed), _f32(msd),
+                                     0.0 if anim_nspeed is None else _f32(anim_nspeed),
+                                     anim_nspeed is not None)
         nspeed = _f32(nspeed)
         msd = _f32(msd)
         an = nspeed if anim_nspeed is None else _f32(anim_nspeed)

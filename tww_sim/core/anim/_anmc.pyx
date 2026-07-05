@@ -489,6 +489,91 @@ cdef inline void _mv_c(double* m, double vx, double vy, double vz, double* out) 
         out[i] = fadds(pa, pb)
 
 
+# ---- native anim-state machine (UnderAnimState port) constants -------------------------------
+# Fixed anim CODES (match anim_state.ANIM_ORDER). The machine works in these; pose_toe maps code ->
+# data-index via PoseEngine._code2idx. Direction enum matches anim_state.DIR_*.
+DEF C_WAITS=0
+DEF C_WALK=1
+DEF C_DASH=2
+DEF C_ROLLF=3
+DEF C_ROT=4
+DEF C_SLIP=5
+DEF C_ATNWLS=6
+DEF C_ATNWRS=7
+DEF C_ATNLS=8
+DEF C_ATNRS=9
+DEF C_ATNDLS=10
+DEF C_ATNDRS=11
+DEF C_ATNWB=12
+DEF C_ATNDB=13
+DEF C_FREEB=14
+DEF D_FORWARD=0
+DEF D_BACKWARD=1
+DEF D_LEFT=2
+
+cdef double _MMAX[15]                 # frameMax per anim code
+cdef int _MATTR[15]                   # J3DFrameCtrl attribute (EMode) per anim code
+cdef double _H_MAXSPEED, _H_2C, _H_30, _H_38, _H_40, _H_48, _H_60
+cdef double _ATN_1C, _ATN_20, _ATN_24, _ATN_28, _ATN_2C
+cdef double _ATNB_1C, _ATNB_20, _ATNB_24, _ATNB_28
+cdef bint _ANIM_CONSTS_READY = False
+
+
+def init_anim_consts(meta_max, meta_attr, hio):
+    """Copy ANIM_META (frameMax + attribute per code) + the f32 HIO tuning constants from anim_state
+    into C. Idempotent; called once when the first fused engine is built."""
+    global _ANIM_CONSTS_READY
+    global _H_MAXSPEED, _H_2C, _H_30, _H_38, _H_40, _H_48, _H_60
+    global _ATN_1C, _ATN_20, _ATN_24, _ATN_28, _ATN_2C, _ATNB_1C, _ATNB_20, _ATNB_24, _ATNB_28
+    cdef int i
+    for i in range(15):
+        _MMAX[i] = meta_max[i]; _MATTR[i] = meta_attr[i]
+    _H_MAXSPEED = hio['maxspeed']; _H_2C = hio['h2c']; _H_30 = hio['h30']; _H_38 = hio['h38']
+    _H_40 = hio['h40']; _H_48 = hio['h48']; _H_60 = hio['h60']
+    _ATN_1C = hio['atn1c']; _ATN_20 = hio['atn20']; _ATN_24 = hio['atn24']; _ATN_28 = hio['atn28']
+    _ATN_2C = hio['atn2c']; _ATNB_1C = hio['atnb1c']; _ATNB_20 = hio['atnb20']
+    _ATNB_24 = hio['atnb24']; _ATNB_28 = hio['atnb28']
+    _ANIM_CONSTS_READY = True
+
+
+cdef void _fc_update(int attr, double start, double end, double loop,
+                     double* frame, double* rate) nogil:
+    """J3DFrameCtrl::update: frame += rate then wrap/clamp per attribute (f32). Bit-exact port of
+    anim_state.FrameCtrl.update. The loop-guard subtractions are f64 (like Python), the frame math f32."""
+    cdef double fr = fadds(frame[0], rate[0])
+    cdef double rt = rate[0]
+    if attr == 0:                     # EMode_NONE
+        if fr < start:
+            fr = start; rt = 0.0
+        if fr >= end:
+            fr = fsubs(end, 0.001); rt = 0.0
+    elif attr == 1:                   # EMode_RESET
+        if fr < start:
+            fr = start; rt = 0.0
+        if fr >= end:
+            fr = start; rt = 0.0
+    elif attr == 2:                   # EMode_LOOP
+        while fr < start:
+            if loop - start <= 0.0:
+                break
+            fr = fadds(fr, fsubs(loop, start))
+        while fr >= end:
+            if end - loop <= 0.0:
+                break
+            fr = fsubs(fr, fsubs(end, loop))
+    elif attr == 3:                   # EMode_REVERSE
+        if fr >= end:
+            fr = fsubs(end, 0.001); rt = -rt
+        if fr < start:
+            fr = start; rt = 0.0
+    elif attr == 4:                   # EMode_LOOP_REVERSE
+        if fr >= end:
+            fr = fsubs(end, 0.001); rt = -rt
+        if fr < start:
+            fr = start; rt = -rt
+    frame[0] = fr; rate[0] = rt
+
+
 cdef class AnimData:
     """IMMUTABLE registered keyframe data + foot chains, shared across all PoseEngine instances (and
     thus every A* clone). Built once per parsed anim set and cached -- avoids re-copying ~90k keyframe
@@ -567,6 +652,25 @@ cdef class PoseEngine:
     cdef double _m_counter, _m_f8, _m_rate, _m_f10, _m_f14
     cdef double _base[12]           # worldBase (set by set_pos)
     cdef double _inv[12]            # m37B4 = PSMTXInverse(worldBase)
+    # ---- fused anim-state machine + toe-stream state (UnderAnimState + FootSpeedF port) --------
+    cdef int _code2idx[15]          # anim code -> AnimData data-index (set by init_anim)
+    cdef bint _fused_ready          # init_anim done
+    cdef int _fc0_attr, _fc1_attr
+    cdef double _fc0_start, _fc0_end, _fc0_loop, _fc0_rate, _fc0_frame
+    cdef double _fc1_start, _fc1_end, _fc1_loop, _fc1_rate, _fc1_frame
+    cdef int _move0, _move1         # anim codes (-1 = None)
+    cdef int _m34C3
+    cdef double _a_ratio            # getRatio(1)
+    cdef double _m3598
+    cdef double _t1[12]             # toe drawn last frame
+    cdef double _t2[12]             # toe drawn the frame before
+    cdef double _prev_f312, _m35B4
+    cdef bint _started, _stopped
+    cdef double _idle_frame
+    cdef int _idle_code
+    cdef bint _single_entered
+    cdef double _pending_morf       # >=0 => pending; use _has_pending gate
+    cdef bint _has_pending
 
     def __cinit__(self, AnimData data):
         cdef int i
@@ -574,6 +678,8 @@ cdef class PoseEngine:
         for i in range(12):
             self._has_old[i] = False
         self._m_counter = self._m_f8 = self._m_rate = self._m_f10 = self._m_f14 = 0.0
+        self._fused_ready = False
+        self._has_pending = False
 
     def reset_old(self):
         cdef int i
@@ -668,10 +774,12 @@ cdef class PoseEngine:
             swp = cur; cur = nxt; nxt = swp
         _concat_c(inv, cur, out)
 
-    def pose_toe(self, int m0, int m1, double f0, double f1, double ratio, double i_morf):
+    cdef void _pose_toe_core(self, int m0, int m1, double f0, double f1, double ratio,
+                             double i_morf, double* toes):
         """Pose all 12 chain joints (blend m0@f0 with m1@f1, oldframe-morf, PSMTXQuat, scale/trans),
-        FK both feet from the worldBase set by set_pos(), remove the base with m37B4, and return the
-        flat 12-tuple [Rtoe, Ltoe, Rheel, Lheel] x (x,y,z) (index 0 = right jnt39, 1 = left jnt34)."""
+        FK both feet from the worldBase set by set_pos(), remove the base with m37B4, and fill
+        toes[0..11] = [Rtoe, Ltoe, Rheel, Lheel] x (x,y,z) (index 0 = right jnt39, 1 = left jnt34).
+        The reusable core shared by pose_toe() and the fused walk/atn/single step methods."""
         cdef double rate
         if i_morf >= 0.0:
             self._init_morf(i_morf)
@@ -735,17 +843,274 @@ cdef class PoseEngine:
         self._chain_fk(self._base, self._inv, d._chain39, d._n39, local, cur39)
         self._chain_fk(self._base, self._inv, d._chain34, d._n34, local, cur34)
 
-        cdef double rt[3]
-        cdef double lt[3]
-        cdef double rh[3]
-        cdef double lh[3]
-        _mv_c(cur39, _TOE_X, _TOE_Y, 0.0, rt)
-        _mv_c(cur34, _TOE_X, _TOE_Y, 0.0, lt)
-        _mv_c(cur39, _HEEL_X, _HEEL_Y, 0.0, rh)
-        _mv_c(cur34, _HEEL_X, _HEEL_Y, 0.0, lh)
-        # Flat 12-tuple (no dict alloc): [Rtoe, Ltoe, Rheel, Lheel] x (x,y,z). foot_compose reads it.
-        return (rt[0], rt[1], rt[2], lt[0], lt[1], lt[2],
-                rh[0], rh[1], rh[2], lh[0], lh[1], lh[2])
+        _mv_c(cur39, _TOE_X, _TOE_Y, 0.0, toes + 0)
+        _mv_c(cur34, _TOE_X, _TOE_Y, 0.0, toes + 3)
+        _mv_c(cur39, _HEEL_X, _HEEL_Y, 0.0, toes + 6)
+        _mv_c(cur34, _HEEL_X, _HEEL_Y, 0.0, toes + 9)
+
+    def pose_toe(self, int m0, int m1, double f0, double f1, double ratio, double i_morf):
+        """Pose one frame and return the flat 12-tuple [Rtoe, Ltoe, Rheel, Lheel] x (x,y,z)
+        (index 0 = right jnt39, 1 = left jnt34). Thin wrapper over _pose_toe_core."""
+        cdef double toes[12]
+        self._pose_toe_core(m0, m1, f0, f1, ratio, i_morf, toes)
+        return (toes[0], toes[1], toes[2], toes[3], toes[4], toes[5],
+                toes[6], toes[7], toes[8], toes[9], toes[10], toes[11])
+
+    # ==== fused anim-state machine + posMoveFromFootPos (FootSpeedF + UnderAnimState port) =======
+    # Every per-frame land walk/atn/turn/roll step becomes ONE native call: the anim FrameCtrl
+    # advance + setBlendMoveAnime regime pick + the 12-joint pose + both foot FKs + posMoveFromFootPos
+    # compose, with all state resident in C. Bit-exact drop-in for the Python FootSpeedF hot path.
+
+    def init_anim(self, code2idx):
+        """Register the anim CODE -> AnimData data-index map (from foot_fk._anim_idx). Requires
+        init_anim_consts() to have been called for the ANIM_META + HIO tables."""
+        cdef int i
+        if not _ANIM_CONSTS_READY:
+            raise RuntimeError("init_anim_consts() must be called before init_anim()")
+        for i in range(15):
+            self._code2idx[i] = code2idx[i]
+        self._fused_ready = True
+
+    def w_init(self, int idle_code, double idle_frame, draw0):
+        """Seed the fused toe-stream + anim state at the rest anchor. `draw0` is the flat 12-tuple
+        the Python seeding (FootFK.seed + step_feet) already posed -- its side effect left this
+        engine's old-pose correct, so w_init only captures draw0 and inits the UnderAnimState fields."""
+        cdef int i
+        for i in range(12):
+            self._t1[i] = draw0[i]; self._t2[i] = draw0[i]
+        self._prev_f312 = 0.0
+        self._m35B4 = 0.0
+        self._started = False
+        self._stopped = False
+        self._single_entered = False
+        self._has_pending = False
+        self._idle_code = idle_code
+        self._idle_frame = idle_frame
+        self._move0 = idle_code
+        self._move1 = -1
+        self._m34C3 = 0
+        self._a_ratio = 0.0
+        self._m3598 = 0.0
+        self._fc0_attr = _MATTR[idle_code]
+        self._fc0_start = 0.0; self._fc0_end = _MMAX[idle_code]; self._fc0_loop = 0.0
+        self._fc0_rate = 0.0; self._fc0_frame = idle_frame
+        self._fc1_attr = 2                        # FrameCtrl defaults (EMode_LOOP, [0,1))
+        self._fc1_start = 0.0; self._fc1_end = 1.0; self._fc1_loop = 0.0
+        self._fc1_rate = 0.0; self._fc1_frame = 0.0
+
+    cdef void _anim_set_move(self, double f27, double f28, double f25, int r27, int r28, int r29):
+        """daPy_lk_c::setMoveAnime (12723): r27->MOVE0, r28->MOVE1 at ratio f27; preserve phase, set the
+        two frame-ctrl rates. i_morf is vestigial here (the FK morf is driven by FootSpeedF). Port of
+        UnderAnimState._set_move_anime."""
+        cdef double f31
+        if self._m34C3 == 0 or self._m34C3 == 9 or self._m34C3 == 10:
+            f31 = 0.0
+        else:
+            f31 = fdivs(self._fc0_frame, _MMAX[self._move0])
+        self._a_ratio = f27
+        cdef double f3 = _MMAX[r27]
+        cdef double f26 = _MMAX[r28]
+        cdef double f30 = fdivs(1.0, f3)
+        cdef double f27r = fadds(f28, fmuls(f27, fsubs(fdivs(fmuls(f25, f3), f26), f28)))
+        self._fc0_attr = _MATTR[r27]
+        self._fc0_start = 0.0; self._fc0_end = f3; self._fc0_rate = f27r
+        self._fc0_frame = fmuls(f31, f3)
+        self._fc0_loop = 0.0 if f27r >= 0.0 else f3
+        self._fc1_attr = _MATTR[r28]
+        self._fc1_start = 0.0; self._fc1_end = f26
+        self._fc1_rate = fmuls(f30, fmuls(f27r, f26))
+        self._fc1_frame = fmuls(f31, f26)
+        self._fc1_loop = 0.0 if self._fc1_rate >= 0.0 else f26
+        self._move0 = r27; self._move1 = r28; self._m34C3 = r29
+
+    cdef void _anim_blend_move(self, double nspeed, double cos):
+        """setBlendMoveAnime flat free-walk path (2966). Port of UnderAnimState._set_blend_move_anime."""
+        cdef double an = fmuls(nspeed, cos)
+        if an < 0.0:
+            an = -an
+        cdef double f30 = fdivs(an, _H_MAXSPEED)
+        cdef double f25_2, f1
+        if f30 < _H_2C:
+            f25_2 = fdivs(f30, _H_2C)
+            self._m3598 = fsubs(1.0, fmuls(fsubs(1.0, _H_60), f25_2))
+            self._anim_set_move(f25_2, _H_38, _H_40, C_WAITS, C_WALK, 1)
+        elif f30 < _H_30:
+            f1 = fdivs(fsubs(f30, _H_2C), fsubs(_H_30, _H_2C))
+            self._anim_set_move(f1, _H_40, _H_48, C_WALK, C_DASH, 1)
+            self._m3598 = fmuls(_H_60, fsubs(1.0, f1))
+        else:
+            self._anim_set_move(1.0, _H_48, _H_48, C_DASH, C_DASH, 1)
+            self._m3598 = 0.0
+
+    cdef void _anim_atn_side(self, double f31, bint is_left):
+        """setBlendAtnMoveAnime side branch (3343). Port of UnderAnimState._set_atn_side_anime."""
+        cdef double f1, f28
+        cdef int m0, m1
+        if f31 < _ATN_1C:
+            f1 = fdivs(f31, _ATN_1C)
+            if is_left:
+                m0 = C_ATNLS; m1 = C_ATNWLS
+            else:
+                m0 = C_ATNRS; m1 = C_ATNWRS
+            self._anim_set_move(f1, _ATN_24, _ATN_28, m0, m1, 4)
+            self._m3598 = 1.0
+        elif f31 < _ATN_20:
+            f28 = fdivs(fsubs(f31, _ATN_1C), fsubs(_ATN_20, _ATN_1C))
+            if is_left:
+                m0 = C_ATNWLS; m1 = C_ATNDLS
+            else:
+                m0 = C_ATNWRS; m1 = C_ATNDRS
+            self._anim_set_move(f28, _ATN_28, _ATN_2C, m0, m1, 4)
+            self._m3598 = fsubs(1.0, fmuls(f28, self._m3598))
+        else:
+            m0 = C_ATNDLS if is_left else C_ATNDRS
+            self._anim_set_move(1.0, _ATN_2C, _ATN_2C, m0, m0, 4)
+            self._m3598 = 0.0
+
+    cdef void _anim_atn_back(self, double dvar7):
+        """setBlendAtnBackMoveAnime (3217). Port of UnderAnimState._set_atn_back_anime."""
+        cdef double f1
+        if dvar7 < _ATNB_1C:
+            f1 = fdivs(dvar7, _ATNB_1C)
+            self._anim_set_move(f1, _H_38, _ATNB_24, C_WAITS, C_ATNWB, 4)
+            self._m3598 = 1.0
+        elif dvar7 < _ATNB_20:
+            f1 = fdivs(fsubs(dvar7, _ATNB_1C), fsubs(_ATNB_20, _ATNB_1C))
+            self._anim_set_move(f1, _ATNB_24, _ATNB_28, C_ATNWB, C_ATNDB, 4)
+            self._m3598 = fsubs(1.0, f1)
+        else:
+            self._anim_set_move(1.0, _ATNB_28, _ATNB_28, C_ATNDB, C_ATNDB, 4)
+            self._m3598 = 0.0
+
+    cdef double _foot_speedf_c(self, double nspeed, double msd, int m0, int m1,
+                               double f0, double f1, double ratio, double m3598, double morf):
+        """posMoveFromFootPos: pose the foot (m0@f0, m1@f1, oldframe-morf `morf`), take the 1-frame
+        delayed toe delta + compose speedF, then shift the toe stream. Port of foot_speedf._foot_speedf."""
+        cdef double cur[12]
+        cdef int i
+        self._pose_toe_core(self._code2idx[m0], self._code2idx[m1 if m1 >= 0 else m0],
+                            f0, f1, ratio, morf, cur)
+        cdef double speedF, f312
+        _foot_compose_c(self._t1, self._t2, nspeed, msd, m3598, self._prev_f312, self._m35B4,
+                        &speedF, &f312)
+        self._m35B4 = msd
+        for i in range(12):
+            self._t2[i] = self._t1[i]
+            self._t1[i] = cur[i]
+        self._prev_f312 = f312
+        return speedF
+
+    def w_step(self, double nspeed, double msd, double anim_nspeed, bint has_anim):
+        """One walk (MOVE / MOVE_TURN tail) frame. Port of FootSpeedF.step. `has_anim` splits the
+        anim-blend speed from the position speed (procMoveTurn_init(1))."""
+        nspeed = f32(nspeed)
+        msd = f32(msd)
+        cdef double an = f32(anim_nspeed) if has_anim else nspeed
+        cdef double morf
+        cdef double na = nspeed if nspeed >= 0.0 else -nspeed
+        cdef double cur[12]
+        cdef int i, idle
+        if not self._started:
+            if nspeed <= 0.0:
+                self._idle_frame = fadds(self._idle_frame, 1.0)
+                idle = self._code2idx[self._idle_code]
+                self._pose_toe_core(idle, idle, self._idle_frame, self._idle_frame, 0.0, -1.0, cur)
+                self._m35B4 = msd
+                for i in range(12):
+                    self._t2[i] = self._t1[i]
+                    self._t1[i] = cur[i]
+                self._prev_f312 = 0.0
+                return 0.0
+            self._started = True
+            morf = 2.4
+        elif na <= 0.001:
+            self._stopped = True
+            self._m35B4 = msd
+            return 0.0
+        elif self._has_pending:
+            morf = self._pending_morf
+            self._has_pending = False
+        else:
+            morf = -1.0
+        _fc_update(self._fc0_attr, self._fc0_start, self._fc0_end, self._fc0_loop,
+                   &self._fc0_frame, &self._fc0_rate)
+        _fc_update(self._fc1_attr, self._fc1_start, self._fc1_end, self._fc1_loop,
+                   &self._fc1_frame, &self._fc1_rate)
+        self._anim_blend_move(an, 1.0)
+        return self._foot_speedf_c(nspeed, msd, self._move0, self._move1,
+                                   self._fc0_frame, self._fc1_frame, self._a_ratio, self._m3598, morf)
+
+    def w_step_atn(self, double nspeed, double msd, int direction, double f31,
+                   double morf, bint has_morf):
+        """One ATN_MOVE frame. Port of FootSpeedF.step_atn."""
+        nspeed = f32(nspeed)
+        msd = f32(msd)
+        self._started = True
+        cdef double m = morf if has_morf else -1.0
+        _fc_update(self._fc0_attr, self._fc0_start, self._fc0_end, self._fc0_loop,
+                   &self._fc0_frame, &self._fc0_rate)
+        _fc_update(self._fc1_attr, self._fc1_start, self._fc1_end, self._fc1_loop,
+                   &self._fc1_frame, &self._fc1_rate)
+        if direction == D_FORWARD:
+            self._anim_blend_move(nspeed, 1.0)
+        elif direction == D_BACKWARD:
+            self._anim_atn_back(f32(f31))
+        else:
+            self._anim_atn_side(f32(f31), direction == D_LEFT)
+        return self._foot_speedf_c(nspeed, msd, self._move0, self._move1,
+                                   self._fc0_frame, self._fc1_frame, self._a_ratio, self._m3598, m)
+
+    def w_step_single(self, double nspeed, double msd):
+        """One single-anim proc frame (ROLL / WAIT_TURN / SLIP). Port of FootSpeedF.step_single_anim."""
+        nspeed = f32(nspeed)
+        msd = f32(msd)
+        cdef double morf = self._pending_morf if self._has_pending else -1.0
+        self._has_pending = False
+        if self._single_entered:
+            self._single_entered = False                 # entry frame: pose at start, no ctrl advance
+        else:
+            _fc_update(self._fc0_attr, self._fc0_start, self._fc0_end, self._fc0_loop,
+                       &self._fc0_frame, &self._fc0_rate)
+        return self._foot_speedf_c(nspeed, msd, self._move0, self._move0,
+                                   self._fc0_frame, self._fc0_frame, 0.0, self._m3598, morf)
+
+    def w_enter_single(self, int code, double morf, double start, double end,
+                       double rate, bint has_morf):
+        """setSingleMoveAnime entry (12794). Port of FootSpeedF.enter_single + UnderAnimState.set_single."""
+        self._move0 = code; self._move1 = -1; self._m34C3 = 0; self._a_ratio = 0.0
+        cdef double frame = fsubs(end, 0.001) if rate < 0.0 else start
+        self._fc0_attr = _MATTR[code]
+        self._fc0_start = start; self._fc0_end = end; self._fc0_rate = rate; self._fc0_frame = frame
+        self._fc0_loop = start if rate >= 0.0 else end
+        self._started = True
+        self._single_entered = True
+        if has_morf:
+            self._pending_morf = morf; self._has_pending = True
+        else:
+            self._has_pending = False
+
+    def w_enter_wait_idle(self, double ratio, int r27_code, double morf, double msd):
+        """WAIT idle-proc turn-step re-pose after a WAIT_TURN pivot. Port of FootSpeedF.enter_wait_idle."""
+        self._started = True
+        self._anim_set_move(ratio, _H_38, _ATN_28, C_WAITS, r27_code, 2)
+        self._m3598 = 0.0
+        self._foot_speedf_c(0.0, f32(msd), self._move0, self._move1,
+                            self._fc0_frame, self._fc1_frame, self._a_ratio, self._m3598, morf)
+        self._pending_morf = morf; self._has_pending = True
+        return 0.0
+
+    def w_set_pending(self, v):
+        """land.py sets FootSpeedF._pending_morf directly on some proc transitions; route into C."""
+        if v is None:
+            self._has_pending = False
+        else:
+            self._pending_morf = v; self._has_pending = True
+
+    def w_get_pending(self):
+        return self._pending_morf if self._has_pending else None
+
+    def w_get_idle_frame(self):
+        return self._idle_frame
 
 
 # ---- posMoveFromFootPos composition (plant select + absXZ + smoothing + speedF) ---------------
@@ -762,16 +1127,16 @@ cdef double _sqrtf_c(double x) nogil:
         return f32(x * g)
     return f32(x)
 
-def foot_compose(t1, t2, double nspeed, double msd, double m3598, double prev_f312, double m35B4):
-    """posMoveFromFootPos toe->speedF (d_a_player_main.cpp:2372+). t1/t2 are the flat 12-tuples from
-    pose_toe for the last two DRAWN frames. Returns (speedF, f312). Bit-exact port of the tail of
+cdef void _foot_compose_c(double* t1, double* t2, double nspeed, double msd, double m3598,
+                          double prev_f312, double m35B4, double* out_speedF, double* out_f312) nogil:
+    """posMoveFromFootPos toe->speedF core (d_a_player_main.cpp:2372+). t1/t2 = the flat 12-double
+    toe arrays for the last two DRAWN frames. Writes speedF + f312. Bit-exact port of the tail of
     foot_speedf._foot_speedf (plant select on t1, 1-frame-delayed toe delta, recursive smoothing,
     speedF = nspeed*(1-m3598) +/- f31_2*m3598 with the |.|<0.05 -> 0 snap)."""
-    cdef double t1_1 = t1[1], t1_7 = t1[7], t1_4 = t1[4], t1_10 = t1[10]
-    cdef int plant = 0 if f32((t1_1 + t1_7) * 0.5) < f32((t1_4 + t1_10) * 0.5) else 1
+    cdef int plant = 0 if f32((t1[1] + t1[7]) * 0.5) < f32((t1[4] + t1[10]) * 0.5) else 1
     cdef int o = plant * 3
-    cdef double dx = f32(<double>t1[o + 0] - <double>t2[o + 0])
-    cdef double dz = f32(<double>t1[o + 2] - <double>t2[o + 2])
+    cdef double dx = f32(t1[o + 0] - t2[o + 0])
+    cdef double dz = f32(t1[o + 2] - t2[o + 2])
     cdef double f312 = _sqrtf_c(fmadds(dz, dz, fmuls(dx, dx)))
     cdef double dm = f32(m35B4 - msd)
     if dm < 0.0:
@@ -784,7 +1149,19 @@ def foot_compose(t1, t2, double nspeed, double msd, double m3598, double prev_f3
     else:
         spz = f32(spz - f32(f312 * m3598))
     cdef double asp = spz if spz >= 0.0 else -spz
-    cdef double speedF = 0.0 if asp < 0.05 else spz
+    out_speedF[0] = 0.0 if asp < 0.05 else spz
+    out_f312[0] = f312
+
+def foot_compose(t1, t2, double nspeed, double msd, double m3598, double prev_f312, double m35B4):
+    """posMoveFromFootPos toe->speedF (d_a_player_main.cpp:2372+). t1/t2 are the flat 12-tuples from
+    pose_toe for the last two DRAWN frames. Returns (speedF, f312)."""
+    cdef double ct1[12]
+    cdef double ct2[12]
+    cdef int i
+    for i in range(12):
+        ct1[i] = t1[i]; ct2[i] = t2[i]
+    cdef double speedF, f312
+    _foot_compose_c(ct1, ct2, nspeed, msd, m3598, prev_f312, m35B4, &speedF, &f312)
     return (speedF, f312)
 
 

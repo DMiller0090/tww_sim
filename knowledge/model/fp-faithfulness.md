@@ -156,8 +156,17 @@ Two optional, **bit-identical** native accelerators; both fall back to pure Pyth
     PSMTXQuat pose + both foot chain FKs + the toe/heel `PSMTXMultVec` + `PSMTXInverse` with zero
     per-frame Python object churn; plus `foot_compose` (the posMoveFromFootPos speedF tail) and the
     `cam_bezier` manualCamera math (`rationalBezierRatio` + substick clamp + s16 azimuth recompute).
-  - Net: **20.9× on `LandState.step`** (668 → 32 µs/frame, `tests/benchmark/perf_land.py`). Only the
-    land physics state-machine (`land.py`) + `anim_state` remain in Python.
+  - **Fused walk step:** the whole `anim_state.UnderAnimState` machine (`FrameCtrl.update`,
+    `setBlendMoveAnime`/`setMoveAnime` regimes, the ATN side/back blends, `set_single`/`set_wait_idle`) +
+    the `FootSpeedF` orchestration (started/stopped/pending-morf/idle-drift/single-entry) + the toe stream
+    now live on `PoseEngine` too (`w_step`/`w_step_atn`/`w_step_single`/`w_enter_*`, working in fixed anim
+    *codes* mapped to data-indices). One `foot.step(...)` = **one** C call. The anim machine's vestigial
+    `i_morf` return (never read downstream) is dropped; the FK oldframe-morf is driven solely by the
+    `FootSpeedF` morf value. `foot_speedf.py` delegates to the engine when present, else the intact
+    pure-Python `st`/`ff` path (same fingerprint proves the drop-in is bit-identical, not a reimplementation).
+  - Net: **31.7× on `LandState.step`** (668 → 21 µs/frame, `tests/benchmark/perf_land.py`). The native
+    compute floor is ~8 µs/frame (`pose_toe` ≈ 6.4 µs); the land physics state-machine (`land.py`) + the
+    camera + `mathlib` leaf helpers are the remaining reducible Python.
 
   The old blocker ("32-bit-C overflow in `quat._fres` `1<<52`") is fixed by doing the `fres` bit surgery
   in `unsigned long long`. `psmtx_quat`'s non-default scale modes and the identity-FK path stay in Python;

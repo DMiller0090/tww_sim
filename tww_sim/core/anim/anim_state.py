@@ -73,6 +73,19 @@ ATNB_24 = fp.f32(0.8)        # mAtnMoveB.field_0x24 (setMoveAnime rate arg)
 ATNB_28 = fp.f32(0.95)       # mAtnMoveB.field_0x28 (back DASH single rate)
 
 
+# Canonical anim-CODE order for the native fused engine (_anmc): fixed small codes mapped to the JSON
+# data-index via foot_fk._anim_idx. Keep in sync with the DEF codes in _anmc.pyx.
+ANIM_ORDER = ['waits', 'walk', 'dash', 'rollf', 'rot', 'slip', 'atnwls', 'atnwrs',
+              'atnls', 'atnrs', 'atndls', 'atndrs', 'atnwb', 'atndb', 'freeb']
+ANIM_CODE = {name: i for i, name in enumerate(ANIM_ORDER)}
+NATIVE_META_MAX = [float(ANIM_META[n][0]) for n in ANIM_ORDER]
+NATIVE_META_ATTR = [int(ANIM_META[n][1]) for n in ANIM_ORDER]
+# HIO constants (already f32-quantized above) handed to the native engine, keyed by field.
+NATIVE_HIO = dict(maxspeed=H_MAXSPEED, h2c=H_2C, h30=H_30, h38=H_38, h40=H_40, h48=H_48, h60=H_60,
+                  atn1c=ATN_1C, atn20=ATN_20, atn24=ATN_24, atn28=ATN_28, atn2c=ATN_2C,
+                  atnb1c=ATNB_1C, atnb20=ATNB_20, atnb24=ATNB_24, atnb28=ATNB_28)
+
+
 class FrameCtrl:
     """J3DFrameCtrl: frame + rate + [start,end) + loop mode. update() = J3DAnimation.cpp:143."""
     __slots__ = ('attribute', 'start', 'end', 'loop', 'rate', 'frame')
