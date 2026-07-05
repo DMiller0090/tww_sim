@@ -30,6 +30,7 @@ and `m34DC = stickAngle + 0x8000`, the inverse full-deflection stick is `stick_f
 from __future__ import annotations
 import heapq
 import math
+from collections import deque
 
 from ..core.mathlib import deg_to_s16, s16_signed, ARROW_STICK_DEADZONE
 from .land import LandState, WAIT, FREE_WAIT
@@ -78,44 +79,47 @@ def stick_for_bearing(theta_s16, csangle=0, msd=1.0):
     return (max(0, min(255, int(round(sx)))), max(0, min(255, int(round(sy)))))
 
 
-def _walk_then_coast(seed, tx, tz, n_walk, coast_max=48):
-    """Simulate from `seed` (a REST state -- clone() only preserves rest anim): walk `n_walk`
-    frames aiming a full-deflection stick at the LIVE bearing to (tx, tz) each frame, then feed
-    neutral until Link comes to rest (or `coast_max`). Returns (resting_dist, seq, end_state)."""
-    s = seed.clone()
-    seq = []
-    for _ in range(n_walk):
-        th = world_angle_s16(tx - s.pos_x, tz - s.pos_z)
-        sx, sy = stick_for_bearing(th, s.csangle)
-        s.step(sx, sy)
-        seq.append((sx, sy))
+def _coast_to_rest(state, tx, tz, coast_max=48):
+    """Feed neutral from a CLONE of `state` until Link comes to rest (or `coast_max`), leaving the
+    source untouched. Mid-walk clone is bit-exact, so the coast is identical to re-simulating the
+    whole prefix. Returns (resting_dist, coast_frames, end_state)."""
+    c = state.clone()
+    n = 0
     for _ in range(coast_max):
-        s.step(*NEUTRAL)
-        seq.append(NEUTRAL)
-        if s.state in (WAIT, FREE_WAIT) and abs(s.nspeed) < 1e-6:
+        c.step(*NEUTRAL)
+        n += 1
+        if c.state in (WAIT, FREE_WAIT) and abs(c.nspeed) < 1e-6:
             break
-    return dist2d(s, tx, tz), seq, s
+    return dist2d(c, tx, tz), n, c
 
 
-def reach_straight(seed, tx, tz, max_walk=240):
+def reach_straight(seed, tx, tz, max_walk=240, coast_max=48):
     """STRAIGHT-WALK reach: return the input sequence whose RESTING position is closest to the
-    target (tx, tz). Sweeps the release frame `n_walk` (walk-then-coast) and keeps the minimum
-    resting distance -- each trial re-simulates from the rest `seed`, so the ported foot-anim
-    engine is seeded cleanly every time (clone() can't carry mid-walk anim state).
+    target (tx, tz). Walk the live-bearing full-deflection glide ONCE; at each release frame clone
+    the walk state and coast that clone to rest, keeping the minimum resting distance. Because the
+    walk is one deterministic trajectory and clone() is bit-exact mid-walk, this is identical to the
+    old per-release re-simulation but O(n) instead of O(n^2) in walk steps.
 
     Returns dict: seq, resting_dist, n_walk, end (LandState), n_frames.
     """
+    walk = seed.clone()
+    walk_seq = []
     best = None
     for n in range(1, max_walk + 1):
-        d, seq, end = _walk_then_coast(seed, tx, tz, n)
-        if best is None or d < best['resting_dist']:
-            best = {'seq': seq, 'resting_dist': d, 'n_walk': n, 'end': end,
-                    'n_frames': len(seq)}
+        th = world_angle_s16(tx - walk.pos_x, tz - walk.pos_z)
+        sx, sy = stick_for_bearing(th, walk.csangle)
+        walk.step(sx, sy)
+        walk_seq.append((sx, sy))
+        d, coast_n, end = _coast_to_rest(walk, tx, tz, coast_max)
+        if best is None or d < best[0]:
+            best = (d, n, coast_n, end)
         # Resting distance is unimodal up to the first overshoot; past it the live-bearing re-aim
         # orbits/reverses back (messy). Stop at the FIRST local minimum -- the clean straight reach.
-        elif n > best['n_walk'] + 8 and d > best['resting_dist'] + 5.0:
+        elif n > best[1] + 8 and d > best[0] + 5.0:
             break
-    return best
+    d, n_walk, coast_n, end = best
+    seq = list(walk_seq[:n_walk]) + [NEUTRAL] * coast_n
+    return {'seq': seq, 'resting_dist': d, 'n_walk': n_walk, 'end': end, 'n_frames': len(seq)}
 
 
 def reach_precise(seed, tx, tz, eps=0.05, k=0.5, min_crawl=0.043, turnback=1.0,
@@ -139,8 +143,12 @@ def reach_precise(seed, tx, tz, eps=0.05, k=0.5, min_crawl=0.043, turnback=1.0,
     """
     # Phase A/B: glide into a fixed crawl, feeding PAST the target (2-frame latency makes a proportional
     # controller overshoot) -- record the whole glide+crawl and pick the cut below, not the live break.
+    # Snapshot a clone each walk step so Phase C branches from any cut with no prefix re-sim (bit-exact
+    # mid-walk clone); a rolling buffer of the cut window (CUT_SPAN+1) bounds memory for any walk length.
+    CUT_SPAN = 60
     s = seed.clone()
     walk = []
+    snaps = deque([s.clone()], maxlen=CUT_SPAN + 1)   # snap after applying walk[:i]; keeps the tail
     prev = dist2d(s, tx, tz)
     near = False
     while len(walk) < max_frames:
@@ -156,27 +164,26 @@ def reach_precise(seed, tx, tz, eps=0.05, k=0.5, min_crawl=0.043, turnback=1.0,
         stick = stick_for_bearing(th, s.csangle, msd)
         s.step(*stick)
         walk.append(stick)
+        snaps.append(s.clone())
 
     # Phase C: truncation search -- the crawl tail advances ~min_crawl u/frame, so cutting the walk at
-    # the right frame + coasting lands within a crawl step. Re-sim walk[:cut]+coast per cut; keep min.
-    def _walk_then_rest(cut):
-        t = seed.clone()
-        seq = list(walk[:cut])
-        for st in seq:
-            t.step(*st)
+    # the right frame + coasting lands within a crawl step. Clone each buffered snapshot and coast; keep
+    # the min. O(n) (no prefix re-sim), identical to the old re-sim since clone is bit-exact.
+    cut_base = len(walk) - (len(snaps) - 1)     # rolling buffer's leftmost snapshot's cut index
+    best = None
+    for off, snap in enumerate(snaps):
+        t = snap.clone()
+        coast = 0
         for _ in range(30):
             if t.state in (WAIT, FREE_WAIT) and abs(t.nspeed) < 1e-6:
                 break
             t.step(*NEUTRAL)
-            seq.append(NEUTRAL)
-        return dist2d(t, tx, tz), seq, t
-
-    best = None
-    for cut in range(max(0, len(walk) - 60), len(walk) + 1):
-        d, seq, t = _walk_then_rest(cut)
+            coast += 1
+        d = dist2d(t, tx, tz)
         if best is None or d < best[0]:
-            best = (d, seq, t)
-    d, seq, t = best
+            best = (d, cut_base + off, coast, t)
+    d, cut, coast, t = best
+    seq = list(walk[:cut]) + [NEUTRAL] * coast
     return {'seq': seq, 'resting_dist': d, 'end': t, 'n_frames': len(seq)}
 
 
