@@ -144,17 +144,24 @@ Two optional, **bit-identical** native accelerators; both fall back to pure Pyth
 
 - **`core/_fpc.pyx`** (`cpdef inline <float>`) — the f32 ops (`fp.py` imports it, else ctypes). ~2.4×
   on the swim planner.
-- **`core/anim/_anmc.pyx`** — the **land-walk anim hot loop**. The whole per-frame foot-FK / quaternion
-  / Hermite chain is the bottleneck (~95% of `LandState.step` with anim data present), and every tiny
-  `fp` op there was a Python call. `_anmc` ports the hot functions (`mtx_concat`/`mtx_mult_vec`,
-  `euler_to_quat`/`quat_lerp`/`psmtx_quat`, `hermite_s16`/`hermite_f32`) **and** a fused per-joint
-  blend (`blend_joint`: euler→quat×2 → lerp → oldframe-morf → PSMTXQuat → scale/trans in one C call)
-  and a whole-chain `chain_concat`, so `fk`/`quat`/`foot_fk` pick them up by name. **7.8× on
-  `LandState.step`** (668 → 86 µs/frame, `tests/benchmark/perf_land.py`), 0-ULP vs the golden suite.
+- **`core/anim/_anmc.pyx`** — the **land-walk per-frame pipeline**. The foot-FK / quaternion / Hermite
+  chain is ~95% of `LandState.step` (anim data present), and every tiny `fp` op there was a Python call.
+  `_anmc` progressively absorbed the whole hot path into C, each step verified 0-ULP vs the golden suite
+  + the `perf_land` fingerprint (identical with and without the module):
+  - leaf ports (`mtx_concat`/`mtx_mult_vec`, `euler_to_quat`/`quat_lerp`/`psmtx_quat`, `hermite_*`) — 3.4×;
+  - a fused per-joint `blend_joint` + `chain_concat` — 5.8×;
+  - **`PoseEngine`** (a `cdef class`): the keyframe data, skeleton chains, oldframe-morf counter, per-joint
+    old pose, worldBase/`m37B4`, and the toe stream all live in C, so `seed()`/`set_pos()`/`step_feet()`
+    collapse to a single native call per frame that does `calc_transform` + the 12-joint blend/morf/
+    PSMTXQuat pose + both foot chain FKs + the toe/heel `PSMTXMultVec` + `PSMTXInverse` with zero
+    per-frame Python object churn; plus `foot_compose` (the posMoveFromFootPos speedF tail) and the
+    `cam_bezier` manualCamera math (`rationalBezierRatio` + substick clamp + s16 azimuth recompute).
+  - Net: **20.9× on `LandState.step`** (668 → 32 µs/frame, `tests/benchmark/perf_land.py`). Only the
+    land physics state-machine (`land.py`) + `anim_state` remain in Python.
 
-  The old blocker ("32-bit-C overflow in `quat._fres` `1<<52`") is fixed here by doing the `fres` bit
-  surgery in `unsigned long long` (64-bit). `psmtx_quat`'s non-default scale modes stay on the Python
-  path; the native fused blend is used only on the world-space FK path (whose `quatfn` is PSMTXQuat).
+  The old blocker ("32-bit-C overflow in `quat._fres` `1<<52`") is fixed by doing the `fres` bit surgery
+  in `unsigned long long`. `psmtx_quat`'s non-default scale modes and the identity-FK path stay in Python;
+  the C `PoseEngine` is used only on the world-space FK path (whose `quatfn` is PSMTXQuat).
 
 Orthogonal but large: `anim/fk.load()` + `j3d_eval.load_anim()` now **cache** the parsed anim/skeleton
 JSON (read-only; the shared `_ct_cache` calc_transform memoize is pure). This cut `LandState.clone()`
