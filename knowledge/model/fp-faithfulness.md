@@ -164,9 +164,17 @@ Two optional, **bit-identical** native accelerators; both fall back to pure Pyth
     `i_morf` return (never read downstream) is dropped; the FK oldframe-morf is driven solely by the
     `FootSpeedF` morf value. `foot_speedf.py` delegates to the engine when present, else the intact
     pure-Python `st`/`ff` path (same fingerprint proves the drop-in is bit-identical, not a reimplementation).
-  - Net: **31.7× on `LandState.step`** (668 → 21 µs/frame, `tests/benchmark/perf_land.py`). The native
-    compute floor is ~8 µs/frame (`pose_toe` ≈ 6.4 µs); the land physics state-machine (`land.py`) + the
-    camera + `mathlib` leaf helpers are the remaining reducible Python.
+  - **`LandCore`** (a `cdef class`): the whole `land.LandState` per-frame physics now runs in C — the
+    proc dispatch, the stick decode (`setStickData` + the `mathlib` dead-zone/angle/`deg_to_s16` helpers),
+    the `setSpeedAndAngleNormal`/`Atn`/`AtnBack` two-angle chase (`cLib_addCalc`/`cLib_addCalcAngleS`),
+    `checkNextMode`, the WAIT_TURN/MOVE_TURN/SLIP/FRONT_ROLL procs, the `manualCamera` s16 chase, and the
+    `speedF`→position integration. It owns the physics state and drives the same `PoseEngine` for `speedF`
+    (one `w_step*` call/frame); `LandState.step` delegates to it and syncs the output fields back for
+    tests/planners. The `mathlib` leaf helpers only paid off once their caller (`land.py`) was in the same
+    C translation unit — ported standalone they broke even against the Python↔C call cost.
+  - Net: **~88× on `LandState.step`** (668 → 7.6 µs/frame, `tests/benchmark/perf_land.py`). This is the
+    native compute floor: `pose_toe` ≈ 6.4 µs + ~1 µs of Python shell (`_sync_from_core`). Going further
+    means optimizing the foot-FK/quaternion pose itself, not the physics/stick/camera glue.
 
   The old blocker ("32-bit-C overflow in `quat._fres` `1<<52`") is fixed by doing the `fres` bit surgery
   in `unsigned long long`. `psmtx_quat`'s non-default scale modes and the identity-FK path stay in Python;

@@ -215,6 +215,22 @@ class LandState:
                                         pos_z=self.pos_z, facing=self.facing)
             except (FileNotFoundError, OSError, ImportError):
                 self._foot = None
+        # Native land physics: when the fused C engine is present, the whole per-frame step runs in one
+        # LandCore call (delegated below); absent -> the bit-identical pure-Python body. See fp-faithfulness.md.
+        self._core = self._build_core()
+
+    def _build_core(self):
+        """Build the native LandCore over the fused PoseEngine, seeded from this LandState's current
+        (rest) fields. Returns None when the fused engine is absent -> the Python step path is used."""
+        foot = self._foot
+        if foot is None or getattr(foot, "_core", None) is None:
+            return None
+        from ..core.anim import _anmc as _N
+        _N.land_init_consts(_LAND_CONSTS)
+        core = _N.LandCore()
+        core.setup(foot._core, self.pos_x, self.pos_z, self.facing, self.travel,
+                   self.csangle, self.state, self.nspeed, self.speedF, float(self._cam.scale))
+        return core
 
     def clone(self):
         s = LandState.__new__(LandState)
@@ -230,7 +246,30 @@ class LandState:
                                      pos_z=self.pos_z, facing=self.facing)
             except (FileNotFoundError, OSError, ImportError):
                 s._foot = None
+        # Native core aliases the same PoseEngine as the (now-fresh) clone's _foot; rebuild it over the
+        # clone's fresh engine, copying all physics/camera state (valid at rest, same as _foot above).
+        if self._core is not None and s._foot is not None and getattr(s._foot, "_core", None) is not None:
+            s._core = self._core.clone(s._foot._core)
+        else:
+            s._core = None
         return s
+
+    def _sync_from_core(self):
+        """Copy the LandCore's post-step public fields back onto this LandState (for tests/planners
+        reading pos/state/etc.) and record the visited proc."""
+        c = self._core
+        self.pos_x = c.pos_x
+        self.pos_z = c.pos_z
+        self.facing = c.facing
+        self.travel = c.travel
+        self.csangle = c.csangle
+        self.state = c.state
+        self.nspeed = c.nspeed
+        self.speedF = c.speedF
+        self.msd = c.msd
+        self.max_nspeed = c.max_nspeed
+        self.direction = c.direction
+        self.visited.add(self.state)
 
     # --- stick layer (setStickData, 10530) -------------------------------------------------
     def _set_stick_data(self, sx, sy):
@@ -614,6 +653,10 @@ class LandState:
         analog triggerL) + raw C-stick (csx, csy) steering the camera. Returns (d_pos, tag).
         csangle is driven per-frame from the shared camera; a centered C-stick (csx=128, the
         free-cam default) holds it frozen at the seed, matching straight superswims."""
+        if self._core is not None:               # native LandCore: one C call/frame, then sync
+            d = self._core.step(int(sx), int(sy), int(buttons), int(triggerL), int(csx), int(csy))
+            self._sync_from_core()
+            return d, _STATE_TAG.get(self.state, "?")
         # 2-frame controller latency: act on the input (stick, L AND C-stick) delivered INPUT_DELAY
         # frames ago -- the whole controller poll is delivered together.
         self._inbuf.append((int(sx), int(sy), int(buttons), int(triggerL), int(csx), int(csy)))
@@ -735,6 +778,20 @@ def _is_zero(x):
 def _dist_angle_s(a, b):
     # cLib_distanceAngleS: |signed s16 difference| (magnitude of the shortest turn).
     return abs(s16_signed(int(a) - int(b)))
+
+
+# Single-sourced HIO/tuning constants handed to the native LandCore (_anmc.land_init_consts). Keeps
+# land.py the one canonical home for the walk/atn/roll/turn/slip constants; the C twin never restates them.
+_LAND_CONSTS = {n: getattr(LandState, n) for n in (
+    'MAX_NSPEED', 'F14', 'F1C', 'F20', 'F24', 'F0', 'F4', 'F6',
+    'ATN_MAX', 'ATN_SPD', 'ATN_ACC', 'ATN_DEC', 'ATN_SCL',
+    'ATN_TURN_MAX', 'ATN_TURN_MIN', 'ATN_TURN_SCALE',
+    'ATNB_MAX', 'ATNB_SPD', 'ATNB_ACC', 'ATNB_DEC', 'ATNB_SCL', 'ATNB_COS_FWD', 'ATNB_COS_BACK',
+    'ROLL_SPD', 'ROLL_ADD', 'ROLL_MIN', 'ROLL_END', 'ROLL_RATE', 'ROLL_ENTRY_MORF',
+    'MOVE_REENTRY_MORF', 'ROLL_EARLY',
+    'TURN_MAX', 'TURN_MIN', 'TURN_SCALE', 'WAIT_TURN_ANIM_RATE',
+    'SLIP_THRESH', 'SLIP_ENTRY', 'SLIP_DEC_SCALE', 'SLIP_DEC_MAX', 'SLIP_DEC_MIN',
+    'SLIP_ANIM_RATE', 'SLIP_MORF', 'MT_SLIP_SEED')}
 
 
 def _cM_ssin_s16(angle):

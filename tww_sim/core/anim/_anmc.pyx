@@ -18,7 +18,9 @@ their own pure implementations (same result), so this is an optional accelerator
 
 from libc.stdlib cimport malloc, free
 from libc.string cimport memcpy
-from libc.math cimport sqrt as _c_sqrt
+from libc.math cimport (sqrt as _c_sqrt, hypot as _c_hypot, atan2 as _c_atan2,
+                        fabs as _c_fabs, copysign as _c_copysign, fmod as _c_fmod,
+                        rint as _c_rint, floor as _c_floor)
 
 # ---- single-precision primitives (identical to _fpc.pyx) -------------------------------------
 cdef inline double f32(double x) nogil: return <double><float>x
@@ -1246,3 +1248,647 @@ def cam_step_target(cam_target_s16, stick_x, scale):
     cdef double total = f32(cur_deg + inc_deg)
     cdef long long new = <long long>(f32(_DEG2S16 * total))       # fctiwz: trunc toward zero
     return new & 0xFFFF
+
+
+# ==== LAND physics core (LandState port) ========================================================
+# Bit-exact port of the tww_sim.land.LandState per-frame step (dispatch + stick decode + the two-angle
+# chase + checkNextMode + the turn/roll/slip procs + camera + position integration). Owns the physics
+# state in C and drives the shared PoseEngine for speedF; LandState delegates step() here when the fused
+# engine is present, syncing output fields back for tests/planners. The pure-Python LandState body stays
+# as the bit-identical fallback (proven by the perf_land fingerprint with the .pyd hidden).
+# link_state / daPyProc + mDirection enums (mirror land.py).
+DEF LS_WAIT=4
+DEF LS_FREE_WAIT=5
+DEF LS_MOVE=6
+DEF LS_ATN_MOVE=7
+DEF LS_WAIT_TURN=23
+DEF LS_MOVE_TURN=24
+DEF LS_SLIP=25
+DEF LS_FRONT_ROLL=30
+DEF LD_FORWARD=0
+DEF LD_BACKWARD=1
+DEF LD_LEFT=2
+DEF LD_RIGHT=3
+DEF LD_NONE=4
+
+# math.degrees factor: x * (180.0 / pi) in double, exactly as CPython math_degrees.
+DEF _DEG_PER_RAD = 57.29577951308232
+
+# HIO tuning constants copied from LandState (one canonical source) via land_init_consts.
+cdef double _L_MAX_NSPEED, _L_F14, _L_F1C, _L_F20, _L_F24
+cdef long long _L_F0, _L_F4, _L_F6
+cdef double _L_ATN_MAX, _L_ATN_SPD, _L_ATN_ACC, _L_ATN_DEC, _L_ATN_SCL
+cdef long long _L_ATN_TURN_MAX, _L_ATN_TURN_MIN, _L_ATN_TURN_SCALE
+cdef double _L_ATNB_MAX, _L_ATNB_SPD, _L_ATNB_ACC, _L_ATNB_DEC, _L_ATNB_SCL
+cdef double _L_ATNB_COS_FWD, _L_ATNB_COS_BACK
+cdef double _L_ROLL_SPD, _L_ROLL_ADD, _L_ROLL_MIN, _L_ROLL_END, _L_ROLL_RATE
+cdef double _L_ROLL_ENTRY_MORF, _L_MOVE_REENTRY_MORF, _L_ROLL_EARLY
+cdef long long _L_TURN_MAX, _L_TURN_MIN, _L_TURN_SCALE
+cdef double _L_WAIT_TURN_ANIM_RATE
+cdef double _L_SLIP_THRESH, _L_SLIP_ENTRY, _L_SLIP_DEC_SCALE, _L_SLIP_DEC_MAX, _L_SLIP_DEC_MIN
+cdef double _L_SLIP_ANIM_RATE, _L_SLIP_MORF, _L_MT_SLIP_SEED
+cdef bint _LAND_CONSTS_READY = False
+
+
+def land_init_consts(c):
+    """Copy the LandState HIO/tuning constants into C module globals (idempotent). `c` is a dict built
+    from the LandState class attributes so the values stay single-sourced in land.py."""
+    global _L_MAX_NSPEED, _L_F14, _L_F1C, _L_F20, _L_F24, _L_F0, _L_F4, _L_F6
+    global _L_ATN_MAX, _L_ATN_SPD, _L_ATN_ACC, _L_ATN_DEC, _L_ATN_SCL
+    global _L_ATN_TURN_MAX, _L_ATN_TURN_MIN, _L_ATN_TURN_SCALE
+    global _L_ATNB_MAX, _L_ATNB_SPD, _L_ATNB_ACC, _L_ATNB_DEC, _L_ATNB_SCL
+    global _L_ATNB_COS_FWD, _L_ATNB_COS_BACK
+    global _L_ROLL_SPD, _L_ROLL_ADD, _L_ROLL_MIN, _L_ROLL_END, _L_ROLL_RATE
+    global _L_ROLL_ENTRY_MORF, _L_MOVE_REENTRY_MORF, _L_ROLL_EARLY
+    global _L_TURN_MAX, _L_TURN_MIN, _L_TURN_SCALE, _L_WAIT_TURN_ANIM_RATE
+    global _L_SLIP_THRESH, _L_SLIP_ENTRY, _L_SLIP_DEC_SCALE, _L_SLIP_DEC_MAX, _L_SLIP_DEC_MIN
+    global _L_SLIP_ANIM_RATE, _L_SLIP_MORF, _L_MT_SLIP_SEED, _LAND_CONSTS_READY
+    _L_MAX_NSPEED = c['MAX_NSPEED']; _L_F14 = c['F14']; _L_F1C = c['F1C']; _L_F20 = c['F20']
+    _L_F24 = c['F24']; _L_F0 = c['F0']; _L_F4 = c['F4']; _L_F6 = c['F6']
+    _L_ATN_MAX = c['ATN_MAX']; _L_ATN_SPD = c['ATN_SPD']; _L_ATN_ACC = c['ATN_ACC']
+    _L_ATN_DEC = c['ATN_DEC']; _L_ATN_SCL = c['ATN_SCL']
+    _L_ATN_TURN_MAX = c['ATN_TURN_MAX']; _L_ATN_TURN_MIN = c['ATN_TURN_MIN']
+    _L_ATN_TURN_SCALE = c['ATN_TURN_SCALE']
+    _L_ATNB_MAX = c['ATNB_MAX']; _L_ATNB_SPD = c['ATNB_SPD']; _L_ATNB_ACC = c['ATNB_ACC']
+    _L_ATNB_DEC = c['ATNB_DEC']; _L_ATNB_SCL = c['ATNB_SCL']
+    _L_ATNB_COS_FWD = c['ATNB_COS_FWD']; _L_ATNB_COS_BACK = c['ATNB_COS_BACK']
+    _L_ROLL_SPD = c['ROLL_SPD']; _L_ROLL_ADD = c['ROLL_ADD']; _L_ROLL_MIN = c['ROLL_MIN']
+    _L_ROLL_END = c['ROLL_END']; _L_ROLL_RATE = c['ROLL_RATE']
+    _L_ROLL_ENTRY_MORF = c['ROLL_ENTRY_MORF']; _L_MOVE_REENTRY_MORF = c['MOVE_REENTRY_MORF']
+    _L_ROLL_EARLY = c['ROLL_EARLY']
+    _L_TURN_MAX = c['TURN_MAX']; _L_TURN_MIN = c['TURN_MIN']; _L_TURN_SCALE = c['TURN_SCALE']
+    _L_WAIT_TURN_ANIM_RATE = c['WAIT_TURN_ANIM_RATE']
+    _L_SLIP_THRESH = c['SLIP_THRESH']; _L_SLIP_ENTRY = c['SLIP_ENTRY']
+    _L_SLIP_DEC_SCALE = c['SLIP_DEC_SCALE']; _L_SLIP_DEC_MAX = c['SLIP_DEC_MAX']
+    _L_SLIP_DEC_MIN = c['SLIP_DEC_MIN']; _L_SLIP_ANIM_RATE = c['SLIP_ANIM_RATE']
+    _L_SLIP_MORF = c['SLIP_MORF']; _L_MT_SLIP_SEED = c['MT_SLIP_SEED']
+    _LAND_CONSTS_READY = True
+
+
+cdef inline double _deadzone_c(double raw) nogil:
+    """mathlib._deadzone (per-axis, dz=15): subtract the dead-zone, keep sign, clamp at 0."""
+    cdef double o = raw - 128.0
+    cdef double m = _c_fabs(o) - 15.0
+    if m <= 0.0:
+        return 0.0
+    return _c_copysign(m, o)
+
+
+cdef inline long long _deg_to_s16_c(double deg) nogil:
+    """mathlib.deg_to_s16: round-half-to-even (Python round) then & 0xFFFF."""
+    return (<long long>_c_rint(deg / 360.0 * 65536.0)) & 0xFFFF
+
+
+cdef double _clib_addcalc(double value, double target, double scale,
+                          double max_step, double min_step) nogil:
+    """mathlib.cLib_addCalc (f32 chase). Bit-exact port."""
+    if value == target:
+        return value
+    cdef double step = f32(scale * f32(target - value))
+    cdef double nv, ms
+    if step >= min_step or step <= -min_step:
+        if step > max_step:
+            step = max_step
+        if step < -max_step:
+            step = -max_step
+        return f32(value + step)
+    if step > 0.0:
+        if step < min_step:
+            nv = f32(value + min_step)
+            return target if nv > target else nv
+    else:
+        ms = -min_step
+        if step > ms:
+            nv = f32(value + ms)
+            return target if nv < target else nv
+    return value
+
+
+cdef long long _clib_addcalc_angles(long long value, long long target, long long scale,
+                                    long long max_step, long long min_step) nogil:
+    """land.cLib_addCalcAngleS (s16 integer chase). Bit-exact port; C int division truncates toward
+    zero (cdivision) == Python int(diff / scale)."""
+    value &= 0xFFFF
+    target &= 0xFFFF
+    if value == target:
+        return value
+    cdef long long diff = _s16c(target - value)
+    cdef long long step = diff / scale
+    cdef long long nv
+    if step > min_step or step < -min_step:
+        if step > max_step:
+            step = max_step
+        if step < -max_step:
+            step = -max_step
+        return (value + step) & 0xFFFF
+    if diff >= 0:
+        nv = (value + min_step) & 0xFFFF
+        return target if _s16c(target - nv) <= 0 else nv
+    else:
+        nv = (value - min_step) & 0xFFFF
+        return target if _s16c(target - nv) >= 0 else nv
+
+
+cdef long long _cam_step_target_c(long long cam_target, double stick_x, double scale) nogil:
+    """cam_bezier.step_cam_target core (one manualCamera azimuth update)."""
+    cdef double ratio
+    if stick_x >= 0.75:
+        ratio = 1.0
+    elif stick_x <= -0.75:
+        ratio = -1.0
+    else:
+        ratio = _rbr_c(f32(_STICK_NRM * stick_x), 2.0)
+    cdef double cur_deg = f32(_S162DEG * <double>_s16c(cam_target))
+    cdef double inc_deg = f32(ratio * scale)
+    cdef double total = f32(cur_deg + inc_deg)
+    cdef long long new = <long long>(f32(_DEG2S16 * total))
+    return new & 0xFFFF
+
+
+cdef double _cstick_posx_c(int csx, int csy) nogil:
+    """cam_bezier.cstick_normalize -> mStickCPosX only (the camera yaw command needs just X)."""
+    cdef int px, py
+    _clamp_stick_c(csx - 128, csy - 128, &px, &py)
+    cdef double posx = f32(px / 42.0)
+    cdef double posy = f32(py / 42.0)
+    cdef double val = f32(_c_sqrt(f32(posx * posx) + f32(posy * posy)))
+    if val > 1.0:
+        posx = f32(posx / val)
+    return posx
+
+
+cdef class LandCore:
+    """C-resident LandState physics engine. Holds a reference to the shared PoseEngine (for speedF) and
+    owns all per-frame physics/stick/camera state. `setup` seeds it; `step` advances one frame and
+    returns speedF; the caller (land.LandState) reads the public fields to sync + build the state tag."""
+    cdef PoseEngine _pe
+    cdef public double pos_x, pos_z
+    cdef public long long facing, travel, csangle
+    cdef public long long m34E6, m34dc, m34ea, m34de, target, turn_target
+    cdef public long long turn_shape_scale, turn_shape_max, turn_shape_min
+    cdef public int state, direction
+    cdef public double nspeed, speedF, msd, max_nspeed, roll_frame
+    cdef public bint _roll_entered, _l_prev, _pos_fallback
+    cdef double _anim_nspeed
+    cdef bint _has_anim_nspeed
+    cdef int _inbuf[2][6]
+    cdef long long _cam_yaw, _cam_target
+    cdef double _cam_scale, _cam_pending_posx
+
+    def setup(self, PoseEngine pe, double pos_x, double pos_z, long long facing,
+              long long travel, long long csangle, int state, double nspeed,
+              double speedF, double cam_scale):
+        cdef int i, j
+        self._pe = pe
+        self.pos_x = pos_x
+        self.pos_z = pos_z
+        self.facing = facing & 0xFFFF
+        self.travel = travel & 0xFFFF
+        self.csangle = csangle & 0xFFFF
+        self.state = state
+        self.nspeed = f32(nspeed)
+        self.speedF = f32(speedF)
+        self.msd = 0.0
+        self.max_nspeed = _L_MAX_NSPEED
+        self.direction = LD_NONE
+        self.m34E6 = facing & 0xFFFF
+        self.m34dc = facing & 0xFFFF
+        self.m34ea = facing & 0xFFFF
+        self.m34de = facing & 0xFFFF
+        self.target = 0
+        self.turn_target = 0
+        self.turn_shape_scale = 0
+        self.turn_shape_max = 0
+        self.turn_shape_min = 0
+        self.roll_frame = 0.0
+        self._roll_entered = False
+        self._l_prev = False
+        self._pos_fallback = False
+        self._anim_nspeed = 0.0
+        self._has_anim_nspeed = False
+        for i in range(2):
+            self._inbuf[i][0] = 128; self._inbuf[i][1] = 128; self._inbuf[i][2] = 0
+            self._inbuf[i][3] = 0; self._inbuf[i][4] = 128; self._inbuf[i][5] = 128
+        self._cam_yaw = (self.csangle - 0x8000) & 0xFFFF
+        self._cam_target = (self._cam_yaw - 1) & 0xFFFF
+        self._cam_scale = cam_scale
+        self._cam_pending_posx = 0.0
+
+    def clone(self, PoseEngine new_pe):
+        """Clone with a fresh PoseEngine (rebuilt at the rest pose by the caller). Copies all physics
+        + camera state; valid at rest (pre-walk), matching land.LandState.clone's contract."""
+        cdef LandCore c = LandCore.__new__(LandCore)
+        cdef int i, j
+        c._pe = new_pe
+        c.pos_x = self.pos_x; c.pos_z = self.pos_z
+        c.facing = self.facing; c.travel = self.travel; c.csangle = self.csangle
+        c.m34E6 = self.m34E6; c.m34dc = self.m34dc; c.m34ea = self.m34ea
+        c.m34de = self.m34de; c.target = self.target; c.turn_target = self.turn_target
+        c.turn_shape_scale = self.turn_shape_scale; c.turn_shape_max = self.turn_shape_max
+        c.turn_shape_min = self.turn_shape_min
+        c.state = self.state; c.direction = self.direction
+        c.nspeed = self.nspeed; c.speedF = self.speedF; c.msd = self.msd
+        c.max_nspeed = self.max_nspeed; c.roll_frame = self.roll_frame
+        c._roll_entered = self._roll_entered; c._l_prev = self._l_prev
+        c._pos_fallback = self._pos_fallback
+        c._anim_nspeed = self._anim_nspeed; c._has_anim_nspeed = self._has_anim_nspeed
+        for i in range(2):
+            for j in range(6):
+                c._inbuf[i][j] = self._inbuf[i][j]
+        c._cam_yaw = self._cam_yaw; c._cam_target = self._cam_target
+        c._cam_scale = self._cam_scale; c._cam_pending_posx = self._cam_pending_posx
+        return c
+
+    # --- stick layer (setStickData, 10530) ---
+    cdef void _set_stick_data(self, int sx, int sy):
+        cdef double ax = _deadzone_c(<double>sx)
+        cdef double ay = _deadzone_c(<double>sy)
+        cdef double mag = _c_hypot(ax, ay) / 54.0
+        if mag > 1.0:
+            mag = 1.0
+        self.msd = mag
+        cdef double ang, r
+        if mag <= 0.05:
+            self.target = self.travel
+        else:
+            ang = _c_atan2(ax, -ay) * _DEG_PER_RAD
+            r = _c_fmod(ang, 360.0)
+            if r < 0.0:
+                r += 360.0
+            self.m34dc = (_deg_to_s16_c(r) + 0x8000) & 0xFFFF
+            self.target = (self.m34dc + self.csangle) & 0xFFFF
+
+    cdef inline int _get_dir(self, long long angle):
+        cdef long long a = _s16c(angle)
+        cdef long long aa = a if a >= 0 else -a
+        if aa > 0x6000:
+            return LD_BACKWARD
+        if a >= 0x2000:
+            return LD_LEFT
+        if a <= -0x2000:
+            return LD_RIGHT
+        return LD_FORWARD
+
+    # --- setNormalSpeedF (2301), walk path ---
+    cdef void _set_normal_speed_f(self, double param_1, double param_2, double param_3, double param_4):
+        cdef double dVar10 = f32(self.msd * f32(self.max_nspeed * self.msd))
+        cdef double temp_f0, temp_f3, dVar6
+        if dVar10 < self.nspeed:
+            temp_f0 = f32(self.nspeed - dVar10)
+            temp_f3 = param_3 if temp_f0 > param_3 else temp_f0
+            if temp_f3 < param_4:
+                temp_f3 = param_4
+            param_1 = 0.0
+            dVar6 = dVar10
+        else:
+            temp_f3 = param_3
+            dVar6 = 0.0
+        if not (_c_fabs(param_1) < 1.0e-5):
+            self.nspeed = f32(self.nspeed + param_1)
+            if self.nspeed > dVar10:
+                self.nspeed = dVar10
+        else:
+            self.nspeed = _clib_addcalc(self.nspeed, dVar6, param_2, temp_f3, param_4)
+
+    # --- setSpeedAndAngleNormal (2751), walk path ---
+    cdef void _set_speed_and_angle_normal(self, long long param_1, bint attention_lock):
+        cdef bint bVar2 = False
+        cdef double dVar11, dVar9, dVar10, sp_ratio
+        cdef long long sVar6, sVar7, old_facing, t1, t2
+        dVar9 = 0.0
+        if self.msd > 0.05:
+            dVar11 = f32(self.msd * self.msd)
+            if ((not attention_lock) and (_lldist(self.target, self.travel) > 0x7800)
+                    and self.state != LS_MOVE_TURN):
+                if self.state == LS_WAIT or self.state == LS_FREE_WAIT or self.state == LS_WAIT_TURN:
+                    return
+                if self.state == LS_MOVE:
+                    sp_ratio = f32(self.speedF / self.max_nspeed)
+                    if (sp_ratio > _L_SLIP_THRESH
+                            and self._get_dir(_s16c(self.m34ea - self.m34dc)) == LD_BACKWARD):
+                        return
+                    if sp_ratio <= _L_SLIP_THRESH:
+                        self.travel = _clib_addcalc_angles(self.travel, self.target,
+                                                           _L_F6, param_1, _L_F4)
+                        return
+                    bVar2 = True
+                else:
+                    self.travel = _clib_addcalc_angles(self.travel, self.target,
+                                                       _L_F6, param_1, _L_F4)
+            else:
+                sVar6 = <long long>(f32(<double>param_1 * dVar11))
+                if sVar6 < 10:
+                    sVar6 = 10
+                sVar7 = <long long>(f32(<double>_L_F4 * dVar11))
+                if sVar7 < 1:
+                    sVar7 = 1
+                self.travel = _clib_addcalc_angles(self.travel, self.target, _L_F6, sVar6, sVar7)
+            if not bVar2:
+                dVar9 = jma_cos(_s16c(self.target - self.travel))
+                if self.nspeed > f32(0.5 * self.max_nspeed):
+                    if dVar9 < 0.7:
+                        dVar9 = f32(0.7)
+                elif dVar9 < 0.0:
+                    dVar9 = 0.0
+                dVar10 = f32(0.5 - f32(0.5 * _c_fabs(f32(self.nspeed / self.max_nspeed))))
+                if self.msd > dVar10:
+                    dVar9 = f32(dVar9 * f32(_L_F14 * dVar11))
+                else:
+                    dVar9 = 0.0
+        if (not attention_lock) and self.state != LS_MOVE_TURN and self.msd > 0.05:
+            old_facing = self.facing
+            self.facing = _clib_addcalc_angles(self.facing, self.target, _L_F6,
+                                               (param_1 << 1) & 0xFFFF, (_L_F4 << 1) & 0xFFFF)
+            t1 = _s16c(old_facing - self.travel)
+            t2 = _s16c(self.facing - self.travel)
+            if t1 * t2 <= 0:
+                self.facing = self.travel
+        self._set_normal_speed_f(dVar9, _L_F24, _L_F1C, _L_F20)
+
+    # --- setSpeedAndAngleAtn (2851) ---
+    cdef void _set_speed_and_angle_atn(self):
+        if self.direction == LD_FORWARD:
+            self._set_speed_and_angle_normal(_L_F0, True)
+            return
+        if self.direction == LD_BACKWARD:
+            self._set_speed_and_angle_atn_back()
+            return
+        cdef double fVar2
+        cdef long long old
+        if self.msd > 0.05:
+            if self._get_dir(self.target - self.travel) == LD_BACKWARD:
+                self.travel = (self.travel + 0x8000) & 0xFFFF
+                self.nspeed = f32(self.nspeed * -1.0)
+            old = self.travel
+            self.travel = _clib_addcalc_angles(self.travel, self.target, _L_ATN_TURN_SCALE,
+                                               _L_ATN_TURN_MAX, _L_ATN_TURN_MIN)
+            fVar2 = f32(f32(_L_ATN_SPD * self.msd) * jma_cos(_s16c(self.travel - old)))
+        else:
+            fVar2 = 0.0
+        self.facing = self.m34E6
+        self._set_normal_speed_f(fVar2, _L_ATN_SCL, _L_ATN_ACC, _L_ATN_DEC)
+
+    cdef void _set_speed_and_angle_atn_back(self):
+        cdef double f1
+        cdef long long old
+        if self.msd > 0.05:
+            if self._get_dir(self.target - self.travel) == LD_BACKWARD:
+                self.travel = (self.travel + 0x8000) & 0xFFFF
+                self.nspeed = f32(self.nspeed * -1.0)
+            old = self.travel
+            self.travel = _clib_addcalc_angles(self.travel, self.target, _L_ATN_TURN_SCALE,
+                                               _L_ATN_TURN_MAX, _L_ATN_TURN_MIN)
+            f1 = f32(f32(_L_ATNB_SPD * self.msd) * jma_cos(_s16c(self.travel - old)))
+        else:
+            f1 = 0.0
+        self.facing = self.m34E6
+        self._set_normal_speed_f(f1, _L_ATNB_SCL, _L_ATNB_ACC, _L_ATNB_DEC)
+
+    cdef void _update_atn_direction(self):
+        cdef long long iVar6 = _s16c(self.travel - self.facing)
+        cdef double f2 = jma_sin(iVar6)
+        cdef double fVar4 = jma_cos(iVar6)
+        cdef int uVar1 = self.direction
+        if self.msd > 0.05:
+            if fVar4 <= _L_ATNB_COS_BACK or fVar4 >= _L_ATNB_COS_FWD:
+                self.direction = LD_BACKWARD if fVar4 <= _L_ATNB_COS_BACK else LD_FORWARD
+            else:
+                if uVar1 == LD_BACKWARD or uVar1 == LD_FORWARD:
+                    self.direction = LD_RIGHT
+                    self.max_nspeed = _L_ATN_MAX
+                if f2 > 0.0:
+                    self.direction = LD_LEFT
+                elif f2 < 0.0:
+                    self.direction = LD_RIGHT
+        if self.direction == LD_BACKWARD:
+            self.max_nspeed = _L_ATNB_MAX
+        elif self.direction == LD_FORWARD:
+            self.max_nspeed = _L_MAX_NSPEED
+        elif self.direction != LD_RIGHT and self.direction != LD_LEFT:
+            self.direction = LD_RIGHT
+
+    cdef void _check_next_mode(self, bint l_held):
+        cdef int cur = self.state
+        cdef long long dist
+        if l_held:
+            self.max_nspeed = _L_ATN_MAX
+            self.state = LS_WAIT if _c_fabs(self.nspeed) <= 0.001 else LS_ATN_MOVE
+            return
+        self.max_nspeed = _L_MAX_NSPEED
+        self.direction = LD_NONE
+        dist = _lldist(self.target, self.travel)
+        if _c_fabs(self.nspeed) <= 0.001:
+            if dist > 0x7800 and self.msd > 0.05:
+                self._proc_wait_turn_init()
+            else:
+                if not (self.state == LS_WAIT or self.state == LS_FREE_WAIT):
+                    self.state = LS_WAIT
+        elif cur == LS_MOVE_TURN and self.travel != self.facing:
+            self.state = LS_MOVE_TURN
+        elif dist > 0x7800 and self.msd > 0.05:
+            if (f32(self.speedF / self.max_nspeed) > _L_SLIP_THRESH
+                    and self._get_dir(_s16c(self.m34ea - self.m34dc)) == LD_BACKWARD):
+                self._proc_slip_init()
+            else:
+                self._proc_move_turn_init(1)
+        elif (self._get_dir(_s16c(self.target - self.travel)) == LD_BACKWARD and self.msd > 0.05):
+            self._proc_move_turn_init(1)
+        else:
+            self.state = LS_MOVE
+
+    # --- turn / roll / slip procs ---
+    cdef void _proc_wait_turn_init(self):
+        self.state = LS_WAIT_TURN
+        self.turn_target = self.target
+        self.travel = self.facing
+        self._pe.w_enter_single(C_ROT, _L_MOVE_REENTRY_MORF, 0.0, _MMAX[C_ROT],
+                                _L_WAIT_TURN_ANIM_RATE, True)
+
+    cdef void _proc_wait_turn(self, bint l_held):
+        self.nspeed = _clib_addcalc(self.nspeed, 0.0, _L_F24, _L_F1C, _L_F20)
+        self.facing = _clib_addcalc_angles(self.facing, self.turn_target,
+                                           _L_TURN_SCALE, _L_TURN_MAX, _L_TURN_MIN)
+        self.travel = self.facing
+        if _s16c(self.turn_target - self.facing) == 0:
+            self._check_next_mode(l_held)
+
+    cdef void _proc_move_turn_init(self, int param_1):
+        self.state = LS_MOVE_TURN
+        self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
+        if param_1 != 0:
+            self.turn_shape_max = (_L_F0 * 4 + 0x4A56) & 0xFFFF
+            self.turn_shape_min = (_L_F0 * 2) & 0xFFFF
+            self.turn_shape_scale = 2
+            self.travel = self.target
+            self._anim_nspeed = self.nspeed
+            self._has_anim_nspeed = True
+            self.nspeed = f32(self.nspeed * 0.5)
+        else:
+            self.turn_shape_max = (_L_F0 * 2) & 0xFFFF
+            self.turn_shape_min = _L_F0 & 0xFFFF
+            self.turn_shape_scale = 3
+
+    cdef void _proc_move_turn(self, bint l_held):
+        self._set_speed_and_angle_normal(_L_F0, l_held)
+        self.facing = _clib_addcalc_angles(self.facing, self.travel,
+                                           self.turn_shape_scale, self.turn_shape_max, self.turn_shape_min)
+        self._check_next_mode(l_held)
+        if self.state == LS_MOVE:
+            self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
+
+    cdef void _proc_slip_init(self):
+        self.state = LS_SLIP
+        self.nspeed = f32(self.speedF * _L_SLIP_ENTRY)
+        self._pe.w_enter_single(C_SLIP, _L_SLIP_MORF, 0.0, _MMAX[C_SLIP], _L_SLIP_ANIM_RATE, True)
+
+    cdef void _proc_slip(self, bint l_held):
+        self.nspeed = _clib_addcalc(self.nspeed, 0.0, _L_SLIP_DEC_SCALE,
+                                    _L_SLIP_DEC_MAX, _L_SLIP_DEC_MIN)
+        if _c_fabs(self.nspeed) <= 0.001:
+            if self.msd > 0.05:
+                self.travel = (self.facing + 0x8000) & 0xFFFF
+                self.facing = (self.facing + 0x100) & 0xFFFF
+                self.nspeed = f32(self.max_nspeed * _L_MT_SLIP_SEED)
+                self._proc_move_turn_init(0)
+            else:
+                self._check_next_mode(l_held)
+
+    cdef void _roll_init(self):
+        cdef double v = f32(f32(self.speedF * _L_ROLL_SPD) + _L_ROLL_ADD)
+        cdef double cap
+        if v < _L_ROLL_MIN:
+            v = f32(_L_ROLL_MIN)
+        else:
+            cap = f32(_L_ROLL_ADD + f32(_L_MAX_NSPEED * _L_ROLL_SPD))
+            if v > cap:
+                v = cap
+        self.nspeed = v
+        self.facing = self.target
+        self.travel = self.facing
+        self.state = LS_FRONT_ROLL
+        self.roll_frame = 0.0
+        self._roll_entered = True
+        self._pe.w_enter_single(C_ROLLF, _L_ROLL_ENTRY_MORF, 0.0, _L_ROLL_END, _L_ROLL_RATE, True)
+
+    cdef void _roll_exit(self, bint l_held):
+        self._check_next_mode(l_held)
+        if self.state == LS_MOVE:
+            self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
+
+    cdef void _proc_roll(self, bint l_held):
+        if self._roll_entered:
+            self._roll_entered = False
+            return
+        self.roll_frame = f32(self.roll_frame + _L_ROLL_RATE)
+        if self.roll_frame >= _L_ROLL_END:
+            if self.msd <= 0.05:
+                self.nspeed = f32(self.nspeed - _L_ROLL_MIN)
+            self._roll_exit(l_held)
+        elif self.roll_frame > _L_ROLL_EARLY and self.msd > 0.05:
+            self._roll_exit(l_held)
+
+    cdef void _cam_step(self, int acsx, int acsy):
+        self._cam_target = _cam_step_target_c(self._cam_target, self._cam_pending_posx, self._cam_scale)
+        cdef long long diff = _s16c(self._cam_target - self._cam_yaw)
+        self._cam_yaw = (self._cam_yaw + (diff / 2)) & 0xFFFF
+        self._cam_pending_posx = _cstick_posx_c(acsx, acsy)
+
+    # --- proc dispatch + per-frame step ---
+    def step(self, int sx, int sy, int buttons=0, int triggerL=0, int csx=128, int csy=128):
+        """Advance one frame; returns speedF (the position-integrating speed). The caller syncs the
+        public physics fields + builds the (d, tag) tuple + `visited`."""
+        cdef int asx = self._inbuf[0][0], asy = self._inbuf[0][1], abtn = self._inbuf[0][2]
+        cdef int atrig = self._inbuf[0][3], acsx = self._inbuf[0][4], acsy = self._inbuf[0][5]
+        self._inbuf[0][0] = self._inbuf[1][0]; self._inbuf[0][1] = self._inbuf[1][1]
+        self._inbuf[0][2] = self._inbuf[1][2]; self._inbuf[0][3] = self._inbuf[1][3]
+        self._inbuf[0][4] = self._inbuf[1][4]; self._inbuf[0][5] = self._inbuf[1][5]
+        self._inbuf[1][0] = sx; self._inbuf[1][1] = sy; self._inbuf[1][2] = buttons
+        self._inbuf[1][3] = triggerL; self._inbuf[1][4] = csx; self._inbuf[1][5] = csy
+        self.csangle = (self._cam_yaw + 0x8000) & 0xFFFF
+        self._set_stick_data(asx, asy)
+        cdef bint l_held = ((abtn & 0x40) != 0) or (atrig >= 200)
+        cdef bint a_pressed = (abtn & 0x100) != 0
+        cdef bint moving = self.msd > 0.05
+        if l_held and not self._l_prev:
+            self.m34E6 = self.facing
+        if a_pressed and moving and (self.state == LS_MOVE or self.state == LS_ATN_MOVE):
+            self.facing = self.target
+            self._roll_init()
+
+        cdef int proc = self.state
+        if proc == LS_WAIT or proc == LS_FREE_WAIT:
+            if l_held:
+                self.state = LS_ATN_MOVE
+                self._set_speed_and_angle_atn()
+            else:
+                self._set_speed_and_angle_normal(_L_F0, False)
+            self._check_next_mode(l_held)
+        elif proc == LS_MOVE:
+            self._set_speed_and_angle_normal(_L_F0, l_held)
+            self._check_next_mode(l_held)
+        elif proc == LS_ATN_MOVE:
+            self._set_speed_and_angle_atn()
+            self._check_next_mode(l_held)
+        elif proc == LS_WAIT_TURN:
+            self._proc_wait_turn(l_held)
+        elif proc == LS_MOVE_TURN:
+            self._proc_move_turn(l_held)
+        elif proc == LS_SLIP:
+            self._proc_slip(l_held)
+        elif proc == LS_FRONT_ROLL:
+            self._proc_roll(l_held)
+
+        cdef int prev_dir = self.direction
+        if self.state == LS_ATN_MOVE:
+            self._update_atn_direction()
+        if proc == LS_ATN_MOVE and self.state == LS_MOVE:
+            self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
+
+        self._pe.set_pos(self.pos_x, 0.0, self.pos_z, self.facing)
+
+        cdef double f31, na, ratio
+        cdef long long r3, r3a
+        cdef int r27
+        if self.state == LS_WAIT_TURN:
+            self._pe.w_step_single(self.nspeed, self.msd)
+            self.speedF = 0.0
+        elif proc == LS_WAIT_TURN and self.state == LS_WAIT:
+            r3 = _s16c(self.facing - self.m34de)
+            r3a = r3 if r3 >= 0 else -r3
+            r27 = C_ATNWLS if r3 > 0 else C_ATNWRS
+            ratio = f32(f32(0.5) + f32(0.001 * <double>r3a))
+            if ratio > 1.0:
+                ratio = 1.0
+            self._pe.w_enter_wait_idle(ratio, r27, _L_MOVE_REENTRY_MORF, self.msd)
+            self.speedF = 0.0
+        elif self.state == LS_FRONT_ROLL or self.state == LS_SLIP:
+            self._pe.w_step_single(self.nspeed, self.msd)
+            na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
+            self.speedF = 0.0 if na < 0.05 else self.nspeed
+        elif self.state == LS_ATN_MOVE:
+            f31 = f32(_c_fabs(self.nspeed) / self.max_nspeed)
+            if proc != LS_ATN_MOVE or self.direction != prev_dir:
+                self.speedF = self._pe.w_step_atn(self.nspeed, self.msd, self.direction, f31,
+                                                  _L_MOVE_REENTRY_MORF, True)
+            else:
+                self.speedF = self._pe.w_step_atn(self.nspeed, self.msd, self.direction, f31, 0.0, False)
+        else:
+            self.speedF = self._pe.w_step(self.nspeed, self.msd,
+                                          self._anim_nspeed if self._has_anim_nspeed else 0.0,
+                                          self._has_anim_nspeed)
+            self._has_anim_nspeed = False
+
+        cdef double d = self.speedF
+        self.pos_x = f32(self.pos_x + f32(d * jma_sin(self.travel)))
+        self.pos_z = f32(self.pos_z + f32(d * jma_cos(self.travel)))
+        self.m34de = self.facing
+        self.m34ea = self.m34dc
+        self._cam_step(acsx, acsy)
+        self._l_prev = l_held
+        return d
+
+
+cdef inline long long _lldist(long long a, long long b) nogil:
+    """cLib_distanceAngleS: |signed s16 difference|."""
+    cdef long long d = _s16c(a - b)
+    return d if d >= 0 else -d
