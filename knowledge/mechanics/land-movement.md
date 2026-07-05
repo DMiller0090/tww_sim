@@ -328,7 +328,22 @@ pending sticks). So a fast arrival gives coarse ~10–17u freeze steps; only a S
 straddle. But you can't crawl arbitrarily slowly: msd < 0.5 collapses to a dead stop (the `dVar9` gate
 above), so the **minimum sustained crawl is msd 0.5 → nspeed≈4.25 → ~1u/frame** (once already moving;
 it can't be started from rest). The finest *sustainable* step is therefore ~1u; sub-ULP resolution
-comes from a drill that fills that 1u step, not from a slower crawl.
+comes from a drill that fills that 1u step, not from a slower crawl. (The freeze itself is 0-ULP-modeled
+from ANY approach speed — full-speed cruise included: live froze at z=1121.9905 from a 23-frame full
+cruise, sim `_freeze_pos` = same bits. The halfL frame RE-ISSUES the last approach stick, it does not add
+a frame.)
+
+**B cancels the freeze recovery (~2 frames vs ~8) — the chained coarse+fine primitive (TAS).** After the
+freeze locks (`link_state → 1`), Link plays a **~8-frame recovery animation** before becoming actionable
+(state 1 → 4 → walk). **Pressing B (`PAD_BUTTON_B` 0x200) interrupts it: actionable in ~2 frames** (that's
+just the 2-frame `INPUT_DELAY` — effectively immediate), MOVING from rest at frame 3. Measured
+2026-07-05c; **C-down did NOT speed recovery (still ~8), only B did.** This enables a **coarse-freeze →
+B-cancel → short fine-walk-from-rest → fine-freeze** approach: freeze from FULL speed (fast stop, lands
+on a coarse ~17u lattice), B-cancel back to rest (already slow, so it SKIPS the ~7-frame decel a crawl
+needs), then a few fine frames to the exact float. **Modeling caveat:** the post-B-cancel re-walk is NOT
+a cold rest walk — same `nspeed` but the **foot-anim phase carries over** from the freeze (per-frame `dz`
+≈ 2× smaller than cold at low speed), so the re-walk's position path must be modeled from the carried
+anim state, not a fresh idle. See [land-planner: chained-freeze roadmap](../model/land-planner.md#float-perfect-stop--the-c-up-speed-cancel).
 
 **Float-perfect stop achieved deterministically and ROBUSTLY** (`reach_freeze`, 2026-07-05): cruise →
 sustained msd-0.5 crawl → dedup-by-freeze-position drill rests within **~1–4 float32 ULP (< 0.001u) of

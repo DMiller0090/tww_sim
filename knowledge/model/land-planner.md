@@ -113,6 +113,19 @@ depth-4. **Off-axis freeze plans are not yet live-valid** — an off-axis
 crawl emits diagonal sticks needing the octagon clamp (a separate open decode issue). Mechanics of the cancel:
 [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
 
+## Roadmap: chained coarse+fine freeze (B-cancel) — fewest frames (TAS)
+
+The min-frame exact plan is ~14% over the pure full-speed travel floor; the overhead is the slow approach
+(you must arrive at ~crawl speed for a fine freeze, and decel from 17→crawl costs ~7 frames). The **B-cancel
+freeze** (see [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel))
+can shave those ~7–10 frames: **coarse-freeze from FULL speed** (0-ULP-modeled, lands on a ~17u lattice) →
+**B-cancel** (actionable in ~2 frames) → resume walking **from rest** (already slow — no decel needed) →
+short fine-walk → **fine-freeze** on the exact float. Blocker to model: the post-B-cancel re-walk inherits
+the freeze's **foot-anim phase**, so its position path differs from a cold rest walk (same nspeed, ~2×
+smaller `dz` at low speed) — the [foot engine](../model/land-sim.md) must be seeded with the carried anim
+state, not a fresh idle. Capture that state live (`harness/anim/foot_probe.py`) before extending
+`plan_land` with a freeze-lock + B-cancel + resume transition.
+
 ## Open gaps
 
 - **Curved-walk chase residual (sub-2u).** A sustained gentle-curve walk (~15° heading over ~1900u)
