@@ -9,9 +9,12 @@ stop now **robustly float-perfect AND live-re-gated 0 ULP** (2026-07-05) — fre
 sim's `freeze_pos.z` for every reachable on-axis target, and within a few float32 ULP (< 0.001u) of ANY
 on-axis target offline (all-live-valid), not just lucky ones. Sweeps are O(n) via bit-exact mid-walk
 clone. The C-up freeze + B-cancel + re-walk is now **input-driven in `step()`** (raw stream, 0 ULP live;
-2026-07-05f) — a freeze plan is just an input sequence. Open: redo the chained planner over real input
-streams (measured chained savings are modest, ~1–3f vs single-freeze — see roadmap), off-axis octagon
-clamp, collision, A*. (Note: `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u
+2026-07-05f) — a freeze plan is just an input sequence. The **fewest-frame bit-exact stop is the START
+crawl** (2026-07-05h): fine-tune the from-rest accel frames (free low-speed fine grid), then cruise full
++ C-up — bit-exact ~+7 over the full-up floor, live-proven 0 ULP (supersedes chained/end-crawl for fewest
+frames). Open: make the start-crawl solve sub-second (δ-prediction filtered search) + productionise into
+`reach_freeze`; the chained-over-streams planner is done (modest ~1–3f); off-axis octagon clamp,
+collision, A*. (Note: `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u
 — use `reach_freeze` for exact stops.)
 **Source:** `tww_sim/land/plan_land.py`; live-validated via `advanceseq`. Forward model:
 [land sim](land-sim.md) · [land movement](../mechanics/land-movement.md).
@@ -115,6 +118,40 @@ gates). A *universal* all-f32 reachability PROOF is still open, but empirically 
 depth-4. **Off-axis freeze plans are not yet live-valid** — an off-axis
 crawl emits diagonal sticks needing the octagon clamp (a separate open decode issue). Mechanics of the cancel:
 [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
+
+## Fewest-frame bit-exact stop — the START crawl (2026-07-05h)
+
+The **cheapest** bit-exact freeze is not a slow approach (reach_freeze rests ~+19..32 over the full-up
+floor) nor a chained coarse+fine (below, ~+12): it is to do the ULP fine-tuning at the **START**, then
+run full speed to the target. Bit-exact needs a few LOW-SPEED frames (the freeze grid is only ULP-dense
+below the 17u speed cap — see next paragraph); at the *start* the from-rest acceleration frames are
+low-speed **for free**, so you spend nothing extra:
+
+1. **k fine start frames from rest** — the natural accel ramp, magnitudes slightly reduced (live-valid
+   Y∈[171,191]∪{255}). At low speed each frame's freeze step is fine; k=3–4 of them fill to the ULP (the
+   same momentum-diversity that fills the drill's last ULP, but at zero frame cost).
+2. **full-forward cruise** (exactly +17.000/frame), half-L on the last frame;
+3. **C-up cancel** → the freeze locks on the **exact** float — the start offset shifted the whole
+   full-speed lattice onto the target.
+
+**Bit-exact at a consistent ~+7 over the full-up floor** (z=2000 → 80f/+7.3; z=1500 → 50f/+6.7;
+z=2810.99 → 128f/+7.6), and **live-proven 0-ULP** (z=2000 froze at exactly `0x44fa0000` in Dolphin).
+Prototype `_notes/chained-freeze-probes/start_freeze_solve.py`; the plan is a raw stream (the freeze is
+input-driven in `step()`). **Open: solve time is 5–63s** (ordered exhaustive; k=4 ≈ 234k candidate starts
+× a full cruise each — `freeze_below` sawtooths over [T-17,T] so no monotonic prune, and the pose is
+irreducible). The fix is a **δ-prediction filtered search** (predict from the cheap position deficit +
+the ±0.3u `coast(phase)` model, full-cruise only the ~24% predicted near T, hierarchical δ-prune the k=4
+subtrees) — not yet built. Not yet productionised into `reach_freeze`.
+
+**Why full-speed windows can't do it (settled, measured):** perturbing a window of the *full-speed*
+cruise cannot hit bit-exact — at the 17u/frame speed cap momentum is pinned, so the freeze grid is coarse
+(1 slid frame → nearest 0.0177u; an end-anchored 3-frame window, **exhaustive 274,625 combos → 0 exact
+hits**; k=4/k=5 too). The smallest live-valid stick step at full speed drops speed ≥3.5u, so there is no
+sub-ULP adjustment. Bit-exact *requires* momentum below the cap — which the start crawl (and the drill)
+provide. **The walk anim is a ~7-frame loop but precesses sub-frame** (per-frame anim advance isn't
+frame-commensurate), so the freeze coast drifts ~0.02–0.3u/cycle and is **not bit-exactly cacheable** by
+frame-phase (the pose sim is the ground truth); that same precession is what lets the freeze reach *any*
+float. Native `.pyx` cruise-batching won't help — `co.step` is 6.88µs (pose-bound), Python dispatch 0.09µs.
 
 ## Roadmap: chained coarse+fine freeze (B-cancel) — fewest frames (TAS)
 
