@@ -333,9 +333,13 @@ comes from a drill that fills that 1u step, not from a slower crawl.
 **Float-perfect stop achieved deterministically and ROBUSTLY** (`reach_freeze`, 2026-07-05): cruise →
 sustained msd-0.5 crawl → dedup-by-freeze-position drill rests within **~1–4 float32 ULP (< 0.001u) of
 ANY on-axis target** with an all-live-valid seq (the earlier glide-based drill hit ~0.003u only at lucky
-targets — see [history](../history/land-planner-precision.md)). Getting the *exact* float is limited by
-the sim's ~1-ULP land-position residual — see
+targets — see [history](../history/land-planner-precision.md)). The residual ~1–4 ULP is the **drill's
+lattice granularity** (whether the exact target f32 is reachable), NOT a sim inaccuracy: the sim
+reproduces live `pos_z` at **0 ULP** (byte-for-byte), enforced by the zero-tolerance `posz_status` gate
+in `run_land_tests` — so an offline *exact* freeze would reproduce exactly live. Position path:
 [model/sim: land position accumulates in f32](../model/land-sim.md#land-position-accumulates-in-f32-not-an-f64-running-sum).
+(The C-up freeze itself is not yet in the 14 locked live cases — one live re-gate still pending — but it
+rides the same 0-ULP-gated `LandState.step` position path.)
 
 ## Values
 

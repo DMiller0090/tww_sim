@@ -62,8 +62,9 @@ from the golden's `ns` column, written with `%g` (6 sig figs), fed a *truncated*
 diverged. Fixed: golden `ns`/`msd` are now full-precision (`repr`), and `test_speedf_y171` drives
 **LandState** (full-precision nspeed + the world position — the foot FK quantizes the toe at world
 magnitude, so the driver MUST get `set_pos` each frame; posing at the stale seed z was the other half
-of the artifact). For the z=2000 beam a 2-ULP `pos_z` oracle is likely already good enough
-(live-verify once). Gated by `test_speedf_y171_matches_live_bit_exact` /
+of the artifact). Note this ~1–2 ULP is the RAW-`FootSpeedF`-driver oracle only; the full `LandState`
+path (which `reach_freeze` and the freeze beam ride) is **0 ULP vs live** — see the gated status above.
+Gated by `test_speedf_y171_matches_live_bit_exact` /
 `test_pos_z_arc_y171_matches_live_bit_exact` and the `walk_y171` case in `run_land_tests.py`.
 
 ## Position residuals — all closed

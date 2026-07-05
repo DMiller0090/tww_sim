@@ -90,9 +90,11 @@ O(1)-per-candidate on the bit-exact mid-walk clone):
    This fills the ~1u crawl step down to the float floor.
 
 On the open **+z corridor** every on-axis target rests within **~1–4 float32 ULP (< 0.001u)** with an
-**all-live-valid** seq that re-simulates to the reported freeze — bounded only by the sim's ~0-ULP
-land-position accuracy. **Off-axis freeze plans are not yet live-valid** — an off-axis crawl emits
-diagonal sticks needing the octagon clamp (a separate open decode issue). Mechanics of the cancel:
+**all-live-valid** seq that re-simulates to the reported freeze. That residual is the **drill's lattice
+granularity** — whether the exact target f32 is reachable — NOT sim error: the sim reproduces live
+`pos_z` at **0 ULP** ([land-sim](land-sim.md), gated no-tolerance by `run_land_tests`), so an offline
+*exact* freeze would land exactly live. **Off-axis freeze plans are not yet live-valid** — an off-axis
+crawl emits diagonal sticks needing the octagon clamp (a separate open decode issue). Mechanics of the cancel:
 [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
 
 ## Open gaps
