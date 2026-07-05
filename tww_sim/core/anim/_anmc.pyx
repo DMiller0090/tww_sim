@@ -688,6 +688,44 @@ cdef class PoseEngine:
         for i in range(12):
             self._has_old[i] = False
 
+    def clone_state(self):
+        """Full memberwise state-copy sharing the immutable AnimData -- makes a MID-WALK clone
+        bit-exact: the toe stream (_t1/_t2/_prev_f312/_m35B4), the oldframe-morf counter, the two
+        frame ctrls + old pose are all carried. Contrast __cinit__, which starts a fresh engine at
+        rest (valid to clone only PRE-walk). The old pose/toe are model-local (worldBase is applied
+        downstream), so the copy is position-independent. See land.LandState.clone."""
+        cdef PoseEngine c = PoseEngine(self.data)     # shares the immutable keyframe data
+        cdef int i, j
+        for i in range(12):
+            c._has_old[i] = self._has_old[i]
+            for j in range(4):
+                c._oldq[i][j] = self._oldq[i][j]
+            for j in range(3):
+                c._oldt[i][j] = self._oldt[i][j]
+                c._olds[i][j] = self._olds[i][j]
+            c._base[i] = self._base[i]
+            c._inv[i] = self._inv[i]
+            c._t1[i] = self._t1[i]
+            c._t2[i] = self._t2[i]
+        c._m_counter = self._m_counter; c._m_f8 = self._m_f8; c._m_rate = self._m_rate
+        c._m_f10 = self._m_f10; c._m_f14 = self._m_f14
+        for i in range(15):
+            c._code2idx[i] = self._code2idx[i]
+        c._fused_ready = self._fused_ready
+        c._fc0_attr = self._fc0_attr; c._fc1_attr = self._fc1_attr
+        c._fc0_start = self._fc0_start; c._fc0_end = self._fc0_end; c._fc0_loop = self._fc0_loop
+        c._fc0_rate = self._fc0_rate; c._fc0_frame = self._fc0_frame
+        c._fc1_start = self._fc1_start; c._fc1_end = self._fc1_end; c._fc1_loop = self._fc1_loop
+        c._fc1_rate = self._fc1_rate; c._fc1_frame = self._fc1_frame
+        c._move0 = self._move0; c._move1 = self._move1
+        c._m34C3 = self._m34C3; c._a_ratio = self._a_ratio; c._m3598 = self._m3598
+        c._prev_f312 = self._prev_f312; c._m35B4 = self._m35B4
+        c._started = self._started; c._stopped = self._stopped
+        c._idle_frame = self._idle_frame; c._idle_code = self._idle_code
+        c._single_entered = self._single_entered
+        c._pending_morf = self._pending_morf; c._has_pending = self._has_pending
+        return c
+
     def set_pos(self, px, py, pz, facing):
         """Set Link's world pose for the frame about to be posed: build worldBase + m37B4 into C
         (was fk.world_base + a Python list round-trip per frame). Flat ground: base = transS.ZXYrotM(Y)."""
@@ -1475,8 +1513,9 @@ cdef class LandCore:
         self._cam_pending_posx = 0.0
 
     def clone(self, PoseEngine new_pe):
-        """Clone with a fresh PoseEngine (rebuilt at the rest pose by the caller). Copies all physics
-        + camera state; valid at rest (pre-walk), matching land.LandState.clone's contract."""
+        """Clone over a caller-supplied PoseEngine (a state-copy of the source engine, via
+        PoseEngine.clone_state). Copies all physics + camera state; bit-exact even MID-WALK now that
+        the engine carries its own toe stream. See land.LandState.clone."""
         cdef LandCore c = LandCore.__new__(LandCore)
         cdef int i, j
         c._pe = new_pe

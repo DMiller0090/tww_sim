@@ -60,6 +60,13 @@ class MorfState:
     def __init__(self):
         self.counter = self.f8 = self.rate = self.f10 = self.f14 = 0.0
 
+    def clone(self):
+        """Memberwise copy (mid-walk clone support). See land.LandState.clone."""
+        c = MorfState()
+        c.counter = self.counter; c.f8 = self.f8; c.rate = self.rate
+        c.f10 = self.f10; c.f14 = self.f14
+        return c
+
     def init_morf(self, i_morf):
         # mOldFrameMorfCounter/i_morf are f32 in-game; f64 2.4 rounds the morf rate 1 ULP low ->
         # jnt0.z entry-morf +5 ULP. Quantize to f32. See knowledge/history/resolved-bugs.md.
@@ -123,6 +130,30 @@ class FootFK:
             self._engine = _N.PoseEngine(data)
         self.base = None            # worldBase 3x4 (set each frame by set_pos)
         self.m37b4 = None           # PSMTXInverse(worldBase)
+
+    def clone(self):
+        """State-copy clone (mid-walk-safe): shares the immutable anims/skeleton/chains (+ the shared
+        AnimData inside the engine) and deep-copies the mutable pose state -- the fused C PoseEngine
+        (via clone_state) OR, in the pure-Python fallback, the oldframe-morf + old-pose dicts. The
+        worldBase (base/m37b4) is reset by set_pos before every pose, so its reference is shared, not
+        copied. See land.LandState.clone."""
+        c = FootFK.__new__(FootFK)
+        c.anms = self.anms; c.sk = self.sk
+        c.parent = self.parent; c._chains = self._chains
+        c.world = self.world; c.quatfn = self.quatfn
+        if self._engine is not None:
+            c._engine = self._engine.clone_state()   # shares immutable AnimData, copies mutable state
+            c._anim_idx = self._anim_idx
+        else:
+            c._engine = None
+            c._anim_idx = getattr(self, '_anim_idx', None)
+        c.morf = self.morf.clone()
+        c.old_quat = dict(self.old_quat)             # jnt -> immutable (w,x,y,z): shallow dict copy
+        c.old_trans = dict(self.old_trans)
+        c.old_scale = dict(self.old_scale)
+        c.base = self.base                           # replaced (not mutated) each set_pos -> share ok
+        c.m37b4 = self.m37b4
+        return c
 
     def set_pos(self, px, pz, py=0.0, facing=0):
         """Set Link's world pose for the frame about to be posed. Only X/Z (and facing) affect the

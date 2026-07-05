@@ -98,6 +98,13 @@ class FrameCtrl:
         self.rate = 0.0
         self.frame = 0.0
 
+    def clone(self):
+        """Memberwise copy (mid-walk clone support). See land.LandState.clone."""
+        c = FrameCtrl()
+        c.attribute = self.attribute; c.start = self.start; c.end = self.end
+        c.loop = self.loop; c.rate = self.rate; c.frame = self.frame
+        return c
+
     def set(self, attribute, start, end, rate, frame):
         """daPy_lk_c::setFrameCtrl (12938): loop = start if rate>=0 else end."""
         self.attribute = attribute
@@ -157,6 +164,16 @@ class UnderAnimState:
         self.fc0.frame = float(move0_frame)
         self.fc0.end = float(ANIM_META[move0_anim][0])
         self.fc0.attribute = ANIM_META[move0_anim][1]
+
+    def clone(self):
+        """Memberwise copy incl. the two frame ctrls (mid-walk clone support; pure-Python fallback
+        path -- fused mode carries this in the C PoseEngine). See land.LandState.clone."""
+        c = UnderAnimState.__new__(UnderAnimState)
+        c.fc0 = self.fc0.clone()
+        c.fc1 = self.fc1.clone()
+        c.move0 = self.move0; c.move1 = self.move1
+        c.m34C3 = self.m34C3; c.ratio = self.ratio; c.m3598 = self.m3598
+        return c
 
     def _set_move_anime(self, f27, f28, f25, r27, r28, r29, i_morf):
         """daPy_lk_c::setMoveAnime (12723): r27->MOVE0, r28->MOVE1, ratio f27->MOVE1 (1-f27->MOVE0).

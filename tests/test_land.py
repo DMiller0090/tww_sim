@@ -420,3 +420,44 @@ def test_slip_position_bit_exact():
     assert SLIP in s.visited and MOVE_TURN in s.visited
     assert s.state == MOVE
     assert_pos_bits(s, 'slip')
+
+
+# --- MID-WALK clone: state-copy must continue BIT-EXACTLY from any frame, not just at rest ------
+
+# A representative arc exercising the whole anim hot path (mirrors tests/benchmark/perf_land): walk
+# accel, off-axis curve, cruise, hard reversal (SLIP/MOVE_TURN), forward roll, then release-to-stop.
+_CLONE_ARC = ([(128, 255, 0, 0, 128, 128)] * 40 + [(190, 245, 0, 0, 128, 128)] * 30
+              + [(128, 255, 0, 0, 128, 128)] * 20 + [(128, 1, 0, 0, 128, 128)] * 25
+              + [(128, 255, 0x100, 0, 128, 128)] + [(128, 255, 0, 0, 128, 128)] * 25
+              + [(128, 128, 0, 0, 128, 128)] * 20)
+
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_clone_midwalk_bit_exact():
+    """clone() taken at frame k must continue the SAME inputs byte-for-byte identically to the
+    straight-through run, for EVERY k (not just rest). This is the mid-walk-clone contract that the
+    O(n) planner sweeps + land A* depend on: PoseEngine.clone_state carries the toe stream /
+    oldframe-morf / frame ctrls, so a branch from a walking node is bit-exact. See land.LandState.clone."""
+    fields = ('pos_x', 'pos_z', 'speedF', 'nspeed', 'msd', 'max_nspeed')
+    ints = ('facing', 'travel', 'csangle', 'state', 'direction')
+
+    def snap(s):
+        d = {f: f32_bits(getattr(s, f)) for f in fields}
+        d.update({f: int(getattr(s, f)) for f in ints})
+        return d
+
+    ref = []
+    s = LandState(pos_z=SEED_POS_Z, use_anim=True)
+    for (sx, sy, b, tl, cx, cy) in _CLONE_ARC:
+        s.step(sx, sy, b, tl, cx, cy)
+        ref.append(snap(s))
+
+    n = len(_CLONE_ARC)
+    for k in range(n):                      # clone at every frame, continue, compare the whole tail
+        s = LandState(pos_z=SEED_POS_Z, use_anim=True)
+        for i in range(k):
+            s.step(*_CLONE_ARC[i])
+        c = s.clone()
+        for j in range(k, n):
+            c.step(*_CLONE_ARC[j])
+            assert snap(c) == ref[j], f"clone@k={k} diverged at frame {j}"

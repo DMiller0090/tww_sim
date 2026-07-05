@@ -150,6 +150,29 @@ class FootSpeedF:
             self._core.init_anim(code2idx)
             self._core.w_init(ANIM_CODE[idle_anim], self._idle_frame_py, draw0)
 
+    def clone(self):
+        """State-copy clone (mid-walk-safe). Shares the immutable parsed anim/skeleton; deep-copies
+        the stateful anim engine (the fused C PoseEngine via FootFK.clone, or the Python
+        UnderAnimState) + the delayed toe stream, so a clone taken mid-walk continues bit-exactly
+        (0 divergence at every frame). Replaces the old rebuild-at-rest clone, which reset the toe
+        stream to the idle pose and so was only valid to clone before the first walk step."""
+        c = FootSpeedF.__new__(FootSpeedF)
+        c.anm = self.anm; c.sk = self.sk
+        c.idle_anim = self.idle_anim
+        c.idle_end = self.idle_end
+        c.pos_x = self.pos_x; c.pos_z = self.pos_z; c.facing = self.facing
+        c.started = self.started; c.stopped = self.stopped
+        c._single_entered = self._single_entered
+        c._idle_frame_py = self._idle_frame_py
+        c._pending_py = self._pending_py
+        c.st = self.st.clone()
+        c.ff = self.ff.clone()
+        c._core = c.ff._engine                 # fused engine lives on the cloned FootFK (None in Py mode)
+        c.t1 = self.t1; c.t2 = self.t2         # flat toe tuples (immutable) -> share the reference
+        c.prev_f312 = self.prev_f312
+        c.m35B4 = self.m35B4
+        return c
+
     @property
     def idle_frame(self):
         """The (drifting) standing-idle frame. Fused mode tracks it in C; clone reads it here so a

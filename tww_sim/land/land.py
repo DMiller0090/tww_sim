@@ -237,17 +237,12 @@ class LandState:
         s.__dict__.update(self.__dict__)
         s._inbuf = list(self._inbuf)
         s._cam = self._cam.clone()          # s16-integer camera: clone so A* nodes never alias one
-        # FootSpeedF is stateful; a shallow copy would alias it. Clones share nothing, so clone
-        # cannot preserve mid-walk anim state -- only clone at rest (pre-walk) where seeding matches.
-        if self._foot is not None and (s._foot is None or s._foot is self._foot):
-            from ..core.anim.foot_speedf import FootSpeedF
-            try:
-                s._foot = FootSpeedF(idle_frame=self._foot.idle_frame, pos_x=self.pos_x,
-                                     pos_z=self.pos_z, facing=self.facing)
-            except (FileNotFoundError, OSError, ImportError):
-                s._foot = None
-        # Native core aliases the same PoseEngine as the (now-fresh) clone's _foot; rebuild it over the
-        # clone's fresh engine, copying all physics/camera state (valid at rest, same as _foot above).
+        # State-copy the stateful anim engine so the clone continues BIT-EXACTLY even MID-WALK (the
+        # old path rebuilt fresh at rest, valid only pre-walk). FootSpeedF.clone carries the toe stream.
+        if self._foot is not None:
+            s._foot = self._foot.clone()
+        # The native LandCore aliases the SAME PoseEngine as the clone's _foot; copy its physics +
+        # camera state over that state-copied engine (was rebuilt fresh -> mid-walk anim was lost).
         if self._core is not None and s._foot is not None and getattr(s._foot, "_core", None) is not None:
             s._core = self._core.clone(s._foot._core)
         else:
