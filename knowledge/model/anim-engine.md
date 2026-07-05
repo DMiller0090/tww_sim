@@ -5,7 +5,12 @@ How does Hermite keyframe interpolation work? How is the foot chain posed (euler
 the two-anim blend / `getRatio` / oldframe-morf? Why is the foot FK run in **world space**? What is
 `jointCB1`? How does the foot toe become `speedF`? Where are the live oracles?
 **Status:** validated — leg chain jnt0..jnt33 bit-exact vs live `anmMtx`; straight full-deflection
-walk `pos_z` float-perfect. Residual: planted-foot toe (1–2 ULP) + entry-morf jnt0 (sub-ULP).
+walk `pos_z` float-perfect AND `speedF` bit-exact through the entry transient (live `walk_run`
+bit-exact). The two entry-transient residuals were root-caused + fixed 2026-07-04 (both f64-vs-f32
+constant leaks, NOT the suspected Hermite/foot-IK frontier): the oldframe-morf counter was f64 (→
+jnt0.z entry-morf now bit-exact) and the `f31_2` smoothing used f64 `0.3`/`0.7` (→ speedF frames 5/6
+now bit-exact) — see [history/resolved-bugs](../history/resolved-bugs.md#walk-entry-transient--two-f64-vs-f32-constant-bugs-not-a-hermitefoot-ik-frontier).
+Still open: ATN/turn endpoints (ebs/brake_right/waitturn 1–2 ULP), slip skid (74 ULP), Y171 toe.z.
 **Source:** `tww_sim/core/anim/{j3d_eval,fk,foot_fk,quat,foot_speedf,anim_state}.py`; decomp
 (`J3DAnimation.cpp`, `J3DJoint.cpp`, `m_Do_ext.cpp`, `d_a_player_main`) + live foot-toe oracle.
 This engine is **core** (generic, FP-faithful); only [land](land-sim.md) consumes it today, but it is
@@ -68,7 +73,9 @@ Steady cruise is **pure DASH anim in both slots** (`getRatio(1) = 1.0`) — an e
 WAITS; only the accel/decel transients (≈11 frames) actually blend two changing anims (that's why
 they need the anim state machine — slot management + ratio ramp + frame-ctrl rates — while cruise
 needs none: `speedF = 17` there). A transient walk-start also applies an **oldframe-morf**
-(`mDoExt_MtxCalcOldFrame`, non-fused).
+(`mDoExt_MtxCalcOldFrame`, non-fused). The morf **counter** (`mOldFrameMorfCounter`) and the `i_morf`
+trigger value (2.4) are **f32** — quantize the constant to f32 *before* the `-=1.0`, or the rate
+lands 1 ULP low and the entry-morf jnt0.z is +5 ULP (see [history](../history/resolved-bugs.md#walk-entry-transient--two-f64-vs-f32-constant-bugs-not-a-hermitefoot-ik-frontier)).
 
 ## Foot FK runs in WORLD space
 
@@ -99,7 +106,9 @@ snap on flat ground** (the earlier "ground-snap on the planted foot" guess was w
 ## Toe → `speedF`
 
 The planted foot is the lower-Y of the two; `f31_2 = absXZ(toe_delta_smoothed)` where the smoothing is
-`f·0.3 + 0.7·m359C_prev` (`absXZ` = the faithful `sqrtf(fmadds(...))`, see
+`f·0.3f + 0.7f·m359C_prev` — **non-fused**, and `0.3f`/`0.7f` are **f32 literals** (multiplying by
+Python's f64 `0.3`/`0.7` rounds each product 1 ULP off → speedF −1 ULP through the entry). (`absXZ` =
+the faithful `sqrtf(fmadds(...))`, see
 [fp-faithfulness](fp-faithfulness.md#fma-fusion-vs-non-fusion-the-load-bearing-distinction)). `f31_2`
 is the plant-foot XZ delta and the only anim-derived input to land `speedF`; how it composes into
 `speedF` and position is [land-sim](land-sim.md).

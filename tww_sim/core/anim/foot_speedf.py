@@ -31,6 +31,9 @@ from .. import fp
 from . import fk
 from .anim_state import UnderAnimState, ANIM_META
 
+# f32 literals from the posMoveFromFootPos recursive-smoothing (d_a_player_main.cpp:2400).
+_F0_3 = fp.f32(0.3)
+_F0_7 = fp.f32(0.7)
 IDLE_ANIM = 'freeb'
 # posMoveFromFootPos rest offset used only when oldFrameFlg==false (Link never posed the walk yet).
 # Not reached from a standing anchor (flag already true); kept for provenance.
@@ -251,9 +254,10 @@ class FootSpeedF:
         dz = _f32(self.t1['toe'][plant][2] - self.t2['toe'][plant][2])
         f312 = _absxz(dx, dz)
         m = state['m3598']
-        # recursive smoothing, gated by m3598<1 AND |prev_msd - msd| < 0.2 (stick-mag steady).
+        # recursive smoothing (m3598<1 AND stick-mag steady): (f31_2*0.3f)+0.7f*m359C, NON-fused,
+        # f32 literals (f64 0.3/0.7 round 1 ULP off). See knowledge/history/resolved-bugs.md.
         if m < 1.0 and abs(_f32(self.m35B4 - msd)) < 0.2:
-            f312 = _f32(_f32(f312 * 0.3) + _f32(0.7 * self.prev_f312))
+            f312 = fp.fadds(fp.fmuls(f312, _F0_3), fp.fmuls(_F0_7, self.prev_f312))
         spz = _f32(nspeed * _f32(1.0 - m))
         spz = _f32(spz + _f32(f312 * m)) if nspeed >= 0.0 else _f32(spz - _f32(f312 * m))
         speedF = 0.0 if abs(spz) < 0.05 else spz

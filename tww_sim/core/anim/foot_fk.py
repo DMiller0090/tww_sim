@@ -34,9 +34,12 @@ class MorfState:
         self.counter = self.f8 = self.rate = self.f10 = self.f14 = 0.0
 
     def init_morf(self, i_morf):
+        # mOldFrameMorfCounter/i_morf are f32 in-game; f64 2.4 rounds the morf rate 1 ULP low ->
+        # jnt0.z entry-morf +5 ULP. Quantize to f32. See knowledge/history/resolved-bugs.md.
+        i_morf = fp.f32(i_morf)
         if i_morf > 0.0:
-            self.counter = float(i_morf)
-            self.f8 = fp.fdivs(1.0, float(i_morf))
+            self.counter = i_morf
+            self.f8 = fp.fdivs(1.0, i_morf)
             self.rate = 1.0
             self.f10 = 1.0
             self.f14 = 1.0

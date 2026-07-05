@@ -36,6 +36,41 @@ discipline `ArrowState` already used). Validated bit-exact via clean DTM (110 **
 `run_tests.py bug3 partial hold` is now a baseline. Repro: `harness/dtm/partial_hold_dtm.py`. →
 [model/sim](../model/swim-sim.md#charge-frame-model-four-1-frame-lags), [mechanics/decay-curve](../mechanics/decay-curve.md).
 
+## walk entry-transient — two f64-vs-f32 constant bugs (NOT a Hermite/foot-IK frontier)
+
+The straight-walk `speedF`/`pos_z` was float-perfect at cruise but the **entry transient** stayed
+RED for several sessions: jnt0.z ~5 ULP off at MOVE frame 3, `speedF` −1 ULP at frames 5/6. The
+04x hypothesis was "a `calc_transform`/Hermite sub-ULP in the root jnt0.z track" + "a planted-foot
+jnt34/39 sub-ULP (likely a foot-IK ground snap)." **Both were wrong.** Live decomposition
+(reload-anchor + `advanceseq` prefix-replay, reading `oldTransInfo`/`m359C` via the
+[anim-engine oracles](../model/anim-engine.md#live-oracles-for-re-validation)) proved:
+
+1. **oldframe-morf counter was f64.** At MOVE frame 3 the anim frames are *exactly* 0.0/0.0 and the
+   ratio is bit-exact, so the per-anim jnt0.z and the ratio-blend are trivially exact — the divergence
+   was entirely in the morf blend, and a single-input sweep pinned it to `oldFrameRate` being 1 ULP
+   low. `MorfState.init_morf` stored `self.counter = float(i_morf)` — Python's **f64** `2.4`
+   (=2.39999999…), but `mOldFrameMorfCounter` and the `i_morf` param are **f32** in the game
+   (`m_Do_ext.cpp:1227`), so the constant is `f32(2.4)`=2.40000009… *before* the `-=1.0`. The f64
+   value rounds `counter` (then `f10`, then the rate) 1 ULP low. **Fix:** `i_morf = fp.f32(i_morf)`
+   on entry → jnt0.z entry-morf bit-exact.
+2. **`f31_2` smoothing used f64 `0.3`/`0.7`.** With jnt0.z fixed the toe stream is fully bit-exact
+   (both feet, x+z, aligned by the 1-frame lag `sim toe(N)==live spB0(N+1)`), so the remaining
+   `speedF` −1 ULP at frames 5/6 was pure `posMoveFromFootPos` arithmetic. It traced to the recursive
+   smoothing `f31_2 = f31_2*0.3f + 0.7f*m359C` (`d_a_player_main.cpp:2400`): `0.3f`/`0.7f` are **f32
+   literals**, but the sim multiplied by Python's f64 `0.3`/`0.7` (=0.2999999…/0.6999999…), rounding
+   each product 1 ULP off. The expression is **non-fused** (fused forms miss). **Fix:** f32 constants
+   `_F0_3`/`_F0_7` → `m359C` bit-exact frames 3–7, live `walk_run` bit-exact.
+
+**Lesson:** an entry-transient "sub-ULP FK frontier" was really two garden-variety **f64 constant
+leaks** — a Python literal fed to an `fp` op is f64; the game's constant is whatever its field/param
+type says (usually f32). Quantize constants to f32 at the site that mirrors an f32 store/param.
+`fp.fmuls`/`fadds` do **not** quantize their operands, so the caller must. Also: the raw-`FootSpeedF`
+driver in `test_speedf_matches_live_bit_exact` is a **harness artifact** in the release region
+(frames 33–36 read hundreds of ULP off while LandState is bit-exact) — same class as the Y171 raw
+driver; trust LandState-driven values. Still open after these fixes: ATN/turn endpoints
+(ebs/brake_right/waitturn 1–2 ULP), slip (74 ULP), Y171 toe.z, deep-release frames 37/39 (1 ULP).
+→ [model/anim-engine](../model/anim-engine.md), [model/land-sim](../model/land-sim.md).
+
 ## 554 / "anim drifts ~3 fr by f400" — truncated-seed artifact
 
 A phantom ~3-frame anim drift by f400 was a **truncated cold-start seed** (anim 8.9417 vs true

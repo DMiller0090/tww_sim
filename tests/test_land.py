@@ -127,10 +127,15 @@ def test_end_position_within_tolerance():
 
 @pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
 def test_speedf_matches_live_bit_exact():
-    """The ported foot-FK speedF must reproduce the GAME's live true_speed BYTE-FOR-BYTE. This isolates
-    the anim FK from the nspeed sim. With the world-space FK it is bit-exact for almost every frame; the
-    lone residual (frame 5, 1 ULP in speedF -- absorbed by the pos_z f32 rounding, so the pos_z arc is
-    float-perfect) is the planted-foot jnt34/39 sub-ULP. See knowledge/model/sim.md."""
+    """The ported foot-FK speedF must reproduce the GAME's live true_speed BYTE-FOR-BYTE via the RAW
+    FootSpeedF driver (golden ns/msd fed directly), isolating the anim FK from the nspeed sim. The
+    entry transient (frames 5/6) is now bit-exact after the two 2026-07-04 f64->f32 constant fixes
+    (oldframe-morf counter; f31_2 smoothing 0.3f/0.7f) -- see history/resolved-bugs.md. The test now
+    surfaces a RELEASE-region RAW-DRIVER ARTIFACT (frames 33-36 read tens/hundreds of ULP off because
+    the raw driver's fed msd/ns diverge from LandState's integration; LandState's own speedF is
+    bit-exact there -- same class as the Y171 raw driver), plus a genuine deep-release 1-ULP at frames
+    37/39. RED here documents that frontier; trust the LandState-driven pos_z arc for position.
+    See knowledge/model/anim-engine.md."""
     golden = _load_golden()
     drv = FootSpeedF(idle_frame=70.0)
     for fr, ns, msd, spF_bits, _pz in golden:
