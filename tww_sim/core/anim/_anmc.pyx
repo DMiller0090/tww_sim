@@ -772,3 +772,86 @@ def foot_compose(t1, t2, double nspeed, double msd, double m3598, double prev_f3
     cdef double asp = spz if spz >= 0.0 else -spz
     cdef double speedF = 0.0 if asp < 0.05 else spz
     return (speedF, f312)
+
+
+# ==== LAND manualCamera (cam_bezier) ============================================================
+# Bit-exact port of the per-frame camera math (dCamMath::rationalBezierRatio + the manualCamera
+# azimuth recompute + the substick PADClamp/normalize). Runs every frame; see cam_bezier.py.
+cdef double _STICK_NRM = 0.0, _DEG2S16 = 0.0, _S162DEG = 0.0
+
+def init_cam(stick_nrm, deg2s16, s162deg):
+    """Receive the exact f32/double camera constants from cam_bezier (STICK_NRM is a specific DOL f32)."""
+    global _STICK_NRM, _DEG2S16, _S162DEG
+    _STICK_NRM = stick_nrm; _DEG2S16 = deg2s16; _S162DEG = s162deg
+
+cdef inline long long _s16c(long long x) nogil:
+    x &= 0xFFFF
+    return x - 0x10000 if x >= 0x8000 else x
+
+cdef void _clamp_stick_c(int x, int y, int* ox, int* oy) nogil:
+    """PADClamp ClampStick for the substick (min=15, max=59, xy=31). x,y are s8 (raw byte - 128)."""
+    cdef int sx = 1 if x >= 0 else -1
+    cdef int sy = 1 if y >= 0 else -1
+    if x < 0: x = -x
+    if y < 0: y = -y
+    x = 0 if x <= 15 else x - 15
+    y = 0 if y <= 15 else y - 15
+    if x == 0 and y == 0:
+        ox[0] = 0; oy[0] = 0; return
+    cdef int d
+    if 31 * y <= 31 * x:
+        d = 31 * x + (59 - 31) * y
+    else:
+        d = 31 * y + (59 - 31) * x
+    if 31 * 59 < d:
+        x = (31 * 59 * x) // d
+        y = (31 * 59 * y) // d
+    ox[0] = sx * x; oy[0] = sy * y
+
+def cstick_normalize(csx, csy):
+    """Raw C-stick bytes -> (mStickCPosX, mStickCPosY). Bit-exact port of cam_bezier.cstick_normalize."""
+    cdef int px, py
+    _clamp_stick_c(<int>csx - 128, <int>csy - 128, &px, &py)
+    cdef double posx = f32(px / 42.0)
+    cdef double posy = f32(py / 42.0)
+    cdef double val = f32(_c_sqrt(f32(posx * posx) + f32(posy * posy)))
+    if val > 1.0:
+        posx = f32(posx / val)
+        posy = f32(posy / val)
+    return (posx, posy)
+
+cdef double _rbr_c(double p1, double p2) nogil:
+    """dCamMath::rationalBezierRatio (double math, single-rounded result). Core of rationalBezierRatio."""
+    cdef double sign = 1.0
+    if p1 < 0.0:
+        sign = -1.0; p1 = -p1
+    cdef double dVar4 = (2.0 * p1 * p2 - 2.0 * p1) - 2.0 * p2
+    cdef double dVar3 = -dVar4 - 1.0
+    cdef double dVar5 = dVar4 * dVar4 - 4.0 * dVar3 * p1
+    cdef double sq = _c_sqrt(dVar5) if dVar5 > 0.0 else 0.0
+    cdef double num = -dVar4 - sq
+    cdef double denom0 = 2.0 * dVar3
+    if denom0 <= 1e-7 and denom0 >= -1e-7:
+        return 0.0
+    cdef double t = num / denom0
+    cdef double tt = t * t
+    cdef double om = 1.0 - t
+    cdef double bez_denom = tt + (om * om + p2 * (2.0 * om * t))
+    if bez_denom <= 1.00000001168610e-7:
+        return 0.0
+    return f32(sign * (tt / bez_denom))
+
+def cam_step_target(cam_target_s16, stick_x, scale):
+    """One manualCamera azimuth update -> new cam_target (s16). Bit-exact port of step_cam_target."""
+    cdef double sx = stick_x, sc = scale, ratio
+    if sx >= 0.75:
+        ratio = 1.0
+    elif sx <= -0.75:
+        ratio = -1.0
+    else:
+        ratio = _rbr_c(f32(_STICK_NRM * sx), 2.0)
+    cdef double cur_deg = f32(_S162DEG * <double>_s16c(<long long>cam_target_s16))
+    cdef double inc_deg = f32(ratio * sc)
+    cdef double total = f32(cur_deg + inc_deg)
+    cdef long long new = <long long>(f32(_DEG2S16 * total))       # fctiwz: trunc toward zero
+    return new & 0xFFFF

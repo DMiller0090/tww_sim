@@ -154,3 +154,14 @@ def _s16(x: int) -> int:
 
 def _trunc_toward_zero(x: float) -> int:
     return int(x)   # Python int() truncates toward zero == PPC fctiwz
+
+
+# Optional native (bit-exact) camera math (anim/_anmc.pyx). cstick_normalize + step_cam_target run
+# every land frame; the native ports inline the bezier / clamp / s16 recompute. See fp-faithfulness.md.
+try:
+    from ..anim import _anmc as _N
+    _N.init_cam(STICK_NRM, DEG2S16, S162DEG)
+    cstick_normalize = _N.cstick_normalize      # noqa: F811
+    step_cam_target = _N.cam_step_target         # noqa: F811
+except ImportError:
+    pass
