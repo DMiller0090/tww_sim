@@ -16,6 +16,9 @@ Build: _build_native.py (cythonize --inplace). When the .pyd is absent the Pytho
 their own pure implementations (same result), so this is an optional accelerator, never a dependency.
 """
 
+from libc.stdlib cimport malloc, free
+from libc.string cimport memcpy
+
 # ---- single-precision primitives (identical to _fpc.pyx) -------------------------------------
 cdef inline double f32(double x) nogil: return <double><float>x
 cdef inline double fmuls(double a, double b) nogil: return <double><float>(a * b)
@@ -340,15 +343,15 @@ def mtx_mult_vec(m, v):
 
 
 # ---- Hermite interpolation (s16 asm path + f32 path) ------------------------------------------
-def hermite_s16(t, time0, value0, tan0, time1, value1, tan1):
-    """s16 rotation Hermite (J3DAnimation.cpp:342-363 asm). Bit-exact port of j3d_eval.hermite_s16."""
-    cdef double dt = t
+cdef double _hermite_s16_c(double t, double time0, double value0, double tan0,
+                           double time1, double value1, double tan1) nogil:
+    """s16 rotation Hermite (J3DAnimation.cpp:342-363 asm). Bit-exact core of j3d_eval.hermite_s16."""
     cdef double f0 = time0
     cdef double f3 = time1
     cdef double f2 = value0
     cdef double f4 = fsubs(f3, f0)
     f3 = value1
-    cdef double f6 = fsubs(dt, f0)
+    cdef double f6 = fsubs(t, f0)
     cdef double fout = tan1
     cdef double f5 = fsubs(f3, f2)
     f6 = fdivs(f6, f4)
@@ -365,9 +368,9 @@ def hermite_s16(t, time0, value0, tan0, time1, value1, tan1):
     fout = fsubs(fout, f3)
     return fout
 
-
-def hermite_f32(frame, time0, value0, tan0, time1, value1, tan1):
-    """f32 scale/translate Hermite (JMAHermiteInterpolation). Bit-exact port of j3d_eval.hermite_f32."""
+cdef double _hermite_f32_c(double frame, double time0, double value0, double tan0,
+                           double time1, double value1, double tan1) nogil:
+    """f32 scale/translate Hermite (JMAHermiteInterpolation). Bit-exact core of j3d_eval.hermite_f32."""
     cdef double length = fsubs(time1, time0)
     cdef double f9 = fsubs(frame, time0)
     cdef double f1 = fdivs(1.0, length)
@@ -380,3 +383,302 @@ def hermite_f32(frame, time0, value0, tan0, time1, value1, tan1):
     cdef double c = fmuls(tan0, fadds(f9, fnmsubs(2.0, f2, f11)))
     cdef double d = fmuls(tan1, fsubs(f11, f2))
     return fadds(fadds(fadds(a, b), c), d)
+
+def hermite_s16(t, time0, value0, tan0, time1, value1, tan1):
+    return _hermite_s16_c(t, time0, value0, tan0, time1, value1, tan1)
+
+def hermite_f32(frame, time0, value0, tan0, time1, value1, tan1):
+    return _hermite_f32_c(frame, time0, value0, tan0, time1, value1, tan1)
+
+
+# ==== full C-resident pose engine ==============================================================
+# One call per frame does calc_transform + the 12-joint blend/morf/PSMTXQuat pose + both foot chain
+# FKs + the toe/heel PSMTXMultVec, with ALL state (keyframe data, skeleton chains, old pose, morf
+# counter) resident in C -- no per-frame Python object churn. Replaces foot_fk._pose_frame/_chain_mtx/
+# _toe/_blend_joint + the MorfState on the world-space FK path. Bit-exact port; see fp-faithfulness.md.
+
+# CHAIN_JOINTS (foot_fk): union of both foot chains in calc order; slot s poses joint _CJ[s].
+cdef int _CJ[12]
+_CJ[0]=0; _CJ[1]=1; _CJ[2]=29; _CJ[3]=30; _CJ[4]=31; _CJ[5]=32
+_CJ[6]=33; _CJ[7]=34; _CJ[8]=36; _CJ[9]=37; _CJ[10]=38; _CJ[11]=39
+
+# l_toe / l_heel in Lfoot-joint local space (fk.L_TOE / L_HEEL, d_a_player_main_data.inc:18-19).
+cdef double _TOE_X = 6.0, _TOE_Y = 3.25, _HEEL_X = -6.0, _HEEL_Y = 3.25
+
+cdef inline long long _as_s32c(long long x) nogil:
+    # (s32) cast: reinterpret the low 32 bits as signed (two's complement), then widen.
+    cdef unsigned int u = <unsigned int>x
+    return <long long><int>u
+
+cdef double _keyframe_interp_c(double frame, int cnt, int tt, double* data, int base, int is_s16) nogil:
+    """Endpoint clamp + bisect + Hermite (J3DGetKeyFrameInterpolation[S]). Bit-exact core of
+    j3d_eval._keyframe_interp; `data` holds the flat track (rot values are stored as exact doubles)."""
+    cdef int stride = 3 if tt == 0 else 4
+    cdef double d0 = data[base]
+    if frame < d0:
+        return data[base + 1]
+    cdef int last = base + stride * (cnt - 1)
+    if data[last] <= frame:
+        return data[last + 1]
+    cdef int p = base, num = cnt, mid
+    while num > 1:
+        mid = num // 2
+        if frame >= data[p + stride * mid]:
+            p += stride * mid
+            num -= mid
+        else:
+            num = mid
+    if stride == 3:
+        if is_s16:
+            return _hermite_s16_c(frame, data[p], data[p+1], data[p+2], data[p+3], data[p+4], data[p+5])
+        return _hermite_f32_c(frame, data[p], data[p+1], data[p+2], data[p+3], data[p+4], data[p+5])
+    if is_s16:
+        return _hermite_s16_c(frame, data[p], data[p+1], data[p+3], data[p+4], data[p+5], data[p+6])
+    return _hermite_f32_c(frame, data[p], data[p+1], data[p+3], data[p+4], data[p+5], data[p+6])
+
+cdef inline void _mv_c(double* m, double vx, double vy, double vz, double* out) nogil:
+    """PSMTXMultVec: out[0..2] = m * (vx,vy,vz) with the ps_sum0 grouping."""
+    cdef int i, r
+    cdef double pa, pb
+    for i in range(3):
+        r = i * 4
+        pa = fmadds(m[r + 2], vz, fmuls(m[r + 0], vx))
+        pb = fadds(fmuls(m[r + 1], vy), m[r + 3])
+        out[i] = fadds(pa, pb)
+
+
+cdef class PoseEngine:
+    """C-resident foot-FK pose + toe engine (world-space path). Register the anims once, set the
+    two foot chains, then call pose_toe() per frame. Owns the old-pose + morf state internally."""
+    cdef int _meta[16][12][3][3][3]     # [anim][slot][track s0/r1/t2][axis][cnt, off, ttype]
+    cdef double* _sdata[16]
+    cdef double* _rdata[16]
+    cdef double* _tdata[16]
+    cdef int _dec[16]
+    cdef int _chain34[12]
+    cdef int _n34
+    cdef int _chain39[12]
+    cdef int _n39
+    cdef double _oldq[12][4]
+    cdef double _oldt[12][3]
+    cdef double _olds[12][3]
+    cdef bint _has_old[12]
+    cdef double _m_counter, _m_f8, _m_rate, _m_f10, _m_f14
+
+    def __cinit__(self):
+        cdef int i
+        for i in range(16):
+            self._sdata[i] = NULL; self._rdata[i] = NULL; self._tdata[i] = NULL
+        for i in range(12):
+            self._has_old[i] = False
+        self._m_counter = self._m_f8 = self._m_rate = self._m_f10 = self._m_f14 = 0.0
+
+    def __dealloc__(self):
+        cdef int i
+        for i in range(16):
+            if self._sdata[i] != NULL: free(self._sdata[i])
+            if self._rdata[i] != NULL: free(self._rdata[i])
+            if self._tdata[i] != NULL: free(self._tdata[i])
+
+    def add_anim(self, int idx, anm):
+        """Register a parsed BCK (j3d_eval anm dict) at index `idx`. Copies the keyframe data into C
+        arrays (rotation ints stored as exact doubles) + the per-chain-joint track metadata."""
+        cdef list sd = anm['scale_data'], rd = anm['rot_data'], td = anm['trans_data']
+        cdef int ns = len(sd), nr = len(rd), nt = len(td), i, slot, track, axis, jnt
+        self._sdata[idx] = <double*>malloc(ns * sizeof(double))
+        self._rdata[idx] = <double*>malloc(nr * sizeof(double))
+        self._tdata[idx] = <double*>malloc(nt * sizeof(double))
+        for i in range(ns): self._sdata[idx][i] = sd[i]
+        for i in range(nr): self._rdata[idx][i] = <double>(<long long>rd[i])
+        for i in range(nt): self._tdata[idx][i] = td[i]
+        self._dec[idx] = anm['dec_shift']
+        cdef list joints = anm['joints']
+        cdef list keys = ['s', 'r', 't']
+        for slot in range(12):
+            jnt = _CJ[slot]
+            j = joints[jnt]
+            for track in range(3):
+                trk = j[keys[track]]
+                for axis in range(3):
+                    m = trk[axis]
+                    self._meta[idx][slot][track][axis][0] = m[0]
+                    self._meta[idx][slot][track][axis][1] = m[1]
+                    self._meta[idx][slot][track][axis][2] = m[2]
+
+    def set_chains(self, chain34, chain39):
+        """The two foot FK chains as JOINT indices (root->foot); stored internally as slot indices."""
+        cdef int k, s
+        self._n34 = len(chain34)
+        self._n39 = len(chain39)
+        for k in range(self._n34):
+            for s in range(12):
+                if _CJ[s] == chain34[k]:
+                    self._chain34[k] = s; break
+        for k in range(self._n39):
+            for s in range(12):
+                if _CJ[s] == chain39[k]:
+                    self._chain39[k] = s; break
+
+    def reset_old(self):
+        cdef int i
+        for i in range(12):
+            self._has_old[i] = False
+
+    cdef void _init_morf(self, double i_morf) nogil:
+        i_morf = f32(i_morf)
+        if i_morf > 0.0:
+            self._m_counter = i_morf
+            self._m_f8 = fdivs(1.0, i_morf)
+            self._m_rate = 1.0
+            self._m_f10 = 1.0
+            self._m_f14 = 1.0
+            self._morf_dec()
+        else:
+            self._m_counter = self._m_f8 = self._m_rate = self._m_f10 = self._m_f14 = 0.0
+
+    cdef void _morf_dec(self) nogil:
+        if not (self._m_counter > 0.0):
+            return
+        self._m_counter = fsubs(self._m_counter, 1.0)
+        if self._m_counter <= 0.0:
+            self._m_counter = 0.0; self._m_f8 = 0.0; self._m_rate = 0.0
+        self._m_f14 = self._m_f10
+        self._m_f10 = fmuls(self._m_counter, self._m_f8)
+        if self._m_f14 > 0.0:
+            self._m_rate = fsubs(1.0, fdivs(fsubs(self._m_f14, self._m_f10), self._m_f14))
+        else:
+            self._m_rate = 0.0
+
+    cdef void _calc_transform_c(self, int anim, int slot, double frame,
+                                double* scale, long long* rot, double* trans) nogil:
+        cdef int axis, cnt, off, tt, dec = self._dec[anim]
+        cdef double v
+        cdef double* sd = self._sdata[anim]
+        cdef double* rd = self._rdata[anim]
+        cdef double* td = self._tdata[anim]
+        for axis in range(3):
+            cnt = self._meta[anim][slot][0][axis][0]
+            off = self._meta[anim][slot][0][axis][1]
+            tt = self._meta[anim][slot][0][axis][2]
+            if cnt == 0:
+                scale[axis] = 1.0
+            elif cnt == 1:
+                scale[axis] = f32(sd[off])
+            else:
+                scale[axis] = _keyframe_interp_c(frame, cnt, tt, sd, off, 0)
+            cnt = self._meta[anim][slot][1][axis][0]
+            off = self._meta[anim][slot][1][axis][1]
+            tt = self._meta[anim][slot][1][axis][2]
+            if cnt == 0:
+                rot[axis] = 0
+            elif cnt == 1:
+                rot[axis] = _as_s32c((<long long>rd[off]) << dec)
+            else:
+                v = _keyframe_interp_c(frame, cnt, tt, rd, off, 1)
+                rot[axis] = _as_s32c((<long long>v) << dec)
+            cnt = self._meta[anim][slot][2][axis][0]
+            off = self._meta[anim][slot][2][axis][1]
+            tt = self._meta[anim][slot][2][axis][2]
+            if cnt == 0:
+                trans[axis] = 0.0
+            elif cnt == 1:
+                trans[axis] = f32(td[off])
+            else:
+                trans[axis] = _keyframe_interp_c(frame, cnt, tt, td, off, 0)
+
+    cdef void _chain_fk(self, double* base, double* inv, int* chain, int n,
+                        double* local, double* out) nogil:
+        """out = inv * (base * local[chain[0]] * ... * local[chain[n-1]]). `local` is 12 slots x 12."""
+        cdef double bufA[12]
+        cdef double bufB[12]
+        cdef double* cur = bufA
+        cdef double* nxt = bufB
+        cdef double* swp
+        cdef int k
+        memcpy(cur, base, 12 * sizeof(double))
+        for k in range(n):
+            _concat_c(cur, local + chain[k] * 12, nxt)
+            swp = cur; cur = nxt; nxt = swp
+        _concat_c(inv, cur, out)
+
+    def pose_toe(self, int m0, int m1, double f0, double f1, double ratio, double i_morf,
+                 base, m37b4):
+        """Pose all 12 chain joints (blend m0@f0 with m1@f1, oldframe-morf, PSMTXQuat, scale/trans),
+        FK both feet from worldBase, remove the base with m37b4, and return the toe+heel dict exactly
+        like foot_fk.step_feet: {'toe':[R,L],'heel':[R,L]} (index 0 = right jnt39, 1 = left jnt34)."""
+        cdef double rate
+        if i_morf >= 0.0:
+            self._init_morf(i_morf)
+        rate = self._m_rate
+
+        cdef double local[144]                     # 12 slots x 12 doubles
+        cdef double q0[4]
+        cdef double q1[4]
+        cdef double q3[4]
+        cdef double mtx[12]
+        cdef double s0[3]
+        cdef double t0[3]
+        cdef double s1[3]
+        cdef double t1[3]
+        cdef long long r0[3]
+        cdef long long r1[3]
+        cdef double tr[3]
+        cdef double scl[3]
+        cdef int slot, k, base_off
+        cdef bint apply_morf
+        cdef double r30, f31
+        cdef bint morf_on = rate > 0.0
+
+        for slot in range(12):
+            self._calc_transform_c(m0, slot, f0, s0, r0, t0)
+            self._calc_transform_c(m1, slot, f1, s1, r1, t1)
+            _euler_to_quat_c(r0[0], r0[1], r0[2], q0)
+            _euler_to_quat_c(r1[0], r1[1], r1[2], q1)
+            _quat_lerp_c(q0, q1, ratio, q3)
+            r30 = fsubs(1.0, ratio)
+            for k in range(3):
+                tr[k] = fadds(fmuls(t0[k], r30), fmuls(t1[k], ratio))
+                scl[k] = fadds(fmuls(s0[k], r30), fmuls(s1[k], ratio))
+            apply_morf = morf_on and self._has_old[slot]   # all chain joints are < MORF_END (0x2A)
+            if apply_morf:
+                f31 = fsubs(1.0, rate)
+                _quat_lerp_c(self._oldq[slot], q3, f31, q3)
+                for k in range(3):
+                    tr[k] = fadds(fmuls(tr[k], f31), fmuls(self._oldt[slot][k], rate))
+                    scl[k] = fadds(fmuls(scl[k], f31), fmuls(self._olds[slot][k], rate))
+            _psmtx_quat_c(q3, mtx)
+            base_off = slot * 12
+            local[base_off + 0] = fmuls(mtx[0], scl[0]); local[base_off + 1] = fmuls(mtx[1], scl[1])
+            local[base_off + 2] = fmuls(mtx[2], scl[2]); local[base_off + 3] = f32(tr[0])
+            local[base_off + 4] = fmuls(mtx[4], scl[0]); local[base_off + 5] = fmuls(mtx[5], scl[1])
+            local[base_off + 6] = fmuls(mtx[6], scl[2]); local[base_off + 7] = f32(tr[1])
+            local[base_off + 8] = fmuls(mtx[8], scl[0]); local[base_off + 9] = fmuls(mtx[9], scl[1])
+            local[base_off + 10] = fmuls(mtx[10], scl[2]); local[base_off + 11] = f32(tr[2])
+            for k in range(4):
+                self._oldq[slot][k] = q3[k]
+            for k in range(3):
+                self._oldt[slot][k] = tr[k]
+                self._olds[slot][k] = scl[k]
+            self._has_old[slot] = True
+
+        self._morf_dec()
+
+        cdef double base12[12]
+        cdef double inv12[12]
+        _read_mtx(base, base12)
+        _read_mtx(m37b4, inv12)
+        cdef double cur39[12]
+        cdef double cur34[12]
+        self._chain_fk(base12, inv12, self._chain39, self._n39, local, cur39)
+        self._chain_fk(base12, inv12, self._chain34, self._n34, local, cur34)
+
+        cdef double rt[3]
+        cdef double lt[3]
+        cdef double rh[3]
+        cdef double lh[3]
+        _mv_c(cur39, _TOE_X, _TOE_Y, 0.0, rt)
+        _mv_c(cur34, _TOE_X, _TOE_Y, 0.0, lt)
+        _mv_c(cur39, _HEEL_X, _HEEL_Y, 0.0, rh)
+        _mv_c(cur34, _HEEL_X, _HEEL_Y, 0.0, lh)
+        return {'toe': [(rt[0], rt[1], rt[2]), (lt[0], lt[1], lt[2])],
+                'heel': [(rh[0], rh[1], rh[2]), (lh[0], lh[1], lh[2])]}

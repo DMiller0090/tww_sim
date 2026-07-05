@@ -17,14 +17,16 @@ the game (which stores old every frame, standing included).
 Reads gitignored _generated anim/skeleton data (dev-supplied).
 """
 from .. import fp
+from .. import mathlib as S
 from . import j3d_eval
 from . import quat as Q
 from . import fk
 
-# Optional native fused per-joint blend (anim/_anmc.pyx); used only on the world-space FK path (its
-# quatfn is PSMTXQuat, which the native blend hardcodes). Absent -> Python path. See fp-faithfulness.md.
+# Optional native anim accelerator (anim/_anmc.pyx): a C-resident PoseEngine does the whole per-frame
+# pose+chain+toe in one call on the world-space FK path; else pure-Python. See fp-faithfulness.md.
 try:
     from . import _anmc as _N
+    _N.init_tables(S._COS_TABLE, S._SIN_TABLE)
 except ImportError:
     _N = None
 
@@ -93,6 +95,16 @@ class FootFK:
         # remove the base with m37B4. world=False = legacy identity FK. See knowledge/model/sim.md.
         self.world = world
         self.quatfn = Q.psmtx_quat if world else Q.mtx_quat   # foot chain uses PSMTXQuat (=mDoMtx_quat)
+        # C-resident pose engine (world path only): registers the anims + chains once; owns old-pose +
+        # morf state internally, so seed()/step_feet() become a single native call. Bit-exact fallback.
+        self._engine = None
+        if _N is not None and world and len(anms) <= 16:
+            eng = _N.PoseEngine()
+            self._anim_idx = {}
+            for i, (name, a) in enumerate(anms.items()):
+                eng.add_anim(i, a); self._anim_idx[name] = i
+            eng.set_chains(self._chains[34], self._chains[39])
+            self._engine = eng
         self.base = None            # worldBase 3x4 (set each frame by set_pos)
         self.m37b4 = None           # PSMTXInverse(worldBase)
 
@@ -185,6 +197,10 @@ class FootFK:
 
     def seed(self, move0, f0):
         """Populate old pose from a single anim (e.g. FREEB rest) before the first walk step."""
+        if self._engine is not None:
+            i = self._anim_idx[move0]
+            self._engine.pose_toe(i, i, f0, f0, 0.0, -1.0, self.base, self.m37b4)
+            return
         self._pose_frame(move0, move0, f0, f0, 0.0, 0.0)
 
     def step(self, move0, move1, f0, f1, ratio, i_morf=-1.0, toe=fk.L_TOE):
@@ -202,6 +218,10 @@ class FootFK:
         """Advance one frame; return dict with model-local toe+heel (x,y,z) for both feet, keyed as
         spB0/sp98 in posMoveFromFootPos: index 0 = RIGHT foot (jnt 39), index 1 = LEFT foot (jnt 34).
         posMoveFromFootPos uses the SAME l_toe_pos/l_heel_pos for both feet (the joint mtx mirrors)."""
+        if self._engine is not None:
+            m1 = move1 if move1 is not None else move0
+            return self._engine.pose_toe(self._anim_idx[move0], self._anim_idx[m1],
+                                         f0, f1, ratio, i_morf, self.base, self.m37b4)
         if i_morf >= 0.0:
             self.morf.init_morf(i_morf)
         rate = self.morf.rate
