@@ -2,4 +2,11 @@
 # Tracked pre-commit hook. Enable once per clone with:
 #   git config core.hooksPath .githooks
 # Bypass a genuine exception with: git commit --no-verify
-exec bash "$(git rev-parse --show-toplevel)/.githooks/check-comment-length.sh"
+set -uo pipefail
+root="$(git rev-parse --show-toplevel)"
+
+# 1. Comment-length style gate (see .githooks/check-comment-length.sh).
+bash "$root/.githooks/check-comment-length.sh" || exit 1
+
+# 2. Knowledge-base doc gate: structure/link hygiene + stale-Source detection.
+bash "$root/.githooks/kb-doc-gate.sh" || exit 1

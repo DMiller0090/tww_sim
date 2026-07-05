@@ -32,6 +32,9 @@ fixtures/savestate/
 # Session handoffs are local working notes, never tracked (see _notes/)
 /HANDOFF.md
 
+# Per-clone doc-eval marker (which commit the change-scoped eval last ran at) — local state
+knowledge/_eval/.last_eval_commit
+
 # Machine-specific Dolphin/ISO paths — never tracked. Copy dolphin.local.example.json
 # to dolphin.local.json and edit for your machine (see harness/dolphin_env.py).
 /dolphin.local.json
