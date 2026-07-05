@@ -23,16 +23,14 @@ comes from the roll's getFrame()>17 checkNextMode(1) exit straight to ATN then t
 
 POSITION (pos_z) IS GATED FLOAT-PERFECT -- 0 ULP vs live is the pass condition (LIVE IS THE SOURCE OF
 TRUTH; the sim must reproduce the game's pos_z byte for byte). posz_status() enforces this with NO
-tolerance and NO xfail: a tech that is not bit-exact shows RED. Today walk_run/walk_y171/brakeslide/
-face_left/roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip/brake_right pass (0 ULP; slip went
-bit-perfect with the posMoveFromFootPos |speedF| < 0.05 -> 0 skid snap, d_a_player_main.cpp:2418;
-brake_right + the deep-release walk speedF with the pos_x sine-leak fix -- cM_ssin must use JMASSin,
-not a cos-table offset; walk_y171 with the daPy_HIO_move_c0 f64->f32 frame-rate constant fix; see
-knowledge/history/resolved-bugs.md). ebs/waitturn FAIL on the open genuine toe-FK/blend frontier
-(ebs = backward-walk speedF 1-3 ULP, travel exact; waitturn = walk-reentry speedF -192 ULP at the
-first post-pivot MOVE frame, all <=1 ULP pos_z, none reaching gameplay-relevant position). Each case
-also layers its tech assertions. (Runs with no anim keyframe data fall back to the calibrated
-stand-in and pos_z is not asserted.)
+tolerance and NO xfail: a tech that is not bit-exact shows RED. Today ALL 14 land cases pass at 0 ULP
+(slip went bit-perfect with the posMoveFromFootPos |speedF| < 0.05 -> 0 skid snap,
+d_a_player_main.cpp:2418; brake_right + the deep-release walk speedF with the pos_x sine-leak fix --
+cM_ssin must use JMASSin, not a cos-table offset; walk_y171 with the daPy_HIO_move_c0 f64->f32 frame-rate
+constant fix; ebs + waitturn with the worldBase inverse = retail PSMTXInverse (cofactor + fres), not R^T,
+which the not-exactly-orthonormal sin/cos rotation makes differ at non-axis facings; see
+knowledge/history/resolved-bugs.md). Each case also layers its tech assertions. (Runs with no anim
+keyframe data fall back to the calibrated stand-in and pos_z is not asserted.)
 
 DTM-PLAYBACK (wiggle_ebs_roll): the wiggle-EBS-into-roll chain is DENSE frame-perfect input, where
 the advanceseq pipe could jitter (bug#2). It is locked by loading a movie-active savestate fixture

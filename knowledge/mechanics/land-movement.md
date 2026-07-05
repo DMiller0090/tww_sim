@@ -359,10 +359,10 @@ Getting the *exact* float is limited by the sim's ~1-ULP land-position residual 
   `procWaitTurn`/`procMoveTurn`/`procSlip`; `step(sx, sy, buttons, triggerL)`);
   `tww_sim.core.anim` (`foot_speedf.FootSpeedF` + the J3D engine) — the bit-exact walk `speedF`;
   `tests/test_land.py` (offline golden walk arc + the ATN + roll + turn end-state cases) +
-  `tests/dolphin/run_land_tests.py`: **12 sim-vs-live** cases (walk + 4 ATN + 4 roll + waitturn/moveturn/slip:
-  nspeed/facing/travel bit-exact; pos_z bit-exact for **every** case — walk, roll, MOVE_TURN, WAIT_TURN,
+  `tests/dolphin/run_land_tests.py`: **13 sim-vs-live** cases (2 walk + 4 ATN + 4 roll + waitturn/moveturn/slip:
+  nspeed/facing/travel bit-exact; pos_z bit-exact (0 ULP) for **every** case — walk, roll, MOVE_TURN, WAIT_TURN,
   the 4 ATN techs, and the SLIP skid→turn — the calibrated fallback is used only with no anim data) **plus**
-  the `wiggle_ebs_roll` DTM-playback lock.
+  the `wiggle_ebs_roll` DTM-playback lock (14 total).
 - [model/land-sim](../model/land-sim.md) (position precision + the 7 ULP tests) ·
   [model/land-planner](../model/land-planner.md) (target→inputs) ·
   [model/anim-engine](../model/anim-engine.md) (foot FK → `speedF`) ·

@@ -100,6 +100,12 @@ correctly-rounded single FMA (2·24+2 = 50 ≤ 53 mantissa bits).
   on the translate column via `fmadds(1, a_i3, accum) == fadds`.
 - **`PSMTXMultVec`** — `dst = (m0·sx + m2·sz) + (m1·sy + m3)`, two `fmadds` partials joined by
   `ps_sum0`/`fadds`.
+- **`PSMTXInverse`** (`fk.psmtx_inverse`) — a general **cofactor/determinant** inverse (each cofactor
+  `fmsubs(a, b, fmuls(c, d))`; det = first-column cofactor expansion), with the reciprocal computed via
+  **`fres` estimate + one Newton refine** (`recip = 2·est − det·est²`), **not** an `fdivs`. This is NOT a
+  transpose: for a rotation built from the sin/cos tables `R` is not exactly orthonormal
+  (`c²+s² ≠ 1.0` in f32 at a non-axis BAM), so `PSMTXInverse ≠ Rᵀ` off the axes — the fix that made the
+  `waitturn` pivot and `ebs` foot toe bit-exact (see [history/resolved-bugs](../history/resolved-bugs.md#ebs--waitturn--worldbase-inverse-was-rt-not-psmtxinverse-foot-toe-at-non-axis-facings)).
 - **`cXyz::absXZ`** — `f31_2 = sqrtf(abs2XZ)` with `abs2XZ = fmadds(dz, dz, fmuls(dx, dx))` (one
   fused round), and `sqrtf` = `frsqrte` seed + 3 Newton refines in double then `f32(x·guess)`.
   Ported as `foot_speedf._absxz` — use this, **not** `math.hypot`.

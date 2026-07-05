@@ -203,8 +203,10 @@ class UnderAnimState:
         (= clamp(0.5 + 0.001*|shape_angle.y - m34DE|, 0, 1)), r29 = 2, m3598 = 0. The frame-ctrl
         arguments are in_f27 = mMove.field_0x38 (1.1), f29 = mAtnMove.field_0x28 (1.0). Called with
         m34C3 == 0 (single-anim ROT preceded it), so the phase resets to frame 0. Returns whether
-        the oldframe-morf triggered."""
-        morf = self._set_move_anime(ratio, 1.1, 1.0, 'waits', r27_anim, 2, i_morf)
+        the oldframe-morf triggered. Both frame-ctrl args are game f32 fields -> keep them f32
+        (H_38/ATN_28): fp.fadds/fmuls don't quantize operands, so an f64 1.1 leaks 1 ULP into f27r,
+        which becomes the next walk frame's phase f31 -> toe -> speedF (the waitturn f9 spike)."""
+        morf = self._set_move_anime(ratio, H_38, ATN_28, 'waits', r27_anim, 2, i_morf)
         self.m3598 = 0.0
         return morf
 

@@ -7,9 +7,10 @@ localizes the divergence to a frame + a quantity (is `travel` off? `speedF`? jus
 with ZERO Dolphin time -- the CSV already holds the live per-frame truth.
 
 Proven this way (2026-07-05): `walk_y171` = an f64 HIO frame-rate constant (speedF), NOT a jnt0 Hermite;
-`ebs` = a backward-walk speedF residual (travel bit-exact, speedF 1-3 ULP); `waitturn` = a walk-reentry
-speedF -192 ULP spike at the first post-pivot MOVE frame. See knowledge/history/resolved-bugs.md and the
-`land-bitperfect-frontier` Claude memory.
+`ebs`/`waitturn` = the worldBase inverse was `R^T` instead of the retail PSMTXInverse (cofactor + `fres`),
+so the foot toe drifted <=127 ULP at non-axis facings (bit-exact at axis facings only). All land techs
+are now 0 ULP; this tool is the fast first move if a NEW case goes RED. See
+knowledge/history/resolved-bugs.md and the `land-bitperfect-frontier` Claude memory.
 
 Usage:  python harness/anim/perframe_compare.py <case>
         cases: ebs | waitturn   (add more by extending CASES below)

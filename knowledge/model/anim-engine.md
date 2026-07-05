@@ -20,9 +20,11 @@ foot FK quantizes at world magnitude so that tiny px flipped the plant-toe X 1 U
 The **partial-magnitude (`Y171`)** walk is now bit-exact too — a THIRD "sub-ULP Hermite frontier" that
 was really an f64-constant leak: the `daPy_HIO_move_c0` frame-rate fields (1.1/0.8/…) were f64 literals
 fed to `fp.fmuls` (see [history/resolved-bugs](../history/resolved-bugs.md#y171-partial-magnitude-speedf--f64-hio-frame-rate-constants-not-a-jnt0-hermite-frontier)).
-Still open (genuine world-magnitude frontier, none reaching gameplay-relevant position): the `ebs`
-backward-walk `speedF` (1–3 ULP, ATNWB↔ATNDB toe/`m3598` blend) and `waitturn` (walk-reentry `speedF`
--192 ULP at the first post-pivot MOVE frame; toe stream off the WAIT-idle turn-step pose).
+`ebs` and `waitturn` are now bit-exact too — a FIFTH "sub-ULP toe frontier" that was really a matrix-op
+gap: `m37B4` (the worldBase inverse) must be the retail **PSMTXInverse** (cofactor + `fres` reciprocal),
+not a transpose, or the foot toe drifts ≤127 ULP at non-axis facings (see
+[history/resolved-bugs](../history/resolved-bugs.md#ebs--waitturn--worldbase-inverse-was-rt-not-psmtxinverse-foot-toe-at-non-axis-facings)).
+Every land tech is now 0 ULP vs live.
 **Source:** `tww_sim/core/anim/{j3d_eval,fk,foot_fk,quat,foot_speedf,anim_state}.py`; decomp
 (`J3DAnimation.cpp`, `J3DJoint.cpp`, `m_Do_ext.cpp`, `d_a_player_main`) + live foot-toe oracle.
 This engine is **core** (generic, FP-faithful); only [land](land-sim.md) consumes it today, but it is
@@ -99,8 +101,11 @@ spacing at 763); `m37B4` removes the base afterward but the rounding is already 
 identity (local scale ≈ tens → ≈1e-6 quantization) misses this — the source of the old 1–2 ULP.
 
 **Fix (shipped):** build `worldBase` offline — `fk.world_base = transS(pos.x, 0, pos.z) · Yrot(shape_angle.y)`
-(base.y is 0 live; only the Y column, irrelevant to the XZ that `f31_2` uses) — and its rigid inverse
-`m37B4`; run the chain from `cur = worldBase`, then apply `m37B4` (`FootFK` world mode).
+(base.y is 0 live; only the Y column, irrelevant to the XZ that `f31_2` uses) — and its inverse `m37B4`
+via `fk.psmtx_inverse` (the retail **PSMTXInverse**: cofactor/determinant with an `fres`+1-Newton
+reciprocal, **not** a transpose — they diverge at non-axis facings because `worldBase`'s `R` from the
+sin/cos tables isn't exactly orthonormal; this is what made `waitturn`/`ebs` bit-exact). Run the chain
+from `cur = worldBase`, then apply `m37B4` (`FootFK` world mode).
 `LandState.step` feeds the current pre-integration `pos.x/pos.z/facing` each frame via
 `FootSpeedF.set_pos` — the FK quantizes the toe at world magnitude, so the driver **must** get the
 live position each frame.

@@ -135,6 +135,41 @@ bit-exact neighbouring regime never triggers points at a **constant only that re
 shared FK. → [model/land-sim](../model/land-sim.md), [model/anim-engine](../model/anim-engine.md),
 [model/fp-faithfulness](../model/fp-faithfulness.md).
 
+## `ebs` + `waitturn` — worldBase inverse was R^T, not PSMTXInverse (foot toe at non-axis facings)
+
+The last two red land cases were `waitturn` (walk re-entry `speedF` **−192 ULP** at the first post-pivot
+MOVE frame) and `ebs` (backward-walk `speedF` 1–3 ULP), both leaving a 1-ULP `pos_z`. The prior
+land-sim truth page (now overturned) filed them as an accept-as-is **"foot-FK toe-stream frontier / world-
+magnitude quantization"** — a genuine sub-ULP FK residual to live with. **Wrong again** — same class as
+the [Y171](#y171-partial-magnitude-speedf--f64-hio-frame-rate-constants-not-a-jnt0-hermite-frontier) /
+[entry-morf](#walk-entry-transient--two-f64-vs-f32-constant-bugs-not-a-hermitefoot-ik-frontier) /
+[pos_x sine-leak](#deep-release-speedf-f37f39--brake_right--a-spurious-pos_x-sine-leak-not-a-foot-fk-x-residual)
+cases: a **wrong input one layer up**, not the FK.
+
+Localized with `harness/anim/perframe_compare.py` + a live `mFootData` toe capture (adapt `foot_probe.py`;
+align by the 1-frame lag `sim pose(N) == live mFootData(N+1)`): the sim's model-local foot toe was
+**bit-exact at axis-aligned facings** (0, `0x8000`) but off by **≤127 ULP at the WaitTurn pivot's
+intermediate facings** (`0xE0C0`, `0xC180`, …). `waitturn`'s f9 `f31_2 = |ATNWRS(f8) − ROT(f7)|` reads the
+f7 ROT toe posed at facing `0x8300` → the −192 ULP `speedF`.
+
+Root cause: the foot FK runs in **world space** from `worldBase` and de-bases the toe with
+`m37B4 = mDoMtx_stack_c::inverse()` = **PSMTXInverse** (`dolphin/mtx/mtx.c:404`, retail paired-single) — a
+general **cofactor/determinant** inverse whose reciprocal is `fres` (12-bit estimate) + **one Newton
+refine** (`recip = 2·est − det·est²`), *not* an `fdivs`. The sim used an analytic **transpose** (`R^T`).
+`worldBase`'s `R` is built from the `JMASin/JMACos` tables, so it is **not exactly orthonormal**
+(`c²+s² ≠ 1.0` in f32 at a non-axis BAM) → `PSMTXInverse ≠ R^T` there. Only when `R`'s entries are `0/±1`
+(axis facings) do the two coincide — exactly the frames that were already bit-exact. **Fix:** port
+PSMTXInverse into `fk.psmtx_inverse` (cofactors fused `ps_msub`, det via first-column cofactor expansion,
+`fres`+1-Newton reciprocal reusing `quat._fres`, translation `−R⁻¹·T` fused) and use it for `m37B4`.
+`waitturn` and `ebs` both went **0 ULP live** (14/14 land techs green; 186/0 offline). One fix closed
+both because `ebs`'s brakeslide decouples facing to ~90° (also non-axis).
+
+**Lesson (a fifth time):** a "sub-ULP FK toe frontier" that appears *only at non-axis facings* and is
+bit-exact at axis-aligned ones is a **matrix-op fidelity gap** (inverse/rotate algorithm), not the FK
+chain. Match the retail **PSMTX*** paired-single algorithm (cofactor+`fres`, not transpose/`fdivs`) for
+any matrix built from the not-exactly-orthonormal sin/cos tables. → [model/land-sim](../model/land-sim.md),
+[model/anim-engine](../model/anim-engine.md), [model/fp-faithfulness](../model/fp-faithfulness.md).
+
 ## 554 / "anim drifts ~3 fr by f400" — truncated-seed artifact
 
 A phantom ~3-frame anim drift by f400 was a **truncated cold-start seed** (anim 8.9417 vs true

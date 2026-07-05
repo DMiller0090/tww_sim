@@ -78,17 +78,54 @@ def tr_matrix(rot, trans):
     return m
 
 
+def psmtx_inverse(m):
+    """PSMTXInverse (dolphin/mtx/mtx.c:404, retail paired-single asm): the general 3x4 cofactor/
+    determinant inverse, NOT a transpose. det = first-column cofactor expansion; the reciprocal is
+    `fres` (12-bit estimate) + ONE Newton refine (recip = 2*est - det*est^2), NOT an exact fdivs.
+    Each cofactor and the translation are fused (ps_msub/ps_madd/ps_nmadd) in the asm's exact order.
+
+    For a matrix built from the JMASin/JMACos tables R is NOT exactly orthonormal (c^2+s^2 != 1.0 in
+    f32 at a non-axis BAM), so this differs from R^T by a few ULP -- exact only when R's entries are
+    0/+-1 (axis-aligned facings). Reproducing it is required for a bit-exact foot toe during a turn
+    (the WaitTurn pivot poses the foot at intermediate facings). See knowledge/history/resolved-bugs.md."""
+    m00, m01, m02, m03 = m[0]
+    m10, m11, m12, m13 = m[1]
+    m20, m21, m22, m23 = m[2]
+    # cofactors -- fmsubs(a,b, fmuls(c,d)) = a*b - round(c*d), matching ps_mul then ps_msub.
+    A00 = fp.fmsubs(m11, m22, fp.fmuls(m21, m12))   # f13.ps0
+    A01 = fp.fmsubs(m21, m02, fp.fmuls(m01, m22))   # f12.ps0
+    A02 = fp.fmsubs(m01, m12, fp.fmuls(m11, m02))   # f11.ps0
+    A20 = fp.fmsubs(m10, m21, fp.fmuls(m11, m20))   # f10.ps0
+    A21 = fp.fmsubs(m01, m20, fp.fmuls(m00, m21))   # f9.ps0
+    A22 = fp.fmsubs(m00, m11, fp.fmuls(m01, m10))   # f8.ps0
+    B10 = fp.fmsubs(m12, m20, fp.fmuls(m22, m10))   # f13.ps1 -> inv[1][0]
+    B11 = fp.fmsubs(m22, m00, fp.fmuls(m02, m20))   # f12.ps1 -> inv[1][1]
+    B12 = fp.fmsubs(m02, m10, fp.fmuls(m12, m00))   # f11.ps1 -> inv[1][2]
+    det = fp.fmadds(m20, A02, fp.fmadds(m10, A01, fp.fmuls(m00, A00)))
+    est = fp.f32(Q._fres(det))
+    recip = fp.fnmsubs(det, fp.fmuls(est, est), fp.fadds(est, est))   # 2*est - det*est^2
+    inv = [[0.0] * 4 for _ in range(3)]
+    inv[0][0] = fp.fmuls(A00, recip); inv[0][1] = fp.fmuls(A01, recip); inv[0][2] = fp.fmuls(A02, recip)
+    inv[1][0] = fp.fmuls(B10, recip); inv[1][1] = fp.fmuls(B11, recip); inv[1][2] = fp.fmuls(B12, recip)
+    inv[2][0] = fp.fmuls(A20, recip); inv[2][1] = fp.fmuls(A21, recip); inv[2][2] = fp.fmuls(A22, recip)
+    # translation inv_i3 = -(inv_i0*m03 + inv_i1*m13 + inv_i2*m23), fused nmadd(madd(mul)).
+    for i in range(3):
+        inv[i][3] = fp.fnmadds(inv[i][2], m23, fp.fmadds(inv[i][1], m13, fp.fmuls(inv[i][0], m03)))
+    return inv
+
+
 def world_base(px, py, pz, facing=0):
     """Build (worldBase, m37B4) for the CL model's setBaseTRMtx (d_a_player_main.cpp:9559-9575).
     worldBase = transS(px,py,pz) . ZXYrotM(0, facing, 0)  (flat ground: shape_angle.x/z == 0), and
-    m37B4 = PSMTXInverse(worldBase) (the rigid inverse). For the FOOT toe f31_2 only rows 0 and 2
-    (X,Z) matter, so the Y translation (py + the m35B8 tweak) is immaterial; pass py=0.
+    m37B4 = PSMTXInverse(worldBase). For the FOOT toe f31_2 only rows 0 and 2 (X,Z) matter, so the
+    Y translation (py + the m35B8 tweak) is immaterial; pass py=0.
 
     WHY this exists: the game runs the foot FK from worldBase, so every accumulated joint matrix
     carries a WORLD-magnitude translation (~pz, e.g. 764) and is quantized to the f32 spacing there
     (~6e-5). m37B4 removes the base afterward, but the quantization is already baked into the toe.
     FK-from-identity (foot_toe_local) misses this. facing == 0 => worldBase is a pure translation and
-    only the Z column is at world magnitude (px stays 0 for the straight walk)."""
+    only the Z column is at world magnitude (px stays 0 for the straight walk). m37B4 must be the exact
+    PSMTXInverse (cofactor/fres), not R^T -- they diverge at a non-axis facing (the WaitTurn pivot)."""
     facing = int(facing) & 0xFFFF
     c = jma_cos(facing); s = jma_sin(facing)
     ns = fp.f32(-s)
@@ -96,13 +133,7 @@ def world_base(px, py, pz, facing=0):
     R = [[c, 0.0, s], [0.0, 1.0, 0.0], [ns, 0.0, c]]
     T = (fp.f32(px), fp.f32(py), fp.f32(pz))
     base = [[R[i][0], R[i][1], R[i][2], T[i]] for i in range(3)]
-    # Rigid inverse: R^T | -R^T.T (PSMTXInverse of a pure-rotation+translation). For facing==0 this is
-    # exact (R==I => -T); the FMA order below matches PSMTXInverse's translate build.
-    inv = [[0.0]*4 for _ in range(3)]
-    for i in range(3):
-        inv[i][0], inv[i][1], inv[i][2] = R[0][i], R[1][i], R[2][i]
-        inv[i][3] = fp.f32(-(fp.fmadds(R[2][i], T[2], fp.fmadds(R[1][i], T[1], fp.fmuls(R[0][i], T[0])))))
-    return base, inv
+    return base, psmtx_inverse(base)
 
 
 def mtx_concat(a, b):
