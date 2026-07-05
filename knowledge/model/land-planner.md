@@ -4,8 +4,9 @@
 proportional glide, the C-up freeze)? What is the live-valid stick set? How close can it stop, and
 what are the current gaps (curve residual, pillar collision)? What are the two use-case accuracy bars
 (seam clips vs RTA setups)?
-**Status:** milestone 1 — straight-walk reach bit-exact live; float-perfect z=2000 stop (1 ULP live)
-via C-up speed-cancel. Open: curved-walk chase residual, wall/pillar collision (unported), A*.
+**Status:** milestone 1 — straight-walk reach bit-exact live; `reach_freeze` deterministic C-up-cancel
+stop ~0.003u on the +z corridor (all-live-valid), the one-off beam reached 1 ULP at z=2000. Sweeps are
+O(n) via bit-exact mid-walk clone. Open: sub-ULP freeze drill, off-axis octagon clamp, collision, A*.
 **Source:** `tww_sim/land/plan_land.py`; live-validated via `advanceseq`. Forward model:
 [land sim](land-sim.md) · [land movement](../mechanics/land-movement.md).
 
@@ -39,7 +40,14 @@ cases set very different accuracy bars:
   back through turn procs). Best safe-stick stop ≈ 0.23u, bit-exact live.
 - `reach_precise(seed, tx, tz, k=0.5)` — proportional-speed glide (target speed = `k·remaining`)
   staying IN MOTION, then truncation-search the tail cut. Rests ~0.10u from target — the smooth-walk
-  floor (min sustainable crawl); sub-0.1u needs tap-inch hops (a follow-up).
+  floor (min sustainable crawl); sub-0.1u needs the C-up freeze (below).
+- `reach_freeze(seed, tx, tz)` — the **float-perfect** approach via the C-up speed cancel (below).
+
+All three sweep by **cloning a snapshot** at each candidate release/cut/cancel frame rather than
+re-simulating the walk prefix — bit-exact because `LandState.clone()` is faithful **mid-walk** (it
+state-copies the anim engine's toe stream + oldframe-morf, not a fresh rest rebuild). That turns the
+O(n²) release sweeps O(n) (`reach_precise` to a far target: 246k → 4k `step` calls). See
+[FP faithfulness](fp-faithfulness.md#cython-fast-path).
 
 **Straight walk (0, 2000): bit-exact** (sim-vs-live Δ = 0.0003u). The milestone-1 core is real.
 
@@ -58,12 +66,19 @@ Natural walk-stop coasts a quasi-fixed decel arc and floors at ~0.019u; float-ex
 unreachable that way. The **C-up speed cancel** freezes mid-motion instead: while walking, half-press
 L for one frame (ends manual cam), then neutral stick + C-stick full up → after 2 latency frames + 1
 decel frame the speed snaps to 0 and position locks. The sim reproduces the freeze with **zero new
-code** — `frozen_pos = walk-sim pos 3 frames after the neutral+C-up input`. Because it happens
-mid-motion (no resting dead-band), a slow-cruise approach tuned by a diverse beam (live-valid mags)
-drilled the freeze to **z = 2000.0001221 live = 1 float32 ULP from 2000.0**, deterministically. The
-last ULP is bounded by the sim's land-position residual — see
-[land sim](land-sim.md#land-position-accumulates-in-f32-not-an-f64-running-sum). Mechanics of the
-cancel: [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
+code** — `frozen_pos = walk-sim pos 3 frames after the neutral+C-up input` (`plan_land._freeze_pos`).
+
+`reach_freeze` is the **deterministic offline planner** for this: proportional glide into a crawl,
+then a tail **beam-drill** over the live-valid magnitude lattice (`msd ≤ 0.889 ∪ {1.0}`, aimed at the
+live bearing) with cancel-within-drill, each candidate evaluated by cloning a snapshot (O(1) on the
+bit-exact mid-walk clone). On the open **+z corridor** it rests **~0.003u** with an **all-live-valid**
+seq — vs `reach_precise`'s 0.10u — and even beats it on the off-axis `(300,1400)` case (0.002u vs
+4.5u) because the freeze sidesteps the curved-walk coast residual. The earlier one-off, live-feedback
+"diverse beam" drilled a hand-tuned seq to **z = 2000.0001221 = 1 float32 ULP from 2000.0**; closing
+`reach_freeze`'s ~0.003u → sub-ULP needs finer approach control (a follow-up), bounded by the sim's
+~0-ULP land-position accuracy. **Off-axis freeze plans are not yet live-valid** — the glide emits
+full-deflection diagonal sticks needing the octagon clamp (a separate open decode issue). Mechanics of
+the cancel: [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
 
 ## Open gaps
 

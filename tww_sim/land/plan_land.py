@@ -122,33 +122,32 @@ def reach_straight(seed, tx, tz, max_walk=240, coast_max=48):
     return {'seq': seq, 'resting_dist': d, 'n_walk': n_walk, 'end': end, 'n_frames': len(seq)}
 
 
-def reach_precise(seed, tx, tz, eps=0.05, k=0.5, min_crawl=0.043, turnback=1.0,
-                  max_frames=4000):
-    """PRECISE reach: rest within ~eps of (tx, tz) (sub-unit), where whole-frame full-speed
-    `reach_straight` is limited to ~15u release granularity. A proportional-speed feedback
-    controller (the exact sim IS the model): aim a stick at the LIVE bearing each frame, scaling
-    the stick MAGNITUDE so Link's target speed tracks `k * remaining_distance` -- he stays in
-    MOTION the whole way, bleeding speed smoothly so he is already crawling (~`min_crawl` u/frame)
-    when he arrives, then coasts to rest within one crawl step.
+# The C-up speed cancel locks position FREEZE_LATENCY frames after the neutral+C-up input (2-frame
+# latency + 1 cLib decel, then link_state->1); the sim reads it with zero new code. land-movement.md.
+FREEZE_LATENCY = 3
+_CUT_SPAN = 60          # Phase-C / freeze sweep window: the last _CUT_SPAN+1 crawl frames near arrival
 
-    Why not brake to a stop then creep: from a STANDSTILL the walk needs msd > 0.5 to move at all
-    (the setSpeedAndAngleNormal speed-scale gate 0.5 - 0.5*|v|/max), so a slow crawl can't be
-    RESTARTED from rest -- it must be sustained by never fully stopping. And a full-speed neutral
-    release coasts ~49u (the whole 17->0 decel arc), far past any fine release point. Hence the
-    stay-in-motion glide. Speed cap = 17*msd^2, so msd = sqrt(target_speed / 17); msd is floored at
-    the movement gate (min_crawl -> msd ~ 0.05) and capped at 1.0 (full).
 
-    Simulated ONCE from the REST seed (clone-safe -- no mid-walk clone, foot-anim stays bit-exact).
-    Returns dict: seq, resting_dist, end (LandState), n_frames.
-    """
-    # Phase A/B: glide into a fixed crawl, feeding PAST the target (2-frame latency makes a proportional
-    # controller overshoot) -- record the whole glide+crawl and pick the cut below, not the live break.
-    # Snapshot a clone each walk step so Phase C branches from any cut with no prefix re-sim (bit-exact
-    # mid-walk clone); a rolling buffer of the cut window (CUT_SPAN+1) bounds memory for any walk length.
-    CUT_SPAN = 60
+def _live_valid_msd(msd):
+    """Snap msd out of the live-divergent band (0.889, 1): those map to stick Y in [192,254], where
+    the sim's /54 magnitude over-reads live PADClamp -- to the nearest live-valid magnitude (a <=0.889
+    partial, or 1.0 = the true full corner). See land-movement.md "Live-valid stick magnitudes"."""
+    if msd <= 0.889:
+        return msd
+    return 1.0 if msd >= 0.9445 else 0.889
+
+
+def _glide(seed, tx, tz, k, min_crawl, turnback, max_frames, clamp_msd=False):
+    """Proportional-speed glide toward (tx, tz): aim the live bearing each frame, scaling the stick
+    magnitude so the target speed tracks k*remaining -- Link stays in MOTION into a crawl (~min_crawl
+    u/frame) and feeds PAST the target (the 2-frame latency overshoots). Speed cap = 17*msd^2, so
+    msd = sqrt(target_speed/17), floored at the movement gate and capped at 1. `clamp_msd` keeps every
+    emitted stick live-valid (snaps out of the Y192-254 band) for plans that must run on console.
+    Snapshots a clone each frame into a rolling buffer (the last _CUT_SPAN+1 frames straddling closest
+    approach -- bounds memory for any walk length; mid-walk clone is bit-exact). Returns (walk, snaps)."""
     s = seed.clone()
     walk = []
-    snaps = deque([s.clone()], maxlen=CUT_SPAN + 1)   # snap after applying walk[:i]; keeps the tail
+    snaps = deque([s.clone()], maxlen=_CUT_SPAN + 1)   # snaps[i] = state after applying walk[:i]
     prev = dist2d(s, tx, tz)
     near = False
     while len(walk) < max_frames:
@@ -160,14 +159,34 @@ def reach_precise(seed, tx, tz, eps=0.05, k=0.5, min_crawl=0.043, turnback=1.0,
         prev = rem
         target_speed = min(max(k * rem, min_crawl), float(LandState.MAX_NSPEED))
         msd = min(max(math.sqrt(target_speed / float(LandState.MAX_NSPEED)), 0.051), 1.0)
+        if clamp_msd:
+            msd = _live_valid_msd(msd)
         th = world_angle_s16(tx - s.pos_x, tz - s.pos_z)
         stick = stick_for_bearing(th, s.csangle, msd)
         s.step(*stick)
         walk.append(stick)
         snaps.append(s.clone())
+    return walk, snaps
 
-    # Phase C: truncation search -- the crawl tail advances ~min_crawl u/frame, so cutting the walk at
-    # the right frame + coasting lands within a crawl step. Clone each buffered snapshot and coast; keep
+
+def reach_precise(seed, tx, tz, eps=0.05, k=0.5, min_crawl=0.043, turnback=1.0,
+                  max_frames=4000):
+    """PRECISE reach: rest within ~eps of (tx, tz) (sub-unit), where whole-frame full-speed
+    `reach_straight` is limited to ~15u release granularity. A proportional-speed feedback
+    controller (the exact sim IS the model) glides into a crawl, then a truncation search picks the
+    release: cut the glide at each candidate frame + coast to rest, keep the min-distance rest.
+
+    Why not brake to a stop then creep: from a STANDSTILL the walk needs msd > 0.5 to move at all
+    (the setSpeedAndAngleNormal speed-scale gate 0.5 - 0.5*|v|/max), so a slow crawl can't be
+    RESTARTED from rest -- it must be sustained by never fully stopping. And a full-speed neutral
+    release coasts ~49u (the whole 17->0 decel arc). Rests ~0.10u from target (the smooth-walk floor);
+    sub-0.1u needs the C-up freeze (`reach_freeze`) or tap-inch hops.
+
+    Returns dict: seq, resting_dist, end (LandState), n_frames.
+    """
+    walk, snaps = _glide(seed, tx, tz, k, min_crawl, turnback, max_frames)
+    # Truncation search -- the crawl tail advances ~min_crawl u/frame, so cutting the walk at the
+    # right frame + coasting lands within a crawl step. Clone each buffered snapshot and coast; keep
     # the min. O(n) (no prefix re-sim), identical to the old re-sim since clone is bit-exact.
     cut_base = len(walk) - (len(snaps) - 1)     # rolling buffer's leftmost snapshot's cut index
     best = None
@@ -185,6 +204,98 @@ def reach_precise(seed, tx, tz, eps=0.05, k=0.5, min_crawl=0.043, turnback=1.0,
     d, cut, coast, t = best
     seq = list(walk[:cut]) + [NEUTRAL] * coast
     return {'seq': seq, 'resting_dist': d, 'end': t, 'n_frames': len(seq)}
+
+
+def _freeze_pos(state):
+    """The FLOAT-PERFECT freeze position if the C-up speed cancel is issued from a mid-walk `state`:
+    the sim position FREEZE_LATENCY neutral frames on (clone -> 3 neutrals -> read pos), where the
+    real cancel locks link_state. Leaves `state` untouched. See knowledge/mechanics/land-movement.md."""
+    c = state.clone()
+    for _ in range(FREEZE_LATENCY):
+        c.step(*NEUTRAL)
+    return c
+
+
+# Live-valid drill magnitudes: msd in (0, 0.889] keeps BOTH stick axes <= 191 for any bearing (the
+# bit-exact regime), plus 1.0 = the full corner; the (0.889,1) -> Y192-254 band diverges live. See KB.
+_DRILL_MSDS = tuple([i / 100.0 for i in range(13, 90)] + [1.0])
+
+
+def reach_freeze(seed, tx, tz, k=0.5, min_crawl=0.043, turnback=1.0, max_frames=4000,
+                 drill_back=6, beam_width=48):
+    """FLOAT-PERFECT reach via the C-up speed cancel. Glide into a slow crawl toward (tx, tz), then
+    at the best frame issue the cancel (one half-L frame, then neutral stick + C-stick full up) to
+    FREEZE Link mid-motion: the position locks FREEZE_LATENCY frames after the cancel, which the sim
+    reads with zero new code (`_freeze_pos`). Because the freeze truncates the ~49u decel coast to a
+    hard lock, a slow approach can place the frozen float almost anywhere -- far finer than the
+    ~0.10u smooth-walk rest floor of `reach_precise`.
+
+    Two stages, both O(1)-per-candidate on the bit-exact mid-walk clone: (1) sweep the cancel frame
+    over the crawl for the closest coarse freeze; (2) tail beam-drill -- from a few frames before the
+    coarse cancel, branch the next frames over the live-valid magnitude lattice (_DRILL_MSDS, aimed
+    at the live bearing), evaluating a freeze after each (cancel-within-drill) and keeping the beam
+    of states still short of the target. The drill fills the crawl-step gaps: on the open +z corridor
+    it rests ~0.003u (vs reach_precise's 0.10u) with an all-live-valid seq (glide clamped +
+    _DRILL_MSDS). Sub-ULP drilling (finer approach control) + the live re-gate are follow-ups.
+
+    SCOPE: on-axis / +z corridor (like milestone 1). An OFF-AXIS target's glide emits full-deflection
+    DIAGONAL sticks (e.g. (65,244)) that need the octagon clamp -- the separate open decode issue (see
+    the advancewith-off-axis lesson), so off-axis freeze plans are not yet live-valid.
+
+    The approach + cancel hold a FROZEN camera (centered C-stick) so csangle stays put. Returns dict:
+    seq (glide prefix + the FREEZE_LATENCY cancel tail), freeze_dist, freeze_pos (x, z), end
+    (LandState frozen), n_frames. Mechanics: knowledge/mechanics/land-movement.md; model:
+    knowledge/model/land-planner.md.
+    """
+    walk, snaps = _glide(seed, tx, tz, k, min_crawl, turnback, max_frames, clamp_msd=True)
+    snaps = list(snaps)
+
+    def fdist(state):
+        e = _freeze_pos(state)
+        return math.hypot(tx - e.pos_x, tz - e.pos_z), e
+
+    # Stage 1 -- coarse cancel-frame sweep. Track the closest freeze and the closest one still SHORT
+    # of the target (the drill seed: extend the approach a little to close the gap from below).
+    best = None
+    ci = 0
+    for i, snap in enumerate(snaps):
+        d, e = fdist(snap)
+        if best is None or d < best[0]:
+            best = (d, e, list(walk[:len(walk) - (len(snaps) - 1) + i]))
+        # closest snapshot whose freeze has not yet passed the target (approach-from-below drill seed)
+        rem_before = math.hypot(tx - snap.pos_x, tz - snap.pos_z)
+        rem_after = math.hypot(tx - e.pos_x, tz - e.pos_z)
+        if rem_after <= rem_before:                # freeze still lands short -> keep extending
+            ci = i
+
+    # Stage 2 -- tail beam-drill from `drill_back` frames before the from-below cancel point.
+    start_i = max(0, ci - drill_back)
+    walk_prefix = list(walk[:len(walk) - (len(snaps) - 1) + start_i])
+    beam = [(snaps[start_i], list(walk_prefix))]
+    for _ in range(drill_back + 8):                # depth: enough to cross the target from start_i
+        cand = []
+        for st, pre in beam:
+            th = world_angle_s16(tx - st.pos_x, tz - st.pos_z)
+            for msd in _DRILL_MSDS:
+                stick = stick_for_bearing(th, st.csangle, msd)
+                c = st.clone()
+                c.step(*stick)
+                d, e = fdist(c)
+                cand.append((d, c, pre + [stick], e))
+        if not cand:
+            break
+        cand.sort(key=lambda t: t[0])
+        if cand[0][0] < best[0]:
+            best = (cand[0][0], cand[0][3], cand[0][2])
+        # keep the closest states, preferring those whose freeze is still short of the target
+        below = [t for t in cand if math.hypot(tx - t[1].pos_x, tz - t[1].pos_z)
+                 >= math.hypot(tx - t[3].pos_x, tz - t[3].pos_z)][:beam_width]
+        beam = [(t[1], t[2]) for t in (below if below else cand[:beam_width])]
+
+    d, end, prefix = best
+    seq = list(prefix) + [NEUTRAL] * FREEZE_LATENCY
+    return {'seq': seq, 'freeze_dist': d, 'freeze_pos': (end.pos_x, end.pos_z),
+            'end': end, 'n_frames': len(seq)}
 
 
 def seq_string(seq):

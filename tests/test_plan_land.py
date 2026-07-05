@@ -14,7 +14,7 @@ import pytest
 
 from tww_sim.land.land import LandState, FREE_WAIT, WAIT
 from tww_sim.land.plan_land import (world_angle_s16, stick_for_bearing, dist2d, reach_straight,
-                                 reach_precise)
+                                 reach_precise, reach_freeze)
 from tww_sim.swim.sim import _deadzone
 import math
 from tww_sim.core.anim.foot_speedf import FootSpeedF
@@ -97,3 +97,34 @@ def test_reach_angled_target(tx, tz):
     assert r['end'].state in (WAIT, FREE_WAIT)
     assert r['resting_dist'] < _reach_bound()
     assert dist2d(r['end'], tx, tz) == pytest.approx(r['resting_dist'])
+
+
+# --- FLOAT-PERFECT reach via the C-up speed cancel (reach_freeze) ----------------------------
+
+def _live_valid_stick(sx, sy):
+    # Live-valid iff each axis is a <=63-from-center partial (Y<=191) or a true full corner (255/1/0);
+    # the ambiguous 192-254 cap band diverges live. See knowledge/mechanics/land-movement.md.
+    def axis_ok(v):
+        return abs(v - 128) <= 63 or v in (255, 1, 0)
+    return axis_ok(sx) and axis_ok(sy)
+
+
+def test_reach_freeze_seq_live_valid_and_reproduces():
+    # On-axis (+z corridor): every emitted stick is live-valid (glide clamped + the <=0.889/1.0 drill
+    # lattice), and re-simulating the whole seq reproduces the reported freeze position exactly.
+    r = reach_freeze(_seed(), 0.0, 2000.0)
+    assert all(_live_valid_stick(*st) for st in r['seq']), "non-live-valid stick in freeze plan"
+    s = _seed()
+    for st in r['seq']:
+        s.step(*st)
+    assert dist2d(s, 0.0, 2000.0) == pytest.approx(r['freeze_dist'], abs=1e-4)
+
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_reach_freeze_beats_precise_rest():
+    # The C-up freeze locks mid-motion, so it places the stop far finer than the ~0.10u smooth-walk
+    # rest floor. On the open +z corridor it rests ~0.003u -- well under reach_precise's rest.
+    precise = reach_precise(_seed(), 0.0, 2000.0)
+    freeze = reach_freeze(_seed(), 0.0, 2000.0)
+    assert freeze['freeze_dist'] < precise['resting_dist']
+    assert freeze['freeze_dist'] < 0.02
