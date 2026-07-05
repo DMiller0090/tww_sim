@@ -1,5 +1,16 @@
 # Planner benchmark — re-plan, record, DTM-verify
 
+> **See also — land-sim throughput:** `perf_land.py` is a separate, self-contained tool that times
+> raw `LandState.step` throughput with the anim engine active (the real per-frame hot path), and
+> carries a bit-exact trajectory *fingerprint* so any non-bit-identical change fails loudly. Use it to
+> measure micro-opt / Cython work (the native `core/anim/_anmc` accelerator):
+> ```bash
+> python tests/benchmark/perf_land.py             # time the default 2000-frame workload
+> python tests/benchmark/perf_land.py profile=1   # cProfile the hot path (top 30)
+> python tests/benchmark/perf_land.py fingerprint=1   # print the correctness fingerprint only
+> ```
+> The rest of this doc is the *planner-quality* harness (`run_benchmark.py`), a different concern.
+
 **What this is.** A regression + data-collection harness that *re-runs the planner* on real
 destinations, records a fully-reproducible result per plan, and (live) verifies each plan
 against Dolphin so the recorded frame counts are **base truths**, not just sim claims.
