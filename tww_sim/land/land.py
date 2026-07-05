@@ -48,9 +48,17 @@ WAIT_TURN = 23    # daPyProc_WAIT_TURN_e    (pivot-in-place reversal from a stan
 MOVE_TURN = 24    # daPyProc_MOVE_TURN_e    (turn-around reversal, low speed / post-slip)
 SLIP = 25         # daPyProc_SLIP_e         (high-speed reversal skid, hands to MOVE_TURN)
 FRONT_ROLL = 30   # daPyProc_FRONT_ROLL_e   (A-button forward roll)
+# Targeted ballistic hops (L-held + A + directional stick -> doStatus JUMP). Pure momentum + gravity,
+# no foot-plant (m3598==0), so position is scalar-exact without the anim engine. See land-movement.md.
+SIDE_STEP = 0x0A       # daPyProc_SIDE_STEP_e       (sidehop: stick L/R while targeting)
+SIDE_STEP_LAND = 0x0B  # daPyProc_SIDE_STEP_LAND_e  (sidehop recovery -> WAIT)
+BACK_JUMP = 0x22       # daPyProc_BACK_JUMP_e       (backflip: stick back while targeting)
+BACK_JUMP_LAND = 0x23  # daPyProc_BACK_JUMP_LAND_e  (backflip recovery -> WAIT)
 
 _STATE_TAG = {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL", WAIT_TURN: "WAITTURN",
-              MOVE_TURN: "MOVETURN", SLIP: "SLIP", WAIT: "WAIT", FREE_WAIT: "WAIT"}
+              MOVE_TURN: "MOVETURN", SLIP: "SLIP", WAIT: "WAIT", FREE_WAIT: "WAIT",
+              SIDE_STEP: "SIDEHOP", SIDE_STEP_LAND: "SIDEHOPLAND",
+              BACK_JUMP: "BACKFLIP", BACK_JUMP_LAND: "BACKFLIPLAND"}
 
 # mDirection enum (d_a_player_main.h daPy_lk_c::direction_e). getDirectionFromAngle buckets the
 # stick-vs-heading angle into these; ATN physics branches on it (fwd->Normal, back->AtnBack, side).
@@ -168,11 +176,40 @@ class LandState:
     # MoveTurn slip-exit re-accel seed = mMaxNormalSpeed * this (procSlip 6666); shape nudge = 0x100.
     MT_SLIP_SEED = f32(0.5)
 
+    # HIO mSideStep (targeted sidehop), d_a_player_HIO_data.inc:223. Ballistic launch perp to facing;
+    # lands on the first ground-hit frame. Mechanics: knowledge/mechanics/land-movement.md.
+    SIDESTEP_ANGLE = 6200          # field_0x2 = s16 launch angle (fed to cM_scos/cM_ssin, >>4 table)
+    SIDESTEP_SPEED = f32(30.0)     # field_0x8 = launch speed magnitude
+    SIDESTEP_GRAV = f32(-2.4)      # field_0x18 = gravity per frame
+    SIDESTEP_LAND_END = f32(5.0)   # field_0x6 = land anim end frame (recovery duration)
+    SIDESTEP_LAND_RATE = f32(0.85) # field_0x1C = land anim frame-ctrl rate
+    # HIO mBackJump (targeted backflip), d_a_player_HIO_data.inc:102. Ballistic backward launch; lands
+    # once ground-hit AND the ROLLB anim finishes. Mechanics: knowledge/mechanics/land-movement.md.
+    BACKJUMP_SPEED = f32(22.5)     # field_0x10 = mNormalSpeed (backward horizontal)
+    BACKJUMP_VY = f32(19.0)        # field_0x14 = speed.y launch
+    BACKJUMP_GRAV = f32(-3.0)      # field_0x18 = gravity per frame
+    BACKJUMP_ANIM_START = f32(2.0) # field_0x8 = ROLLB frame-ctrl start
+    BACKJUMP_ANIM_END = f32(11.0)  # field_0x0 = ROLLB frame-ctrl end (getRate()<0.01 gates the land)
+    BACKJUMP_ANIM_RATE = f32(0.8)  # field_0x4 = ROLLB frame-ctrl rate
+    BACKJUMP_LAND_END = f32(5.0)   # field_0x2 = land anim end frame (recovery duration)
+    BACKJUMP_LAND_RATE = f32(0.8)  # field_0x24 = land anim frame-ctrl rate
+    # Terminal fall velocity (mAutoJump.field_0x10 global default, d_a_player_HIO_data.inc:116): speed.y
+    # is clamped to this after gravity each frame (posMoveFromFootPos 2472). Never reached on a flat hop.
+    MAX_FALL = f32(-175.0)
+
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
-                 use_anim=True, cam_scale=LAND_SCALE):
+                 use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
+        # Vertical state for the ballistic hops. pos_y accumulates in f32; ground_y = the jump-entry
+        # height. Seed pos_y from live for a bit-exact airtime (the vertical rounding is magnitude-dependent).
+        self.pos_y = f32(pos_y)
+        self.speed_y = 0.0             # speed.y (integrated by gravity while airborne)
+        self.gravity = 0.0             # per-proc gravity (set at hop entry)
+        self.ground_y = f32(pos_y)     # m3688.y flat landing height (reset at hop entry)
+        self.ground_hit = True         # mAcch GROUND_HIT (grounded at rest); re-derived each air frame
+        self.air_anim = 0.0            # ROLLB frame ctrl during BACK_JUMP (gates the land) / land recovery
         self.facing = int(facing) & 0xFFFF     # shape_angle.y (s16)
         self.travel = int(travel) & 0xFFFF     # current.angle.y (s16)
         self.csangle = int(csangle) & 0xFFFF   # dCam_getControledAngleY (s16); set each frame from _cam
@@ -217,7 +254,9 @@ class LandState:
                 self._foot = None
         # Native land physics: when the fused C engine is present, the whole per-frame step runs in one
         # LandCore call (delegated below); absent -> the bit-identical pure-Python body. See fp-faithfulness.md.
-        self._core = self._build_core()
+        # `native=False` forces the Python path (still bit-exact via `_foot`) -- REQUIRED for the ballistic
+        # hops (sidehop/backflip), which the C twin does not yet implement. The setup finder uses it.
+        self._core = self._build_core() if native else None
 
     def _build_core(self):
         """Build the native LandCore over the fused PoseEngine, seeded from this LandState's current
@@ -642,6 +681,82 @@ class LandState:
             else:
                 self._check_next_mode(l_held)
 
+    # --- targeted ballistic hops (procSideStep 6313 / procBackJump 7003) -------------------
+    def _side_step_init(self, direction):
+        """procSideStep_init (6313): a ballistic sidehop PERPENDICULAR to facing. current.angle.y =
+        shape_angle.y +-0x4000; a fixed launch speed splits by the launch angle into horizontal
+        (mNormalSpeed = cM_scos*speed) and vertical (speed.y = cM_ssin*speed). Pure momentum in air
+        (m3598==0). ground_y = the launch height (m3688.y on flat ground). No lock-on actor here, so
+        procSideStep's per-frame re-aim (6336) leaves travel constant."""
+        self.state = SIDE_STEP
+        self.direction = direction
+        self.travel = ((self.facing + 0x4000) if direction == DIR_LEFT
+                       else (self.facing - 0x4000)) & 0xFFFF
+        self.nspeed = f32(S.cM_scos_s16(self.SIDESTEP_ANGLE) * self.SIDESTEP_SPEED)
+        self.speed_y = f32(_cM_ssin_s16(self.SIDESTEP_ANGLE) * self.SIDESTEP_SPEED)
+        self.gravity = self.SIDESTEP_GRAV
+        self.ground_y = f32(self.pos_y)
+        self.ground_hit = False
+        self.air_anim = 0.0
+
+    def _back_jump_init(self):
+        """procBackJump_init (7003): a ballistic backflip. mNormalSpeed / speed.y are set DIRECTLY (no
+        trig); current.angle.y = shape_angle.y + 0x8000 (backward). Lands only once BOTH ground-hit AND
+        the ROLLB frame ctrl (start 2 -> end 11 @0.8) has run out (getRate()<0.01, procBackJump 7028) --
+        so the horizontal momentum can slide along the ground for the frames between contact and anim-end."""
+        self.state = BACK_JUMP
+        self.direction = DIR_BACKWARD
+        self.travel = (self.facing + 0x8000) & 0xFFFF
+        self.nspeed = f32(self.BACKJUMP_SPEED)
+        self.speed_y = f32(self.BACKJUMP_VY)
+        self.gravity = self.BACKJUMP_GRAV
+        self.ground_y = f32(self.pos_y)
+        self.ground_hit = False
+        self.air_anim = f32(self.BACKJUMP_ANIM_START)
+
+    def _ballistic_anim_done(self):
+        """getRate()<0.01 for the airborne anim: sidehop has no anim gate (lands on the first ground hit);
+        backflip needs the ROLLB frame ctrl to have reached its end frame."""
+        return self.state == SIDE_STEP or self.air_anim >= self.BACKJUMP_ANIM_END
+
+    def _proc_ballistic(self, l_held):
+        """procSideStep (6335) / procBackJump (7026), flat/no-item subset. The ground-hit + anim-rate
+        tests read LAST frame's state (execute order: proc -> posMove -> CrrPos / anim update), so the
+        land is detected one frame after pos.y crosses the floor. Flat ground + no bow/leaf/jump-cut ->
+        pure ballistic. Advances the backflip ROLLB frame ctrl for next frame's land gate."""
+        if self.ground_hit and self._ballistic_anim_done():
+            self._ballistic_land_init()
+            return
+        if self.state == BACK_JUMP and self.air_anim < self.BACKJUMP_ANIM_END:
+            self.air_anim = f32(self.air_anim + self.BACKJUMP_ANIM_RATE)
+            if self.air_anim > self.BACKJUMP_ANIM_END:      # J3DFrameCtrl clamps to end, rate->0
+                self.air_anim = f32(self.BACKJUMP_ANIM_END)
+
+    def _ballistic_land_init(self):
+        """procSideStepLand_init (6365) / procBackJumpLand_init (7042): mNormalSpeed = 0, backflip snaps
+        current.angle.y = shape_angle.y (7056), pose the land recovery anim. Position is frozen through
+        the recovery; when it completes checkNextMode routes to WAIT."""
+        if self.state == SIDE_STEP:
+            self.state = SIDE_STEP_LAND
+        else:
+            self.state = BACK_JUMP_LAND
+            self.travel = self.facing
+        self.nspeed = 0.0
+        self.speed_y = 0.0
+        self.air_anim = 0.0
+
+    def _proc_ballistic_land(self, l_held):
+        """The land recovery: the land anim frame ctrl runs to its end (position frozen at the floor),
+        then checkNextMode(l_held) hands to WAIT (neutral) / ATN_MOVE (L). Duration affects the block's
+        frame COST only -- position does not move (mNormalSpeed 0)."""
+        if self.state == SIDE_STEP_LAND:
+            end, rate = self.SIDESTEP_LAND_END, self.SIDESTEP_LAND_RATE
+        else:
+            end, rate = self.BACKJUMP_LAND_END, self.BACKJUMP_LAND_RATE
+        self.air_anim = f32(self.air_anim + rate)
+        if self.air_anim >= end:
+            self._check_next_mode(l_held)
+
     # --- proc dispatch + per-frame step ----------------------------------------------------
     def step(self, sx, sy, buttons=0, triggerL=0, csx=128, csy=128):
         """Advance one frame with a raw main stick (sx, sy) + optional L-target (buttons 0x40 or
@@ -668,11 +783,19 @@ class LandState:
         # edge; it stays frozen because the ATN path writes shape_angle.y = m34E6 every frame.
         if l_held and not self._l_prev:
             self.m34E6 = self.facing
-        # A while moving on the ground -> forward roll (doTrigger + ATTACK, 4318). Facing snaps to the
-        # stick target first (shape_angle.y = m34E8, 4319), then procFrontRoll_init.
-        if a_pressed and moving and self.state in (MOVE, ATN_MOVE):
-            self.facing = self.target
-            self._roll_init()
+        # doTrigger (A) dispatch (checkNextActionFromButton 4309): L held -> JUMP (sidehop L/R, backflip
+        # back; no forward); L off + moving -> ATTACK roll. Input mapping: land-movement.md (a gotcha).
+        grounded = self.state in (WAIT, FREE_WAIT, MOVE, ATN_MOVE)
+        if a_pressed and grounded:
+            if l_held:
+                jdir = self._get_dir_from_angle(s16_signed(self.target - self.facing))
+                if jdir in (DIR_LEFT, DIR_RIGHT):
+                    self._side_step_init(jdir)
+                elif jdir == DIR_BACKWARD:
+                    self._back_jump_init()
+            elif moving and self.state in (MOVE, ATN_MOVE):
+                self.facing = self.target
+                self._roll_init()
 
         # dispatch the active proc body. WAIT/FREE_WAIT/MOVE/ATN_MOVE run their speed/angle update then
         # checkNextMode (the arbiter: starts locomotion from idle, routes reversals to the turn procs).
@@ -698,6 +821,10 @@ class LandState:
             self._proc_slip(l_held)              # checkNextMode / hand to MoveTurn when the skid dies
         elif proc == FRONT_ROLL:
             self._proc_roll(l_held)              # checkNextMode on its exit frame
+        elif proc in (SIDE_STEP, BACK_JUMP):
+            self._proc_ballistic(l_held)         # lands on the (1-frame-late) ground hit
+        elif proc in (SIDE_STEP_LAND, BACK_JUMP_LAND):
+            self._proc_ballistic_land(l_held)    # recovery anim -> WAIT
 
         # setBlendAtnMoveAnime's direction update for a (possibly just-entered) ATN frame. Capture the
         # pre-update mDirection (uVar1, 3291): the anim re-triggers the oldframe-morf when it changes.
@@ -715,7 +842,22 @@ class LandState:
             self._foot.set_pos(self.pos_x, self.pos_z, facing=self.facing)
         # speedF -> position. ROLL/SLIP = momentum; WAIT_TURN frozen; MOVE + MOVE_TURN tail + ATN_MOVE use
         # the anim engine (only the SLIP tail keeps the fallback); single-anim procs pose to warm the stream.
-        if self.state == WAIT_TURN:
+        if self.state in (SIDE_STEP, BACK_JUMP):
+            # Airborne ballistic: horizontal momentum (shared bottom advances pos.x/z); vertical integrates
+            # speed.y by gravity, then CrrPos snaps to the floor + flags GROUND_HIT. See land-movement.md.
+            self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
+            self.speed_y = f32(self.speed_y + self.gravity)
+            if self.speed_y < self.MAX_FALL:
+                self.speed_y = f32(self.MAX_FALL)
+            self.pos_y = f32(self.pos_y + self.speed_y)
+            if self.pos_y <= self.ground_y:
+                self.pos_y = f32(self.ground_y)
+                self.ground_hit = True
+            else:
+                self.ground_hit = False
+        elif self.state in (SIDE_STEP_LAND, BACK_JUMP_LAND):
+            self.speedF = 0.0                     # land recovery: mNormalSpeed 0, position frozen
+        elif self.state == WAIT_TURN:
             if self._foot is not None:
                 self._foot.step_single_anim(self.nspeed, self.msd)   # pose ANM_ROT, warm the toe stream
             self.speedF = 0.0
