@@ -54,6 +54,9 @@ you can triage in one glance.
 ### Camera
 - **How does camera yaw affect movement / the steering law / fine steering?** → [mechanics/camera.md](mechanics/camera.md)
 
+### Culling / rendering
+- **How does TWW decide what's drawn vs culled / the view frustum / FOV-near-far / per-actor cull box / why is the culling far ≠ render far / how do I view it live?** → [mechanics/culling.md](mechanics/culling.md)
+
 ### Ocean world, refills & routing
 - **How is the sea laid out / why is only one island loaded / what's a sploosh zone / why route around quadrants?** → [mechanics/ocean-environment.md](mechanics/ocean-environment.md)
 - **How do air refills work / why is touching land fatal / flat vs wavy / corner refills / the manual-refill workflow?** → [mechanics/air-refill.md](mechanics/air-refill.md)
@@ -77,6 +80,8 @@ you can triage in one glance.
 ### Model — land
 - **How does the land sim accumulate position (f32) / the `Y171` partial regime / the 7 red ULP tests?** → [model/land-sim.md](model/land-sim.md)
 - **How does the land planner reach a target (x,z) / the live-valid stick set / the C-up freeze to z=2000 / seam-clip vs RTA bars?** → [model/land-planner.md](model/land-planner.md)
+- **How does the land SETUP FINDER work (human-consistent discrete moves → ranked input seqs) / why re-simulate instead of summing displacements / which moves are "blocks" / why isn't walking one?** → [model/land-setup-finder.md](model/land-setup-finder.md)
+- **What are the targeted ballistic hops (sidehop / backflip) / the A=roll vs L+A=sidehop/backflip input mapping?** → [mechanics/land-movement.md#targeted-ballistic-hops-sidehop--backflip](mechanics/land-movement.md#targeted-ballistic-hops-sidehop--backflip)
 
 ### Provenance & open work
 - **Was <bug> a physics issue or an artifact?** (bug#2, 554, off-axis, omega grid, cosine table) → [history/resolved-bugs.md](history/resolved-bugs.md)

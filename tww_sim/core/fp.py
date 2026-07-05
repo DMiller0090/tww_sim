@@ -20,43 +20,53 @@ default FPSCR RN. Negation is exact, so fnmsub == -(fmsub) bit-for-bit.
 
 Extends the rules in memory `superswim-gekko-fp`. Reused later for the collision core.
 """
-from ctypes import c_float as _c_float
+# f64->f32 rounding `_r`: ctypes c_float, else struct (bit-identical round-half-to-even) when
+# _ctypes is unavailable -- e.g. the Dolphin scripting fork's embedded Python ships without it.
+try:
+    from ctypes import c_float as _c_float
+    def _r(x):
+        return _c_float(x).value
+except ImportError:
+    import struct as _struct
+    _pack, _unpack = _struct.pack, _struct.unpack
+    def _r(x):
+        return _unpack("f", _pack("f", x))[0]
 
 # FAST PATH: the native Cython build (superswim/_fpc.pyx; C (float) cast, bit-identical to ctypes,
-# ~5x faster) when present, else the pure-Python ctypes fallback below (same result). Build: _build_native.py.
+# ~5x faster) when present, else the pure-Python `_r` fallback below (same result). Build: _build_native.py.
 try:
     from ._fpc import (f32, fmuls, fadds, fsubs, fdivs, fmadds, fmsubs, fnmadds,  # noqa: F401
                        fnmsubs)
 except ImportError:
     def f32(x):
         """Round an f64 result to f32 (round-half-to-even), like a single-precision store/round."""
-        return _c_float(x).value
+        return _r(x)
 
     def fmuls(a, b):
         """single a*b, rounded once."""
-        return _c_float(a * b).value
+        return _r(a * b)
 
     def fadds(a, b):
-        return _c_float(a + b).value
+        return _r(a + b)
 
     def fsubs(a, b):
-        return _c_float(a - b).value
+        return _r(a - b)
 
     def fdivs(a, b):
-        return _c_float(a / b).value
+        return _r(a / b)
 
     def fmadds(a, b, c):
         """fused a*b + c, single. One rounding of the exact product-sum (f64 intermediate exact)."""
-        return _c_float(a * b + c).value
+        return _r(a * b + c)
 
     def fmsubs(a, b, c):
         """fused a*b - c, single."""
-        return _c_float(a * b - c).value
+        return _r(a * b - c)
 
     def fnmadds(a, b, c):
         """fused -(a*b + c), single. Negation is exact -> == -fmadds(a,b,c)."""
-        return _c_float(-(a * b + c)).value
+        return _r(-(a * b + c))
 
     def fnmsubs(a, b, c):
         """fused -(a*b - c) == c - a*b, single. Negation is exact -> == -fmsubs(a,b,c)."""
-        return _c_float(-(a * b - c)).value
+        return _r(-(a * b - c))

@@ -42,6 +42,26 @@ for any live breakpoint. Example mismatch: procSwimWait_init decomp=0x8013DB24 v
 - `event.on_codebreakpoint(cb)` cb(addr); `event.on_memorybreakpoint(cb)` cb(is_write, addr, value); `registers.read_gpr(n)/read_fpr(n)`.
 - To non-pausing call-trace a code addr (log_on_hit=true, break_on_hit=false) the single-arg debug.set_breakpoint is insufficient → would need a small rebuild to expose flags, OR use on_codebreakpoint+resume.
 
+## Culling / camera object (JP/GZLJ01, live-verified 2026-07-05)
+
+For the view-frustum culling model see [mechanics/culling.md](../mechanics/culling.md). All camera
+fields hang off `camera_class = [[0x803AD380]+0x34]` (JP view_class layout == US `f_op_view.h`):
+
+| What | Address / offset | type |
+|------|------------------|------|
+| `camera_class` base | `[[0x803AD380]+0x34]` | ptr |
+| view near / far / fovy / aspect | `+0xC8 / +0xCC / +0xD0 / +0xD4` | f32 |
+| view eye / center / up | `+0xD8 / +0xE4 / +0xF0` (cXyz each) | f32 |
+| view matrix (world→camera, 3×4) | `+0x140` | f32×12 |
+| `mDoLib_clipper` singleton | static `0x80398bfc` | — |
+| clipper planes / fovy / aspect / near / **far(cull point)** | `+0x04 (Vec×4) / +0x4C / +0x50 / +0x54 / +0x58` | f32 |
+| actor list head | `0x803654CC` → node: next `+0x00`, actor `+0x0C` | ptr |
+| `fopAc_ac_c`: pid / cullType / status / condition | `+0x08(u16) / +0x1BF(u8) / +0x1C4(u32) / +0x1C8(u32)` | — |
+| `fopAc_ac_c`: pos / cullMtx / boxMin / boxMax / cullSizeFar | `+0x1F8 / +0x22C(MtxP) / +0x230 / +0x23C / +0x248` | — |
+
+Bits: `fopAcStts_CULL_e=0x100` (in status → cullable); `fopAcCnd_NODRAW_e=0x04` (in condition →
+culled this frame). The cull point is `mSchbitEnableAndFarPlane & 0xFFFF` (u16), not the render far.
+
 ## Decomp function map (`tww/src/d/actor/d_a_player_swim.inc`, included into `d_a_player_main.cpp`)
 
 These are the US/GZLE01 decomp symbols (logic identical to JP; use the JP table above for live
