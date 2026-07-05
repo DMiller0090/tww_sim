@@ -62,6 +62,8 @@ you can triage in one glance.
 ### Land movement (walk, brakeslide, EBS)
 - **How does walking accelerate / what are the two movement angles (facing vs travel)?** → [mechanics/land-movement.md](mechanics/land-movement.md)
 - **What is a brakeslide / extended brakeslide (EBS) / why does ESS left-or-right hold speed almost forever?** → is *facing* (not travel) relative to `csangle` → [land-movement.md#camera-relative-speed-preservation-the-ebs-payoff](mechanics/land-movement.md#camera-relative-speed-preservation-the-ebs-payoff)
+- **Is there a walk-before-run speed plateau (~5.0)?** → no — full stick goes straight to the 17 cap (the "plateau" was a phantom front roll) → [land-movement.md#walk--run-acceleration-baseline](mechanics/land-movement.md#walk--run-acceleration-baseline)
+- **Which partial stick magnitudes are live-valid in a land plan / why NEVER emit Y 192–254?** → [land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel](mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel). NB: this live-valid *stick-input* band is a different thing from the sim's [`Y171` partial-magnitude *regime*](model/land-sim.md#partial-magnitude-regime-y171-msd052) — don't conflate "partial stick" with "partial regime".
 
 ### Model — engine (core)
 - **Why f32/ctypes / op-order / `_F32_PI` / `cM_rad2s` truncation / the baked cos+sin tables / which matrix-quat ops are FMA-fused?** → [model/fp-faithfulness.md](model/fp-faithfulness.md)
@@ -102,4 +104,6 @@ the provenance. The definitive *current* answer must be reachable from the truth
 from a `status: historical` page. (Validated by the doc-eval: weak agents were told to prefer
 non-history pages, so an answer that lives only in history is effectively hidden.)
 
-The KB is regression-tested by a bounded weak-agent eval — bank + harness under [`_eval/`](_eval/).
+The KB is regression-tested by a bounded weak-agent eval — the question bank + run protocol under
+[`_eval/`](_eval/) (Tier-A retrieval / Tier-B comprehension, run by fanning out weak sub-agents;
+agents must never read `_eval/` itself, the answer key).
