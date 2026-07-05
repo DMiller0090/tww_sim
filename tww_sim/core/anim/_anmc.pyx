@@ -18,6 +18,7 @@ their own pure implementations (same result), so this is an optional accelerator
 
 from libc.stdlib cimport malloc, free
 from libc.string cimport memcpy
+from libc.math cimport sqrt as _c_sqrt
 
 # ---- single-precision primitives (identical to _fpc.pyx) -------------------------------------
 cdef inline double f32(double x) nogil: return <double><float>x
@@ -384,6 +385,47 @@ cdef double _hermite_f32_c(double frame, double time0, double value0, double tan
     cdef double d = fmuls(tan1, fsubs(f11, f2))
     return fadds(fadds(fadds(a, b), c), d)
 
+# ---- worldBase + PSMTXInverse (per-frame foot-FK base build) ----------------------------------
+cdef void _psmtx_inverse_c(double* m, double* inv) nogil:
+    """PSMTXInverse (dolphin/mtx/mtx.c:404): cofactor/det inverse, det reciprocal via fres + one
+    Newton refine. Bit-exact core of fk.psmtx_inverse. m/inv are row-major 3x4 (12 doubles)."""
+    cdef double m00 = m[0], m01 = m[1], m02 = m[2], m03 = m[3]
+    cdef double m10 = m[4], m11 = m[5], m12 = m[6], m13 = m[7]
+    cdef double m20 = m[8], m21 = m[9], m22 = m[10], m23 = m[11]
+    cdef double A00 = fmsubs(m11, m22, fmuls(m21, m12))
+    cdef double A01 = fmsubs(m21, m02, fmuls(m01, m22))
+    cdef double A02 = fmsubs(m01, m12, fmuls(m11, m02))
+    cdef double A20 = fmsubs(m10, m21, fmuls(m11, m20))
+    cdef double A21 = fmsubs(m01, m20, fmuls(m00, m21))
+    cdef double A22 = fmsubs(m00, m11, fmuls(m01, m10))
+    cdef double B10 = fmsubs(m12, m20, fmuls(m22, m10))
+    cdef double B11 = fmsubs(m22, m00, fmuls(m02, m20))
+    cdef double B12 = fmsubs(m02, m10, fmuls(m12, m00))
+    cdef double det = fmadds(m20, A02, fmadds(m10, A01, fmuls(m00, A00)))
+    cdef double est = f32(_fres(det))
+    cdef double recip = fnmsubs(det, fmuls(est, est), fadds(est, est))
+    inv[0] = fmuls(A00, recip); inv[1] = fmuls(A01, recip); inv[2] = fmuls(A02, recip)
+    inv[4] = fmuls(B10, recip); inv[5] = fmuls(B11, recip); inv[6] = fmuls(B12, recip)
+    inv[8] = fmuls(A20, recip); inv[9] = fmuls(A21, recip); inv[10] = fmuls(A22, recip)
+    inv[3] = fnmadds(inv[2], m23, fmadds(inv[1], m13, fmuls(inv[0], m03)))
+    inv[7] = fnmadds(inv[6], m23, fmadds(inv[5], m13, fmuls(inv[4], m03)))
+    inv[11] = fnmadds(inv[10], m23, fmadds(inv[9], m13, fmuls(inv[8], m03)))
+
+def world_base(px, py, pz, facing):
+    """(worldBase, m37B4) for the CL setBaseTRMtx: base = transS(px,py,pz).ZXYrotM(0,facing,0) on flat
+    ground; m37B4 = PSMTXInverse(base). Bit-exact port of fk.world_base. Returns two 3x4 lists."""
+    cdef long long fc = (<long long>facing) & 0xFFFF
+    cdef double c = jma_cos(fc), s = jma_sin(fc)
+    cdef double ns = f32(-s)
+    cdef double base[12]
+    cdef double inv[12]
+    base[0] = c;   base[1] = 0.0; base[2] = s;   base[3] = f32(px)
+    base[4] = 0.0; base[5] = 1.0; base[6] = 0.0; base[7] = f32(py)
+    base[8] = ns;  base[9] = 0.0; base[10] = c;  base[11] = f32(pz)
+    _psmtx_inverse_c(base, inv)
+    return (_mtx_list(base), _mtx_list(inv))
+
+
 def hermite_s16(t, time0, value0, tan0, time1, value1, tan1):
     return _hermite_s16_c(t, time0, value0, tan0, time1, value1, tan1)
 
@@ -464,6 +506,8 @@ cdef class PoseEngine:
     cdef double _olds[12][3]
     cdef bint _has_old[12]
     cdef double _m_counter, _m_f8, _m_rate, _m_f10, _m_f14
+    cdef double _base[12]           # worldBase (set by set_pos)
+    cdef double _inv[12]            # m37B4 = PSMTXInverse(worldBase)
 
     def __cinit__(self):
         cdef int i
@@ -523,6 +567,16 @@ cdef class PoseEngine:
         cdef int i
         for i in range(12):
             self._has_old[i] = False
+
+    def set_pos(self, px, py, pz, facing):
+        """Set Link's world pose for the frame about to be posed: build worldBase + m37B4 into C
+        (was fk.world_base + a Python list round-trip per frame). Flat ground: base = transS.ZXYrotM(Y)."""
+        cdef long long fc = (<long long>facing) & 0xFFFF
+        cdef double c = jma_cos(fc), s = jma_sin(fc), ns = f32(-s)
+        self._base[0] = c;   self._base[1] = 0.0; self._base[2] = s;   self._base[3] = f32(px)
+        self._base[4] = 0.0; self._base[5] = 1.0; self._base[6] = 0.0; self._base[7] = f32(py)
+        self._base[8] = ns;  self._base[9] = 0.0; self._base[10] = c;  self._base[11] = f32(pz)
+        _psmtx_inverse_c(self._base, self._inv)
 
     cdef void _init_morf(self, double i_morf) nogil:
         i_morf = f32(i_morf)
@@ -601,11 +655,10 @@ cdef class PoseEngine:
             swp = cur; cur = nxt; nxt = swp
         _concat_c(inv, cur, out)
 
-    def pose_toe(self, int m0, int m1, double f0, double f1, double ratio, double i_morf,
-                 base, m37b4):
+    def pose_toe(self, int m0, int m1, double f0, double f1, double ratio, double i_morf):
         """Pose all 12 chain joints (blend m0@f0 with m1@f1, oldframe-morf, PSMTXQuat, scale/trans),
-        FK both feet from worldBase, remove the base with m37b4, and return the toe+heel dict exactly
-        like foot_fk.step_feet: {'toe':[R,L],'heel':[R,L]} (index 0 = right jnt39, 1 = left jnt34)."""
+        FK both feet from the worldBase set by set_pos(), remove the base with m37B4, and return the
+        flat 12-tuple [Rtoe, Ltoe, Rheel, Lheel] x (x,y,z) (index 0 = right jnt39, 1 = left jnt34)."""
         cdef double rate
         if i_morf >= 0.0:
             self._init_morf(i_morf)
@@ -663,14 +716,10 @@ cdef class PoseEngine:
 
         self._morf_dec()
 
-        cdef double base12[12]
-        cdef double inv12[12]
-        _read_mtx(base, base12)
-        _read_mtx(m37b4, inv12)
         cdef double cur39[12]
         cdef double cur34[12]
-        self._chain_fk(base12, inv12, self._chain39, self._n39, local, cur39)
-        self._chain_fk(base12, inv12, self._chain34, self._n34, local, cur34)
+        self._chain_fk(self._base, self._inv, self._chain39, self._n39, local, cur39)
+        self._chain_fk(self._base, self._inv, self._chain34, self._n34, local, cur34)
 
         cdef double rt[3]
         cdef double lt[3]
@@ -680,5 +729,46 @@ cdef class PoseEngine:
         _mv_c(cur34, _TOE_X, _TOE_Y, 0.0, lt)
         _mv_c(cur39, _HEEL_X, _HEEL_Y, 0.0, rh)
         _mv_c(cur34, _HEEL_X, _HEEL_Y, 0.0, lh)
-        return {'toe': [(rt[0], rt[1], rt[2]), (lt[0], lt[1], lt[2])],
-                'heel': [(rh[0], rh[1], rh[2]), (lh[0], lh[1], lh[2])]}
+        # Flat 12-tuple (no dict alloc): [Rtoe, Ltoe, Rheel, Lheel] x (x,y,z). foot_compose reads it.
+        return (rt[0], rt[1], rt[2], lt[0], lt[1], lt[2],
+                rh[0], rh[1], rh[2], lh[0], lh[1], lh[2])
+
+
+# ---- posMoveFromFootPos composition (plant select + absXZ + smoothing + speedF) ---------------
+cdef double _sqrtf_c(double x) nogil:
+    """std::sqrtf: frsqrte seed + 3 Newton refines in f64, then f32(x*guess). Bit-exact core of
+    foot_speedf._sqrtf (a math-accurate seed matches: 3 Newton steps wash out the crude frsqrte seed)."""
+    x = f32(x)
+    cdef double g
+    if x > 0.0:
+        g = 1.0 / _c_sqrt(x)
+        g = 0.5 * g * (3.0 - g * g * x)
+        g = 0.5 * g * (3.0 - g * g * x)
+        g = 0.5 * g * (3.0 - g * g * x)
+        return f32(x * g)
+    return f32(x)
+
+def foot_compose(t1, t2, double nspeed, double msd, double m3598, double prev_f312, double m35B4):
+    """posMoveFromFootPos toe->speedF (d_a_player_main.cpp:2372+). t1/t2 are the flat 12-tuples from
+    pose_toe for the last two DRAWN frames. Returns (speedF, f312). Bit-exact port of the tail of
+    foot_speedf._foot_speedf (plant select on t1, 1-frame-delayed toe delta, recursive smoothing,
+    speedF = nspeed*(1-m3598) +/- f31_2*m3598 with the |.|<0.05 -> 0 snap)."""
+    cdef double t1_1 = t1[1], t1_7 = t1[7], t1_4 = t1[4], t1_10 = t1[10]
+    cdef int plant = 0 if f32((t1_1 + t1_7) * 0.5) < f32((t1_4 + t1_10) * 0.5) else 1
+    cdef int o = plant * 3
+    cdef double dx = f32(<double>t1[o + 0] - <double>t2[o + 0])
+    cdef double dz = f32(<double>t1[o + 2] - <double>t2[o + 2])
+    cdef double f312 = _sqrtf_c(fmadds(dz, dz, fmuls(dx, dx)))
+    cdef double dm = f32(m35B4 - msd)
+    if dm < 0.0:
+        dm = -dm
+    if m3598 < 1.0 and dm < 0.2:
+        f312 = fadds(fmuls(f312, f32(0.3)), fmuls(f32(0.7), prev_f312))
+    cdef double spz = f32(nspeed * f32(1.0 - m3598))
+    if nspeed >= 0.0:
+        spz = f32(spz + f32(f312 * m3598))
+    else:
+        spz = f32(spz - f32(f312 * m3598))
+    cdef double asp = spz if spz >= 0.0 else -spz
+    cdef double speedF = 0.0 if asp < 0.05 else spz
+    return (speedF, f312)

@@ -31,6 +31,12 @@ from .. import fp
 from . import fk
 from .anim_state import UnderAnimState, ANIM_META
 
+# Optional native composition (anim/_anmc.foot_compose); bit-exact with _py_foot_compose below.
+try:
+    from . import _anmc as _N
+except ImportError:
+    _N = None
+
 # f32 literals from the posMoveFromFootPos recursive-smoothing (d_a_player_main.cpp:2400).
 _F0_3 = fp.f32(0.3)
 _F0_7 = fp.f32(0.7)
@@ -67,9 +73,27 @@ def _absxz(dx, dz):
 
 
 def _plant_of(feet):
-    """m34BC on flat ground: index (0=right jnt39, 1=left jnt34) of the lower toe/heel midpoint Y."""
-    midY = [_f32((feet['toe'][k][1] + feet['heel'][k][1]) * 0.5) for k in (0, 1)]
-    return 0 if midY[0] < midY[1] else 1
+    """m34BC on flat ground: index (0=right jnt39, 1=left jnt34) of the lower toe/heel midpoint Y.
+    `feet` is the flat 12-tuple [Rtoe, Ltoe, Rheel, Lheel] x (x,y,z) from step_feet/pose_toe."""
+    m0 = _f32((feet[1] + feet[7]) * 0.5)     # right: toe.y (idx 1) + heel.y (idx 7)
+    m1 = _f32((feet[4] + feet[10]) * 0.5)    # left:  toe.y (idx 4) + heel.y (idx 10)
+    return 0 if m0 < m1 else 1
+
+
+def _py_foot_compose(t1, t2, nspeed, msd, m3598, prev_f312, m35B4):
+    """Pure-Python posMoveFromFootPos toe->speedF (fallback for _anmc.foot_compose). t1/t2 are the
+    flat 12-tuples of the last two DRAWN frames. Returns (speedF, f312)."""
+    plant = _plant_of(t1)
+    o = plant * 3
+    dx = _f32(t1[o + 0] - t2[o + 0])
+    dz = _f32(t1[o + 2] - t2[o + 2])
+    f312 = _absxz(dx, dz)
+    if m3598 < 1.0 and abs(_f32(m35B4 - msd)) < 0.2:
+        f312 = fp.fadds(fp.fmuls(f312, _F0_3), fp.fmuls(_F0_7, prev_f312))
+    spz = _f32(nspeed * _f32(1.0 - m3598))
+    spz = _f32(spz + _f32(f312 * m3598)) if nspeed >= 0.0 else _f32(spz - _f32(f312 * m3598))
+    speedF = 0.0 if abs(spz) < 0.05 else spz
+    return speedF, f312
 
 
 class FootSpeedF:
@@ -244,22 +268,14 @@ class FootSpeedF:
     def _foot_speedf(self, nspeed, msd, state, morf):
         """The shared posMoveFromFootPos math (d_a_player_main.cpp:2372+): pose the foot, take the
         1-frame-delayed plant toe delta f31_2 with the recursive smoothing, and compose
-        speedF = nspeed*(1-m3598) +/- f31_2*m3598. Used by both the walk step() and the roll step_roll()."""
+        speedF = nspeed*(1-m3598) +/- f31_2*m3598. The plant/delta/smoothing/compose tail runs in C
+        (_anmc.foot_compose) when available, else the bit-identical _py_foot_compose. t1 = the toe
+        DRAWN last frame (1-frame delay), t2 = the frame before (both flat 12-tuples)."""
         self._apply_base()
         cur = self.ff.step_feet(state['move0'], state['move1'], state['f0'], state['f1'],
                                 state['ratio'], i_morf=morf)
-        # spB0 = the toe DRAWN last frame (1-frame delay) = t1; prevStored = t2.
-        plant = _plant_of(self.t1)
-        dx = _f32(self.t1['toe'][plant][0] - self.t2['toe'][plant][0])
-        dz = _f32(self.t1['toe'][plant][2] - self.t2['toe'][plant][2])
-        f312 = _absxz(dx, dz)
-        m = state['m3598']
-        # recursive smoothing (m3598<1 AND stick-mag steady): (f31_2*0.3f)+0.7f*m359C, NON-fused,
-        # f32 literals (f64 0.3/0.7 round 1 ULP off). See knowledge/history/resolved-bugs.md.
-        if m < 1.0 and abs(_f32(self.m35B4 - msd)) < 0.2:
-            f312 = fp.fadds(fp.fmuls(f312, _F0_3), fp.fmuls(_F0_7, self.prev_f312))
-        spz = _f32(nspeed * _f32(1.0 - m))
-        spz = _f32(spz + _f32(f312 * m)) if nspeed >= 0.0 else _f32(spz - _f32(f312 * m))
-        speedF = 0.0 if abs(spz) < 0.05 else spz
+        compose = _N.foot_compose if _N is not None else _py_foot_compose
+        speedF, f312 = compose(self.t1, self.t2, nspeed, msd, state['m3598'],
+                               self.prev_f312, self.m35B4)
         self._shift(cur, f312, msd)
         return speedF

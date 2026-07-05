@@ -25,9 +25,9 @@ Constants (SDA2/d_cam_param + d_camera, read from the DOL via Ghidra):
 from __future__ import annotations
 import math, struct
 
-def f32(x: float) -> float:
-    """Round a Python float to IEEE-754 single precision (mwcc fmuls/fadds/frsp semantics)."""
-    return struct.unpack(">f", struct.pack(">f", float(x)))[0]
+# f32 rounding: the shared fp primitive (native _fpc when built, else ctypes) -- bit-identical to the
+# old struct round-trip but ~5x cheaper, and this runs ~11x per camera frame. See fp-faithfulness.md.
+from ..fp import f32
 
 # --- dCamMath::rationalBezierRatio consts (d_cam_param::_4103.._4113) ---
 _B_SIGN0 = 0.0        # _4103 (float; also the "flat"/degenerate return)

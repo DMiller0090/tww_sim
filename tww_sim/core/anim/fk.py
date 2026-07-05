@@ -238,6 +238,7 @@ try:
     _N.init_tables(S._COS_TABLE, S._SIN_TABLE)
     mtx_concat = _N.mtx_concat
     mtx_mult_vec = _N.mtx_mult_vec
+    world_base = _N.world_base          # transS.ZXYrotM + PSMTXInverse, per foot-FK frame
 except ImportError:
     pass
 

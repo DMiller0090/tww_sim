@@ -110,8 +110,11 @@ class FootFK:
 
     def set_pos(self, px, pz, py=0.0, facing=0):
         """Set Link's world pose for the frame about to be posed. Only X/Z (and facing) affect the
-        foot toe f31_2; py is immaterial (Y column unused). No-op when world FK is disabled."""
-        if self.world:
+        foot toe f31_2; py is immaterial (Y column unused). No-op when world FK is disabled. With the
+        engine, worldBase + m37B4 are built + kept in C (no per-frame Python list round-trip)."""
+        if self._engine is not None:
+            self._engine.set_pos(px, py, pz, facing)
+        elif self.world:
             self.base, self.m37b4 = fk.world_base(px, py, pz, facing)
 
     def _blend_joint(self, move0, move1, f0, f1, ratio, jnt, rate):
@@ -199,7 +202,7 @@ class FootFK:
         """Populate old pose from a single anim (e.g. FREEB rest) before the first walk step."""
         if self._engine is not None:
             i = self._anim_idx[move0]
-            self._engine.pose_toe(i, i, f0, f0, 0.0, -1.0, self.base, self.m37b4)
+            self._engine.pose_toe(i, i, f0, f0, 0.0, -1.0)
             return
         self._pose_frame(move0, move0, f0, f0, 0.0, 0.0)
 
@@ -221,7 +224,7 @@ class FootFK:
         if self._engine is not None:
             m1 = move1 if move1 is not None else move0
             return self._engine.pose_toe(self._anim_idx[move0], self._anim_idx[m1],
-                                         f0, f1, ratio, i_morf, self.base, self.m37b4)
+                                         f0, f1, ratio, i_morf)
         if i_morf >= 0.0:
             self.morf.init_morf(i_morf)
         rate = self.morf.rate
@@ -230,9 +233,9 @@ class FootFK:
         cur39 = self._chain_mtx(local, 39)
         cur34 = self._chain_mtx(local, 34)
         mv = fk.mtx_mult_vec
-        out = {
-            'toe': [mv(cur39, fk.L_TOE), mv(cur34, fk.L_TOE)],
-            'heel': [mv(cur39, fk.L_HEEL), mv(cur34, fk.L_HEEL)],
-        }
+        rt = mv(cur39, fk.L_TOE); lt = mv(cur34, fk.L_TOE)
+        rh = mv(cur39, fk.L_HEEL); lh = mv(cur34, fk.L_HEEL)
         self.morf.dec()
-        return out
+        # Flat 12-tuple [Rtoe, Ltoe, Rheel, Lheel] x (x,y,z) -- matches PoseEngine.pose_toe.
+        return (rt[0], rt[1], rt[2], lt[0], lt[1], lt[2],
+                rh[0], rh[1], rh[2], lh[0], lh[1], lh[2])
