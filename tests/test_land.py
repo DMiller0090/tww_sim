@@ -127,21 +127,24 @@ def test_end_position_within_tolerance():
 
 @pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
 def test_speedf_matches_live_bit_exact():
-    """The ported foot-FK speedF must reproduce the GAME's live true_speed BYTE-FOR-BYTE via the RAW
-    FootSpeedF driver (golden ns/msd fed directly), isolating the anim FK from the nspeed sim. The
-    entry transient (frames 5/6) is now bit-exact after the two 2026-07-04 f64->f32 constant fixes
-    (oldframe-morf counter; f31_2 smoothing 0.3f/0.7f) -- see history/resolved-bugs.md. The test now
-    surfaces a RELEASE-region RAW-DRIVER ARTIFACT (frames 33-36 read tens/hundreds of ULP off because
-    the raw driver's fed msd/ns diverge from LandState's integration; LandState's own speedF is
-    bit-exact there -- same class as the Y171 raw driver), plus a genuine deep-release 1-ULP at frames
-    37/39. RED here documents that frontier; trust the LandState-driven pos_z arc for position.
-    See knowledge/model/anim-engine.md."""
+    """The walk speedF (true_speed) must reproduce the GAME's live value BYTE-FOR-BYTE. Driven via
+    LandState (not the raw FootSpeedF driver from the %g golden) so nspeed/mStickDistance/world pos are
+    full-precision -- the raw driver's release-region ns/msd diverge from LandState's integration and
+    read tens/hundreds of ULP off there, a HARNESS ARTIFACT, not a sim error (same reason the Y171 test
+    is LandState-driven, c056bba). The entry transient (frames 5/6) is bit-exact after the two 2026-07-04
+    f64->f32 constant fixes (oldframe-morf counter; f31_2 smoothing 0.3f/0.7f, history/resolved-bugs.md).
+    Residual RED: the deep-release 1-ULP at frames 37/39. Root-caused (live spB0 decomposition,
+    2026-07-04) to a 1-ULP-LOW rounding in the plant-toe FK **X** coordinate on some frames (34/35/38);
+    it is NOT world-quantization (facing=0 => px=0 => the toe X is effectively identity-space FK; the
+    world-magnitude Z is bit-exact) and NOT the compose/msd path (that is provably exact when m3598==1).
+    It does not reach position: the pos_z arc + endpoint are bit-exact through the whole release. This
+    is the sub-ULP foot-FK-chain frontier. See knowledge/model/anim-engine.md."""
     golden = _load_golden()
-    drv = FootSpeedF(idle_frame=70.0)
-    for fr, ns, msd, spF_bits, _pz in golden:
-        got = drv.step(ns, msd)
-        assert f32_bits(got) == spF_bits, \
-            f"frame {fr}: sim speedF {got!r} (0x{f32_bits(got):08x}) != LIVE 0x{spF_bits:08x}"
+    s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
+    for (sx, sy), (fr, _ns, _msd, spF_bits, _pz) in zip(WALK_STICKS, golden):
+        s.step(sx, sy)
+        assert f32_bits(s.speedF) == spF_bits, \
+            f"frame {fr}: sim speedF {s.speedF!r} (0x{f32_bits(s.speedF):08x}) != LIVE 0x{spF_bits:08x}"
 
 
 @pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
