@@ -67,8 +67,44 @@ type says (usually f32). Quantize constants to f32 at the site that mirrors an f
 `fp.fmuls`/`fadds` do **not** quantize their operands, so the caller must. Also: the raw-`FootSpeedF`
 driver in `test_speedf_matches_live_bit_exact` is a **harness artifact** in the release region
 (frames 33–36 read hundreds of ULP off while LandState is bit-exact) — same class as the Y171 raw
-driver; trust LandState-driven values. Still open after these fixes: ATN/turn endpoints
-(ebs/brake_right/waitturn 1–2 ULP), slip (74 ULP), Y171 toe.z, deep-release frames 37/39 (1 ULP).
+driver; trust LandState-driven values.
+→ [model/anim-engine](../model/anim-engine.md), [model/land-sim](../model/land-sim.md).
+
+## deep-release speedF f37/f39 + brake_right — a spurious `pos_x` sine leak (NOT a foot-FK-X residual)
+
+The straight-walk release tail was `speedF`-bit-exact except frames 37/39 (±1 ULP), and `brake_right`
+was 2 ULP in `pos_z`. The 04x hypothesis (recorded on the anim-engine truth page, now migrated here)
+was a **"1-ULP-low toe X in the local foot-FK chain (quat→matrix / blend / concat), the same
+FK-chain frontier as Y171/ATN"** — reached by a live `spB0` decomposition that saw the drawn right-foot
+toe **X** 1 ULP low at frames 34/35/38. **That attribution was wrong.** A full live per-joint `anmMtx`
+decomposition (capture the right chain 0→1→29→30→36→37→38→39 over the release; compare `m37B4·anmMtx(39)·l_toe`
+to the stored toe) proved:
+
+1. **The foot FK is bit-exact.** Every joint's `anmMtx` **rotation** row matches live to 0 ULP, and the
+   toe-multiply (`PSMTXMultVec`) reproduces the stored toe from the live matrices at 0 ULP. The only
+   divergence was the world-space **X-translate**, and it **cancelled internally** (sim `m37B4` and
+   sim `anmMtx` differ from live by the *same* world-X term → the self-consistent toe was clean except
+   ≤1 ULP on 3 frames).
+2. **The real cause: the sim leaked a spurious `pos_x`.** Live `pos_x ≡ 0` (m37B4[0][3] = −0.0) on the
+   on-axis walk; the sim drifted `pos_x → ~9e-5`. The foot FK quantizes at **world magnitude**, so even
+   a ~9e-5 lateral offset shifts the X grid and flips the plant-toe X 1 ULP on some frames → `speedF`
+   f37/f39. It also fed the `brake_right`/`ebs` position tails.
+3. **Why px leaked: `cM_ssin` reconstructed from the cos table.** `LandState` integrated
+   `speed.x = speedF·_cM_ssin_s16(travel)` with `_cM_ssin_s16(a) = cM_scos_s16((a−0x4000)&0xFFFF)`.
+   But the game's `cM_ssin(a) = JMASSin(a)` (`c_math.h:38`) — the **console SIN table** directly. Sin is
+   NOT a −0x4000 view of cos: `cos[0xC000] = 1.75e-7 ≠ sin[0] = 0` (and 816/4096 entries differ 1 ULP,
+   the same table asymmetry the [sin-table fix](../model/fp-faithfulness.md#console-cosine-and-sine-tables)
+   found for `JMAEulerToQuat`). So `_cM_ssin_s16(0)` returned `1.75e-7` instead of `0`, leaking
+   `speed.x ≈ 17·1.75e-7 ≈ 3e-6/frame`. **Fix:** route `_cM_ssin_s16` through `mathlib.cM_ssin_s16`
+   (the baked sin table). Offline land 180→182 pass; live gate 10→11 (`brake_right` + the deep-release
+   `speedf` now bit-exact); no regression.
+
+**Lesson (again):** a claimed "sub-ULP foot-FK-X frontier" was a **wrong-table** input leak one layer
+up. When a toe residual "cancels internally" in the world-space FK, the fault is the *world position
+fed to the FK*, not the chain. And any sine on an s16 angle must use the **sin** table — never a
+cos-table offset. Still open after this fix (genuine world-magnitude frontier, all position-neutral to
+gameplay): `Y171` speedF/pos_z (px now clean → the toe.z Z-quantization + the partial-mag smoothing
+regime), and `ebs`/`waitturn` (turn transients, ≤1 ULP).
 → [model/anim-engine](../model/anim-engine.md), [model/land-sim](../model/land-sim.md).
 
 ## 554 / "anim drifts ~3 fr by f400" — truncated-seed artifact

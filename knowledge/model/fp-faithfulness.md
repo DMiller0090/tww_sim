@@ -60,7 +60,16 @@ by the s16 angle with the low 4 bits truncated (`index >> 4`, no interpolation).
 
 `JMAEulerToQuat` uses `JMASSin`/`JMASCos` off a **separate** console `jmaSinTable`
 (`jmaCosTable = jmaSinTable + 1024`, `jmaSinShift = 4`, size 4096) — **not** a −1024 view of the
-cosine table; the old wrap-around reconstruction was 1 ULP off at 816/4096 entries. Both baked tables
+cosine table; the old wrap-around reconstruction was 1 ULP off at 816/4096 entries.
+
+**`cM_ssin` is `JMASSin`, not a cos offset.** `cM_ssin(a) = JMASSin(a)` / `cM_scos(a) = JMASCos(a)`
+(`c_math.h:38`) — so any sine on an s16 angle must index the **sin** table (`mathlib.cM_ssin_s16`),
+never `cM_scos((a−0x4000)&0xFFFF)`. They are not interchangeable: `cos[0xC000] = 1.75e-7` but
+`sin[0] = 0`. Reconstructing sine from cos leaked a spurious `speed.x ≈ speedF·1.75e-7 ≈ 3e-6/frame`
+on the on-axis land walk (`travel==0` → should be exactly 0), drifting `pos_x` to ~9e-5; because the
+foot FK quantizes at world magnitude, that nonzero px flipped the plant-toe X 1 ULP (deep-release
+`speedF` f37/f39 + `brake_right`). See
+[history/resolved-bugs](../history/resolved-bugs.md#deep-release-speedf-f37f39--brake_right--a-spurious-pos_x-sine-leak-not-a-foot-fk-x-residual). Both baked tables
 (`core/tables/cos_table.bin`, `sin_table.bin`; `mathlib._COS_TABLE`/`_SIN_TABLE`) were re-verified
 against the live console (`jmaSinTable` ptr @ `0x803EAE28`): **0 mismatches** across all 4096 sin AND
 cos entries. The tables are not a source of any remaining residual.

@@ -735,8 +735,9 @@ def _dist_angle_s(a, b):
 
 
 def _cM_ssin_s16(angle):
-    # cM_ssin on an s16 angle: sin(a) = cos(a - 0x4000). Reuses sim's baked console cos table.
-    return S.cM_scos_s16((int(angle) - 0x4000) & 0xFFFF)
+    # cM_ssin(a) == JMASSin(a): the console SIN table directly, NOT a cos offset (cos[0xC000] != sin[0]).
+    # See knowledge/model/fp-faithfulness.md (sin table) + history/resolved-bugs.md (pos_x sine leak).
+    return S.cM_ssin_s16(angle)
 
 
 def run_walk(sticks, csangle=0, **seed):

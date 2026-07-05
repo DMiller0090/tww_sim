@@ -24,11 +24,14 @@ comes from the roll's getFrame()>17 checkNextMode(1) exit straight to ATN then t
 POSITION (pos_z) IS GATED FLOAT-PERFECT -- 0 ULP vs live is the pass condition (LIVE IS THE SOURCE OF
 TRUTH; the sim must reproduce the game's pos_z byte for byte). posz_status() enforces this with NO
 tolerance and NO xfail: a tech that is not bit-exact shows RED. Today walk_run/brakeslide/face_left/
-roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip pass (0 ULP; slip went bit-perfect with the
-posMoveFromFootPos |speedF| < 0.05 -> 0 skid snap, d_a_player_main.cpp:2418); walk_y171/ebs/
-brake_right/waitturn FAIL on the open sub-ULP planted-foot jnt34/39 FK-X residual. Each case also layers
-its tech assertions. (Runs with no anim keyframe data fall back to the calibrated stand-in and pos_z
-is not asserted.)
+roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip/brake_right pass (0 ULP; slip went bit-perfect
+with the posMoveFromFootPos |speedF| < 0.05 -> 0 skid snap, d_a_player_main.cpp:2418; brake_right +
+the deep-release walk speedF went bit-perfect with the pos_x sine-leak fix -- cM_ssin must use JMASSin,
+not a cos-table offset, or the on-axis walk leaks a spurious px that flips the world-magnitude foot
+toe X 1 ULP; see knowledge/history/resolved-bugs.md). walk_y171/ebs/waitturn FAIL on the open genuine
+world-magnitude quantization frontier (Y171 toe.z; ebs/waitturn turn-transient px, all <=1 ULP, none
+reaching gameplay-relevant position). Each case also layers its tech assertions. (Runs with no anim
+keyframe data fall back to the calibrated stand-in and pos_z is not asserted.)
 
 DTM-PLAYBACK (wiggle_ebs_roll): the wiggle-EBS-into-roll chain is DENSE frame-perfect input, where
 the advanceseq pipe could jitter (bug#2). It is locked by loading a movie-active savestate fixture

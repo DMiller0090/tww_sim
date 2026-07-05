@@ -65,17 +65,22 @@ of the artifact). For the z=2000 beam a 2-ULP `pos_z` oracle is likely already g
 (live-verify once). Gated by `test_speedf_y171_matches_live_bit_exact` /
 `test_pos_z_arc_y171_matches_live_bit_exact` and the `walk_y171` case in `run_land_tests.py`.
 
-## Open residuals (the 7 red land tests)
+## Open residuals (4 red offline / 3 red live)
 
-With the [fres + non-fused fixes](fp-faithfulness.md) the walk-blend foot toe (frames 5/6/34) is
-bit-exact and the straight walk arc is float-perfect. What remains:
+With the [fres + non-fused fixes](fp-faithfulness.md), the [slip skid snap](#speedf-snaps-to-0-below-005-the-slip-skid-tail),
+and the [`pos_x` sine-leak fix](../history/resolved-bugs.md#deep-release-speedf-f37f39--brake_right--a-spurious-pos_x-sine-leak-not-a-foot-fk-x-residual)
+(which closed the deep-release `speedF` f37/f39 and `brake_right`), the straight walk arc, the release
+tail, roll, slip, and `brake_right` are all bit-exact. What remains is the genuine **world-magnitude
+quantization frontier** — none of it reaches a gameplay-relevant position:
 
+- **`Y171` (partial-magnitude walk).** `pos_x` is now clean (0 = live), so the residual is the
+  **toe.z world-quantization** (~0.6 ULP at f27 → 1 ULP `pos_z`) plus a `speedF` miss (~3 ULP at f17)
+  in the partial-mag smoothing/blend regime (`m3598 == 1.0`, the only cruise that exercises the toe
+  every frame). Gated by `test_speedf_y171` / `test_pos_z_arc_y171` and live `walk_y171`.
+- **`ebs` / `waitturn` (turn transients, ≤1 ULP `pos_z`).** After the pivot/strafe transient the
+  sim's `pos_x` differs from live by a sub-ULP amount, shifting the world-X quantization by 1 ULP.
 - **Entry-morf jnt0 (sub-ULP).** The first 1–2 MOVE frames have jnt0.z ~5 ULP off (decaying with the
-  morf rate) — seed/ratio/rate/morf-fusion all verified exact, so it is a `calc_transform`/Hermite
-  sub-ULP in the root Z-translate track. It leaks into the ATN/turn endpoints
-  (`ebs` 1, `brake_right` 2, `waitturn` 1 ULP) and is the `speedf` test's frame-5 miss.
-- **Toe.z world-quantization (~0.6 ULP)** at f26/27 → the `Y171` 2-ULP `pos_z`.
-- **`slip` (74 ULP)** — a separate ANM_SLIP skid-modelling gap, not a foot-FK residual.
+  morf rate) — a `calc_transform`/Hermite sub-ULP in the root Z-translate track.
 
 These are immutable per the [locked-test rule](../../tests/dolphin/README.md#locked-tests-are-immutable-hard-rule):
 red until the sim closes the gap; never edit the test/golden to pass.
@@ -83,14 +88,14 @@ red until the sim closes the gap; never edit the test/golden to pass.
 ## Enforced to the byte by two tests
 
 - **Live** (`tests/dolphin/run_land_tests.py`, the accuracy gate — live is the source of truth): pass
-  condition is **0 ULP vs live**, no tolerance, no xfail. `walk/brakeslide/face_left/roll_run/
-  roll_slow/roll_settle/roll_ebs/moveturn` pass; `ebs/brake_right/waitturn/slip` (and the `Y171`
-  cases) are the to-do list.
+  condition is **0 ULP vs live**, no tolerance, no xfail. `walk/brakeslide/face_left/brake_right/
+  roll_run/roll_slow/roll_settle/roll_ebs/moveturn/slip` pass (**11 pass**); `walk_y171/ebs/waitturn`
+  are the to-do list (**3 fail**).
 - **Offline** (`tests/test_land.py`, no Dolphin): the token-cheap **shadow** — the golden
   (`tests/golden/land_walk_speedf.csv` + `CASE_POSZ`) is the GAME's live f32 bytes (captured by
   `tests/gen_land_golden.py`), and the tests assert `f32_bits(sim) == live`, so the SAME techs fail
-  (7 red: `speedf` frame 5, `speedf_y171`, `pos_z_arc_y171`, `ebs`, `brake_right`, `waitturn`, `slip`;
-  173 pass). Regenerate the golden from live after a sim fix via `python tests/gen_land_golden.py`.
+  (**4 red**: `speedf_y171`, `pos_z_arc_y171`, `ebs`, `waitturn`; **182 pass**). Regenerate the golden
+  from live after a sim fix via `python tests/gen_land_golden.py`.
 
 ## See also
 

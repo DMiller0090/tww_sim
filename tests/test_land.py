@@ -134,12 +134,11 @@ def test_speedf_matches_live_bit_exact():
     read tens/hundreds of ULP off there, a HARNESS ARTIFACT, not a sim error (same reason the Y171 test
     is LandState-driven, c056bba). The entry transient (frames 5/6) is bit-exact after the two 2026-07-04
     f64->f32 constant fixes (oldframe-morf counter; f31_2 smoothing 0.3f/0.7f, history/resolved-bugs.md).
-    Residual RED: the deep-release 1-ULP at frames 37/39. Root-caused (live spB0 decomposition,
-    2026-07-04) to a 1-ULP-LOW rounding in the plant-toe FK **X** coordinate on some frames (34/35/38);
-    it is NOT world-quantization (facing=0 => px=0 => the toe X is effectively identity-space FK; the
-    world-magnitude Z is bit-exact) and NOT the compose/msd path (that is provably exact when m3598==1).
-    It does not reach position: the pos_z arc + endpoint are bit-exact through the whole release. This
-    is the sub-ULP foot-FK-chain frontier. See knowledge/model/anim-engine.md."""
+    The deep-release f37/f39 (previously the last RED here) is now bit-exact: it was NOT a foot-FK-X
+    residual but a spurious on-axis pos_x -- the sim reconstructed cM_ssin from the cos table instead of
+    JMASSin, leaking speed.x ~3e-6/frame, and the world-magnitude foot FK flipped the plant-toe X 1 ULP.
+    Fixed by routing _cM_ssin_s16 through mathlib.cM_ssin_s16. See
+    knowledge/history/resolved-bugs.md (deep-release pos_x sine leak)."""
     golden = _load_golden()
     s = LandState(pos_z=SEED_POS_Z, state=FREE_WAIT, idle_frame=70.0)
     for (sx, sy), (fr, _ns, _msd, spF_bits, _pz) in zip(WALK_STICKS, golden):
@@ -198,14 +197,14 @@ def test_pos_z_arc_y171_matches_live_bit_exact():
 # `python tests/gen_land_golden.py endpoints`. sim!=live fails here, mirroring run_land_tests.py.
 CASE_POSZ = {
     'brakeslide' : 0x448146b3,   # 1034.2093505859375 (state 7)   bit-perfect
-    'ebs'        : 0x44aa2072,   # 1361.013916015625  (state 6)   sim off 1 ULP (jnt34 foot residual)
+    'ebs'        : 0x44aa2072,   # 1361.013916015625  (state 6)   sim off 1 ULP (turn-transient px world-quant)
     'face_left'  : 0x44e9fa16,   # 1871.815185546875  (state 6)   bit-perfect (world FK)
-    'brake_right': 0x447238c3,   # 968.8869018554688  (state 4)   sim off 2 ULP (jnt34 foot residual)
+    'brake_right': 0x447238c3,   # 968.8869018554688  (state 4)   bit-perfect (pos_x sine-leak fix)
     'roll_run'   : 0x4486a1c6,   # 1077.055419921875  (state 30)  bit-perfect
     'roll_slow'  : 0x4445f858,   # 791.88037109375    (state 30)  bit-perfect
     'roll_settle': 0x44be9639,   # 1524.6944580078125 (state 4)   bit-perfect (world FK)
     'roll_ebs'   : 0x44d64e35,   # 1714.4439697265625 (state 6)   bit-perfect
-    'waitturn'   : 0x442c9e1e,   # 690.4705810546875  (state 6)   sim off 2 ULP (jnt34 foot residual)
+    'waitturn'   : 0x442c9e1e,   # 690.4705810546875  (state 6)   sim off 1 ULP (turn-transient px world-quant)
     'moveturn'   : 0x44086be3,   # 545.6857299804688  (state 6)   bit-perfect (live-mirror *18 seq)
     'moveturn_pos': 0x43ffd7c6,  # 511.68572998046875 (state 6)   bit-perfect (*20 seq)
     'slip'       : 0x44756df2,   # 981.7178955078125  (state 6)   bit-perfect (speedF<0.05 skid snap)

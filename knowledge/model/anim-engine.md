@@ -12,9 +12,13 @@ jnt0.z entry-morf now bit-exact) and the `f31_2` smoothing used f64 `0.3`/`0.7` 
 now bit-exact) — see [history/resolved-bugs](../history/resolved-bugs.md#walk-entry-transient--two-f64-vs-f32-constant-bugs-not-a-hermitefoot-ik-frontier).
 The full-speed **slip** skid + reversed-walk arc is now `pos_z` bit-exact too — it was NOT a FK
 residual but a missing `speedF < 0.05 -> 0` snap (`posMoveFromFootPos`, d_a_player_main.cpp:2418);
-see [land-sim](land-sim.md#speedf-snaps-to-0-below-005-the-slip-skid-tail). Still open (all sub-ULP
-foot-FK-chain frontier, none reaching position): deep-release `speedF` f37/f39 (1 ULP, root-caused
-below), ATN/turn endpoints (ebs/brake_right/waitturn 1–2 ULP), Y171 toe.z.
+see [land-sim](land-sim.md#speedf-snaps-to-0-below-005-the-slip-skid-tail). The **deep-release
+`speedF` f37/f39** and **brake_right** are now bit-exact too — also NOT a foot-FK residual: the sim
+leaked a spurious on-axis `pos_x` (a cos-table sine reconstruction instead of `JMASSin`), and the
+foot FK quantizes at world magnitude so that tiny px flipped the plant-toe X 1 ULP (see
+[history/resolved-bugs](../history/resolved-bugs.md#deep-release-speedf-f37f39--brake_right--a-spurious-pos_x-sine-leak-not-a-foot-fk-x-residual)).
+Still open (genuine world-magnitude frontier, none reaching gameplay-relevant position): Y171
+speedF/toe.z, ATN/turn endpoints (ebs/waitturn ≤1 ULP).
 **Source:** `tww_sim/core/anim/{j3d_eval,fk,foot_fk,quat,foot_speedf,anim_state}.py`; decomp
 (`J3DAnimation.cpp`, `J3DJoint.cpp`, `m_Do_ext.cpp`, `d_a_player_main`) + live foot-toe oracle.
 This engine is **core** (generic, FP-faithful); only [land](land-sim.md) consumes it today, but it is
@@ -117,29 +121,18 @@ the faithful `sqrtf(fmadds(...))`, see
 is the plant-foot XZ delta and the only anim-derived input to land `speedF`; how it composes into
 `speedF` and position is [land-sim](land-sim.md).
 
-### Deep-release `speedF` f37/f39 — a 1-ULP-low toe **X** FK residual (not the compose path)
+### The FK is only as exact as the world position fed to it
 
-The straight full-deflection walk's release tail (`msd=0`, `nspeed` decaying 17→0) is `speedF`-bit-exact
-except frames 37 and 39 (±1 ULP). Root-caused 2026-07-04 by a live `spB0` decomposition (reload +
-`advanceseq(WALK[:n])`, read the stored toe at `+0x3CF8`/`+0x3E10`):
-- **The compose is provably exact.** At f36–f39 `m3598==1.0`, so `speedF = f31_2 = absXZ(plant_delta)`
-  directly (no `nspeed` term, no smoothing). Feeding the **live** `spB0` toes into `absXZ` reproduces
-  live `true_speed` byte-for-byte at 36/37/38/39. So the game's math is exactly what the sim models,
-  and `_sqrtf`/`fmadds`/the smoothing are **not** the cause (the earlier "compose/msd f64 constant"
-  guess was wrong).
-- **The fault is the sim's drawn toe X, 1 ULP low.** Comparing the sim's drawn toe (`cur`) against
-  live `spB0(N+1)`: the right-foot **X** is 1 ULP *low* at frames 34/35/38 and exact at 36/37/39; **Z
-  is always bit-exact.** The low-X frames feed the plant delta at 37/39, flipping `speedF` 1 ULP.
-- **It is NOT world-quantization.** With `facing==0` the straight walk has `px==0`, so `worldBase` and
-  `m37B4` are exact identities on row 0 → the toe **X is effectively identity-space FK**; the
-  world-magnitude quantization only lives in Z (which is exact). The residual is a frame-dependent,
-  consistently-low sub-ULP rounding in the local foot-FK chain's X (quat→matrix / blend / concat),
-  i.e. the same fundamental FK-chain frontier as the Y171 toe.z and the ATN/turn `jnt34` residuals.
-- **It does not reach position:** the LandState `pos_z` arc + endpoint are bit-exact through the whole
-  release (the 1-ULP `speedF` is absorbed when multiplied by `cos(travel)` and re-added at world
-  magnitude). `tests/test_land.py::test_speedf_matches_live_bit_exact` is now **LandState-driven**
-  (was the raw `FootSpeedF` driver, whose release-region `ns/msd` diverge and read tens/hundreds of
-  ULP off — a harness artifact, cf. the Y171 test c056bba), so it surfaces only the genuine f37/f39.
+The foot FK runs from `worldBase(pos)`, so a wrong `pos` quantizes the toe wrong even when every
+matrix op is bit-exact. The deep-release `speedF` f37/f39 (and `brake_right`) looked like a
+"1-ULP-low toe **X** in the local chain," but a full per-joint `anmMtx` decomposition showed the FK
+rotation is 0 ULP everywhere and the toe residual **cancels internally** — the fault was a spurious
+on-axis `pos_x` (the sim reconstructed `cM_ssin` from the cos table instead of `JMASSin`), and the
+world-magnitude quantization flipped the toe X 1 ULP. Fixed; see
+[history/resolved-bugs](../history/resolved-bugs.md#deep-release-speedf-f37f39--brake_right--a-spurious-pos_x-sine-leak-not-a-foot-fk-x-residual).
+Diagnostic rule: when a world-space-FK toe residual cancels between `m37B4` and `anmMtx`, suspect the
+**position fed to the FK**, not the chain. `test_speedf_matches_live_bit_exact` is LandState-driven
+(the raw `FootSpeedF` driver reads hundreds of ULP off in the release region — a harness artifact).
 
 ## Live oracles (for re-validation)
 
