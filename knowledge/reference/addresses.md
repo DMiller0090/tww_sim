@@ -42,6 +42,28 @@ for any live breakpoint. Example mismatch: procSwimWait_init decomp=0x8013DB24 v
 - `event.on_codebreakpoint(cb)` cb(addr); `event.on_memorybreakpoint(cb)` cb(is_write, addr, value); `registers.read_gpr(n)/read_fpr(n)`.
 - To non-pausing call-trace a code addr (log_on_hit=true, break_on_hit=false) the single-arg debug.set_breakpoint is insufficient → would need a small rebuild to expose flags, OR use on_codebreakpoint+resume.
 
+## Collision geometry (DZB) — JP/GZLJ01, live-verified 2026-07-06
+
+For the collision model see [mechanics/collision.md](../mechanics/collision.md). The manager `dBgS`
+is a fixed global; its 256-slot registry enumerates every loaded room/movable-BG collision mesh.
+
+| What | Address / offset | type |
+|------|------------------|------|
+| `dBgS` manager | static `0x803B93A8` ( = `g_dComIfG_gameInfo 0x803B8108` + `0x12A0`) | — |
+| `cBgS::m_chk_element[256]` | `dBgS + 0x00`, stride `0x14`: `cBgW* +0x00`, `flags +0x04` (bit0 = in use) | — |
+| `cBgW`: mFlags | `+0x6C` (`GLOBAL_e=0x20` static room, `MOVE_BG_e=0x01` movable) | u8 |
+| `cBgW`: `pm_vtx_tbl` (WORLD verts) / `pm_bgd` | `+0x90` / `+0x94` | ptr |
+| `cBgD_t`: v_num / v_tbl / t_num / t_tbl | `+0x00 / +0x04 / +0x08 / +0x0C` | s32,ptr |
+| `cBgD_t`: g_num / g_tbl / ti_num / ti_tbl | `+0x20 / +0x24 / +0x28 / +0x2C` | s32,ptr |
+| `cBgD_Vtx_t` (vertex) | 12 B: f32 `x,y,z` | f32×3 |
+| `cBgD_Tri_t` (triangle) | 10 B: u16 `vtx0,vtx1,vtx2,id,grp` | u16×5 |
+| `dBgS_LinkAcch` (current floor tri) | `[0x803BD910]` → polyIndex `+0x554`, bgIndex `+0x556`, roof `+0x594` | u16 |
+
+Surface class from face-normal Y (`cBgW_CheckB*`): `ny ≥ 0.5` ground, `ny < −0.8` roof, else wall.
+The slot index **is** the `cBgS_PolyInfo` `mBgIndex`, so the floor `(bgIndex, polyIndex)` indexes
+straight back into `m_chk_element[bgIndex]`'s mesh. Read WORLD verts from `cBgW+0x90`, not the DZB
+`m_v_tbl` (they differ for movable BG). Live reader: `tww-python-scripts/ww/collision_geo.py`.
+
 ## Culling / camera object (JP/GZLJ01, live-verified 2026-07-05)
 
 For the view-frustum culling model see [mechanics/culling.md](../mechanics/culling.md). All camera

@@ -57,6 +57,9 @@ you can triage in one glance.
 ### Culling / rendering
 - **How does TWW decide what's drawn vs culled / the view frustum / FOV-near-far / per-actor cull box / why is the culling far ≠ render far / how do I view it live?** → [mechanics/culling.md](mechanics/culling.md)
 
+### Collision geometry
+- **How is stage/room collision stored in RAM (the DZB triangle mesh) / how do I reach it from a global / the vertex+triangle layout / ground vs wall vs roof / how do I view the live collision mesh in 3D?** → [mechanics/collision.md](mechanics/collision.md)
+
 ### Ocean world, refills & routing
 - **How is the sea laid out / why is only one island loaded / what's a sploosh zone / why route around quadrants?** → [mechanics/ocean-environment.md](mechanics/ocean-environment.md)
 - **How do air refills work / why is touching land fatal / flat vs wavy / corner refills / the manual-refill workflow?** → [mechanics/air-refill.md](mechanics/air-refill.md)
