@@ -67,11 +67,18 @@ multiply-add (see [FP note](#fp-note) below).
   walls are coplanar (one plane, no seam gap) → impossible. A shallower bend (closer to 180°, the
   GanonL seam is a ~137° dihedral) keeps the crossings clustered right at the seam vertex where the
   gap is, which is why near-flat corners clip more readily.
-- **Perfectly vertical walls (ny ≈ 0).** With a vertical normal `cM3d_Cross_LinTri` skips the Y
-  projection (`|ny| < 0.008`) and the seam edge is a clean shared **vertical** line, so all three
-  cylinder heights probe the same XZ seam point and the point-in-triangle test degenerates exactly
-  at the edge. A tilted wall introduces the Y-projection test and a non-vertical seam, closing the
-  gap.
+- **Perfectly vertical walls (ny ≈ 0).** This is the sharpest requirement, and its cause is
+  **LineCheck's three fixed cylinder heights** (30.1 / 89.9 / 125.0), *not* the Y-projection gate.
+  A vertical seam's gap is a height-invariant vertical slab, so all three heights miss the same XZ
+  point together. Tilt the walls and the seam's gap sits at a *different* XZ at each height — even a
+  0.5° lean spreads the three crossing points ~0.4–1.3 u apart (the cylinders are ~95 u apart in Y),
+  versus a gap only ~0.01 u wide — so no single straight line can thread all three at once and at
+  least one cylinder catches the wall. Verified with the model
+  ([`harness/collision/`](../../harness/collision/README.md), `tilt_experiment`): a vertical seam
+  yields many clip solutions; **any** tilt ≥0.01° (ny ≥ 0.0002, well below the 0.008 Y-projection
+  threshold) drops it to **zero**. With a *single* cylinder height a tilted seam does still clip —
+  confirming the per-triangle-plane gap itself is not tilt-dependent; it's the "all three heights
+  must miss simultaneously" condition that forces verticality.
 
 ## Modelling / predicting a clip
 
