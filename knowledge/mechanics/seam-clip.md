@@ -56,15 +56,13 @@ the clip vs block outcome flips on the last few float bits. Faithful reproductio
 (a) the console's fused multiply-add (see [FP note](#fp-note)) and (b) the triangle's plane
 **exactly** as the game computes it.
 
-> **⚠️ Status (do this): use RAM-read planes for real seams.** The sim *logic* (LineCheck +
-> WallCorrect + `cM3d` math) is validated — fed the game's **stored planes read from RAM**, it
-> reproduces real clips bit-for-bit (incl. a live Hyrule clip at the (−1727,−990) seam). But the
-> plane *compute* path [`calc_pla`](../../tww_sim/core/collision.py) is **NOT yet universally
-> bit-exact**: across 4506 Hyrule triangles it matches RAM only ~64% (the `frsqrte` normalise is
-> ported, but the paired-single `PSVECCrossProduct` is still approximated). A 1-ULP normal error
-> flips a razor clip, so **do not trust `calc_pla`-computed planes** — read them from RAM
-> (`cBgW.pm_tri`, stride 0x18) until the cross-product port lands. This means the *synthetic-angle*
-> results below (built on `calc_pla`) are **provisional**, not verified.
+> **✅ Status: `calc_pla` is bit-exact (4506/4506 Hyrule planes).** Both paths are now verified.
+> The sim *logic* (LineCheck + WallCorrect + `cM3d` math), fed the game's stored planes, reproduces
+> real clips bit-for-bit (incl. a live Hyrule clip at the (−1727,−990) seam). And the plane *compute*
+> path [`calc_pla`](../../tww_sim/core/collision.py) now matches every RAM plane, every field, so the
+> **synthetic-angle results below are trustworthy** (no longer provisional). Reading the plane from
+> RAM (`cBgW.pm_tri`, stride 0x18) is still the simplest path for a real seam, but `calc_pla`
+> reproduces it exactly — see the FP note under "The model."
 
 ## Why the three requirements
 
@@ -75,8 +73,8 @@ the clip vs block outcome flips on the last few float bits. Faithful reproductio
   planes must differ so the per-triangle crossings land on different sides of the seam; the *amount*
   of difference is set by the per-triangle plane **fan**, a sub-ULP property of the exact vertices,
   not a clean function of the dihedral. The synthetic-angle sweep
-  ([`harness/collision/angle_experiment.py`](../../harness/collision/README.md)) — **provisional**,
-  it runs on `calc_pla` planes which aren't yet bit-exact — finds clips across interior angles
+  ([`harness/collision/angle_experiment.py`](../../harness/collision/README.md)) — now on
+  **bit-exact `calc_pla` planes** — finds clips across interior angles
   **80°–137°** (and reflex/concave corners wider); near-90° clips are also confirmed live on real
   RAM geometry, so the *qualitative* result (no clean angle cutoff) holds. Clippability at a given
   angle is decided by the exact float fan, so it is effectively per-geometry: exactly-90.0° can miss
@@ -84,6 +82,17 @@ the clip vs block outcome flips on the last few float bits. Faithful reproductio
   gate as "the two triangles' bit-exact planes fan enough to miss both crossings," which you check by
   running the model on the actual geometry. (Sharper convex corners tend to need more displacement to
   clear the cylinder, so speed rises as you sharpen.)
+
+> **Open question — flat / 180° seams + a better search.** A real flat seam DOES have a ~1-ULP
+> plane difference between its two coplanar segments (verified in RAM: `nx` `0x3f800000` vs
+> `0x3f800001`). A brute-force high-speed search (123k lines, disp 70–100, RAM planes) found no clip,
+> and the "coplanar segments tile → no divergent wedge" argument suggests flat is unclippable — but
+> that is **not a proof** (a brute-force negative can't certify impossibility). **Do not rule out
+> flat seams yet.** The clippability search is currently brute-force (start × aim × D) and misses
+> razor gaps; the standing TODO is to derive the gap region **analytically** (solve for the line
+> offsets/angles where both per-triangle crossings straddle the seam). The prerequisite — a bit-exact
+> `calc_pla` for synthetic geometry — is now **done** (4506/4506), so this is the next open item.
+> Practical bar for a usable clip: **< 49.6 u/frame** displacement.
 - **Perfectly vertical walls (ny ≈ 0).** This is the sharpest requirement, and its cause is
   **LineCheck's three fixed cylinder heights** (30.1 / 89.9 / 125.0), *not* the Y-projection gate.
   A vertical seam's gap is a height-invariant vertical slab, so all three heights miss the same XZ
@@ -100,25 +109,34 @@ the clip vs block outcome flips on the last few float bits. Faithful reproductio
 ## Modelling / predicting a clip
 
 [`tww_sim.core.collision`](../../tww_sim/core/collision.py) is a geometry-agnostic FP-faithful port
-of `CrrPos` (LineCheck + WallCorrect + the `cM3d` math). Its `cM3d_CalcPla` is **not yet
-bit-exact** (~64% vs RAM; see the status note above) — **feed it planes read from RAM** for real
-seams. [`harness/collision/seam_model.py`](../../harness/collision/README.md)
+of `CrrPos` (LineCheck + WallCorrect + the `cM3d` math). Its `cM3d_CalcPla` is **bit-exact**
+(4506/4506 Hyrule planes; see the status note above), so it works on synthetic geometry as well as
+on RAM-read planes. [`harness/collision/seam_model.py`](../../harness/collision/README.md)
 wraps it with the GanonL seam and exposes `predict_clip(initial, end)` → clip/block;
 [`angle_experiment.py`](../../harness/collision/README.md) sweeps synthetic corner angles.
 `harness/collision/validate_live.py` checks it against a running game by position-hacking Link's
 debug pos (`0x803D78FC`).
 
-<a id="fp-note"></a>**FP note.** Two console-exact details a naive port gets wrong:
+<a id="fp-note"></a>**FP note.** `cM3d_CalcPla` is bit-exact (4506/4506 RAM planes) once you get four
+console-exact details right — all four verified live via a breakpoint at `PSVECMag`/`cM3d_CalcPla`
+(inject a known `sq`, single-step, read the FPRs):
 1. **Plane dot product** — `PSVECDotProduct` (paired-single) computes `dot = fadds(fmadds(nx,px,
    fmuls(ny,py)), fmuls(nz,pz))`; `nx*px + ny*py` is **fused** (rounds once). `cM3d_VectorProduct2d`
    (point-in-triangle) and the crossing interpolation (`cM3d_InDivPos1/2`) are **not** fused.
-2. **Plane normalise** — `cM3d_CalcPla` normalises via `VECMag`, which uses Gekko **`frsqrte`**
-   (reciprocal-sqrt estimate + one Newton step), *not* a correctly-rounded `sqrt`. libm `sqrt` is
-   ~1 ULP off in the normal — enough to flip the seam razor. `calc_pla` ports `frsqrte` (Dolphin's
-   exact table); the frsqrte part is validated, but the paired-single **`PSVECCrossProduct`** is
-   still approximated (`-(a*b - c)`), so `calc_pla` only matches RAM ~64% — **finishing this exact
-   cross-product port (against the 4506-triangle RAM oracle) is the outstanding handoff item.**
-The port uses [`core.fp`](../../tww_sim/core/fp.py)'s `fmadds`/`fmuls`/`fadds`/`fmsubs` accordingly.
+2. **Cross product** — `PSVECCrossProduct` (asm @ `0x8030BC14`) has an exact paired-single lane
+   layout: the `nx` lane is `fmsubs(a.y, b.z, fmuls(b.y, a.z))` — it **fuses `a.y*b.z`** and
+   **pre-rounds `b.y*a.z`** with a separate `ps_mul`. Getting which product is fused vs pre-rounded
+   wrong (e.g. the naive `-(a*b - c)`) flips ~36% of normals by 1 ULP.
+3. **Plane normalise** — `cM3d_CalcPla` normalises via `VECMag` (`0x8030BBB0`), which uses Gekko
+   **`frsqrte`** (recip-sqrt estimate + ONE Newton step), *not* a correctly-rounded `sqrt`. `calc_pla`
+   ports Dolphin's exact `frsqrte` table, and the Newton step is the **fused** `fnmsubs(esq, sq, 3.0)`
+   (= `3.0 - esq*sq`, one rounding) — not a separate `fmuls` then subtract.
+4. **Gekko 25-bit multiply** — single-precision `fmuls`/`ps_mul` round the **`frC` (multiplier)
+   operand to 25 mantissa bits** before the op (Dolphin `Force25Bit`). This is a no-op for genuine
+   f32 operands (their low mantissa bits are 0), so it only bites in one place: `fmuls e, e` in
+   `VECMag`, where `e` is the ~27-bit `frsqrte` estimate (a f64, not an f32). Without it, `e*e`
+   double-rounds 1 ULP off — the last ~3.6% of planes. See `collision.py::_force25`.
+The port uses [`core.fp`](../../tww_sim/core/fp.py)'s `fmadds`/`fmuls`/`fadds`/`fmsubs`/`fnmsubs`.
 
 **old_pos matters.** The discriminator is the swept line, so the *exact* `old_pos` (Link's previous
 position) decides clip vs block at the razor edge. When feeding a raw brute-force initial, first

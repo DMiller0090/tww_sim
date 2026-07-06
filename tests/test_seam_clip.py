@@ -22,6 +22,13 @@ def _bits(x):
     return struct.unpack(">I", struct.pack(">f", x))[0]
 
 
+_GOLDEN = os.path.join(os.path.dirname(__file__), "golden", "calc_pla_ram.json")
+
+
+def _f_from_hex(s):
+    return struct.unpack(">f", struct.pack(">I", int(s, 16)))[0]
+
+
 def test_calc_pla_bit_exact_vs_ram():
     """calc_pla (frsqrte-based cM3d_CalcPla port) must reproduce the game's RAM-stored planes
     bit-for-bit — this is what lets the sim run faithfully on synthetic geometry."""
@@ -30,6 +37,22 @@ def test_calc_pla_bit_exact_vs_ram():
         p = calc_pla(t["A"], t["B"], t["C"])
         for got, want in [(p.nx, t["n"][0]), (p.ny, t["n"][1]), (p.nz, t["n"][2]), (p.d, t["D"])]:
             assert _bits(got) == _bits(want), f"tri n={t['n']}: {got!r} != {want!r}"
+
+
+def test_calc_pla_golden_ram_planes():
+    """Full-precision RAM golden (Hyrule, hex-encoded f32) covering the Force25Bit-sensitive
+    triangles — the ones that were 1-2 ULP off before the exact PSVECCrossProduct lanes, fused
+    Newton fnmsubs, and the 25-bit frC round in VECMag. calc_pla is bit-exact on all 4506 Hyrule
+    tris; these 10 are the permanent offline guard (poly 4/20/37/72/127/128 exercise the 25-bit
+    path, 0/1/2/5 are the always-exact cases)."""
+    for t in json.load(open(_GOLDEN)):
+        A = [_f_from_hex(h) for h in t["A"]]
+        B = [_f_from_hex(h) for h in t["B"]]
+        C = [_f_from_hex(h) for h in t["C"]]
+        p = calc_pla(A, B, C)
+        want = [int(t["n"][0], 16), int(t["n"][1], 16), int(t["n"][2], 16), int(t["D"], 16)]
+        got = [_bits(p.nx), _bits(p.ny), _bits(p.nz), _bits(p.d)]
+        assert got == want, f"poly {t['poly']}: got {[hex(g) for g in got]} != {[hex(w) for w in want]}"
 
 
 def test_linecheck_matches_captured_game_returns():

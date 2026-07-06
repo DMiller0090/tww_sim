@@ -27,15 +27,16 @@ cases). See ``knowledge/mechanics/seam-clip.md``.
 (``normalize(cross(v1-v0, v2-v0))``, ``d=-dot(n,v0)``) — planes are NOT stored in the DZB
 (``cBgW::ClassifyPlane`` -> ``cM3d_CalcPla``, c_bg_w.cpp). The two triangles of one wall quad
 normalise independently and differ in the last mantissa bits, and that difference is exactly what
-opens the seam gap. :func:`calc_pla` ports the Gekko ``frsqrte`` (recip-sqrt estimate + one Newton
-step) that ``VECMag`` uses, BUT is **not yet universally bit-exact** — across 4506 Hyrule triangles
-it matches RAM only ~64%: the ``frsqrte`` normalise is right, but the paired-single
-``PSVECCrossProduct`` is still approximated as ``-(a*b - c)``. A 1-ULP normal error flips a razor
-seam clip, so **for real seams feed the plane read from RAM** (``cBgW.pm_tri``, stride 0x18) via
-``Tri(v0,v1,v2, plane=Plane(*n, d))`` rather than trusting ``calc_pla``. Finishing the exact
-cross-product port (validated against the RAM oracle) is an open handoff item; until then the
-synthetic-geometry path is provisional. The sim *logic* is validated on RAM planes (reproduces real
-clips bit-for-bit).
+opens the seam gap. :func:`calc_pla` ports ``cM3d_CalcPla`` **bit-exactly** — verified against all
+4506 Hyrule RAM planes (4506/4506, every field). Three console-faithful details make it exact:
+(1) ``PSVECCrossProduct``'s exact paired-single lanes (the ``nx`` lane fuses ``a.y*b.z`` and
+pre-rounds ``b.y*a.z``; asm @ 0x8030BC14); (2) the ``VECMag`` Newton step is the FUSED
+``fnmsubs 3.0 - esq*sq``; (3) Gekko single-precision ``fmuls`` rounds its ``frC`` operand to 25
+mantissa bits first (Dolphin ``Force25Bit``) — a no-op for f32 operands but essential for ``e*e``,
+where ``e`` is the ~27-bit ``frsqrte`` estimate (see :func:`_force25`). This means the
+synthetic-geometry path (arbitrary corner angles) is now trustworthy. Reading the plane from RAM
+(``cBgW.pm_tri``, stride 0x18) via ``Tri(v0,v1,v2, plane=Plane(*n, d))`` is still the simplest path
+for a real seam, but :func:`calc_pla` reproduces it.
 
 Decomp refs: ``src/SSystem/SComponent/c_m3d.cpp`` (``cM3d_Cross_Lin*``, ``cM3d_CrossX/Y/Z_Tri``),
 ``c_m2d.cpp`` (``cM2d_CrossCirLin``), ``src/d/d_bg_w.cpp`` (``RwgWallCorrect``), ``src/d/d_bg_s_acch.cpp``
@@ -44,7 +45,7 @@ Decomp refs: ``src/SSystem/SComponent/c_m3d.cpp`` (``cM3d_Cross_Lin*``, ``cM3d_C
 import math
 import struct
 
-from .fp import f32 as _f, fadds, fsubs, fmuls, fdivs, fmadds, fmsubs
+from .fp import f32 as _f, fadds, fsubs, fmuls, fdivs, fmadds, fmsubs, fnmsubs
 
 # cM3d_IsZero threshold (kZero, c_m3d.h). Distinct from the point-in-triangle 20.0 area tolerance.
 G_CM3D_F_ABS_MIN = 1.0e-5
@@ -98,15 +99,32 @@ def frsqrte(val):
     integral = (integral | ((base + dec*(i%2048)) << 26)) & ((1<<64)-1)
     return struct.unpack("<d", struct.pack("<Q", integral))[0]
 
+def _force25(d):
+    """Round ``d`` to 25 mantissa bits, matching Dolphin ``Force25Bit`` (Interpreter_FPUtils.h): the
+    Gekko rounds a single-precision op's ``frC`` operand to 25 bits first. See seam-clip.md FP note."""
+    MASK = (1 << 64) - 1
+    i = struct.unpack("<Q", struct.pack("<d", d))[0]
+    if (i & (0x7FF << 52)) == 0 and (i & ((1 << 52) - 1)) != 0:
+        # subnormal: shift the keep-mask/round bit right until the fraction is "normal"
+        frac = i & ((1 << 52) - 1)
+        shift = (64 - frac.bit_length()) - 11
+        keep = ((0xFFFFFFFFF8000000 | ~MASK) >> shift) & MASK   # arithmetic >> of the s64 mask
+        rnd = 0x8000000 >> shift
+        i = ((i & keep) + (i & rnd)) & MASK
+    else:
+        i = ((i & 0xFFFFFFFFF8000000) + (i & 0x8000000)) & MASK
+    return struct.unpack("<d", struct.pack("<Q", i))[0]
+
+
 def vecmag(x, y, z):
     """PSVECMag: sqrt via frsqrte + one Newton step. sq = ((z*z+x*x)[fused] + y*y)."""
     sq = fadds(fmadds(z, z, fmuls(x, x)), fmuls(y, y))
     if sq == 0.0:
         return 0.0
     e = frsqrte(sq)
-    esq = fmuls(e, e)
-    half_e = fmuls(e, 0.5)
-    t = _f(3.0 - fmuls(esq, sq))     # fnmsubs(esq, sq, 3.0)
+    esq = fmuls(e, _force25(e))      # fmuls e,e: Gekko rounds the frC operand (e) to 25 bits first
+    half_e = fmuls(e, 0.5)           # frC = 0.5 (exact) -> Force25Bit is a no-op here
+    t = fnmsubs(esq, sq, 3.0)        # fnmsubs nwork0, nwork0, sqmag, c_three: FUSED 3.0 - esq*sq
     return fmuls(sq, fmuls(t, half_e))
 
 
@@ -134,10 +152,11 @@ def calc_pla(v0, v1, v2):
     v0 = tuple(_f(c) for c in v0); v1 = tuple(_f(c) for c in v1); v2 = tuple(_f(c) for c in v2)
     ax, ay, az = fsubs(v1[0], v0[0]), fsubs(v1[1], v0[1]), fsubs(v1[2], v0[2])
     bx, by, bz = fsubs(v2[0], v0[0]), fsubs(v2[1], v0[1]), fsubs(v2[2], v0[2])
-    # cross = -(fmsubs(...)) form (matches PSVECCrossProduct's fused lanes bit-for-bit)
-    nx = _f(-fmsubs(az, by, fmuls(ay, bz)))
-    ny = _f(-fmsubs(ax, bz, fmuls(az, bx)))
-    nz = _f(-fmsubs(ay, bx, fmuls(ax, by)))
+    # cross = PSVECCrossProduct's exact paired-single lanes (asm @ 0x8030BC14 JP; see seam-clip.md FP
+    # note): the fused term is a.?*b.?, the OTHER product is pre-rounded by a separate ps_mul.
+    nx = _f(fmsubs(ay, bz, fmuls(by, az)))
+    ny = _f(-fmsubs(ax, bz, fmuls(bx, az)))
+    nz = _f(-fmsubs(ay, bx, fmuls(by, ax)))
     t = vecmag(nx, ny, nz)
     if abs(_f(t)) >= 0.02:
         inv = fdivs(1.0, t)
