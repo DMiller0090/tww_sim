@@ -84,7 +84,9 @@ draw-radius slider bounds the drawn count on large rooms.
 > Drawing a whole room's filled+wireframe triangles overruns it and **crashes the core** (a hard
 > native crash, not a catchable Python error). The viewer enforces a per-frame **hard cap** (draw
 > only the nearest ~1100 tris with wireframe on) so it can never overflow regardless of zoom. Any
-> new canvas that emits thousands of primitives per frame needs the same guard.
+> new canvas that emits thousands of primitives per frame needs the same guard. (The cap ranks by
+> world distance **to Link**, not to the orbiting camera — otherwise geometry right by the player
+> gets dropped in favor of whatever is nearest the eye.)
 
 ## Open question — sim integration
 
