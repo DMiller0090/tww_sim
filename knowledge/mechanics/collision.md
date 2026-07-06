@@ -72,6 +72,8 @@ floor triangle (`dBgS_LinkAcch` @ `0x803BD910` → +0x554 polyIndex, +0x556 bgIn
 `tww-python-scripts/collision_viewer.py` (sibling to `cull_viewer.py`) renders the live mesh: enable
 it from Dolphin's Scripts panel while TWW runs. Orbit/pan/zoom around Link, triangles colored by
 class (green ground / red wall / blue roof), the floor triangle Link stands on highlighted yellow.
+Link himself is a haloed **cyan** marker (reads over the yellow floor) with a **facing arrow** built
+from the u16 heading (`0x803EA3D2`; fwd = `(sin θ, 0, −cos θ)`).
 The reader is `ww/collision_geo.py` (self-contained, same `rd.read_bytes` reader contract as
 `ww/cull.py`); the canvas has no depth buffer, so filled triangles are painter-sorted and a
 draw-radius slider bounds the drawn count on large rooms.
