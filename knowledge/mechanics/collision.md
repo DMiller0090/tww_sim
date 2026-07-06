@@ -110,7 +110,14 @@ real `GroundCross`/`WallCorrect` geometry into the sim. The runtime query entry 
 `dBgS::GroundCross` (floor height + ground angle), `dBgS::WallCorrect` (`dBgS_Acch`), and
 `dBgS::RoofChk`; the player drives them each frame through `mAcch.CrrPos(*dComIfG_Bgsp())`.
 
+**Partial progress:** the horizontal-blocking half of `CrrPos` — `LineCheck` (swept centre-line vs
+triangles) and `WallCorrect` (static wall cylinder) plus the `cM3d` line/plane/point-in-triangle math
+— is now ported FP-faithfully in [`tww_sim/core/collision.py`](../../tww_sim/core/collision.py) and
+validated bit-exact against the game (see [seam-clip.md](seam-clip.md)). `GroundCross`/`RoofChk` and
+the octree traversal are still TODO.
+
 ## See also
+- [mechanics/seam-clip.md](seam-clip.md) — why seam clips work (the float-precision root cause) + the FP-faithful `CrrPos` port and live validator.
 - [reference/addresses.md](../reference/addresses.md#collision-geometry-dzb--jpgzlj01-live-verified-2026-07-06) — the address/offset table.
 - [mechanics/culling.md](culling.md) — the sibling live in-Dolphin viewer (`cull_viewer.py`) and its reader pattern.
 - [mechanics/land-movement.md](land-movement.md) — how the sim currently handles ground (flat-floor snap) and the reachability caveat.

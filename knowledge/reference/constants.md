@@ -124,6 +124,17 @@ The legacy "−850 / −1650" community figures are the same bands, off by the a
 | `charge_disp_factor` | **0.9466** | charge frames move ~5.3% LESS than ESS at the same (v,anim,air) | live (band 2 only — revalidate far from −1630) |
 | `avg_ess_rate` | `(4+3π)/(5π)` | mean fraction of speed retained as displacement while ESSing | tool closed-form |
 
+## Collision (player wall cylinders)
+
+| Constant | Value | Meaning | Source |
+|----------|-------|---------|--------|
+| Wall radius | **35.0** | player wall-collision cylinder radius (standing/walking) — the "must-clear" distance for a seam clip | decomp `daPy_lk_c::setBgCheckParam` (d_a_player_main.cpp:10715) |
+| Wall cylinder heights | **30.1 / 89.9 / 125.0** | the 3 `dBgS_AcchCir` heights above Link at which LineCheck/WallCorrect probe | decomp same fn |
+| Point-in-triangle tolerance | **±20.0** (area units) | `cM3d_CrossX/Y/Z_Tri` signed-area edge slack, both windings | decomp `c_m3d.cpp` |
+| `cM3d_IsZero` (kZero) | **1e-5** | float "is zero" threshold in the collision math | decomp `c_m3d.h` |
+
+See [mechanics/seam-clip.md](../mechanics/seam-clip.md) for how these produce the seam clip.
+
 ## Camera (steering) — summary (full table migrates with the camera topic)
 
 | Constant | Value | Meaning | Source |
