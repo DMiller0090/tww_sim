@@ -80,6 +80,12 @@ The reader is `ww/collision_geo.py` (self-contained, same `rd.read_bytes` reader
 `ww/cull.py`); the canvas has no depth buffer, so filled triangles are painter-sorted and a
 draw-radius slider bounds the drawn count on large rooms.
 
+> **GOTCHA — the canvas builds ONE ImGui draw list with 16-bit indices (65535-vertex ceiling).**
+> Drawing a whole room's filled+wireframe triangles overruns it and **crashes the core** (a hard
+> native crash, not a catchable Python error). The viewer enforces a per-frame **hard cap** (draw
+> only the nearest ~1100 tris with wireframe on) so it can never overflow regardless of zoom. Any
+> new canvas that emits thousands of primitives per frame needs the same guard.
+
 ## Open question — sim integration
 
 The land sim (`tww_sim.land`) currently assumes **flat, wall-free ground** and has no collision
