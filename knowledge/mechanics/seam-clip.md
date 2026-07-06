@@ -83,16 +83,40 @@ the clip vs block outcome flips on the last few float bits. Faithful reproductio
   running the model on the actual geometry. (Sharper convex corners tend to need more displacement to
   clear the cylinder, so speed rises as you sharpen.)
 
-> **Open question — flat / 180° seams + a better search.** A real flat seam DOES have a ~1-ULP
-> plane difference between its two coplanar segments (verified in RAM: `nx` `0x3f800000` vs
-> `0x3f800001`). A brute-force high-speed search (123k lines, disp 70–100, RAM planes) found no clip,
-> and the "coplanar segments tile → no divergent wedge" argument suggests flat is unclippable — but
-> that is **not a proof** (a brute-force negative can't certify impossibility). **Do not rule out
-> flat seams yet.** The clippability search is currently brute-force (start × aim × D) and misses
-> razor gaps; the standing TODO is to derive the gap region **analytically** (solve for the line
-> offsets/angles where both per-triangle crossings straddle the seam). The prerequisite — a bit-exact
-> `calc_pla` for synthetic geometry — is now **done** (4506/4506), so this is the next open item.
-> Practical bar for a usable clip: **< 49.6 u/frame** displacement.
+> **Practical viability = analytic gap width vs the local f32 position ULP.** A geometric gap is
+> necessary but not sufficient. Link's position is f32, so a clip is *reachable* only if the gap
+> window (in world units) is wide enough that an f32-representable position lands inside it — i.e.
+> the window must be comparable to or larger than the **local f32 ULP**, which grows with distance
+> from the origin (≈ `coord · 2⁻²³`: ~1.2e-4 u at coord 1250, ~5e-3 u at coord 37000). Example: a
+> Hyrule 90° corner near (−157, −1250) has a continuous gap ~2e-5 u but a local ULP ~8e-5 u — the
+> gap is sub-ULP, so **0 of 129 605 enumerated f32 positions clip** (unclippable in practice), while
+> the GanonL staircase gap (~4e-3) is comparable to its ULP (~5e-3) and clips. Going *further* from
+> the origin does **not** help — the position grid coarsens faster than the gap grows. So the real
+> viability target is a large **plane fan**, not distance. **Min displacement** is set by the *old*
+> position: `old_pos` must be a settled WallCorrect fixed point (never inside the cylinder), so it
+> sits ~`wall_r/sin(halfangle)` in front — ~37.6 u for the GanonL 137° corner — which dominates the
+> one-frame displacement (geometry-dependent, ~35–50 u, NOT a flat 35).
+
+> **Flat / 180° seams are unclippable (resolved).** A real flat seam has a ~1-ULP plane difference
+> between its two coplanar segments (verified in RAM: `nx` `0x3f800000` vs `0x3f800001`). Fed those
+> exact planes, the analytic gap search — scanning the offset an order of magnitude finer than that
+> fan — finds NO clip: **at most one of the four triangles ever misses** (never the ≥2 needed for a
+> gap). Mechanism: the two coplanar quads **tile** the wall, so a crossing that lands past the seam
+> for one triangle falls inside the neighbour's footprint, and the neighbour's ~1-ULP-different plane
+> still catches it — there is no angular divergence (unlike a real corner, where "past the seam" is
+> open space) to make both miss. Confirmed at fan resolution on the real Hyrule flat wall x=−157.578
+> (seam pair poly 2360/2355); permanent guard
+> `tests/test_seam_clip.py::test_flat_seam_unclippable` (golden `tests/golden/flat_seam_ram.json`).
+>
+> **The clip-offset window IS analytic** (the standing "derive the gap analytically" TODO). For a
+> fixed line direction, parametrise the swept line by its perpendicular offset ρ from the seam
+> vertex S. Each triangle's plane-crossing point is *linear* in ρ (affine plane func, affine line),
+> and the point-in-triangle miss test (`incl_box2d`/`vprod2d` on the seam edge) is a *linear
+> inequality* in that crossing → linear in ρ. So each triangle's "miss" is a half-line in ρ and the
+> clip window is their intersection = a closed-form interval `[ρ_lo, ρ_hi]` (±1 ULP fused-rounding
+> fuzz + the ±20 area tolerance shift the bounds by known amounts). The numeric offset *scan* in
+> `gap_search` aliases over sub-ULP windows and can **false-negative** — the closed-form interval,
+> intersected with the f32 position lattice, is the alias-free replacement (see the handoff).
 - **Perfectly vertical walls (ny ≈ 0).** This is the sharpest requirement, and its cause is
   **LineCheck's three fixed cylinder heights** (30.1 / 89.9 / 125.0), *not* the Y-projection gate.
   A vertical seam's gap is a height-invariant vertical slab, so all three heights miss the same XZ
@@ -113,7 +137,10 @@ of `CrrPos` (LineCheck + WallCorrect + the `cM3d` math). Its `cM3d_CalcPla` is *
 (4506/4506 Hyrule planes; see the status note above), so it works on synthetic geometry as well as
 on RAM-read planes. [`harness/collision/seam_model.py`](../../harness/collision/README.md)
 wraps it with the GanonL seam and exposes `predict_clip(initial, end)` → clip/block;
-[`angle_experiment.py`](../../harness/collision/README.md) sweeps synthetic corner angles.
+[`gap_search.py`](../../harness/collision/README.md) is the analytic gap finder (pin the swept line
+through S, sweep travel direction, micro-scan the offset) — `find_clip` / `characterize` /
+`min_displacement_for_line`; [`angle_experiment.py`](../../harness/collision/README.md) sweeps
+synthetic corner angles through it.
 `harness/collision/validate_live.py` checks it against a running game by position-hacking Link's
 debug pos (`0x803D78FC`).
 

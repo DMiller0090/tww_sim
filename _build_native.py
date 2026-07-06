@@ -1,10 +1,12 @@
 """Build the native (Cython) accelerators in-place:
   tww_sim/core/_fpc.pyx        -- single-precision (f32) fused ops
   tww_sim/core/anim/_anmc.pyx  -- land-walk anim hot loop (matrix/quat/Hermite)
+  tww_sim/core/_collc.pyx      -- wall-collision hot loop (crr_pos_walls/line_check/wall_correct)
 
-Both are OPTIONAL: when a .pyd is absent the pure-Python fallbacks run (same result). Run:
-    python _build_native.py            # build both
+All are OPTIONAL: when a .pyd is absent the pure-Python fallbacks run (same result). Run:
+    python _build_native.py            # build all
     python _build_native.py _anmc      # build only the anim accelerator
+    python _build_native.py _collc     # build only the collision accelerator
 """
 import sys
 from setuptools import setup
@@ -13,6 +15,7 @@ from Cython.Build import cythonize
 _SOURCES = {
     "_fpc": "tww_sim/core/_fpc.pyx",
     "_anmc": "tww_sim/core/anim/_anmc.pyx",
+    "_collc": "tww_sim/core/_collc.pyx",
 }
 
 sel = [a for a in sys.argv[1:] if a in _SOURCES]

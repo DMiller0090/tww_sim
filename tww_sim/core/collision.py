@@ -438,3 +438,12 @@ def crr_pos_walls(old_pos, new_pos, tris, wall_h=(30.1, 89.9, 125.0), wall_r=35.
         lh2, pos = line_check(old_pos, pos, tris, wall_h)
         line_hit = line_hit or lh2
     return pos, {"line_hit": line_hit, "wall_hit": wall_hit, "ran_line": ran_line}
+
+
+# FAST PATH: native Cython (tww_sim/core/_collc.pyx) ports the crr_pos_walls hot path, bit-IDENTICAL
+# (0 ULP, ~38x). Absent .pyd -> pure defs above (same result). Build: _build_native.py _collc.
+try:
+    from ._collc import (crr_pos_walls, line_check, wall_correct,  # noqa: F401,F811
+                         len2dsq)
+except ImportError:
+    pass

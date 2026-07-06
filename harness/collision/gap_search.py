@@ -1,0 +1,221 @@
+"""Analytic seam-clip gap search — the reliable replacement for the brute-force
+``start x aim x D`` grid in :mod:`angle_experiment`.
+
+**Why a grid fails.** A seam clip is a razor event: the swept centre-line must pass within a
+*fan-sized* perpendicular offset of the seam vertex ``S`` — the offset window is only
+~1e-3 u wide (its width IS the per-triangle plane fan, the 1-ULP normal difference between the two
+triangles of each wall; see ``knowledge/mechanics/seam-clip.md``). A blind grid over start position,
+aim and displacement steps far coarser than that window and reports spurious ``False`` at razor
+angles (the old grid missed exactly-90.0 and 120.0, which DO clip).
+
+**The analytic reduction.** The clip is decided by two independent conditions:
+
+  1. **LineCheck miss** — the line's crossing with plane A and its crossing with plane B must each
+     land just *past* the seam vertex (outside their own triangle's ``incl_box2d``). This happens
+     iff the line passes within the fan offset of ``S``. So we do NOT search start-position freely:
+     we **pin the line through S** (offset ``rho`` ~ 0) and only micro-scan ``rho`` at fan
+     resolution. The travel *direction* has a broad window and the *displacement* ``D`` an even
+     broader one (~35 up to ~95), so those are swept coarsely.
+  2. **WallCorrect miss + a settled old** — both ends must clear the radius-35 wall cylinder. The
+     endpoint clears cheaply (once ``new`` is behind the wall face, WallCorrect's directional test
+     lets it pass, so it needs only a hair past ``S``). The DOMINANT term is the *old* position:
+     ``old_pos`` must be a settled WallCorrect fixed point (the game never carries an old_pos inside
+     the cylinder), so it sits ``~wall_r / sin(halfangle)`` in front — e.g. 37.6 u for the GanonL
+     137-deg corner (``35/sin(68.5)``), ~35 u for a right-angle corner approached off the bisector.
+     That front clearance sets the **min-speed** (geometry-dependent, ~35-38 u, NOT a flat 35).
+
+Feeding the exact bit-exact FP model (:func:`tww_sim.core.collision.crr_pos_walls`) at the pinned
+offsets makes "gap found" reliable and cheap. "No gap found" is only trustworthy when the offset
+step is finer than the fan (see :func:`fan_offset_scale` and ``off_step`` — the default is fine
+enough for real corners; for near-flat seams pass a smaller ``off_step``).
+
+Geometry-agnostic: pass the 4 wall triangles (``tris[1]`` = wall-A seam triangle, ``tris[2]`` =
+wall-B seam triangle — the convention :func:`angle_experiment.build_angle` and the GanonL
+``seam_model`` both use) plus the seam XZ point and Link's floor Y.
+"""
+import math
+
+from tww_sim.core.collision import crr_pos_walls, wall_correct
+
+WALL_H = (30.1, 89.9, 125.0)   # player wall-cylinder heights (setBgCheckParam)
+WALL_R = 35.0                  # player wall-cylinder radius (standing/walking)
+
+
+def _is_clip(tris, ix, iz, ex, ez, link_y):
+    _, info = crr_pos_walls((ix, link_y, iz), (ex, link_y, ez), tris)
+    return (not info["line_hit"]) and (not info["wall_hit"])
+
+
+def _is_settled(tris, p, wall_h=WALL_H, wall_r=WALL_R):
+    """True if ``p`` is a physical ``old_pos`` — a WallCorrect fixed point (Link not overlapping any
+    wall). CrrPos always leaves ``pm_old_pos`` settled, so a clip's old_pos must clear the radius-35
+    cylinder; a raw point deep inside it is not a position the game would ever carry."""
+    q, hit = wall_correct(p, 0.0, tris, wall_h, wall_r)
+    return (not hit) and ((q[0] - p[0]) ** 2 + (q[2] - p[2]) ** 2) ** 0.5 < 1e-4
+
+
+def bisector_dir(tris):
+    """Front->back travel direction along the corner bisector: ``-(nA + nB)`` normalised, from the
+    two seam triangles' planes. Returned as ``atan2(dx, dz)`` so ``d = (sin, cos)``."""
+    pA, pB = tris[1].pla, tris[2].pla
+    bx, bz = -(pA.nx + pB.nx), -(pA.nz + pB.nz)
+    return math.atan2(bx, bz)
+
+
+def _line(seam, ang, rho, D, t_back):
+    """A swept line pinned to pass through ``S + rho*perp`` travelling at ``ang``. ``old`` sits
+    ``t_back`` u before that point (in front of the walls), ``new`` ``D - t_back`` u past it."""
+    dx, dz = math.sin(ang), math.cos(ang)
+    px, pz = -dz, dx
+    cx, cz = seam[0] + rho * px, seam[1] + rho * pz
+    return (cx - t_back * dx, cz - t_back * dz,        # old x,z
+            cx + (D - t_back) * dx, cz + (D - t_back) * dz)  # new x,z
+
+
+def offset_window(tris, seam, link_y, ang, D=40.0, t_back=3.0,
+                  off_half=0.006, off_step=2e-5):
+    """All perpendicular offsets ``rho`` (line pinned through ``S``, travelling at ``ang``) that
+    clip, at this displacement. The clipping ``rho`` form a single contiguous fan-width interval;
+    returns the sorted list (empty if none)."""
+    hits = []
+    n = int(2 * off_half / off_step) + 1
+    for j in range(n):
+        rho = -off_half + j * off_step
+        ix, iz, ex, ez = _line(seam, ang, rho, D, t_back)
+        if _is_clip(tris, ix, iz, ex, ez, link_y):
+            hits.append(rho)
+    return hits
+
+
+def find_clip(tris, seam, link_y, D=40.0, t_back=3.0,
+              dir_half_deg=50.0, dir_step_deg=0.5,
+              off_half=0.006, off_step=2e-5, physical=True):
+    """Search for ANY clipping line for this corner. Sweeps travel direction over
+    ``bisector +/- dir_half_deg`` and micro-scans the offset at each. Returns ``(clipped, rec)``
+    for the first clip found, else ``(False, None)``.
+
+    With ``physical=True`` (default) the returned ``old`` is a genuine **standable** position — a
+    settled WallCorrect fixed point in front of the walls (via :func:`min_displacement_for_line`),
+    and ``new`` is the minimal step past the seam; ``rec`` = ``dict(rel_deg, rho, old, new, D,
+    t_back, t_fwd)``. With ``physical=False`` it returns the raw pinned line at the fixed ``t_back``
+    (``old`` may sit inside the wall cylinder — useful only for detection, not for a real setup)."""
+    base = bisector_dir(tris)
+    nd = int(2 * dir_half_deg / dir_step_deg) + 1
+    for i in range(nd):
+        rel = -dir_half_deg + i * dir_step_deg
+        ang = base + math.radians(rel)
+        hits = offset_window(tris, seam, link_y, ang, D, t_back, off_half, off_step)
+        if hits:
+            rho = hits[len(hits) // 2]
+            if physical:
+                r = min_displacement_for_line(tris, seam, link_y, ang, rho)
+                if r is None:
+                    continue          # this direction has no physical (settled-old) clip; keep looking
+                Dp, tb, tf = r
+                dx, dz = math.sin(ang), math.cos(ang)
+                px, pz = -dz, dx
+                cx, cz = seam[0] + rho * px, seam[1] + rho * pz
+                old = (cx - tb * dx, cz - tb * dz)
+                new = (cx + tf * dx, cz + tf * dz)
+                return True, dict(rel_deg=round(rel, 3), rho=rho, old=old, new=new,
+                                  D=Dp, t_back=tb, t_fwd=tf)
+            ix, iz, ex, ez = _line(seam, ang, rho, D, t_back)
+            return True, dict(rel_deg=round(rel, 3), rho=rho, old=(ix, iz), new=(ex, ez), D=D)
+    return False, None
+
+
+def min_displacement_for_line(tris, seam, link_y, ang, rho, step=0.05, reach=90.0):
+    """Smallest one-frame displacement ``|new - old|`` that yields a genuine seam clip on the pinned
+    line ``(ang, rho)``, using a PHYSICAL ``old_pos`` (a settled WallCorrect fixed point in front).
+    ``line_check`` depends only on the line (not where ``old`` sits, verified), so we minimise the
+    two ends independently: ``t_fwd`` = least distance past ``S`` where the endpoint clears
+    WallCorrect (``new`` is already behind the wall face, so this is small), ``t_back`` = least
+    distance in front where ``old`` is settled AND still on the front side (this is the dominant
+    term — ~``wall_r / sin(halfangle)`` to clear the wall faces). Returns ``(D, t_back, t_fwd)`` or
+    ``None``."""
+    dx, dz = math.sin(ang), math.cos(ang)
+    px, pz = -dz, dx
+    cx, cz = seam[0] + rho * px, seam[1] + rho * pz
+    old_far = (cx - reach * dx, link_y, cz - reach * dz)   # deeply-settled reference old
+    pA, pB = tris[1].pla, tris[2].pla
+    # min t_fwd: endpoint clears WallCorrect (full clip against a settled old)
+    t_fwd = None
+    t = step
+    while t <= reach:
+        new = (cx + t * dx, link_y, cz + t * dz)
+        if _is_clip(tris, old_far[0], old_far[2], new[0], new[2], link_y):
+            t_fwd = t
+            break
+        t += step
+    # min t_back: old settled AND in front of both walls (fA, fB > 0)
+    t_back = None
+    t = step
+    while t <= reach:
+        ox, oz = cx - t * dx, cz - t * dz
+        fA = pA.d + pA.nx * ox + pA.ny * link_y + pA.nz * oz
+        fB = pB.d + pB.nx * ox + pB.ny * link_y + pB.nz * oz
+        if fA > 0 and fB > 0 and _is_settled(tris, (ox, link_y, oz)):
+            t_back = t
+            break
+        t += step
+    if t_fwd is None or t_back is None:
+        return None
+    old = (cx - t_back * dx, link_y, cz - t_back * dz)
+    new = (cx + t_fwd * dx, link_y, cz + t_fwd * dz)
+    if not _is_clip(tris, old[0], old[2], new[0], new[2], link_y):
+        return None
+    D = ((new[0] - old[0]) ** 2 + (new[2] - old[2]) ** 2) ** 0.5
+    return round(D, 3), round(t_back, 3), round(t_fwd, 3)
+
+
+def characterize(tris, seam, link_y, D=40.0, t_back=3.0,
+                 dir_half_deg=50.0, dir_step_deg=0.5,
+                 off_half=0.006, off_step=2e-5):
+    """Full analytic characterisation of a corner's gap: the clippable direction window, the offset
+    window (at the central clipping direction), and the min displacement. Returns a dict, or
+    ``dict(clippable=False)`` if no gap survives the scan."""
+    base = bisector_dir(tris)
+    clip_dirs = []
+    nd = int(2 * dir_half_deg / dir_step_deg) + 1
+    for i in range(nd):
+        rel = -dir_half_deg + i * dir_step_deg
+        ang = base + math.radians(rel)
+        hits = offset_window(tris, seam, link_y, ang, D, t_back, off_half, off_step)
+        if hits:
+            clip_dirs.append((rel, hits))
+    if not clip_dirs:
+        return dict(clippable=False)
+    # True min displacement (physical settled old) over ALL clipping directions.
+    best = None
+    for rel, off in clip_dirs:
+        ang = base + math.radians(rel)
+        rho = off[len(off) // 2]
+        r = min_displacement_for_line(tris, seam, link_y, ang, rho)
+        if r is not None and (best is None or r[0] < best[0]):
+            best = (r[0], rel, rho, r[1], r[2])
+    # central clipping direction (for the offset-window report)
+    rel_c, off_c = clip_dirs[len(clip_dirs) // 2]
+    return dict(
+        clippable=True,
+        dir_window_deg=(clip_dirs[0][0], clip_dirs[-1][0]),
+        dir_window_width_deg=round(clip_dirs[-1][0] - clip_dirs[0][0], 3),
+        offset_window=(round(min(off_c), 6), round(max(off_c), 6)),
+        offset_window_width=round(max(off_c) - min(off_c), 6),
+        min_displacement=(best[0] if best else None),
+        min_disp_at=(dict(rel_deg=best[1], rho=best[2], t_back=best[3], t_fwd=best[4])
+                     if best else None),
+    )
+
+
+def fan_offset_scale(tris, seam):
+    """Estimate the perpendicular-offset scale of the seam gap = how far the two triangles of a
+    wall disagree on where the seam-crossing lands, driven by their 1-ULP plane-normal difference.
+    A trustworthy "unclippable" verdict needs ``off_step`` a few times smaller than this."""
+    def sep(p, q):
+        # angular difference between the two normals -> lateral crossing separation over ~unit reach
+        return math.hypot(p.nx - q.nx, p.nz - q.nz)
+    # within-wall fans (A_up vs A_lo, B1 vs B2) AND the cross-wall seam-pair fan (A_seam vs B_seam,
+    # the one that matters for a near-flat seam where the two walls are nearly coplanar).
+    return max(sep(tris[0].pla, tris[1].pla),
+               sep(tris[2].pla, tris[3].pla),
+               sep(tris[1].pla, tris[2].pla))

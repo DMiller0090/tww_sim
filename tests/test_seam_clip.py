@@ -13,6 +13,8 @@ import struct
 
 from tww_sim.core.collision import Tri, Plane, cross_lin_tri, calc_pla
 from harness.collision.seam_model import predict_clip
+from harness.collision.angle_experiment import build_angle, S, LINK_Y
+from harness.collision.gap_search import find_clip
 
 _CAP = os.path.join(os.path.dirname(__file__), "..", "harness", "collision",
                     "ganonl_seam_capture.json")
@@ -78,3 +80,34 @@ def test_short_displacement_blocks():
     # Under the 35 u cylinder radius toward the wall: WallCorrect must push back (no clip).
     clipped, info = predict_clip((-817.6296387, -37307.21875), (-830.0, -37320.0))
     assert not clipped, info
+
+
+def test_analytic_gap_finds_grid_false_negatives():
+    """The analytic gap search (gap_search.find_clip) must find a clip at the two synthetic corner
+    angles the OLD brute-force grid spuriously reported unclippable: interior 90 deg (alpha=90) and
+    120 deg (alpha=60). Both DO clip; the grid missed the ~1e-3-u offset razor. Guards against any
+    regression back to grid-style false negatives."""
+    for alpha in (90.0, 60.0):
+        ok, rec = find_clip(build_angle(alpha), S, LINK_Y, dir_half_deg=30.0, dir_step_deg=1.0)
+        assert ok, f"alpha={alpha}: analytic search failed to find a clip (false negative)"
+        assert rec is not None
+
+
+def test_flat_seam_unclippable():
+    """A real FLAT (180 deg / coplanar) vertical seam is unclippable, verified at fan resolution.
+    Golden = the Hyrule flat wall at x=-157.578 (GZLJ01), seam pair poly 2360/2355 whose stored
+    planes differ by only 1 ULP in nx + 5 ULP in D. The analytic gap search, scanning the offset
+    an order of magnitude finer than that fan, finds NO clip: the two coplanar quads tile the wall,
+    so a crossing past the seam for one triangle lands inside the neighbour's footprint and its
+    ~1-ULP-different plane still catches it. There is no angular divergence (unlike a real corner)
+    to make both miss. See knowledge/mechanics/seam-clip.md."""
+    from tww_sim.core.collision import Tri, Plane
+    g = json.load(open(os.path.join(os.path.dirname(__file__), "golden", "flat_seam_ram.json")))
+    tris = [Tri([_f_from_hex(x) for x in t["v"][0]],
+                [_f_from_hex(x) for x in t["v"][1]],
+                [_f_from_hex(x) for x in t["v"][2]],
+                plane=Plane(*[_f_from_hex(x) for x in t["n"]], _f_from_hex(t["D"])))
+            for t in g["tris"]]
+    ok, rec = find_clip(tris, tuple(g["seam_xz"]), g["link_y"],
+                        dir_half_deg=30.0, dir_step_deg=1.0, off_half=0.004, off_step=5e-8)
+    assert not ok, f"flat seam unexpectedly clipped: {rec}"
