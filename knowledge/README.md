@@ -66,6 +66,7 @@ you can triage in one glance.
 - **How does walking accelerate / what are the two movement angles (facing vs travel)?** → [mechanics/land-movement.md](mechanics/land-movement.md)
 - **What is a brakeslide / extended brakeslide (EBS) / why does ESS left-or-right hold speed almost forever?** → is *facing* (not travel) relative to `csangle` → [land-movement.md#camera-relative-speed-preservation-the-ebs-payoff](mechanics/land-movement.md#camera-relative-speed-preservation-the-ebs-payoff)
 - **Is there a walk-before-run speed plateau (~5.0)?** → no — full stick goes straight to the 17 cap (the "plateau" was a phantom front roll) → [land-movement.md#walk--run-acceleration-baseline](mechanics/land-movement.md#walk--run-acceleration-baseline)
+- **From a standstill, fastest way into a roll chain / why hold L on frame 1 / why a slight off-axis stick beats straight-up / why the frame-6 roll caps at ~25.9?** → [strategy/roll-launch.md](strategy/roll-launch.md)
 - **Which partial stick magnitudes are live-valid in a land plan / why NEVER emit Y 192–254?** → [land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel](mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel). NB: this live-valid *stick-input* band is a different thing from the sim's [`Y171` partial-magnitude *regime*](model/land-sim.md#partial-magnitude-regime-y171-msd052) — don't conflate "partial stick" with "partial regime".
 
 ### Model — engine (core)
