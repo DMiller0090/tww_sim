@@ -320,6 +320,18 @@ class LandState:
         self.direction = c.direction
         self.visited.add(self.state)
 
+    @property
+    def anim_fc0(self):
+        """The walk-anim frame-ctrl phase (`J3DFrameCtrl` frame of MOVE slot 0). At the 17u speed cap
+        this advances a fixed +2.3/frame and the freeze coast is a pure function of it — the observable
+        the fewest-frame freeze planner (`plan_land.reach_freeze(min_frames=True)`) uses to predict a
+        start crawl's full-speed freeze. Reads whichever backend is active (native core / Python foot)."""
+        if self._core is not None:
+            return self._core.pe_phase[0]
+        if self._foot is not None:
+            return self._foot.st.fc0.frame
+        return 0.0
+
     # --- stick layer (setStickData, 10530) -------------------------------------------------
     def _set_stick_data(self, sx, sy):
         """mStickDistance + m34E8 world target from a raw stick. mStickDistance uses the /54

@@ -726,6 +726,15 @@ cdef class PoseEngine:
         c._pending_morf = self._pending_morf; c._has_pending = self._has_pending
         return c
 
+    @property
+    def phase(self):
+        """Read-only anim-phase fingerprint (diagnostic): the two frame-ctrl frames, the oldframe-morf
+        counter + morf tuning, and the toe-stream scalars. Determines the walk pose (hence the freeze
+        coast) for a given position -- used by the freeze planner's delta-prediction to characterize a
+        start seq's full-speed phase. See _notes/chained-freeze-probes."""
+        return (self._fc0_frame, self._fc1_frame, self._m_counter, self._m_f8, self._m_rate,
+                self._m_f10, self._m_f14, self._prev_f312, self._m35B4, self._a_ratio, self._m3598)
+
     def set_pos(self, px, py, pz, facing):
         """Set Link's world pose for the frame about to be posed: build worldBase + m37B4 into C
         (was fk.world_base + a Python list round-trip per frame). Flat ground: base = transS.ZXYrotM(Y)."""
@@ -1522,6 +1531,11 @@ cdef class LandCore:
     cdef int _inbuf[2][6]
     cdef long long _cam_yaw, _cam_target
     cdef double _cam_scale, _cam_pending_posx
+
+    @property
+    def pe_phase(self):
+        """The shared PoseEngine's anim-phase fingerprint (diagnostic; see PoseEngine.phase)."""
+        return self._pe.phase
 
     def setup(self, PoseEngine pe, double pos_x, double pos_z, long long facing,
               long long travel, long long csangle, int state, double nspeed,

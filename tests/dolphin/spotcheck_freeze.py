@@ -16,7 +16,13 @@ the requested z) and reads as a spurious FAIL. Keep on-axis targets in (764.08, 
 Usage:
   python spotcheck_freeze.py                 # default reachable targets: 1500 2000 2500
   python spotcheck_freeze.py 1800 2200 2900  # custom on-axis +z targets (all below the wall)
+  python spotcheck_freeze.py --min 2000      # the FEWEST-FRAME start-crawl freeze (reach_freeze min_frames)
 Requires Dolphin running with twwgz booted (see tests/dolphin/README.md). Loads land_flatwalk@twwgz.sav.
+
+The --min plan is the START-crawl fewest-frame freeze: a few from-rest reduced-magnitude frames then
+full cruise + C-up. Its seq has the SAME shape (walk prefix + FREEZE_LATENCY tail) as the robust plan,
+so the live cancel below drives it unchanged; it just travels ~+7 over the full-up floor (vs +19..32)
+and freezes BIT-EXACTLY (0 ULP). Requires the anchor at REST (the crawl starts from a standstill).
 """
 import os, sys, struct  # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
@@ -48,8 +54,9 @@ def _el(sx, sy, substickY=0, triggerL=0):
             "buttons": 0, "triggerL": triggerL, "frames": 1}
 
 
-def spotcheck(tz, cups=6):
-    """Plan + live-drive a freeze at reachable on-axis target z=tz. Returns True iff 0 ULP + pos_x~0."""
+def spotcheck(tz, cups=6, min_frames=False):
+    """Plan + live-drive a freeze at reachable on-axis target z=tz. Returns True iff 0 ULP + pos_x~0.
+    `min_frames` selects the fewest-frame START-crawl plan (else the robust slow-approach plan)."""
     D.control_pipe_quiet("clearinput")
     D.control_pipe_quiet("savestate", {"action": "load", "path": ANCHOR.replace("\\", "/")})
     h, m = D.attach()
@@ -57,7 +64,7 @@ def spotcheck(tz, cups=6):
     seed = LandState(pos_z=s["pos_z"], facing=int(s["shape_angle_y"]), travel=int(s["travel_angle"]),
                      csangle=int(s["csangle"]), state=int(s["link_state"]),
                      nspeed=s["potential_speed"], idle_frame=s["anim_frame"])
-    r = reach_freeze(seed, seed.pos_x, tz)
+    r = reach_freeze(seed, seed.pos_x, tz, min_frames=min_frames)
     prefix = r["seq"][:-FREEZE_LATENCY]
     sim_fz = r["freeze_pos"][1]
 
@@ -76,15 +83,18 @@ def spotcheck(tz, cups=6):
     live_fz, live_x = end["pos_z"], end["pos_x"]
     ulp = abs(bits(live_fz) - bits(sim_fz))
     ok = (ulp == 0) and abs(live_x) < 1e-4
-    print(f"{'PASS' if ok else 'FAIL'} z={tz:<7.1f} sim {sim_fz!r} (0x{bits(sim_fz):08x}) / "
+    print(f"{'PASS' if ok else 'FAIL'} z={tz:<7.1f} {'[min]' if min_frames else '     '} "
+          f"sim {sim_fz!r} (0x{bits(sim_fz):08x}) / "
           f"live {live_fz!r} (0x{bits(live_fz):08x})  {ulp} ULP  pos_x={live_x:.5f}"
           f"  [{len(prefix)}f, dist {r['freeze_dist']:.6f}]")
     return ok
 
 
 def main():
-    targets = [float(x) for x in sys.argv[1:]] or [1500.0, 2000.0, 2500.0]
-    res = [spotcheck(tz) for tz in targets]
+    args = sys.argv[1:]
+    min_frames = "--min" in args
+    targets = [float(x) for x in args if x != "--min"] or [1500.0, 2000.0, 2500.0]
+    res = [spotcheck(tz, min_frames=min_frames) for tz in targets]
     npass = sum(res)
     print(f"\n{npass} passed (0 ULP), {len(res) - npass} failed")
     sys.exit(0 if npass == len(res) else 1)

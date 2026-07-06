@@ -145,6 +145,23 @@ def test_reach_freeze_beats_precise_rest():
     assert freeze['freeze_dist'] < 0.001
 
 
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_reach_freeze_min_frames_bit_exact_and_fewer():
+    # The START-crawl fewest-frame freeze (min_frames=True): 0-ULP freeze, all sticks live-valid, the seq
+    # re-simulates to the target, and it travels FEWER frames than robust reach_freeze. See land-planner.md.
+    T = 2000.0
+    r = reach_freeze(_seed(), 0.0, T, min_frames=True)
+    assert _bits(r['freeze_pos'][1]) == _bits(T), "min_frames freeze not bit-exact: %r" % (r['freeze_pos'],)
+    assert all(_live_valid_stick(*st) for st in r['seq']), "non-live-valid stick in min_frames plan"
+    s = _seed()
+    for st in r['seq']:
+        s.step(*st)
+    assert _bits(s.pos_z) == _bits(T), "min_frames seq re-sim %.6f != %.6f" % (s.pos_z, T)
+    robust = reach_freeze(_seed(), 0.0, T)
+    assert r['n_frames'] < robust['n_frames'], "min_frames (%d) not fewer than robust (%d)" % (
+        r['n_frames'], robust['n_frames'])
+
+
 # --- SUBJECTIVITY freeze -> B-cancel -> re-walk-from-rest (the chained-freeze tech) --------------
 def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]

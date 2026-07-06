@@ -12,10 +12,11 @@ clone. The C-up freeze + B-cancel + re-walk is now **input-driven in `step()`** 
 2026-07-05f) — a freeze plan is just an input sequence. The **fewest-frame bit-exact stop is the START
 crawl** (2026-07-05h): fine-tune the from-rest accel frames (free low-speed fine grid), then cruise full
 + C-up — bit-exact ~+7 over the full-up floor, live-proven 0 ULP (supersedes chained/end-crawl for fewest
-frames). Open: make the start-crawl solve sub-second (δ-prediction filtered search) + productionise into
-`reach_freeze`; the chained-over-streams planner is done (modest ~1–3f); off-axis octagon clamp,
-collision, A*. (Note: `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u
-— use `reach_freeze` for exact stops.)
+frames). **Productionised (2026-07-05i) as `reach_freeze(min_frames=True)`** with a δ-prediction filter
+(~3× solve, NOT sub-second — floored by per-leaf pose sim; see below) + offline & live gates. Open:
+genuine sub-second (composable characterization memo — blocked by hidden anim/input-buffer state);
+off-axis octagon clamp; collision; A*. The chained-over-streams planner is done (modest ~1–3f). (Note:
+`reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u — use `reach_freeze` for exact stops.)
 **Source:** `tww_sim/land/plan_land.py`; live-validated via `advanceseq`. Forward model:
 [land sim](land-sim.md) · [land movement](../mechanics/land-movement.md).
 
@@ -135,13 +136,31 @@ low-speed **for free**, so you spend nothing extra:
    full-speed lattice onto the target.
 
 **Bit-exact at a consistent ~+7 over the full-up floor** (z=2000 → 80f/+7.3; z=1500 → 50f/+6.7;
-z=2810.99 → 128f/+7.6), and **live-proven 0-ULP** (z=2000 froze at exactly `0x44fa0000` in Dolphin).
-Prototype `_notes/chained-freeze-probes/start_freeze_solve.py`; the plan is a raw stream (the freeze is
-input-driven in `step()`). **Open: solve time is 5–63s** (ordered exhaustive; k=4 ≈ 234k candidate starts
-× a full cruise each — `freeze_below` sawtooths over [T-17,T] so no monotonic prune, and the pose is
-irreducible). The fix is a **δ-prediction filtered search** (predict from the cheap position deficit +
-the ±0.3u `coast(phase)` model, full-cruise only the ~24% predicted near T, hierarchical δ-prune the k=4
-subtrees) — not yet built. Not yet productionised into `reach_freeze`.
+z=2810.99 → 128f/+7.6), and **live-proven 0-ULP** (z=2000/1500/2500 froze byte-for-byte at the sim's
+`freeze_pos.z` in Dolphin — `spotcheck_freeze.py --min`). The plan is a raw stream (the freeze is
+input-driven in `step()`).
+
+**Productionised (2026-07-05i): `reach_freeze(seed, tx, tz, min_frames=True)`** — requires the seed AT
+REST, on-axis/+z corridor; returns the same plan dict (0-ULP freeze, all sticks live-valid) and falls
+back to the robust phases if no exact hit up to `kmax`. Offline gate
+`test_reach_freeze_min_frames_bit_exact_and_fewer`; live gate `spotcheck_freeze.py --min`.
+
+**Solve speed — the δ-prediction filter (built, ~3× — NOT sub-second).** The measured full-speed
+invariants power a closed-form freeze predictor: once nspeed hits the 17u cap every start seq cruises at
+**exactly +17.000 pos/frame and +2.300 `anim_fc0`/frame** (the walk frame-ctrl phase, exposed on
+`LandState.anim_fc0`), and the **freeze coast is a universal function of `anim_fc0`** (±0.3u, built once
+as a coast table from a full-up reference cruise). So a candidate's freeze at any future cruise frame is
+predictable from just (pos, fc0) read at the cap frame — candidates predicted outside a ±0.5u band skip
+the expensive exact cruise (~120 frames → ~8), so the exhaustive DFS's early-exit reaches a hit far
+sooner (z=2000 4.7s→1.7s; z=1500 7.7s→2.9s; verified the *identical* start seqs, no false negatives).
+But it is a **filter, not an O(1) solve**: per-leaf pose characterization has a floor (~seconds at k=4,
+tens at k=5), because an arbitrary ULP target needs ~17u/ulp ≈ 10⁵ distinct start seqs to cover δ, and
+each still needs a pose sim to the cap. **True sub-second is blocked by hidden state:** the ~7-frame
+walk anim never bit-exactly repeats (precesses) *and* the from-rest characterization can't be memoised
+on a low-dim key — the 2-frame INPUT_DELAY buffer + the high-dim foot pose are hidden state, so distinct
+prefixes don't collapse (confirmed: an apparent state collapse was an input-delay artifact). A composable
+(bucketised, ±0.3u) characterization memo is the open idea for genuine sub-second. Prototypes:
+`_notes/chained-freeze-probes/{start_freeze_solve,fast_start_solve,coast_probe,phase_probe}.py`.
 
 **Why full-speed windows can't do it (settled, measured):** perturbing a window of the *full-speed*
 cruise cannot hit bit-exact — at the 17u/frame speed cap momentum is pinned, so the freeze grid is coarse
