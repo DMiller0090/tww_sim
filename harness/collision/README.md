@@ -10,7 +10,8 @@ this folder is the runnable model.
 |------|------|
 | [`seam_model.py`](seam_model.py) | The seam geometry (4 wall tris + STORED per-triangle planes) + `predict_clip(initial, end)` / `settle_initial`. Wraps [`tww_sim.core.collision`](../../tww_sim/core/collision.py). |
 | [`validate_live.py`](validate_live.py) | Drives a running Dolphin (position-hacking) and compares live clip/block vs `predict_clip` fed the game's actual old_pos. |
-| `ganonl_seam_capture.json` | Ground truth: every triangle the game's `LineCheck` tested for the row-1 clip line, with stored plane (n, D) + the game's crossing point + return. Captured via a breakpoint on `cM3d_Cross_LinTri`. |
+| [`angle_experiment.py`](angle_experiment.py) | Sweeps synthetic corner angles (pivot wall B about the seam) and reports clippability — enabled by the bit-exact `calc_pla`. Near-90° clips; no clean angle cutoff (per-geometry float fan). |
+| `ganonl_seam_capture.json` | Ground truth: every triangle the game's `LineCheck` tested for the row-1 clip line, with stored plane (n, D) + the game's crossing point + return. Captured via a breakpoint on `cM3d_Cross_LinTri`. Also the oracle for the bit-exact `calc_pla` (frsqrte) test. |
 
 The reusable, geometry-agnostic port of the collision resolution (`LineCheck` + `WallCorrect` +
 the `cM3d` math) lives in [`tww_sim/core/collision.py`](../../tww_sim/core/collision.py).

@@ -23,20 +23,23 @@ in the compiled code, so they use separate rounds. Validated live on GZLJ01 (Gan
 seam): reproduces the game's per-triangle crossing points to f32 and every hit/miss (24/24 live
 cases). See ``knowledge/mechanics/seam-clip.md``.
 
-**Plane normals must be the game's STORED per-triangle planes.** Each triangle stores an
-independently-normalised plane (``cM3d_CalcPla``: ``normalize(cross(v1-v0, v2-v0))``, ``d=-dot(n,v0)``).
-The two triangles of one wall quad differ in the last bits, and that difference is exactly what
-opens the seam gap — so feed :class:`Tri` the stored ``(n, d)`` (read from ``cBgW.pm_tri``, stride
-0x18) rather than recomputing, or the razor-edge cases land on the wrong side. :func:`calc_pla`
-reproduces the compute path for reference but is not bit-identical to the console's rsqrt-normalise.
+**Plane normals.** Each triangle's plane is *computed at room load* by ``cM3d_CalcPla``
+(``normalize(cross(v1-v0, v2-v0))``, ``d=-dot(n,v0)``) — planes are NOT stored in the DZB
+(``cBgW::ClassifyPlane`` -> ``cM3d_CalcPla``, c_bg_w.cpp). The two triangles of one wall quad
+normalise independently and differ in the last mantissa bits, and that difference is exactly what
+opens the seam gap. :func:`calc_pla` here is **bit-exact** to the console: it ports the Gekko
+``frsqrte`` (reciprocal-sqrt estimate + one Newton step) that ``VECMag`` uses, so it reproduces the
+game's stored planes bit-for-bit (verified against RAM for the GanonL seam). This lets the sim run
+on *synthetic* geometry (any vertices) faithfully, not just real seams read from RAM.
 
 Decomp refs: ``src/SSystem/SComponent/c_m3d.cpp`` (``cM3d_Cross_Lin*``, ``cM3d_CrossX/Y/Z_Tri``),
 ``c_m2d.cpp`` (``cM2d_CrossCirLin``), ``src/d/d_bg_w.cpp`` (``RwgWallCorrect``), ``src/d/d_bg_s_acch.cpp``
 (``CrrPos``/``LineCheck``). Pure stdlib + ``core.fp``; no Dolphin dependency.
 """
 import math
+import struct
 
-from .fp import f32 as _f, fadds, fsubs, fmuls, fdivs, fmadds
+from .fp import f32 as _f, fadds, fsubs, fmuls, fdivs, fmadds, fmsubs
 
 # cM3d_IsZero threshold (kZero, c_m3d.h). Distinct from the point-in-triangle 20.0 area tolerance.
 G_CM3D_F_ABS_MIN = 1.0e-5
@@ -48,6 +51,58 @@ def is_zero(x):
 
 def fsqrt(a):
     return _f(math.sqrt(_f(a)))
+
+
+# Gekko frsqrte (reciprocal-sqrt estimate) — Dolphin's exact table + algorithm. VECMag/cM3d_CalcPla
+# normalise via frsqrte+Newton (not correctly-rounded sqrt); the ~1-ULP difference flips seam clips.
+_FRSQRTE = [
+    (0x1a7e800,-0x568),(0x17cb800,-0x4f3),(0x1552800,-0x48d),(0x130c000,-0x435),
+    (0x10f2000,-0x3e7),(0x0eff000,-0x3a2),(0x0d2e000,-0x365),(0x0b7c000,-0x32e),
+    (0x09e5000,-0x2fc),(0x0867000,-0x2d0),(0x06ff000,-0x2a8),(0x05ab800,-0x283),
+    (0x046a000,-0x261),(0x0339800,-0x243),(0x0218800,-0x226),(0x0105800,-0x20b),
+    (0x3ffa000,-0x7a4),(0x3c29000,-0x700),(0x38aa000,-0x670),(0x3572000,-0x5f2),
+    (0x3279000,-0x584),(0x2fb7000,-0x524),(0x2d26000,-0x4cc),(0x2ac0000,-0x47e),
+    (0x2881000,-0x43a),(0x2665000,-0x3fa),(0x2468000,-0x3c2),(0x2287000,-0x38e),
+    (0x20c1000,-0x35e),(0x1f12000,-0x332),(0x1d79000,-0x30a),(0x1bf4000,-0x2e6),
+]
+
+def _ctrunc_div2(a):
+    return int(a/2) if a >= 0 else -((-a)//2)   # C s64 /2 (truncate toward zero)
+
+def frsqrte(val):
+    integral = struct.unpack("<q", struct.pack("<d", val))[0]
+    mantissa = integral & ((1<<52)-1)
+    sign = integral & (1<<63)
+    exponent = integral & (0x7FF<<52)
+    if mantissa == 0 and exponent == 0:
+        return float("-inf") if sign else float("inf")
+    if exponent == (0x7FF<<52):
+        return (float("nan") if sign else 0.0) if mantissa == 0 else val
+    if sign:
+        return float("nan")
+    if not exponent:
+        while not (mantissa & (1<<52)):
+            exponent -= 1<<52; mantissa <<= 1
+        mantissa &= (1<<52)-1
+        exponent += 1<<52
+    exponent_lsb = exponent & (1<<52)
+    exponent = ((0x3FF<<52) - _ctrunc_div2(exponent - (0x3FE<<52))) & (0x7FF<<52)
+    integral = sign | exponent
+    i = (exponent_lsb | mantissa) >> 37
+    base, dec = _FRSQRTE[i//2048]
+    integral = (integral | ((base + dec*(i%2048)) << 26)) & ((1<<64)-1)
+    return struct.unpack("<d", struct.pack("<Q", integral))[0]
+
+def vecmag(x, y, z):
+    """PSVECMag: sqrt via frsqrte + one Newton step. sq = ((z*z+x*x)[fused] + y*y)."""
+    sq = fadds(fmadds(z, z, fmuls(x, x)), fmuls(y, y))
+    if sq == 0.0:
+        return 0.0
+    e = frsqrte(sq)
+    esq = fmuls(e, e)
+    half_e = fmuls(e, 0.5)
+    t = _f(3.0 - fmuls(esq, sq))     # fnmsubs(esq, sq, 3.0)
+    return fmuls(sq, fmuls(t, half_e))
 
 
 # --------------------------------------------------------------------------- plane
@@ -67,17 +122,23 @@ class Plane:
 
 
 def calc_pla(v0, v1, v2):
-    """``cM3d_CalcPla`` reference (NOT console-bit-exact: uses libm sqrt, not Gekko frsqrte).
-    Prefer the stored plane. normalize(cross(v1-v0, v2-v0)); d = -dot(n, v0)."""
+    """``cM3d_CalcPla``, bit-exact to the console. normalize(cross(v1-v0, v2-v0)); d = -dot(n, v0),
+    with the cross as fused ``-(a*b - c)``, magnitude via :func:`vecmag` (frsqrte), reciprocal via
+    ``fdivs``, and the dot as the fused ``PSVECDotProduct``. Reproduces the game's stored planes
+    bit-for-bit (verified vs RAM at the GanonL seam)."""
+    v0 = tuple(_f(c) for c in v0); v1 = tuple(_f(c) for c in v1); v2 = tuple(_f(c) for c in v2)
     ax, ay, az = fsubs(v1[0], v0[0]), fsubs(v1[1], v0[1]), fsubs(v1[2], v0[2])
     bx, by, bz = fsubs(v2[0], v0[0]), fsubs(v2[1], v0[1]), fsubs(v2[2], v0[2])
-    nx = fsubs(fmuls(ay, bz), fmuls(az, by))
-    ny = fsubs(fmuls(az, bx), fmuls(ax, bz))
-    nz = fsubs(fmuls(ax, by), fmuls(ay, bx))
-    t = fsqrt(fadds(fadds(fmuls(nx, nx), fmuls(ny, ny)), fmuls(nz, nz)))
-    if abs(t) >= 0.02:
-        nx = fdivs(nx, t); ny = fdivs(ny, t); nz = fdivs(nz, t)
-        d = _f(-(fadds(fadds(fmuls(nx, v0[0]), fmuls(ny, v0[1])), fmuls(nz, v0[2]))))
+    # cross = -(fmsubs(...)) form (matches PSVECCrossProduct's fused lanes bit-for-bit)
+    nx = _f(-fmsubs(az, by, fmuls(ay, bz)))
+    ny = _f(-fmsubs(ax, bz, fmuls(az, bx)))
+    nz = _f(-fmsubs(ay, bx, fmuls(ax, by)))
+    t = vecmag(nx, ny, nz)
+    if abs(_f(t)) >= 0.02:
+        inv = fdivs(1.0, t)
+        nx = fmuls(nx, inv); ny = fmuls(ny, inv); nz = fmuls(nz, inv)
+        # d = -VECDotProduct(n, v0)  (fused PSVECDotProduct)
+        d = _f(-fadds(fmadds(nx, v0[0], fmuls(ny, v0[1])), fmuls(nz, v0[2])))
         return Plane(nx, ny, nz, d)
     return Plane(0.0, 0.0, 0.0, 0.0)
 

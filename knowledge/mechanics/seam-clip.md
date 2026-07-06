@@ -52,21 +52,29 @@ past the seam that WallCorrect's static radius-35 cylinder no longer overlaps ei
 no push-back. With both barriers missing, Link keeps `new_pos` — he's through the wall.
 
 This is not a coarse geometric wedge: the crossing points sit within ~0.01 u of the seam edge, and
-the clip vs block outcome flips on the last few float bits. The model is only faithful when fed the
-game's **stored** per-triangle planes (not recomputed unit normals) and the console's fused
-multiply-add (see [FP note](#fp-note) below).
+the clip vs block outcome flips on the last few float bits. Faithful reproduction needs the console's
+fused multiply-add (see [FP note](#fp-note)) **and** the plane normals computed exactly as the game
+does — which [`calc_pla`](../../tww_sim/core/collision.py) now is, bit-for-bit (it ports the Gekko
+`frsqrte` normalise; see [FP note](#fp-note)). That means the sim runs faithfully on *synthetic*
+geometry, not just real seams read from RAM.
 
 ## Why the three requirements
 
 - **≥ ~36 u of displacement in one frame** (35 is the hard floor). The displacement must exceed the
   radius-35 wall **cylinder** so that WallCorrect's *static* test at `new_pos` no longer overlaps the
   wall. Below that, even if LineCheck's swept test misses, WallCorrect shoves Link back out.
-- **Corner angle > 90°, easier near 180°, but not 90° or 180°.** The seam must be a genuine
-  **non-coplanar corner** so the two walls' planes differ — that difference is what makes the
-  per-triangle crossings land on different sides of the seam and all miss. At exactly **180°** the
-  walls are coplanar (one plane, no seam gap) → impossible. A shallower bend (closer to 180°, the
-  GanonL seam is a ~137° dihedral) keeps the crossings clustered right at the seam vertex where the
-  gap is, which is why near-flat corners clip more readily.
+- **A corner is needed, but there is NO clean angle cutoff — including near 90°.** The two walls'
+  planes must differ so the per-triangle crossings land on different sides of the seam; the *amount*
+  of difference is set by the per-triangle plane **fan**, a sub-ULP property of the exact vertices,
+  not a clean function of the dihedral. The synthetic-angle sweep
+  ([`harness/collision/angle_experiment.py`](../../harness/collision/README.md), now bit-exact via
+  `calc_pla`) finds genuine clips across interior angles **80°–137°** (and reflex/concave corners
+  over a wider range) — near-90° corners clip, matching live confirmation. Clippability at a given
+  angle is decided by the exact float fan, so it is effectively per-geometry: exactly-90.0° can miss
+  while 88°/92° clip. The folk "> 90° and not 180°" rule is only approximate — treat the real
+  gate as "the two triangles' bit-exact planes fan enough to miss both crossings," which you check by
+  running the model on the actual geometry. (Sharper convex corners tend to need more displacement to
+  clear the cylinder, so speed rises as you sharpen.)
 - **Perfectly vertical walls (ny ≈ 0).** This is the sharpest requirement, and its cause is
   **LineCheck's three fixed cylinder heights** (30.1 / 89.9 / 125.0), *not* the Y-projection gate.
   A vertical seam's gap is a height-invariant vertical slab, so all three heights miss the same XZ
@@ -83,16 +91,22 @@ multiply-add (see [FP note](#fp-note) below).
 ## Modelling / predicting a clip
 
 [`tww_sim.core.collision`](../../tww_sim/core/collision.py) is a geometry-agnostic FP-faithful port
-of `CrrPos` (LineCheck + WallCorrect + the `cM3d` math). [`harness/collision/seam_model.py`](../../harness/collision/README.md)
-wraps it with the GanonL seam's four wall triangles (verts + stored planes) and exposes
-`predict_clip(initial, end)` → clip/block. `harness/collision/validate_live.py` checks it against a
-running game by position-hacking Link's debug pos (`0x803D78FC`).
+of `CrrPos` (LineCheck + WallCorrect + the `cM3d` math) with a **bit-exact `cM3d_CalcPla`**, so it
+can build faithful planes from any vertices. [`harness/collision/seam_model.py`](../../harness/collision/README.md)
+wraps it with the GanonL seam and exposes `predict_clip(initial, end)` → clip/block;
+[`angle_experiment.py`](../../harness/collision/README.md) sweeps synthetic corner angles.
+`harness/collision/validate_live.py` checks it against a running game by position-hacking Link's
+debug pos (`0x803D78FC`).
 
-<a id="fp-note"></a>**FP note.** The one fused op a naive port gets wrong is the plane function's dot
-product: `PSVECDotProduct` (paired-single) computes `dot = fadds(fmadds(nx,px, fmuls(ny,py)),
-fmuls(nz,pz))` — `nx*px + ny*py` is **fused** (rounds once). `cM3d_VectorProduct2d` (the
-point-in-triangle signed areas) and the crossing interpolation (`cM3d_InDivPos1/2`) are **not**
-fused. The port uses [`core.fp`](../../tww_sim/core/fp.py)'s `fmadds`/`fmuls`/`fadds` accordingly.
+<a id="fp-note"></a>**FP note.** Two console-exact details a naive port gets wrong:
+1. **Plane dot product** — `PSVECDotProduct` (paired-single) computes `dot = fadds(fmadds(nx,px,
+   fmuls(ny,py)), fmuls(nz,pz))`; `nx*px + ny*py` is **fused** (rounds once). `cM3d_VectorProduct2d`
+   (point-in-triangle) and the crossing interpolation (`cM3d_InDivPos1/2`) are **not** fused.
+2. **Plane normalise** — `cM3d_CalcPla` normalises via `VECMag`, which uses Gekko **`frsqrte`**
+   (reciprocal-sqrt estimate + one Newton step), *not* a correctly-rounded `sqrt`. libm `sqrt` is
+   ~1 ULP off in the normal — enough to flip the seam razor. `calc_pla` ports `frsqrte` (Dolphin's
+   exact table) and the fused cross (`-(a*b - c)`), reproducing the RAM planes bit-for-bit.
+The port uses [`core.fp`](../../tww_sim/core/fp.py)'s `fmadds`/`fmuls`/`fadds`/`fmsubs` accordingly.
 
 **old_pos matters.** The discriminator is the swept line, so the *exact* `old_pos` (Link's previous
 position) decides clip vs block at the razor edge. When feeding a raw brute-force initial, first

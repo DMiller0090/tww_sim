@@ -9,11 +9,27 @@ Guards the two things that must not drift:
 import json
 import os
 
-from tww_sim.core.collision import Tri, Plane, cross_lin_tri
+import struct
+
+from tww_sim.core.collision import Tri, Plane, cross_lin_tri, calc_pla
 from harness.collision.seam_model import predict_clip
 
 _CAP = os.path.join(os.path.dirname(__file__), "..", "harness", "collision",
                     "ganonl_seam_capture.json")
+
+
+def _bits(x):
+    return struct.unpack(">I", struct.pack(">f", x))[0]
+
+
+def test_calc_pla_bit_exact_vs_ram():
+    """calc_pla (frsqrte-based cM3d_CalcPla port) must reproduce the game's RAM-stored planes
+    bit-for-bit — this is what lets the sim run faithfully on synthetic geometry."""
+    data = json.load(open(_CAP))
+    for t in data[:4]:
+        p = calc_pla(t["A"], t["B"], t["C"])
+        for got, want in [(p.nx, t["n"][0]), (p.ny, t["n"][1]), (p.nz, t["n"][2]), (p.d, t["D"])]:
+            assert _bits(got) == _bits(want), f"tri n={t['n']}: {got!r} != {want!r}"
 
 
 def test_linecheck_matches_captured_game_returns():
