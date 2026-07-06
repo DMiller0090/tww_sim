@@ -219,12 +219,22 @@ Press **A** (the "do" button, `dActStts_ATTACK_e`) while moving on the ground �
 **Chained rolls (26 u/frame ground cover).** `mNormalSpeed = clamp(speedF·1.5 + 0.5, 5, 26)`, and the cap
 26 = `0.5 + 17·1.5`, so **any pre-roll `speedF ≥ 17` re-rolls to the full 26**. A re-roll only registers
 from **MOVE** (never mid-ROLL — the `a_pressed and grounded` gate excludes FRONT_ROLL) and carries the
-2-frame `INPUT_DELAY`, so a chained cycle is **19 frames = +486.5u (25.6 u/frame)** with two forced MOVE
-frames (26→23.5) between rolls — you can't re-press sooner. To land **intermediate** roll speeds, space
-the re-roll 1–2 frames so `speedF` decays below 17 first (neutral-exit does 26→21, then walk decel
-21→18.5→16→…, and the re-roll clamps that): a coarse-tuning knob (23.5 / 21 / 18 …), not yet used by the
-planner but a lattice densifier for the roll freeze. (Native path: `roll_frame` is NOT synced — read the
-state tag, not the frame ctrl.)
+2-frame `INPUT_DELAY`, so a chained cycle is **19 frames = +486.5u (25.6 u/frame)** — you can't re-press
+sooner. (Native path: `roll_frame` is NOT synced — read the state tag, not the frame ctrl.)
+
+**Intermediate roll speeds — you must DECAY `speedF` below 17 first (measured 2026-07-05k, live-gated).**
+The re-roll clamps `speedF·1.5+0.5`, and `speedF ≥ 17 → 26`. **Holding full up between rolls keeps `speedF`
+floored at the walk cap 17, so every chained roll is 26** — the 26→23.5→21→18.6 values you see while
+holding up are the post-roll `speedF` **decay readouts**, NOT the resulting roll speed (they re-clamp to
+26). To get a genuine sub-26 roll you must **reduce the stick** before re-pressing A so `speedF` settles
+below 17. The clean recipe is a **partial FORWARD hold** `(128, Y)` (`Y ≤ 191`, live-valid) for a frame or
+two, then A: `speedF` decays toward that stick's walk cap `17·msd²`, and the re-roll clamps it — giving a
+**continuous, live-valid, forward-moving** ladder of ~40 distinct speeds 5→26 (e.g. `Y187` ×2 → 23.7,
+`Y171` ×2 → 25.36, `Y180` ×5 → 13.8). **Every intermediate roll still resets the walk anim (post-roll
+`anim_fc0 == 0`), so the freeze stays analytic.** This is the **densifier knob** now driven by the planner
+(`reach_freeze(roll=True, roll_speed_min<26)`); a slower roll covers less ground (more frames) but its
+distinct distance is an extra coarse-grid point, so hard exact-float targets hit at a **shallower start
+crawl** — see [planner: ROLL densifier](../model/land-planner.md#fewest-frame-freeze-via-a-roll-approach--and-the-analytic-solve-2026-07-05j).
 
 **The roll RESETS the walk anim → the C-up freeze is analytic (2026-07-05j).** Because the roll's
 `setSingleMoveAnime` leaves `m34C3 == 0`, the roll→MOVE exit re-inits the walk frame ctrl to **frame 0**:

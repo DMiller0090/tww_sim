@@ -182,6 +182,26 @@ def test_reach_freeze_roll_bit_exact_and_beats_floor():
     assert r['n_frames'] < floor17, "roll %d not below walk floor %.0f" % (r['n_frames'], floor17)
 
 
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_reach_freeze_roll_densifier_lowers_k():
+    # DENSIFIER (roll_speed_min < 26): full-only misses z=2049.404 at k<=3, but admitting partial-speed
+    # TUNING rolls surfaces a bit-exact k<=3 hit -- the fast-solve knob. See land-planner.md (ROLL densifier).
+    T = 2049.404
+    full = reach_freeze(_seed(), 0.0, T, roll=True, kmax=3)
+    assert full is None or 'rolls' not in full, "unexpected full-only k<=3 hit (test premise stale)"
+    dense = reach_freeze(_seed(), 0.0, T, roll=True, kmax=3, roll_speed_min=10.0)
+    assert dense is not None and 'rolls' in dense, "densifier found no k<=3 hit"
+    assert dense.get('tuned') is True, "densifier k<=3 hit should use a partial tuning roll"
+    assert _bits(dense['freeze_pos'][1]) == _bits(T), "densifier freeze not bit-exact: %r" % (
+        dense['freeze_pos'],)
+    assert all(_live_valid_stick(st[0], st[1]) for st in dense['seq']), "non-live-valid stick"
+    # re-simulate the button-carrying seq -> reproduces the freeze bit-exactly
+    s = _seed()
+    for st in dense['seq']:
+        s.step(st[0], st[1], buttons=(st[2] if len(st) > 2 else 0))
+    assert _bits(s.pos_z) == _bits(T), "densifier seq re-sim %.6f != %.6f" % (s.pos_z, T)
+
+
 # --- SUBJECTIVITY freeze -> B-cancel -> re-walk-from-rest (the chained-freeze tech) --------------
 def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]

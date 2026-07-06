@@ -17,9 +17,11 @@ frames). **Productionised (2026-07-05i) as `reach_freeze(min_frames=True)`** wit
 **fewest-frame stop overall is the ROLL approach** (2026-07-05j): chained forward rolls (26 u/frame) rest
 **~15–30 frames BELOW the walk floor**, and — because a roll RESETS the walk anim (fc0→0) — the freeze is
 **analytically solvable** (`freeze = freeze_ref(nr,r) + δ`, sub-second lookup), unblocking the walk's
-precession wall. Productionised as **`reach_freeze(roll=True)`**, live 0-ULP; see the ROLL section below.
-Open: off-axis octagon clamp; collision; A*; a density fix (intermediate-roll-speed knob) so hard exact
-targets solve fast. The chained-over-streams planner is done (modest ~1–3f). (Note:
+precession wall. Productionised as **`reach_freeze(roll=True)`**, live 0-ULP; see the ROLL section below. The **density fix
+is done (2026-07-05k)**: the **`roll_speed_min` knob** admits partial-speed tuning rolls that let hard
+exact-float targets hit at a **shallower start crawl** (k=5→k=3, ~57s→~2s, live 0-ULP) — trading a few
+frames for solve speed; partial-speed rolls are now live-gated. Open: off-axis octagon clamp; collision;
+A*. The chained-over-streams planner is done (modest ~1–3f). (Note:
 `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u — use `reach_freeze` for exact stops.)
 **Source:** `tww_sim/land/plan_land.py`; live-validated via `advanceseq`. Forward model:
 [land sim](land-sim.md) · [land movement](../mechanics/land-movement.md).
@@ -107,21 +109,12 @@ On the open **+z corridor** the production beam rests within **~1–4 float32 UL
 exactly live (**confirmed 2026-07-05** by driving whole plans in Dolphin: `pos_z` froze byte-for-byte at
 the sim's `freeze_pos.z` for z = 1500 / 2000 / 2500, `pos_x` = 0).
 
-**Exact-float freeze IS reachable (resolved 2026-07-05c) — live-proven for `2000.0` AND `1800.0`.** The
-~1–4 ULP is the **production beam UNDER-EXPLORING the tail**, NOT a lattice floor: the beam dedups by
-freeze POSITION (+ a `beam_width` cap), which collapses the **momentum diversity** that fills the last
-ULP. Two fixes recover it: (a) let the last few frames vary FULLY (unpruned over the live-valid stick
-set) — depth-3 already hits many targets exactly; (b) better, a **windowed-deepening** search that keeps
-every distinct STATE still short of the target within a small window (dedup by momentum, NOT position)
-and deepens only those — the near-target frontier stays small, so depth-4/5/6 is cheap (~16 s, not the
-~65⁴/snapshot ≈ 30 min a naïve deep drill would cost). This hit **every target tried exactly within
-depth-4**, including z = 1800 / 2000.5 that a depth-3 unpruned drill misses. Since the sim is 0-ULP vs
-live, the offline-exact solve lands exact on console: **verified — console froze at EXACTLY `2000.0`
-(`0x44fa0000`) and `1800.0` (`0x44e10000`), `pos_x` = 0** (offline solves seconds–~16 s, early-exit).
-Not yet productionised into `reach_freeze` (would be an `exact=`/windowed-deepening mode + offline & live
-gates). A *universal* all-f32 reachability PROOF is still open, but empirically every target hits by
-depth-4. **Off-axis freeze plans are not yet live-valid** — an off-axis
-crawl emits diagonal sticks needing the octagon clamp (a separate open decode issue). Mechanics of the cancel:
+**Exact-float (0-ULP) freeze IS reachable, live-proven** (the production robust beam's ~1–4 ULP was the
+beam under-exploring the tail, not a lattice floor). The exact solvers are now productionised — the
+fewest-frame **START crawl** (`min_frames=True`) and the **ROLL** approach (`roll=True`, below) — and
+since the sim is 0-ULP vs live, an offline-exact solve lands exact on console (verified: `2000.0` /
+`1800.0`, `pos_x`=0). **Off-axis freeze plans are not yet live-valid** — an off-axis crawl emits diagonal
+sticks needing the octagon clamp (a separate open decode issue). Mechanics of the cancel:
 [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
 
 ## Fewest-frame bit-exact stop — the START crawl (2026-07-05h)
@@ -188,41 +181,41 @@ z=2000/2222.2/2345.678, all 0 ULP, held stable). **Seed from the LIVE anchor** �
 rounds pos_z to 764.079 vs the anchor's 764.0791015625 (2 ULP); a seed mismatch shifts the freeze 1 ULP
 (root-caused: the sim is 0-ULP vs live when seeded right — a seed bug, not sim error). Gates:
 `test_reach_freeze_roll_bit_exact_and_beats_floor` + `spotcheck_roll_freeze.py`. `seq` frames are
-`(sx, sy, buttons)` 3-tuples (A=0x100 on roll press frames). On-axis / +z only. **Open:** a density fix
-(the intermediate-roll-speed knob / DFS δ-pruning) so hard exact targets solve fast.
+`(sx, sy, buttons)` 3-tuples (A=0x100 on roll press frames). On-axis / +z only.
+
+### The partial-tuning-roll densifier — `roll_speed_min` (2026-07-05k)
+
+The full-only grid (all 26-rolls + tail) is **sparse** (~17u tail steps), so a hard exact-float target
+needs a **deep (k=5) start crawl** to bridge the residual — a slow (~57s) DFS. The
+**`reach_freeze(roll=True, roll_speed_min=<float>)`** knob (default 26.0 = full-only) fixes this: lower it
+to admit **partial-speed tuning rolls** (mNormalSpeed in `[roll_speed_min, 26]`, via a pre-roll partial
+FORWARD hold — [land movement](../mechanics/land-movement.md#roll-front_roll--the-fast-approach-movement))
+as the last roll. Each covers a distinct distance → extra coarse-grid points → the target hits at a
+**shallower k** (fast solve). Every roll resets the walk anim (`anim_fc0 == 0`), so the tuning roll is just
+extra `freeze_ref` rows and the prediction stays exact.
+
+**It trades frames for solve-speed** (the user's dial): a partial roll is slower than 26, so the
+fewest-frame stop is **always all-full-rolls** (settled) — the densifier doesn't cut frames, it makes a
+**lower-k** solution *exist* at a few extra frames. Search per k: fewest-frame **full** config first
+(first-hit, fast); only if none, fewest-frame **tuning** config (config-first over enumerated leaves);
+return the first k with a hit. Use a **small `kmax`** (≈3). Live-proven 0 ULP: the k=5-hard **z=2000 → k=3
+in ~2s, 72f** (vs ~60f k=5 full-only), z=1900/2345.678 too — **partial-speed rolls are now live-gated**.
+Gate: `test_reach_freeze_roll_densifier_lowers_k` + `spotcheck_roll_freeze.py rmin=…`. **Open:** off-axis.
 Prototypes: `_notes/roll-freeze-probes/`.
 
 ## Roadmap: chained coarse+fine freeze (B-cancel) — fewest frames (TAS)
 
-The yardstick is the **pure full-up travel floor** ≈ `(target − 764.08)/17` frames (hold full-up the whole
-way). An exact-float stop costs ~12–17 frames over that floor either way (you must decelerate and land on
-the exact float). The idea of the **B-cancel chained freeze** (see [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel)):
-**coarse-freeze from FULL speed** (0-ULP, lands on a ~17u lattice) → **B-cancel** → resume walking **from
-rest** → short fine-walk → **fine-freeze** on the exact float — trades the single-freeze's slow approach
-for a coarse stop + short re-walk.
-
-**The freeze/B-cancel/re-walk mechanic is now MODELED, input-driven, and live-proven 0 ULP** (2026-07-05f).
-The former blocker — the post-B-cancel re-walk inheriting the freeze's **foot-anim phase** (same nspeed,
-~2× smaller low-speed `dz` than a cold walk) — is solved: it's the `m34C3 = 2` phase-preservation of the
-subjectivity/WAIT blend (root cause + decomp cites in [land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel)).
-`LandState.step()` now consumes the **raw controller stream** — the C-up cancel gesture, the B button, and
-the resume all fall out of the input + `INPUT_DELAY` (+1 camera frame on entry), so a plan is just an input
-sequence that plays 1:1 on sim + Dolphin. Tracked live gate `tests/dolphin/spotcheck_subj_inputdriven.py`
-(varied timings, 0 ULP both paths); the manual `enter_freeze/hold_freeze/resume_walk` API is retained for
-fast planner re-simulation.
-
-**Measured savings (chained_solve prototype, 2026-07-05e/f) — modest, NOT the optimistic ~7–10.** Best
-chained plans vs the single-freeze baseline: **z=2000 → 86f** (vs 89), **z=2810.98 → 135f** (vs 138),
-**z=1800 → ~74f** (vs 74). So the chain shaves only **~1–3 frames** vs single-freeze, and sits **~+12–14
-over the full-up floor**. The exact-float stop is intrinsically expensive; the coarse+fine split barely
-beats a good single freeze.
-
-**Remaining: redo the chained PLANNER search over REAL input streams** (now that `step()` is input-driven).
-Search cruise length × B-cancel timing × re-walk sticks × fine-cancel point; objective = frames over the
-full-up floor, **excluding the final cancel's lock frames** (those are the "stop", not travel). Constrain
-B-cancel to the realizable region (≥~3-frame resume latency). Playback is then the same stream (live gate
-trivial). Compare honestly vs single-freeze — if the win stays ~1–3 frames, it may not be worth
-productionising into `plan_land.py`.
+The **B-cancel chained freeze** (coarse-freeze from full speed → B-cancel → re-walk from rest → fine-freeze
+on the exact float) is fully **MODELED, input-driven, and live-proven 0 ULP** (2026-07-05f): the former
+blocker (post-B-cancel re-walk inheriting the freeze foot-anim phase) is the `m34C3 = 2`
+phase-preservation of the subjectivity/WAIT blend, and `LandState.step()` now consumes the raw controller
+stream so a plan plays 1:1 on sim + Dolphin (gate `spotcheck_subj_inputdriven.py`; details in
+[land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel)).
+**But the measured savings are modest — only ~1–3 frames** vs a good single freeze (z=2000 → 86f vs 89;
+prototype `chained_solve`), since the exact-float stop is intrinsically ~12–17 frames over the full-up
+floor either way. **Remaining (low priority):** redo the chained PLANNER search over real input streams
+(cruise × B-cancel timing × re-walk × fine-cancel; objective = frames over floor excluding lock frames);
+if the win stays ~1–3 frames it may not be worth productionising into `plan_land.py`.
 
 ## Open gaps
 

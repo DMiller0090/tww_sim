@@ -46,9 +46,11 @@ def _el(sx, sy, buttons=0, substickY=0, triggerL=0):
             "buttons": buttons, "triggerL": triggerL, "frames": 1}
 
 
-def spotcheck(tz, kmax=5, cups=6, hold=4):
+def spotcheck(tz, kmax=5, cups=6, hold=4, roll_speed_min=26.0):
     """Plan (roll=True) + live-drive a freeze at reachable on-axis z=tz. Returns True iff 0 ULP + pos_x~0.
-    Also holds `hold` frames after the lock to confirm the freeze stays byte-stable."""
+    Also holds `hold` frames after the lock to confirm the freeze stays byte-stable. `roll_speed_min` < 26
+    engages the partial-tuning-roll DENSIFIER (a k<=3 fast solve for targets full-only can't crack that
+    low) -- its plans carry partial forward sticks + A, all advanceseq-injectable like the full rolls."""
     D.control_pipe_quiet("clearinput")
     D.control_pipe_quiet("savestate", {"action": "load", "path": ANCHOR.replace("\\", "/")})
     h, m = D.attach()
@@ -56,7 +58,7 @@ def spotcheck(tz, kmax=5, cups=6, hold=4):
     seed = LandState(pos_z=s["pos_z"], facing=int(s["shape_angle_y"]), travel=int(s["travel_angle"]),
                      csangle=int(s["csangle"]), state=int(s["link_state"]),
                      nspeed=s["potential_speed"], idle_frame=s["anim_frame"])
-    r = reach_freeze(seed, seed.pos_x, tz, roll=True, kmax=kmax)
+    r = reach_freeze(seed, seed.pos_x, tz, roll=True, kmax=kmax, roll_speed_min=roll_speed_min)
     if r is None or "rolls" not in r:
         print(f"SKIP z={tz:<7.1f} no roll hit within k<={kmax} (fell back)")
         return None
@@ -85,19 +87,30 @@ def spotcheck(tz, kmax=5, cups=6, hold=4):
     live_fz, live_x = end["pos_z"], end["pos_x"]
     ulp = abs(bits(live_fz) - bits(sim_fz))
     ok = (ulp == 0) and abs(live_x) < 1e-4 and stable
+    tuned = " tuned" if r.get("tuned") else ""
     print(f"{'PASS' if ok else 'FAIL'} z={tz:<8.2f} sim {sim_fz!r} (0x{bits(sim_fz):08x}) / "
           f"live {live_fz!r} (0x{bits(live_fz):08x})  {ulp} ULP  pos_x={live_x:.5f}  held={stable}"
-          f"  [{r['n_frames']}f: {r['rolls']} rolls + {r['tail']} tail + {r['start_frames']} start]")
+          f"  [{r['n_frames']}f: {r['rolls']} rolls{tuned} + {r['tail']} tail + {r['start_frames']} start]")
     return ok
 
 
 def main():
+    # Optional: pass `rmin=<float>` anywhere to engage the densifier (partial tuning rolls, roll speed >=
+    # rmin). Default 26 = full-only. Trailing 1-digit int = kmax.
     args = sys.argv[1:]
     kmax = 5
+    roll_speed_min = 26.0
+    rest = []
+    for a in args:
+        if a.startswith("rmin="):
+            roll_speed_min = float(a[5:])
+        else:
+            rest.append(a)
+    args = rest
     if args and args[-1].isdigit() and float(args[-1]) < 10:
         kmax = int(args[-1]); args = args[:-1]
     targets = [float(x) for x in args] or [2222.2, 2345.678]
-    res = [spotcheck(tz, kmax=kmax) for tz in targets]
+    res = [spotcheck(tz, kmax=kmax, roll_speed_min=roll_speed_min) for tz in targets]
     graded = [x for x in res if x is not None]
     npass = sum(graded)
     print(f"\n{npass} passed (0 ULP), {len(graded) - npass} failed, {len(res) - len(graded)} skipped")
