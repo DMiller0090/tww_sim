@@ -216,6 +216,28 @@ Press **A** (the "do" button, `dActStts_ATTACK_e`) while moving on the ground �
     `tww_sim/core/anim/foot_speedf.py` `enter_roll`/`step_roll`; `rollf` keyframe data added to the
     gitignored `_generated/anim/` set (frameMax 19, `EMode_NONE`, decShift 2).
 
+**Chained rolls (26 u/frame ground cover).** `mNormalSpeed = clamp(speedF·1.5 + 0.5, 5, 26)`, and the cap
+26 = `0.5 + 17·1.5`, so **any pre-roll `speedF ≥ 17` re-rolls to the full 26**. A re-roll only registers
+from **MOVE** (never mid-ROLL — the `a_pressed and grounded` gate excludes FRONT_ROLL) and carries the
+2-frame `INPUT_DELAY`, so a chained cycle is **19 frames = +486.5u (25.6 u/frame)** with two forced MOVE
+frames (26→23.5) between rolls — you can't re-press sooner. To land **intermediate** roll speeds, space
+the re-roll 1–2 frames so `speedF` decays below 17 first (neutral-exit does 26→21, then walk decel
+21→18.5→16→…, and the re-roll clamps that): a coarse-tuning knob (23.5 / 21 / 18 …), not yet used by the
+planner but a lattice densifier for the roll freeze. (Native path: `roll_frame` is NOT synced — read the
+state tag, not the frame ctrl.)
+
+**The roll RESETS the walk anim → the C-up freeze is analytic (2026-07-05j).** Because the roll's
+`setSingleMoveAnime` leaves `m34C3 == 0`, the roll→MOVE exit re-inits the walk frame ctrl to **frame 0**:
+post-roll **`anim_fc0 == 0` for every approach** (start crawl / accel length / roll count — bit-exact).
+This kills the walk anim's sub-frame **precession** (the thing that blocks the walk freeze's sub-second
+solve — [planner](../model/land-planner.md#fewest-frame-bit-exact-stop--the-start-crawl-2026-07-05h)):
+after the first roll everything is **history-independent** — each roll adds a fixed +486.5u, the post-roll
+walk-tail freeze coast is a **fixed table**, and a start-crawl position offset carries through the roll
+**exactly**. So the C-up freeze after a roll approach is `freeze = freeze_ref(nr, r) + δ(start)`, a
+closed-form/analytic solve. The freeze fires only from a post-roll **MOVE** frame (`_freeze_pos` is
+bit-exact there); **live 0-ULP** end-to-end (`spotcheck_roll_freeze.py`). Model + frame savings (~15–30
+frames below the walk floor): [planner: ROLL freeze](../model/land-planner.md#fewest-frame-freeze-via-a-roll-approach--and-the-analytic-solve-2026-07-05j).
+
 ## Targeted ballistic hops (sidehop / backflip)
 
 The consistent standstill movers.

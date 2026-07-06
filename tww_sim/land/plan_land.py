@@ -39,7 +39,7 @@ import struct
 from collections import deque
 
 from ..core.mathlib import deg_to_s16, s16_signed, ARROW_STICK_DEADZONE
-from .land import LandState, WAIT, FREE_WAIT
+from .land import LandState, WAIT, FREE_WAIT, MOVE, FRONT_ROLL
 
 # Dead-zoned deflection magnitude (per axis) before the 15-unit dead zone is added back per axis (see
 # stick_for_bearing). _STICK_R + DZ == 127 -> cardinals hit the full corners (255/1). See land-movement.md.
@@ -434,8 +434,156 @@ def _reach_freeze_min(seed, tx, tz, kmax=5, max_frames=4000):
     return None
 
 
+# Fewest-frame bit-exact freeze via a ROLL approach (`reach_freeze(roll=True)`): start crawl + rolls (26
+# u/frame) + walk tail + C-up; ~15-30 frames below the walk floor. Model + the analytic solve: land-planner.md.
+_ROLL_RMAX = 30                 # walk-tail scan depth after the last roll (the fine freeze straddle)
+_ROLL_PC_BAND = 0.02            # predicted |freeze - tz| (via pos_cap) -> bit-confirm (>> 1-ULP wobble)
+_ROLL_PC_MARGIN = 0.05          # pos_cap prune safety margin (>> the ~1-ULP pos_cap-vs-δ wobble)
+
+
+def _roll_accel(s, full, stream=None):
+    """Full-forward until nspeed holds the run cap for 2 frames (post-accel MOVE cruise)."""
+    prev = False
+    for _ in range(16):
+        at = (s.nspeed == float(LandState.MAX_NSPEED))
+        if at and prev:
+            return
+        prev = at
+        s.step(*full)
+        if stream is not None:
+            stream.append((full[0], full[1], 0))
+
+
+def _roll_pos_cap(state, full):
+    """Position at the run cap from `state` (clone) -- the leaf's freeze offset δ equals this pos-at-cap
+    offset to ~1 ULP (the whole post-roll downstream is history-independent), so it is the cheap
+    (~5-step) predictor + a clean monotone scalar to prune the start-crawl DFS on. `state` untouched."""
+    s = state.clone()
+    _roll_accel(s, full)
+    return s.pos_z
+
+
+def _roll_cycle(s, full, stream=None):
+    """One chained forward roll: press A (0x100) from a MOVE frame, hold full through the roll until it
+    exits back to MOVE. A re-rolls only from MOVE and carries the 2-frame input delay, so a cycle is
+    ~19 frames (+486.5u at the run cap); the roll's setSingleMoveAnime leaves m34C3==0, so the walk
+    blend re-inits its frame ctrl to 0 on exit -- the canonical-phase RESET that makes the freeze
+    analytic (land-movement.md Roll section)."""
+    s.step(full[0], full[1], buttons=0x100)
+    if stream is not None:
+        stream.append((full[0], full[1], 0x100))
+    entered = False
+    for _ in range(40):
+        if s.state == FRONT_ROLL:
+            entered = True
+        if entered and s.state == MOVE:
+            return
+        s.step(*full)
+        if stream is not None:
+            stream.append((full[0], full[1], 0))
+
+
+def _reach_freeze_roll(seed, tx, tz, kmax=5, max_frames=4000):
+    """Fewest-frame bit-exact C-up freeze via a ROLL approach (see the block comment above). Grows the
+    start window k=2..kmax; per k, DFS the from-rest crawl sticks FAST->slow (first exact hit = fewest
+    start frames) with a **pos_cap prune**: the needed pos_cap for each (nr rolls, r walk-tail) is
+    `ref_pc + (tz - freeze_ref(nr,r))` (history-independent, computed once), and a subtree is skipped
+    when its reachable pos_cap range (all-full completion -> max, all-slow -> min) misses every needed
+    value. Each surviving leaf's pos_cap (~5-step accel-to-cap) predicts its freeze to ~1 ULP; the few
+    predicted matches get an exact bit-confirm (max nr / min r first = fewest total frames). Returns a
+    plan dict whose `seq` frames are (sx, sy, buttons) 3-tuples (A=0x100 on each roll's press frame),
+    else None (caller falls back).
+
+    ON-AXIS / +z, seed AT REST (the crawl's low speeds are the free fine grid). Because the sim is 0-ULP
+    vs live when seeded from the anchor, the returned plan freezes bit-exact on console -- provided the
+    caller seeds `seed` from the LIVE anchor (a 2-ULP seed-pos mismatch shifts the freeze by 1 ULP)."""
+    if abs(tx - seed.pos_x) > 1e-6:
+        return None                         # on-axis only (off-axis needs the octagon clamp)
+    full, lattice = _freeze_start_lattice(seed, tx, tz)
+    slow = lattice[-1]                       # slowest live-valid start frame (min pos_cap completion)
+    TB = _f32_bits(tz)
+    ref_pc = _roll_pos_cap(seed, full)       # reference pos-at-cap (delta baseline)
+
+    def ref_after(nr):                       # reference (no start crawl): accel + nr rolls
+        s = seed.clone()
+        _roll_accel(s, full)
+        for _ in range(nr):
+            _roll_cycle(s, full)
+        return s
+
+    ref_freeze10 = _freeze_pos(ref_after(1)).pos_z
+    roll_dz = _freeze_pos(ref_after(2)).pos_z - ref_freeze10
+    nr_lo = max(1, int((tz - ref_freeze10) / roll_dz))
+    nr_hi = nr_lo + 2
+    # history-independent downstream, computed ONCE: needed pos_cap = ref_pc + (tz - freeze_ref(nr,r)).
+    needed = []                              # (target pos_cap, nr, r), fewest-frames first (max nr, min r)
+    for nr in range(nr_hi, nr_lo - 1, -1):
+        t = ref_after(nr)
+        for r in range(_ROLL_RMAX):
+            if t.state == MOVE:
+                needed.append((ref_pc + (tz - _freeze_pos(t).pos_z), nr, r))
+            t.step(*full)
+    if not needed:
+        return None
+    pcs = [p for p, _, _ in needed]
+    p_lo, p_hi = min(pcs) - _ROLL_PC_MARGIN, max(pcs) + _ROLL_PC_MARGIN
+
+    def confirm(start_seq, nr, r):
+        s = seed.clone()
+        stream = []
+        for st in start_seq:
+            s.step(*st); stream.append((st[0], st[1], 0))
+        _roll_accel(s, full, stream)
+        for _ in range(nr):
+            _roll_cycle(s, full, stream)
+        for _ in range(r):
+            s.step(*full); stream.append((full[0], full[1], 0))
+        if s.state != MOVE:
+            return None
+        e = _freeze_pos(s)
+        return (stream, e) if _f32_bits(e.pos_z) == TB else None
+
+    def search(k):
+        def rec(state, seq):
+            rem = k - len(seq)
+            if rem > 0:                       # prune: reachable pos_cap range of the remaining frames
+                hf = state.clone()
+                for _ in range(rem):
+                    hf.step(*full)            # all-full completion -> MAX pos_cap
+                sf = state.clone()
+                for _ in range(rem):
+                    sf.step(*slow)            # all-slow completion -> MIN pos_cap
+                if _roll_pos_cap(hf, full) < p_lo or _roll_pos_cap(sf, full) > p_hi:
+                    return None
+            if len(seq) == k:
+                pc = _roll_pos_cap(state, full)                # δ predictor (~5 steps, ~1 ULP)
+                for p, nr, r in needed:                        # fewest-frames-first order
+                    if abs(pc - p) <= _ROLL_PC_BAND:
+                        got = confirm(seq, nr, r)              # exact bit-confirm
+                        if got is not None:
+                            return (seq, nr, r, got)
+                return None
+            for stick in lattice:
+                child = state.clone(); child.step(*stick)
+                got = rec(child, seq + [stick])
+                if got:
+                    return got
+            return None
+        return rec(seed.clone(), [])
+
+    for k in range(2, kmax + 1):
+        got = search(k)
+        if got is None:
+            continue
+        start_seq, nr, r, (stream, e) = got
+        seq = list(stream) + [(NEUTRAL[0], NEUTRAL[1], 0)] * FREEZE_LATENCY
+        return {'seq': seq, 'freeze_dist': dist2d(e, tx, tz), 'freeze_pos': (e.pos_x, e.pos_z),
+                'end': e, 'n_frames': len(seq), 'start_frames': len(start_seq), 'rolls': nr, 'tail': r}
+    return None
+
+
 def reach_freeze(seed, tx, tz, coarse_gap=60.0, max_frames=4000, drill_back=8, beam_width=96,
-                 min_frames=False, kmax=5):
+                 min_frames=False, kmax=5, roll=False):
     """FLOAT-PERFECT reach via the C-up speed cancel: place the FROZEN float within a ULP or two of
     (tx, tz). Issue the cancel (one half-L frame, then neutral stick + C-stick full up) mid-motion and
     Link's position locks FREEZE_LATENCY frames later -- which the sim reads with zero new code
@@ -471,7 +619,20 @@ def reach_freeze(seed, tx, tz, coarse_gap=60.0, max_frames=4000, drill_back=8, b
     (exact float), so its plan is bit-exact live. Slower to SOLVE (an unlucky target needs a k=5 start,
     tens of seconds) and on-axis only; if no exact hit is found up to `kmax` it falls back to the robust
     phases below. See the START-crawl block comment above and land-planner.md.
+
+    `roll=True` selects the FEWEST-FRAME analytic ROLL-approach variant (`_reach_freeze_roll`): a from-rest
+    start crawl + full cruise + chained forward rolls (26 u/frame) + a short walk tail + C-up. Rolls cover
+    ~25.6 vs 17 u/frame, so it rests ~15-30 frames BELOW the pure full-up walk floor, and the roll's anim
+    reset makes the per-leaf freeze prediction exact (fast, per-call guided DFS -- no precomputed table).
+    Its `seq` frames are (sx, sy, buttons) 3-tuples (A=0x100 on each roll's press frame). On-axis / +z, seed
+    AT REST; 0-ULP live when `seed` is seeded from the live anchor. Falls back to min_frames/robust if no
+    exact hit up to `kmax`. See land-planner.md.
     """
+    if roll:
+        got = _reach_freeze_roll(seed, tx, tz, kmax=kmax, max_frames=max_frames)
+        if got is not None:
+            return got
+        # no exact roll hit within kmax -> fall through to the walk start-crawl / robust approach.
     if min_frames:
         got = _reach_freeze_min(seed, tx, tz, kmax=kmax, max_frames=max_frames)
         if got is not None:
@@ -560,10 +721,13 @@ def reach_freeze(seed, tx, tz, coarse_gap=60.0, max_frames=4000, drill_back=8, b
 
 def seq_string(seq):
     """Compact per-frame stick string (matches the dolphin seq convention): 'sx,sy' per frame,
-    run-length collapsed as 'sx,sy xN'."""
+    run-length collapsed as 'sx,sy xN'. Roll plans carry a 3rd button element -- 'sx,sy+A' for the
+    A-press (roll) frames (buttons & 0x100)."""
     out = []
-    for stick in seq:
-        tok = f"{stick[0]},{stick[1]}"
+    for st in seq:
+        tok = f"{st[0]},{st[1]}"
+        if len(st) > 2 and st[2] & 0x100:
+            tok += "+A"
         if out and out[-1][0] == tok:
             out[-1][1] += 1
         else:

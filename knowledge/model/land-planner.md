@@ -13,9 +13,13 @@ clone. The C-up freeze + B-cancel + re-walk is now **input-driven in `step()`** 
 crawl** (2026-07-05h): fine-tune the from-rest accel frames (free low-speed fine grid), then cruise full
 + C-up — bit-exact ~+7 over the full-up floor, live-proven 0 ULP (supersedes chained/end-crawl for fewest
 frames). **Productionised (2026-07-05i) as `reach_freeze(min_frames=True)`** with a δ-prediction filter
-(~3× solve, NOT sub-second — floored by per-leaf pose sim; see below) + offline & live gates. Open:
-genuine sub-second (composable characterization memo — blocked by hidden anim/input-buffer state);
-off-axis octagon clamp; collision; A*. The chained-over-streams planner is done (modest ~1–3f). (Note:
+(~3× solve, NOT sub-second — floored by per-leaf pose sim; see below) + offline & live gates. The
+**fewest-frame stop overall is the ROLL approach** (2026-07-05j): chained forward rolls (26 u/frame) rest
+**~15–30 frames BELOW the walk floor**, and — because a roll RESETS the walk anim (fc0→0) — the freeze is
+**analytically solvable** (`freeze = freeze_ref(nr,r) + δ`, sub-second lookup), unblocking the walk's
+precession wall. Productionised as **`reach_freeze(roll=True)`**, live 0-ULP; see the ROLL section below.
+Open: off-axis octagon clamp; collision; A*; a density fix (intermediate-roll-speed knob) so hard exact
+targets solve fast. The chained-over-streams planner is done (modest ~1–3f). (Note:
 `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u — use `reach_freeze` for exact stops.)
 **Source:** `tww_sim/land/plan_land.py`; live-validated via `advanceseq`. Forward model:
 [land sim](land-sim.md) · [land movement](../mechanics/land-movement.md).
@@ -145,32 +149,48 @@ REST, on-axis/+z corridor; returns the same plan dict (0-ULP freeze, all sticks 
 back to the robust phases if no exact hit up to `kmax`. Offline gate
 `test_reach_freeze_min_frames_bit_exact_and_fewer`; live gate `spotcheck_freeze.py --min`.
 
-**Solve speed — the δ-prediction filter (built, ~3× — NOT sub-second).** The measured full-speed
-invariants power a closed-form freeze predictor: once nspeed hits the 17u cap every start seq cruises at
-**exactly +17.000 pos/frame and +2.300 `anim_fc0`/frame** (the walk frame-ctrl phase, exposed on
-`LandState.anim_fc0`), and the **freeze coast is a universal function of `anim_fc0`** (±0.3u, built once
-as a coast table from a full-up reference cruise). So a candidate's freeze at any future cruise frame is
-predictable from just (pos, fc0) read at the cap frame — candidates predicted outside a ±0.5u band skip
-the expensive exact cruise (~120 frames → ~8), so the exhaustive DFS's early-exit reaches a hit far
-sooner (z=2000 4.7s→1.7s; z=1500 7.7s→2.9s; verified the *identical* start seqs, no false negatives).
-But it is a **filter, not an O(1) solve**: per-leaf pose characterization has a floor (~seconds at k=4,
-tens at k=5), because an arbitrary ULP target needs ~17u/ulp ≈ 10⁵ distinct start seqs to cover δ, and
-each still needs a pose sim to the cap. **True sub-second is blocked by hidden state:** the ~7-frame
-walk anim never bit-exactly repeats (precesses) *and* the from-rest characterization can't be memoised
-on a low-dim key — the 2-frame INPUT_DELAY buffer + the high-dim foot pose are hidden state, so distinct
-prefixes don't collapse (confirmed: an apparent state collapse was an input-delay artifact). A composable
-(bucketised, ±0.3u) characterization memo is the open idea for genuine sub-second. Prototypes:
-`_notes/chained-freeze-probes/{start_freeze_solve,fast_start_solve,coast_probe,phase_probe}.py`.
+**Solve speed — δ-prediction filter (~3×, NOT sub-second for WALK).** Once nspeed hits the 17u cap every
+start seq cruises **+17.000 pos/frame and +2.300 `anim_fc0`/frame** (exposed on `LandState.anim_fc0`), and
+the freeze coast is a function of `anim_fc0` (±0.3u, from one reference cruise) — so a candidate's freeze is
+predictable from (pos, fc0) at the cap frame; predictions outside ±0.5u skip the exact cruise (z=2000
+4.7→1.7s, identical start seqs). But it's a **filter, not O(1)**: an arbitrary-ULP target needs ~10⁵
+distinct start seqs to cover δ, each needing a pose sim. **Walk sub-second is blocked** because the ~7-frame
+walk anim **precesses** (never bit-exactly repeats), so the coast can't be memoised on a low-dim key. **The
+ROLL approach RESOLVES this** — a roll resets the anim (fc0→0), making the coast a reusable table → analytic
+solve (ROLL section below). Prototypes: `_notes/chained-freeze-probes/`.
 
-**Why full-speed windows can't do it (settled, measured):** perturbing a window of the *full-speed*
-cruise cannot hit bit-exact — at the 17u/frame speed cap momentum is pinned, so the freeze grid is coarse
-(1 slid frame → nearest 0.0177u; an end-anchored 3-frame window, **exhaustive 274,625 combos → 0 exact
-hits**; k=4/k=5 too). The smallest live-valid stick step at full speed drops speed ≥3.5u, so there is no
-sub-ULP adjustment. Bit-exact *requires* momentum below the cap — which the start crawl (and the drill)
-provide. **The walk anim is a ~7-frame loop but precesses sub-frame** (per-frame anim advance isn't
-frame-commensurate), so the freeze coast drifts ~0.02–0.3u/cycle and is **not bit-exactly cacheable** by
-frame-phase (the pose sim is the ground truth); that same precession is what lets the freeze reach *any*
-float. Native `.pyx` cruise-batching won't help — `co.step` is 6.88µs (pose-bound), Python dispatch 0.09µs.
+**Why full-speed windows can't hit bit-exact (settled, measured):** at the 17u cap momentum is pinned
+(1 slid frame → 0.0177u; exhaustive 3-frame window 274,625 combos → 0 hits; smallest live-valid stick step
+drops speed ≥3.5u). Bit-exact **requires sub-cap momentum** — the start crawl / drill provide it.
+
+## Fewest-frame freeze via a ROLL approach — AND the analytic solve (2026-07-05j)
+
+`reach_freeze(seed, tx, tz, roll=True)` (`_reach_freeze_roll`): from-rest start crawl (free fine grid) →
+full cruise → **chained forward rolls** (26 u/frame) → short walk tail → C-up. Two wins:
+
+- **~15–30 fewer frames.** Rolls cover **~25.6 vs 17 u/frame**, so the freeze rests **13–23 frames BELOW
+  the full-up walk floor** `(z−764.08)/17`: z=2000 → 60f (walk 79), z=2500 → 79f (109), z=2810.98 → 97f
+  (~127). A chained roll = **+486.5u / 19 frames** (first roll off cruise 476.0); the freeze fires only
+  from a post-roll MOVE frame (A/C-up don't arm mid-roll). Roll mechanics + the retain-26 window +
+  intermediate speeds: [land movement](../mechanics/land-movement.md#roll-front_roll--the-fast-approach-movement).
+- **ANALYTIC solve — unblocks the walk's precession wall (above).** A roll **resets the walk anim** (the
+  roll→MOVE exit re-inits the walk frame ctrl to 0, since `setSingleMoveAnime` left `m34C3==0`) → post-roll
+  `anim_fc0==0`, so everything downstream is **history-independent**: fixed +486.5u/roll, a FIXED walk-tail
+  coast table, and the start-crawl offset **δ carries through the roll EXACTLY**. Hence
+  **freeze(nr, r, start) = freeze_ref(nr, r) + δ(start)** — a closed-form lookup with a REUSABLE δ memo
+  (impossible for the walk: its coast rode the *precessing* fc0). Prototype table k=4 → 111k δ (~75s once)
+  then ~5–12 ms/target; productionised as a **per-call guided DFS** (no table): exact per-leaf δ → predict
+  → bit-confirm the matching (nr, r). Solve k=3 ~1s, k=4 ~16–21s (≈ walk `min_frames`); unlucky exact
+  targets need k=5 (slow).
+
+**LIVE 0-ULP (2026-07-05j):** plans freeze byte-for-byte at the sim's `freeze_pos` (`spotcheck_roll_freeze.py`:
+z=2000/2222.2/2345.678, all 0 ULP, held stable). **Seed from the LIVE anchor** — the default `LandState`
+rounds pos_z to 764.079 vs the anchor's 764.0791015625 (2 ULP); a seed mismatch shifts the freeze 1 ULP
+(root-caused: the sim is 0-ULP vs live when seeded right — a seed bug, not sim error). Gates:
+`test_reach_freeze_roll_bit_exact_and_beats_floor` + `spotcheck_roll_freeze.py`. `seq` frames are
+`(sx, sy, buttons)` 3-tuples (A=0x100 on roll press frames). On-axis / +z only. **Open:** a density fix
+(the intermediate-roll-speed knob / DFS δ-pruning) so hard exact targets solve fast.
+Prototypes: `_notes/roll-freeze-probes/`.
 
 ## Roadmap: chained coarse+fine freeze (B-cancel) — fewest frames (TAS)
 

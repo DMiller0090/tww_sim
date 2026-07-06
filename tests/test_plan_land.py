@@ -162,6 +162,26 @@ def test_reach_freeze_min_frames_bit_exact_and_fewer():
         r['n_frames'], robust['n_frames'])
 
 
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_reach_freeze_roll_bit_exact_and_beats_floor():
+    # roll=True: rolls (26 u/frame) rest BELOW the walk floor, freeze bit-exact; seq carries A (3-tuples).
+    # z=2222.2 hits at k<=3 (fast). See land-planner.md.
+    T = 2222.2
+    r = reach_freeze(_seed(), 0.0, T, roll=True, kmax=3)
+    assert r is not None and 'rolls' in r, "roll freeze found no hit within k<=3"
+    assert _bits(r['freeze_pos'][1]) == _bits(T), "roll freeze not bit-exact: %r" % (r['freeze_pos'],)
+    assert all(_live_valid_stick(st[0], st[1]) for st in r['seq']), "non-live-valid stick in roll plan"
+    assert any(len(st) > 2 and st[2] & 0x100 for st in r['seq']), "no A-press (roll) in the roll plan"
+    # re-simulate the button-carrying seq -> reproduces the freeze bit-exactly
+    s = _seed()
+    for st in r['seq']:
+        s.step(st[0], st[1], buttons=(st[2] if len(st) > 2 else 0))
+    assert _bits(s.pos_z) == _bits(T), "roll seq re-sim %.6f != %.6f" % (s.pos_z, T)
+    # rolls (25.6 u/frame) beat the pure full-up walk floor ((T - Z0)/17 at 17 u/frame)
+    floor17 = (T - 764.079) / 17.0
+    assert r['n_frames'] < floor17, "roll %d not below walk floor %.0f" % (r['n_frames'], floor17)
+
+
 # --- SUBJECTIVITY freeze -> B-cancel -> re-walk-from-rest (the chained-freeze tech) --------------
 def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]

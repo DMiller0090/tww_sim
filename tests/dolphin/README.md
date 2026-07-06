@@ -48,6 +48,7 @@ python tests/dolphin/run_tests.py quick=1    # skip the long 200k case
 python tests/dolphin/verify_state.py seq=... # per-frame divergence locator
 python tests/dolphin/run_land_tests.py       # LAND sim-vs-live (walk/ATN/roll/turns), 0-ULP pos_z gate
 python tests/dolphin/spotcheck_freeze.py     # LAND C-up-cancel freeze: reach_freeze plans, 0-ULP live
+python tests/dolphin/spotcheck_roll_freeze.py # LAND ROLL-approach freeze: reach_freeze(roll=True), 0-ULP live
 ```
 
 **`run_land_tests.py` — `roll_slow` is order-sensitive (harness, not sim).** `roll_slow` (a dense
