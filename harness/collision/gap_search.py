@@ -29,27 +29,47 @@ offsets makes "gap found" reliable and cheap. "No gap found" is only trustworthy
 step is finer than the fan (see :func:`fan_offset_scale` and ``off_step`` — the default is fine
 enough for real corners; for near-flat seams pass a smaller ``off_step``).
 
+**f32-HONESTY (do NOT remove).** Link's position is stored as f32 (``cXyz`` = three f32;
+``pm_pos``/``pm_old_pos`` are ``cXyz*``, ``d_bg_s_acch.h``), and ``core.fp`` is only console-faithful
+when fed f32 (see its docstring). So every candidate ``old``/``new`` is snapped to f32 (:func:`_p32`)
+before the model runs. This is not cosmetic: a blind double-precision search reports **false-positive**
+clips at sub-ULP offsets the game can never occupy. Measured at the live (-1727,-990) seam: a
+rel=-14deg direction has 9 "clips" over a 0.04u rho span in double precision but **0** survive f32
+rounding, whereas the genuine clip zone (rel~+45deg) survives f32 (2571 vs 2573 of 20001 samples).
+The continuous/double "gap window" is therefore only an upper bound — practical viability is decided
+by whether an f32-representable position lands in it (``knowledge/mechanics/seam-clip.md``).
+
 Geometry-agnostic: pass the 4 wall triangles (``tris[1]`` = wall-A seam triangle, ``tris[2]`` =
 wall-B seam triangle — the convention :func:`angle_experiment.build_angle` and the GanonL
 ``seam_model`` both use) plus the seam XZ point and Link's floor Y.
 """
 import math
+import struct
 
 from tww_sim.core.collision import crr_pos_walls, wall_correct
+from tww_sim.core.fp import f32 as _f
 
 WALL_H = (30.1, 89.9, 125.0)   # player wall-cylinder heights (setBgCheckParam)
 WALL_R = 35.0                  # player wall-cylinder radius (standing/walking)
 
 
+# f32-HONESTY: snap every candidate to f32 before the model — Link's pos is f32 (cXyz), and a
+# double-precision search FALSE-POSITIVES on sub-ULP gaps (see the module docstring + seam-clip.md).
+def _p32(x, y, z):
+    return (_f(x), _f(y), _f(z))
+
+
 def _is_clip(tris, ix, iz, ex, ez, link_y):
-    _, info = crr_pos_walls((ix, link_y, iz), (ex, link_y, ez), tris)
+    _, info = crr_pos_walls(_p32(ix, link_y, iz), _p32(ex, link_y, ez), tris)
     return (not info["line_hit"]) and (not info["wall_hit"])
 
 
 def _is_settled(tris, p, wall_h=WALL_H, wall_r=WALL_R):
     """True if ``p`` is a physical ``old_pos`` — a WallCorrect fixed point (Link not overlapping any
     wall). CrrPos always leaves ``pm_old_pos`` settled, so a clip's old_pos must clear the radius-35
-    cylinder; a raw point deep inside it is not a position the game would ever carry."""
+    cylinder; a raw point deep inside it is not a position the game would ever carry. ``p`` is
+    snapped to f32 first (Link's stored position is f32)."""
+    p = _p32(p[0], p[1], p[2])
     q, hit = wall_correct(p, 0.0, tris, wall_h, wall_r)
     return (not hit) and ((q[0] - p[0]) ** 2 + (q[2] - p[2]) ** 2) ** 0.5 < 1e-4
 
@@ -115,12 +135,14 @@ def find_clip(tris, seam, link_y, D=40.0, t_back=3.0,
                 dx, dz = math.sin(ang), math.cos(ang)
                 px, pz = -dz, dx
                 cx, cz = seam[0] + rho * px, seam[1] + rho * pz
-                old = (cx - tb * dx, cz - tb * dz)
-                new = (cx + tf * dx, cz + tf * dz)
+                # return the actual f32-representable positions (what the game would hold)
+                old = (_f(cx - tb * dx), _f(cz - tb * dz))
+                new = (_f(cx + tf * dx), _f(cz + tf * dz))
                 return True, dict(rel_deg=round(rel, 3), rho=rho, old=old, new=new,
                                   D=Dp, t_back=tb, t_fwd=tf)
             ix, iz, ex, ez = _line(seam, ang, rho, D, t_back)
-            return True, dict(rel_deg=round(rel, 3), rho=rho, old=(ix, iz), new=(ex, ez), D=D)
+            return True, dict(rel_deg=round(rel, 3), rho=rho,
+                              old=(_f(ix), _f(iz)), new=(_f(ex), _f(ez)), D=D)
     return False, None
 
 
@@ -173,7 +195,13 @@ def characterize(tris, seam, link_y, D=40.0, t_back=3.0,
                  off_half=0.006, off_step=2e-5):
     """Full analytic characterisation of a corner's gap: the clippable direction window, the offset
     window (at the central clipping direction), and the min displacement. Returns a dict, or
-    ``dict(clippable=False)`` if no gap survives the scan."""
+    ``dict(clippable=False)`` if no gap survives the scan.
+
+    NOTE: ``min_displacement`` here is an **over-estimate** — this continuous machinery pins the line
+    through S and requires a settled old at a swept t_back, missing lower-displacement approaches.
+    For the authoritative clippable/min-displacement answer use :func:`min_f32_clip` (direct
+    f32-lattice search). At the live (-1727,-990) seam this reports ~63 u where ``min_f32_clip``
+    finds the true 49.9 u."""
     base = bisector_dir(tris)
     clip_dirs = []
     nd = int(2 * dir_half_deg / dir_step_deg) + 1
@@ -205,6 +233,51 @@ def characterize(tris, seam, link_y, D=40.0, t_back=3.0,
         min_disp_at=(dict(rel_deg=best[1], rho=best[2], t_back=best[3], t_fwd=best[4])
                      if best else None),
     )
+
+
+def _next_f32(x, d):
+    """The f32 that is ``d`` ULPs away from f32 ``x`` (magnitude-directed: +d moves away from 0)."""
+    b = struct.unpack("<I", struct.pack("<f", _f(x)))[0]
+    b = (b + d) if x >= 0 else (b - d)
+    return struct.unpack("<f", struct.pack("<I", b & 0xFFFFFFFF))[0]
+
+
+def settle(tris, xz, link_y, wall_h=WALL_H, wall_r=WALL_R, iters=8):
+    """Iterate WallCorrect to a settled f32 fixed point (what the game carries as ``pm_old_pos``).
+    Returns the settled ``(x, y, z)`` as f32."""
+    pos = _p32(xz[0], link_y, xz[1])
+    for _ in range(iters):
+        pos, _ = wall_correct(pos, 0.0, tris, wall_h, wall_r)
+        pos = _p32(pos[0], pos[1], pos[2])
+    return pos
+
+
+def min_f32_clip(tris, old, new_center, link_y, box_ulps=400, wall_h=WALL_H, wall_r=WALL_R):
+    """RELIABLE f32-lattice clip search — no false positives, no aliasing. Given a **settled f32**
+    ``old`` (x,y,z) and a guess ``new_center`` (x,z) just behind the wall, enumerate every
+    f32-representable ``new`` in a ``+/-box_ulps``-ULP box (in x and z) around ``new_center`` and
+    return the minimum-displacement one that genuinely clips, or ``None``.
+
+    This is the honest primitive the continuous ``find_clip``/``characterize`` machinery only
+    approximates: because Link's position is f32 (``cXyz``), the ONLY reachable clips are on this
+    lattice. It is O(box_ulps^2) model calls, so keep the box tight (a few hundred ULPs ~ a few
+    hundredths of a unit near coord 1700). Returns ``dict(disp, new, old, n_clips)``."""
+    cx, cz = _f(new_center[0]), _f(new_center[1])
+    best = None
+    n = 0
+    for i in range(-box_ulps, box_ulps + 1):
+        nx = _next_f32(cx, i)
+        for j in range(-box_ulps, box_ulps + 1):
+            nz = _next_f32(cz, j)
+            _, info = crr_pos_walls(old, (nx, link_y, nz), tris, wall_h, wall_r)
+            if (not info["line_hit"]) and (not info["wall_hit"]):
+                n += 1
+                disp = ((nx - old[0]) ** 2 + (nz - old[2]) ** 2) ** 0.5
+                if best is None or disp < best[0]:
+                    best = (disp, (nx, nz))
+    if best is None:
+        return None
+    return dict(disp=best[0], new=best[1], old=(old[0], old[2]), n_clips=n)
 
 
 def fan_offset_scale(tris, seam):

@@ -111,3 +111,55 @@ def test_flat_seam_unclippable():
     ok, rec = find_clip(tris, tuple(g["seam_xz"]), g["link_y"],
                         dir_half_deg=30.0, dir_step_deg=1.0, off_half=0.004, off_step=5e-8)
     assert not ok, f"flat seam unexpectedly clipped: {rec}"
+
+
+def _load_hyrule_1727():
+    """Build the 4 seam Tris (STORED planes) + anchor from the live-captured hex golden."""
+    from tww_sim.core.collision import Tri, Plane
+    g = json.load(open(os.path.join(os.path.dirname(__file__), "golden",
+                                     "hyrule_seam_1727_ram.json")))
+    tris = [Tri([_f_from_hex(x) for x in t["v"][0]],
+                [_f_from_hex(x) for x in t["v"][1]],
+                [_f_from_hex(x) for x in t["v"][2]],
+                plane=Plane(*[_f_from_hex(x) for x in t["n"]], _f_from_hex(t["D"])))
+            for t in g["tris"]]
+    link_y = _f_from_hex(g["seam_v_hex"][1])   # Link floor Y == the seam vertex Y (~0.163)
+    old = (_f_from_hex(g["old_hex"][0]), _f_from_hex(g["old_hex"][1]))
+    new = (_f_from_hex(g["new_hex"][0]), _f_from_hex(g["new_hex"][1]))
+    return tris, link_y, old, new
+
+
+def test_hyrule_1727_f32_clip_anchor():
+    """Live-confirmed Hyrule seam clip at (-1727,-990) reproduced in the model as an f32 anchor.
+    Ground truth (handoff-06d, live): old~(-1692.31,-955.02) -> new~(-1727.37,-990.66), disp~49.99,
+    Link y~0.163. This guards TWO things:
+      1. The exact f32 (old,new) pair clips (collision leaves Link at new).
+      2. min_f32_clip — the RELIABLE f32-lattice search — finds the seam clippable with a
+         minimum displacement matching the live ~50u (NOT the double-precision phantom the old
+         double search reported). See knowledge/mechanics/seam-clip.md (f32 viability)."""
+    from tww_sim.core.collision import crr_pos_walls
+    from tww_sim.core.fp import f32 as _f
+    from harness.collision.gap_search import min_f32_clip, settle
+    tris, link_y, old, new = _load_hyrule_1727()
+
+    # (1) the exact captured f32 pair clips
+    o = (old[0], link_y, old[1])
+    _, info = crr_pos_walls(o, (new[0], link_y, new[1]), tris)
+    assert not info["line_hit"] and not info["wall_hit"], info
+
+    # (2) reliable f32-lattice search re-finds it near the live ~50u displacement
+    settled = settle(tris, old, link_y)
+    assert abs(settled[0] - old[0]) < 1e-3 and abs(settled[2] - old[1]) < 1e-3   # old already settled
+    r = min_f32_clip(tris, settled, (-1727.37, -990.66), link_y, box_ulps=400)
+    assert r is not None, "min_f32_clip found no clip at a live-confirmed clippable seam"
+    assert 49.0 < r["disp"] < 51.0, f"min f32 displacement {r['disp']} off the live ~49.99"
+    assert r["n_clips"] >= 1
+
+
+def test_hyrule_1727_short_displacement_blocks():
+    """Control: a sub-cylinder step toward the same seam must be blocked (no phantom clip)."""
+    from tww_sim.core.collision import crr_pos_walls
+    tris, link_y, old, _ = _load_hyrule_1727()
+    o = (old[0], link_y, old[1])
+    _, info = crr_pos_walls(o, (-1710.0, link_y, -972.0), tris)   # ~24u step, under the radius
+    assert info["line_hit"] or info["wall_hit"], info

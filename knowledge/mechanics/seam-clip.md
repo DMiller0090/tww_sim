@@ -94,8 +94,33 @@ the clip vs block outcome flips on the last few float bits. Faithful reproductio
 > the origin does **not** help — the position grid coarsens faster than the gap grows. So the real
 > viability target is a large **plane fan**, not distance. **Min displacement** is set by the *old*
 > position: `old_pos` must be a settled WallCorrect fixed point (never inside the cylinder), so it
-> sits ~`wall_r/sin(halfangle)` in front — ~37.6 u for the GanonL 137° corner — which dominates the
-> one-frame displacement (geometry-dependent, ~35–50 u, NOT a flat 35).
+> sits ~`wall_r/sin(halfangle)` in front (`halfangle` = half the **interior** corner angle) — ~37.6 u
+> for the GanonL 137° corner, ~49.3 u for a ~90.6° corner — which dominates the one-frame displacement
+> (geometry-dependent, ~35–50 u, NOT a flat 35).
+>
+> **The min-displacement floor is a HARD analytic screen.** `floor = wall_r / sin(interior/2)` is a
+> lower bound no clip can beat (settled `old` clears both radius-35 cylinders; `new` is on the far
+> side of S). So it screens a whole region analytically, no search: to clip at `< D` you need
+> `interior > 2·asin(wall_r/D)` (e.g. `< 49.22 u` ⇒ interior `> 90.63°`; `< 40 u` ⇒ `> 122°`). The
+> *actual* min is floor + a smaller geometry-dependent "how far past S must `new` sit to clear
+> WallCorrect" term (≈0.6 u at the −1727 corner: floor 49.26 → true 49.90). Worked example
+> (`harness/collision/seam_scan.py`, Hyrule box X±1800 Y±160 Z −1100..0): 8 vertical corners, most
+> obtuse is (−1727,−990) at 90.57° (floor 49.26, true 49.90); the seven 90.0° corners don't even
+> reach the f32 lattice (no clip). Sub-49.22 is analytically impossible in that region.
+>
+> **⚠️ The search must run on f32 positions — a double-precision search FALSE-POSITIVES.** Link's
+> position is f32 (`cXyz` = three f32; `pm_pos`/`pm_old_pos` are `cXyz*`, `d_bg_s_acch.h`), and
+> `core.fp` is only console-faithful when fed f32 (its docstring: "callers feed f32"). A search that
+> feeds *double*-precision `old`/`new` to the model finds "clips" at sub-ULP positions the game can
+> never hold — they vanish the instant the position is rounded to f32. Measured at the live
+> (−1727,−990) seam: a rel=−14° travel direction shows **9 double-precision "clips" over a 0.04 u
+> offset span but 0 survive f32 rounding**, while the genuine clip zone survives (2571 double vs 2573
+> f32 of 20001 samples). So `gap_search` now snaps every candidate to f32 (`_p32`) before the model,
+> and the reliable primitive is **`gap_search.min_f32_clip`** — a direct f32-lattice enumeration
+> (settled f32 `old` in front + f32 `new` swept behind the wall). The continuous
+> `find_clip`/`characterize` machinery only *approximates* and its `min_displacement` **over-estimates**
+> (reported 63 u where the true f32 minimum is 49.9 u); treat `min_f32_clip` as authoritative for
+> "clippable?" and min-displacement, and the continuous window as an upper bound only.
 
 > **Flat / 180° seams are unclippable (resolved).** A real flat seam has a ~1-ULP plane difference
 > between its two coplanar segments (verified in RAM: `nx` `0x3f800000` vs `0x3f800001`). Fed those
@@ -137,10 +162,18 @@ of `CrrPos` (LineCheck + WallCorrect + the `cM3d` math). Its `cM3d_CalcPla` is *
 (4506/4506 Hyrule planes; see the status note above), so it works on synthetic geometry as well as
 on RAM-read planes. [`harness/collision/seam_model.py`](../../harness/collision/README.md)
 wraps it with the GanonL seam and exposes `predict_clip(initial, end)` → clip/block;
-[`gap_search.py`](../../harness/collision/README.md) is the analytic gap finder (pin the swept line
-through S, sweep travel direction, micro-scan the offset) — `find_clip` / `characterize` /
-`min_displacement_for_line`; [`angle_experiment.py`](../../harness/collision/README.md) sweeps
-synthetic corner angles through it.
+[`gap_search.py`](../../harness/collision/README.md) is the gap finder: **`min_f32_clip`** is the
+reliable f32-lattice search (settled f32 `old` + f32 `new` box — no false positives, authoritative
+min-displacement), and `find_clip` / `characterize` / `min_displacement_for_line` are the continuous
+approximation (pin the swept line through S, sweep travel direction, micro-scan the offset — now
+f32-snapped, but the min-displacement over-estimates; see the f32-viability note above).
+[`angle_experiment.py`](../../harness/collision/README.md) sweeps synthetic corner angles through it.
+[`seam_scan.py`](../../harness/collision/README.md) is the stage-wide scanner — enumerate a region's
+differing-normal vertical seam corners live from Dolphin, screen by the analytic floor, and report each
+one's reliable f32 min-displacement (`enumerate_seams` / `scan_seam` / `disp_floor`).
+The live (−1727,−990) Hyrule clip is a permanent regression anchor
+(`tests/test_seam_clip.py::test_hyrule_1727_f32_clip_anchor`, golden `hyrule_seam_1727_ram.json`):
+model min-disp 49.9 u vs live 49.99 u.
 `harness/collision/validate_live.py` checks it against a running game by position-hacking Link's
 debug pos (`0x803D78FC`).
 
