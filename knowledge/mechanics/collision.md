@@ -71,7 +71,10 @@ floor triangle (`dBgS_LinkAcch` @ `0x803BD910` → +0x554 polyIndex, +0x556 bgIn
 
 `tww-python-scripts/collision_viewer.py` (sibling to `cull_viewer.py`) renders the live mesh: enable
 it from Dolphin's Scripts panel while TWW runs. Orbit/pan/zoom around Link, triangles colored by
-class (green ground / red wall / blue roof), the floor triangle Link stands on highlighted yellow.
+class (green ground / red wall / blue roof); **movable-BG objects** (doors/platforms/blocks) are
+drawn in **purple** and always shown (exempt from the radius filter + distance cap, since they are
+few and are the dynamic collision of interest). The floor triangle Link stands on is highlighted
+yellow.
 Link himself is a shaded **cyan 3D cone** whose apex faces his heading — it reads over the yellow
 floor and shows facing at a glance. The visual-facing world vector is `(sin θ, 0, cos θ)` where
 `θ = raw · 2π/65536` (u16 heading @ `0x803EA3D2`) — measured live against travel direction (raw
