@@ -27,10 +27,15 @@ cases). See ``knowledge/mechanics/seam-clip.md``.
 (``normalize(cross(v1-v0, v2-v0))``, ``d=-dot(n,v0)``) — planes are NOT stored in the DZB
 (``cBgW::ClassifyPlane`` -> ``cM3d_CalcPla``, c_bg_w.cpp). The two triangles of one wall quad
 normalise independently and differ in the last mantissa bits, and that difference is exactly what
-opens the seam gap. :func:`calc_pla` here is **bit-exact** to the console: it ports the Gekko
-``frsqrte`` (reciprocal-sqrt estimate + one Newton step) that ``VECMag`` uses, so it reproduces the
-game's stored planes bit-for-bit (verified against RAM for the GanonL seam). This lets the sim run
-on *synthetic* geometry (any vertices) faithfully, not just real seams read from RAM.
+opens the seam gap. :func:`calc_pla` ports the Gekko ``frsqrte`` (recip-sqrt estimate + one Newton
+step) that ``VECMag`` uses, BUT is **not yet universally bit-exact** — across 4506 Hyrule triangles
+it matches RAM only ~64%: the ``frsqrte`` normalise is right, but the paired-single
+``PSVECCrossProduct`` is still approximated as ``-(a*b - c)``. A 1-ULP normal error flips a razor
+seam clip, so **for real seams feed the plane read from RAM** (``cBgW.pm_tri``, stride 0x18) via
+``Tri(v0,v1,v2, plane=Plane(*n, d))`` rather than trusting ``calc_pla``. Finishing the exact
+cross-product port (validated against the RAM oracle) is an open handoff item; until then the
+synthetic-geometry path is provisional. The sim *logic* is validated on RAM planes (reproduces real
+clips bit-for-bit).
 
 Decomp refs: ``src/SSystem/SComponent/c_m3d.cpp`` (``cM3d_Cross_Lin*``, ``cM3d_CrossX/Y/Z_Tri``),
 ``c_m2d.cpp`` (``cM2d_CrossCirLin``), ``src/d/d_bg_w.cpp`` (``RwgWallCorrect``), ``src/d/d_bg_s_acch.cpp``

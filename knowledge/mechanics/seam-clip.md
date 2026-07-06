@@ -52,11 +52,19 @@ past the seam that WallCorrect's static radius-35 cylinder no longer overlaps ei
 no push-back. With both barriers missing, Link keeps `new_pos` — he's through the wall.
 
 This is not a coarse geometric wedge: the crossing points sit within ~0.01 u of the seam edge, and
-the clip vs block outcome flips on the last few float bits. Faithful reproduction needs the console's
-fused multiply-add (see [FP note](#fp-note)) **and** the plane normals computed exactly as the game
-does — which [`calc_pla`](../../tww_sim/core/collision.py) now is, bit-for-bit (it ports the Gekko
-`frsqrte` normalise; see [FP note](#fp-note)). That means the sim runs faithfully on *synthetic*
-geometry, not just real seams read from RAM.
+the clip vs block outcome flips on the last few float bits. Faithful reproduction therefore needs
+(a) the console's fused multiply-add (see [FP note](#fp-note)) and (b) the triangle's plane
+**exactly** as the game computes it.
+
+> **⚠️ Status (do this): use RAM-read planes for real seams.** The sim *logic* (LineCheck +
+> WallCorrect + `cM3d` math) is validated — fed the game's **stored planes read from RAM**, it
+> reproduces real clips bit-for-bit (incl. a live Hyrule clip at the (−1727,−990) seam). But the
+> plane *compute* path [`calc_pla`](../../tww_sim/core/collision.py) is **NOT yet universally
+> bit-exact**: across 4506 Hyrule triangles it matches RAM only ~64% (the `frsqrte` normalise is
+> ported, but the paired-single `PSVECCrossProduct` is still approximated). A 1-ULP normal error
+> flips a razor clip, so **do not trust `calc_pla`-computed planes** — read them from RAM
+> (`cBgW.pm_tri`, stride 0x18) until the cross-product port lands. This means the *synthetic-angle*
+> results below (built on `calc_pla`) are **provisional**, not verified.
 
 ## Why the three requirements
 
@@ -67,9 +75,10 @@ geometry, not just real seams read from RAM.
   planes must differ so the per-triangle crossings land on different sides of the seam; the *amount*
   of difference is set by the per-triangle plane **fan**, a sub-ULP property of the exact vertices,
   not a clean function of the dihedral. The synthetic-angle sweep
-  ([`harness/collision/angle_experiment.py`](../../harness/collision/README.md), now bit-exact via
-  `calc_pla`) finds genuine clips across interior angles **80°–137°** (and reflex/concave corners
-  over a wider range) — near-90° corners clip, matching live confirmation. Clippability at a given
+  ([`harness/collision/angle_experiment.py`](../../harness/collision/README.md)) — **provisional**,
+  it runs on `calc_pla` planes which aren't yet bit-exact — finds clips across interior angles
+  **80°–137°** (and reflex/concave corners wider); near-90° clips are also confirmed live on real
+  RAM geometry, so the *qualitative* result (no clean angle cutoff) holds. Clippability at a given
   angle is decided by the exact float fan, so it is effectively per-geometry: exactly-90.0° can miss
   while 88°/92° clip. The folk "> 90° and not 180°" rule is only approximate — treat the real
   gate as "the two triangles' bit-exact planes fan enough to miss both crossings," which you check by
@@ -91,8 +100,9 @@ geometry, not just real seams read from RAM.
 ## Modelling / predicting a clip
 
 [`tww_sim.core.collision`](../../tww_sim/core/collision.py) is a geometry-agnostic FP-faithful port
-of `CrrPos` (LineCheck + WallCorrect + the `cM3d` math) with a **bit-exact `cM3d_CalcPla`**, so it
-can build faithful planes from any vertices. [`harness/collision/seam_model.py`](../../harness/collision/README.md)
+of `CrrPos` (LineCheck + WallCorrect + the `cM3d` math). Its `cM3d_CalcPla` is **not yet
+bit-exact** (~64% vs RAM; see the status note above) — **feed it planes read from RAM** for real
+seams. [`harness/collision/seam_model.py`](../../harness/collision/README.md)
 wraps it with the GanonL seam and exposes `predict_clip(initial, end)` → clip/block;
 [`angle_experiment.py`](../../harness/collision/README.md) sweeps synthetic corner angles.
 `harness/collision/validate_live.py` checks it against a running game by position-hacking Link's
@@ -105,7 +115,9 @@ debug pos (`0x803D78FC`).
 2. **Plane normalise** — `cM3d_CalcPla` normalises via `VECMag`, which uses Gekko **`frsqrte`**
    (reciprocal-sqrt estimate + one Newton step), *not* a correctly-rounded `sqrt`. libm `sqrt` is
    ~1 ULP off in the normal — enough to flip the seam razor. `calc_pla` ports `frsqrte` (Dolphin's
-   exact table) and the fused cross (`-(a*b - c)`), reproducing the RAM planes bit-for-bit.
+   exact table); the frsqrte part is validated, but the paired-single **`PSVECCrossProduct`** is
+   still approximated (`-(a*b - c)`), so `calc_pla` only matches RAM ~64% — **finishing this exact
+   cross-product port (against the 4506-triangle RAM oracle) is the outstanding handoff item.**
 The port uses [`core.fp`](../../tww_sim/core/fp.py)'s `fmadds`/`fmuls`/`fadds`/`fmsubs` accordingly.
 
 **old_pos matters.** The discriminator is the swept line, so the *exact* `old_pos` (Link's previous
