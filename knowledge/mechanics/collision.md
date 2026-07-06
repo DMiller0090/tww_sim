@@ -91,6 +91,13 @@ draw-radius slider bounds the drawn count on large rooms.
 > world distance **to Link**, not to the orbiting camera — otherwise geometry right by the player
 > gets dropped in favor of whatever is nearest the eye.)
 
+**Perf.** The script runs on the emu thread, so per-frame Python cost directly throttles emulation.
+Two things keep it cheap: (1) the reader caches each mesh's raw tables **and** derived per-triangle
+**centroid + surface class** (computed once for the static room, only re-derived for the few movable
+meshes) — the viewer never recomputes `tri_normal`/`classify` per frame; (2) the nearest-Link cap is
+applied via a partial sort **before** projection, so only ~`cap` triangles are ever projected, not
+the whole room. Together these cut the per-frame draw-prep ~3× (≈19 ms → ≈6 ms on a 4.8k-tri stage).
+
 ## Open question — sim integration
 
 The land sim (`tww_sim.land`) currently assumes **flat, wall-free ground** and has no collision
