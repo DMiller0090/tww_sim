@@ -39,6 +39,19 @@ returned plan, re-run, reproduces its endpoint byte-for-byte — `test_resim_con
 target itself is reachable only on the block lattice, so a residual (reported exactly) is expected; the
 tool returns the closest + cheapest reachable spots.
 
+**Nuance — the residual is sub-ULP for *clamped/reset* atoms, so additive is a fine *planner* model.**
+A **neutral flat roll** is genuinely entry-*independent*: its launch speed is `clamp(speedF·1.5 + 0.5,
+5.0, 26.0)` ([roll](../mechanics/land-movement.md#roll-front_roll--the-fast-approach-movement)), so a
+near-zero (neutral) entry saturates to the **5.0 floor** and a full-run entry to the **26 cap** — either
+way a *constant*, and `setSingleMoveAnime(ANM_ROLLF)` resets the anim frame ctrl (no phase carry) while
+flat ground drops the slope term. The magnitude is thus fixed; the *only* variation is the sub-ULP
+position/facing rounding of point 1 (< 1u per roll, usually 0). Same for the ballistic hops (fixed
+launch constant) and the crawl cycle. So for those atoms you **can** plan by summing constants (accurate
+to sub-unit) and re-simulate the chosen chain **once** only to certify a 0-ULP landing. Re-simulation
+is *strictly* required only for (a) bit-exact seam/tile targets where accumulated sub-ULP drift can
+cross a ±1u boundary, and (b) genuinely entry-*dependent* blocks — a **moving** roll whose `speedF`
+lands inside the open `(floor, cap)` band, or a jump carrying horizontal speed.
+
 ## What is a "block" — and why WALK is not one
 
 A block starts and ends at a standstill and needs **no frame-perfect input**, so its effect is
