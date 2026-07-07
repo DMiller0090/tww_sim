@@ -1,11 +1,15 @@
-# ESS (Extra Slow Swim)
+# ESS (extended superslide)
 
-**Answers:** What is ESS physically? What stick values? Why is diagonal ESS more efficient? Why is
-raw=110 optimal?
+**Answers:** What does ESS stand for? What is ESS physically? What stick values? Why is diagonal ESS
+more efficient? Why is raw=110 optimal?
 **Status:** validated (decomp + live).
 **Source:** decomp stick pipeline (`PADClamp`, `JUTGamePad::CStick::update`, `setSpeedAndAngleSwim`); live.
 
 ---
+
+**"ESS" = extended superslide** — a legacy term carried in from older Zelda-series movement tech; the
+name is historical, not descriptive of what it does in TWW (the "Extra Slow Swim" backronym seen
+elsewhere is wrong). It is used for both the swim tech below and the low-magnitude land aim-stick.
 
 ## What ESS is
 

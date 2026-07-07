@@ -47,7 +47,7 @@ never reaches the snap. The `0.05` threshold is modeled in `foot_speedf._foot_sp
 
 > Not to be confused with **which partial stick magnitudes are safe to emit** in a land plan (the
 > live-valid `Y ≤ 191 ∪ {255}` band, never `192–254`) — that is a stick-input rule, covered in
-> [mechanics/land-movement.md](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel). This section is about the sim's *speed regime* at `msd≈0.52`.
+> [mechanics/land-movement.md](../mechanics/precise-stop.md). This section is about the sim's *speed regime* at `msd≈0.52`.
 
 The z=2000 stop rides this regime (verified 2026-07-04). The full-deflection golden covers only
 `msd` 0/1, whose DASH cruise has `m3598 == 0` (so `speedF == nspeed` and the foot-toe term drops out

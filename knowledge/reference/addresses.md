@@ -84,6 +84,26 @@ fields hang off `camera_class = [[0x803AD380]+0x34]` (JP view_class layout == US
 Bits: `fopAcStts_CULL_e=0x100` (in status → cullable); `fopAcCnd_NODRAW_e=0x04` (in condition →
 culled this frame). The cull point is `mSchbitEnableAndFarPlane & 0xFFFF` (u16), not the render far.
 
+<a id="land-player-fields"></a>
+## Land player movement fields (JP/GZLJ01)
+
+The per-frame land-movement fields ([land movement](../mechanics/land-movement.md)) hang off the
+player class `daPy_lk_c = [0x803AD860]` (== the live actor's `+0xD8`). They are exposed as
+`dolphin_mem` **named reads** (registered in `tools/tww_jp_ref.*`, so scripts read them by name rather
+than restating the raw offsets here); the ones the land captures/log use:
+
+| Named read | Field | Meaning |
+|------------|-------|---------|
+| `potential_speed` | `mNormalSpeed` | signed speed relative to facing (see [walk-run](../mechanics/walk-run.md)) |
+| `travel_angle` | `current.angle.y` | velocity direction (s16) |
+| `shape_angle_y` | `shape_angle.y` | visual facing (s16) |
+| `target_angle` | `m34E8` | stick world target = `m34DC(stick) + csangle` |
+| `csangle` | camera yaw | `dCam_getControledAngleY`; the camera-relative offset |
+| `anim_frame` | `[0x803AD860]+0x2F64` | active proc's frame controller (e.g. roll frame ctrl) |
+
+Resolve exact offsets from the named-read registry (`build_tww_ref.py` output) rather than hardcoding
+them; the registry is the single source so a layout change updates every script at once.
+
 ## Decomp function map (`tww/src/d/actor/d_a_player_swim.inc`, included into `d_a_player_main.cpp`)
 
 These are the US/GZLE01 decomp symbols (logic identical to JP; use the JP table above for live

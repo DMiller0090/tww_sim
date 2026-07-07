@@ -7,8 +7,9 @@ turnaround angle threshold? Animation wrap points? The strobo band speeds?
 restating. If a number elsewhere disagrees with this table, this table wins and the other page
 is wrong.
 
-> Scope note: this table currently covers the **stick / speed / animation / turnaround / strobo**
-> constants (the pilot slice + shared foundation). Camera, balloon, and planner constants are
+> Scope note: this table covers the **stick / speed / animation / turnaround / strobo** constants,
+> the **collision** (wall cylinder + actor Co push) and **land sword-cut** constants, the **land
+> movement / turn-proc** constants, and a camera-steering summary. Balloon and planner constants are
 > added as those topics migrate.
 
 ---
@@ -157,7 +158,7 @@ The **game uses `dCcS::SetPosCorrect`** (virtual override, JP 0x800AB1E4), whose
 <a id="land-sword-cut-roll-stab"></a>
 ## Land sword-cut (roll stab)
 
-The [roll stab](../mechanics/land-movement.md#roll-stab-sword-thrust-out-of-a-roll--the-seam-clip-lunge):
+The [roll stab](../mechanics/roll-stab.md):
 a sword cut fired out of a FRONT_ROLL. HIO `daPy_HIO_cutF_c1`/`cutA_c1`
 (`d_a_player_HIO_data.inc:31/27`); procs `d_a_player_sword.inc:660/430`. Live-validated bit-exact (0 ULP,
 GZLJ01 savestate 7, 2026-07-06). Only the joint-0 (root) translate of `cutf.bck`/`cuta.bck` is used.
@@ -174,8 +175,55 @@ GZLJ01 savestate 7, 2026-07-06). Only the joint-0 (root) translate of `cutf.bck`
 
 The lunge = `speedF` (foot term, along `current.angle.y`) + the root-translate delta `m3700(t)−m3700(t−1)`
 (rotated by `shape_angle.y`); `m3700` is reset to 0 in `procCut*_init`, so frame 1 stacks the full root
-translate onto the carried roll speed. See [land-movement.md](../mechanics/land-movement.md#roll-stab-sword-thrust-out-of-a-roll--the-seam-clip-lunge)
+translate onto the carried roll speed. See [land-movement.md](../mechanics/roll-stab.md)
 and [seam-clip.md](../mechanics/seam-clip.md).
+
+<a id="land-movement"></a>
+## Land movement (walk / roll / ATN / hops)
+
+The walk/run, brakeslide/EBS, roll, and ballistic-hop constants. Decomp `d_a_player_main.cpp` HIO
+(`mMove`/`mRoll`/`mAtnMove`/`mAtnMoveB`/`mSideStep`/`mBackJump`); live-validated bit-exact. Techs:
+[walk-run.md](../mechanics/walk-run.md) · [brakeslide-ebs.md](../mechanics/brakeslide-ebs.md) ·
+[roll.md](../mechanics/roll.md) · [ballistic-hops.md](../mechanics/ballistic-hops.md).
+
+| Constant | Value | Meaning (field) |
+|----------|-------|-----------------|
+| run cap `mMaxNormalSpeed` | **17.0** | `mMove.field_0x18` |
+| walk accel step | **+3.5/fr** | `field_0x14 = 3.5` × `cM_scos(0)` × `msd²` |
+| walk decel `cLib_addCalc(v,0,scale,max,min)` | scale **0.6** / max **2.5** / min **1.8** | `field_0x24/0x1C/0x20` |
+| input latency | **2 frames** (press and release) | `tww_sim.land.INPUT_DELAY` |
+| ESS down / left / right | `(128,110)` / `(110,128)` / `(146,128)` | see [ess.md](../mechanics/ess.md) |
+| decay: brakeslide / EBS / EBS-toward-cam / brake | −0.14 / −0.011 / ~−0.001 / −2.5 per frame | live |
+| ATN cap (attention / DIR_BACKWARD) | **12** (`mAtnMove.field_0xC`) / **15** (`mAtnMoveB.field_0xC`) | |
+| ATN speed scale (side / back) `field_0x8` | 5.0 / 2.5 | |
+| ATN `setNormalSpeedF` (scale/max/min) side / back | 0.5 / 7.5 / 4.0 · 0.5 / 8.0 / 2.0 | |
+| ATN travel-chase `cLib_addCalcAngleS(scale,max,min)` | 6 / 3000 / 2000 | |
+| direction cos thresholds (fwd / back) `mAtnMoveB.0x2C/0x30` | ≥0.99 → FORWARD · ≤−0.99 → BACKWARD (else side) | |
+| roll speed `clamp(speedF·field_0x18 + field_0x1C, field_0x20, cap)` | **×1.5 + 0.5, floor 5.0, cap 26.0** (= 0.5 + 17·1.5) | `mRoll` |
+| roll duration / exit frame `mRoll.field_0x10` | **17** (anim rate 1.1, ≈18 frames) | |
+| roll-EBS (frame-perfect) | full-run roll → hold L+down through roll → release L into ESS-down → **≈ −23.1** | live |
+| sidehop `procSideStep_init` | `nspeed = cM_scos(6200)·30`, `speed.y = cM_ssin(6200)·30`, gravity **−2.4** | `mSideStep` `d_a_player_HIO_data.inc:223` |
+| backflip `procBackJump_init` | `nspeed = 22.5`, `speed.y = 19.0`, gravity **−3.0** | `mBackJump` `:102` |
+
+| proc | `link_state` |
+|------|-----|
+| WAIT · FREE_WAIT · MOVE · ATN_MOVE | 4 · 5 · 6 · 7 |
+| WAIT_TURN · MOVE_TURN · SLIP | 0x17/23 · 0x18/24 · 0x19/25 |
+| FRONT_ROLL · SIDE_STEP(+LAND) · BACK_JUMP(+LAND) | 30 · 0x0A/0x0B · 0x22/0x23 |
+
+<a id="land-turn-procs"></a>
+## Land turn procs (SLIP / MOVE_TURN / WAIT_TURN)
+
+The big-reversal ground-turn constants. Decomp `mSlip`/`mTurn`/`mMove`; see
+[ground-turns.md](../mechanics/ground-turns.md).
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| slip speed threshold `mSlip.field_0x4` | `speedF/mMaxNormalSpeed > 0.6` → SLIP (else MOVE_TURN) | on a moving reversal (+ genuine stick flip) |
+| slip entry `mSlip.0x8` | `nspeed = speedF·1.1` (uncapped) | |
+| slip decel `mSlip.0x18/0x10/0x14` | cLib scale 0.6 / max 1.25 / min 0.1875 (~−1.25/fr) | |
+| WaitTurn facing pivot `mTurn.0x4/0x0/0x2` | `cLib_addCalcAngleS(scale 30, max 0x3CDF, min 0x1F40)` → ~0x1F40 (≈8000)/frame | |
+| MoveTurn facing sweep `cLib_addCalcAngleS(scale,max,min)` | 1-path 2 / (F0·4+0x4A56) / (F0·2) · slip-exit 3 / (F0·2) / F0 | F0 = `mMove.field_0x0` = 3000 |
 
 ## Camera (steering) — summary (full table migrates with the camera topic)
 

@@ -41,7 +41,7 @@ tool returns the closest + cheapest reachable spots.
 
 **Nuance — the residual is sub-ULP for *clamped/reset* atoms, so additive is a fine *planner* model.**
 A **neutral flat roll** is genuinely entry-*independent*: its launch speed is `clamp(speedF·1.5 + 0.5,
-5.0, 26.0)` ([roll](../mechanics/land-movement.md#roll-front_roll--the-fast-approach-movement)), so a
+5.0, 26.0)` ([roll](../mechanics/roll.md)), so a
 near-zero (neutral) entry saturates to the **5.0 floor** and a full-run entry to the **26 cap** — either
 way a *constant*, and `setSingleMoveAnime(ANM_ROLLF)` resets the anim frame ctrl (no phase carry) while
 flat ground drops the slope term. The magnitude is thus fixed; the *only* variation is the sub-ULP
@@ -75,7 +75,7 @@ crawl — never a raw walk.
 | `sidehop_l` | L+A+left | ~**+323u** perpendicular (2-D) | exact (ballistic) |
 | `sidehop_r` | L+A+right | ~**−323u** perpendicular (2-D) | exact (ballistic) |
 
-Ballistic mechanics + constants: [land movement](../mechanics/land-movement.md#targeted-ballistic-hops-sidehop--backflip).
+Ballistic mechanics + constants: [land movement](../mechanics/ballistic-hops.md).
 
 ### Follow-on blocks (not yet in the catalog)
 - **Facing turn** — the **ESS + C-down in-place rotation** (hold a low/ESS-magnitude stick at a world

@@ -8,7 +8,7 @@ straight-up? Why does the frame-6 roll cap at ~25.9 instead of the full 26? Can 
 runner-known technique the sim reproduces.
 **Source:** decomp HIO `mAtnMove`/`mMove` constants + `_update_atn_direction` (`setBlendAtnMoveAnime`
 @3280) + `procFrontRoll`; sim exploration 2026-07-06 (native `LandCore`, seeded from savestate 6 =
-the resting-anchor defaults). Constants live in [`land-movement.md#values`](../mechanics/land-movement.md#values).
+the resting-anchor defaults). Constants live in [`constants.md#land-movement`](../reference/constants.md#land-movement).
 
 ---
 
@@ -31,7 +31,7 @@ From a standstill, holding L enters `ATN_MOVE`. The **first ATN frame** takes th
 target-speed scale **`F14 = 3.5`**. So `mNormalSpeed` jumps to 5.0 that frame instead of 3.5. Both
 paths hit the 17 cap at the same frame, but the head start is a *permanent position lead* because
 the roll chain equalizes speed afterward (a higher `speedF` earlier is never repaid). This is the
-[ATN_MOVE tier](../mechanics/land-movement.md#brakeslide-l-held) engaged for one frame from rest.
+[ATN_MOVE tier](../mechanics/brakeslide-ebs.md#brakeslide-l-held) engaged for one frame from rest.
 
 ## Why the slight diagonal beats straight-up (the +2.4)
 

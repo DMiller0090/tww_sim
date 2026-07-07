@@ -112,7 +112,7 @@ the clip vs block outcome flips on the last few float bits. Faithful reproductio
 > hard lower bound for *any* corner, and Link's fastest **single** ground move is a **FRONT_ROLL at
 > 26.0 u** (`clamp(speedF·1.5+0.5, 5, 26)`, cap `0.5 + mMaxNormalSpeed·1.5`, `mMaxNormalSpeed = 17`;
 > walk ~14, dash ~17) — 26 < 35, so a roll (or walk/dash) *alone* clips no corner. The clip uses a
-> **roll + sword thrust** (the [roll stab](land-movement.md#roll-stab-sword-thrust-out-of-a-roll--the-seam-clip-lunge)):
+> **roll + sword thrust** (the [roll stab](roll-stab.md)):
 > fire a CUT_F/CUT_A cut out of the roll and the cut's first frame stacks the animation root-translate
 > lunge (`m3700`, +23.22 u) onto the carried roll speed (26) for a **49.22 u** single frame. The land sim
 > now models this **bit-exact end to end** (`LandState` `CUT_F`/`CUT_A`, live 0 ULP) — the roll AND the

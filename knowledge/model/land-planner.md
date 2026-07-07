@@ -78,7 +78,7 @@ differently near the cap. So `Y ≤ 191` (msd ≤ 0.889) is bit-exact and `(128,
 exact, but **`Y ∈ [192,254]` diverges live** (a walk at `(128,196)` gives sim v=16.38 vs live 15.76).
 **Any land search over partials must restrict to `Y ≤ 191 ∪ {255}`; never emit 192–254.** From a
 standstill the walk needs `msd > 0.5` to move (`(128,171)` is the smallest that cruises); the L-target
-`ATN_MOVE` unlocks lower speeds (`Y=168` → 3.64). Detail: [land movement](../mechanics/land-movement.md#values).
+`ATN_MOVE` unlocks lower speeds (`Y=168` → 3.64). Detail: [land movement](../reference/constants.md#land-movement).
 
 ## Float-perfect stop — the C-up speed cancel
 
@@ -115,7 +115,7 @@ fewest-frame **START crawl** (`min_frames=True`) and the **ROLL** approach (`rol
 since the sim is 0-ULP vs live, an offline-exact solve lands exact on console (verified: `2000.0` /
 `1800.0`, `pos_x`=0). **Off-axis freeze plans are not yet live-valid** — an off-axis crawl emits diagonal
 sticks needing the octagon clamp (a separate open decode issue). Mechanics of the cancel:
-[land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel).
+[land movement](../mechanics/precise-stop.md).
 
 ## Fewest-frame bit-exact stop — the START crawl (2026-07-05h)
 
@@ -165,7 +165,7 @@ full cruise → **chained forward rolls** (26 u/frame) → short walk tail → C
   the full-up walk floor** `(z−764.08)/17`: z=2000 → 60f (walk 79), z=2500 → 79f (109), z=2810.98 → 97f
   (~127). A chained roll = **+486.5u / 19 frames** (first roll off cruise 476.0); the freeze fires only
   from a post-roll MOVE frame (A/C-up don't arm mid-roll). Roll mechanics + the retain-26 window +
-  intermediate speeds: [land movement](../mechanics/land-movement.md#roll-front_roll--the-fast-approach-movement).
+  intermediate speeds: [land movement](../mechanics/roll.md).
 - **ANALYTIC solve — unblocks the walk's precession wall (above).** A roll **resets the walk anim** (the
   roll→MOVE exit re-inits the walk frame ctrl to 0, since `setSingleMoveAnime` left `m34C3==0`) → post-roll
   `anim_fc0==0`, so everything downstream is **history-independent**: fixed +486.5u/roll, a FIXED walk-tail
@@ -189,7 +189,7 @@ The full-only grid (all 26-rolls + tail) is **sparse** (~17u tail steps), so a h
 needs a **deep (k=5) start crawl** to bridge the residual — a slow (~57s) DFS. The
 **`reach_freeze(roll=True, roll_speed_min=<float>)`** knob (default 26.0 = full-only) fixes this: lower it
 to admit **partial-speed tuning rolls** (mNormalSpeed in `[roll_speed_min, 26]`, via a pre-roll partial
-FORWARD hold — [land movement](../mechanics/land-movement.md#roll-front_roll--the-fast-approach-movement))
+FORWARD hold — [land movement](../mechanics/roll.md))
 as the last roll. Each covers a distinct distance → extra coarse-grid points → the target hits at a
 **shallower k** (fast solve). Every roll resets the walk anim (`anim_fc0 == 0`), so the tuning roll is just
 extra `freeze_ref` rows and the prediction stays exact.
@@ -210,7 +210,7 @@ on the exact float) is fully **MODELED, input-driven, and live-proven 0 ULP** (2
 blocker (post-B-cancel re-walk inheriting the freeze foot-anim phase) is the `m34C3 = 2`
 phase-preservation of the subjectivity/WAIT blend, and `LandState.step()` now consumes the raw controller
 stream so a plan plays 1:1 on sim + Dolphin (gate `spotcheck_subj_inputdriven.py`; details in
-[land movement](../mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel)).
+[land movement](../mechanics/precise-stop.md)).
 **But the measured savings are modest — only ~1–3 frames** vs a good single freeze (z=2000 → 86f vs 89;
 prototype `chained_solve`), since the exact-float stop is intrinsically ~12–17 frames over the full-up
 floor either way. **Remaining (low priority):** redo the chained PLANNER search over real input streams

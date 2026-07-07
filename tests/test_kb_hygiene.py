@@ -31,12 +31,10 @@ HUB = KB / "README.md"
 # banner instead; reference/ is lookup but still templated.
 TRUTH_DIRS = {"mechanics", "model", "strategy", "reference"}
 
-# Single-topic size cap for truth pages (history/ is frozen narrative → exempt). Grandfather the
-# known-oversized pages here; the allowlist is the VISIBLE debt list — shrink it, don't grow it.
+# Single-topic size cap for truth pages (history/ is frozen narrative → exempt).
+# EMPTY BY DESIGN: a new oversized truth page means SPLIT it, do NOT re-add here (needs --no-verify).
 SIZE_CAP = 250
-SIZE_ALLOWLIST = {
-    "knowledge/mechanics/land-movement.md",  # dense land reference; split candidate (KB-eval flagged buried facts)
-}
+SIZE_ALLOWLIST = set()  # was {land-movement.md}; split into 7 single-topic pages 2026-07-07
 
 _LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 _HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*$", re.MULTILINE)

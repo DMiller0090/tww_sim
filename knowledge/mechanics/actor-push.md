@@ -108,7 +108,7 @@ reproduces the live clip endpoint **NEW = (−1727.3423, −990.6356) bit-for-bi
 
 > **The 49.22 u is a roll + sword thrust — now modeled bit-exact.** The displacement that reaches the
 > corner is a **stacked land move** — a FRONT_ROLL into a **sword thrust** (the
-> [roll stab](land-movement.md#roll-stab-sword-thrust-out-of-a-roll--the-seam-clip-lunge)). The land sim
+> [roll stab](roll-stab.md)). The land sim
 > ([`tww_sim/land/land.py`](../../tww_sim/land/land.py)) now models BOTH halves **bit-exact** (`CUT_F`
 > forward thrust / `CUT_A` L+B vertical slash; live 0 ULP, GZLJ01 2026-07-06). The roll caps at 26.0 u,
 > and the cut's FIRST frame adds the animation joint-0 root-translate lunge (`m3700`, reset to 0 in
@@ -118,7 +118,7 @@ reproduces the live clip endpoint **NEW = (−1727.3423, −990.6356) bit-for-bi
 > on `cutf.bck`/`cuta.bck`). `test_tetra_clip.py` now derives the displacement from
 > `LandState.enter_cut(CUT_F)` (model-derived, not a literal). The Tetra-push pipeline that closes the
 > remaining sub-unit gap is unchanged. Full mechanic + constants:
-> [land-movement.md](land-movement.md#roll-stab-sword-thrust-out-of-a-roll--the-seam-clip-lunge),
+> [land-movement.md](roll-stab.md),
 > [reference/constants.md](../reference/constants.md#land-sword-cut-roll-stab).
 
 > **Where the animated center matters.** For the *colinear-behind* solver, the **overlap depth** is

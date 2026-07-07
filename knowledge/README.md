@@ -67,12 +67,18 @@ you can triage in one glance.
 - **How do air refills work / why is touching land fatal / flat vs wavy / corner refills / the manual-refill workflow?** → [mechanics/air-refill.md](mechanics/air-refill.md)
 - **How does the sim handle unmodeled world features (refills, sploosh) / the re-plan loop?** → [model/planner.md#unmodeled-world-features--the-re-plan-loop](model/planner.md#unmodeled-world-features--the-re-plan-loop)
 
-### Land movement (walk, brakeslide, EBS)
-- **How does walking accelerate / what are the two movement angles (facing vs travel)?** → [mechanics/land-movement.md](mechanics/land-movement.md)
-- **What is a brakeslide / extended brakeslide (EBS) / why does ESS left-or-right hold speed almost forever?** → is *facing* (not travel) relative to `csangle` → [land-movement.md#camera-relative-speed-preservation-the-ebs-payoff](mechanics/land-movement.md#camera-relative-speed-preservation-the-ebs-payoff)
-- **Is there a walk-before-run speed plateau (~5.0)?** → no — full stick goes straight to the 17 cap (the "plateau" was a phantom front roll) → [land-movement.md#walk--run-acceleration-baseline](mechanics/land-movement.md#walk--run-acceleration-baseline)
-- **From a standstill, fastest way into a roll chain / why hold L on frame 1 / why a slight off-axis stick beats straight-up / why the frame-6 roll caps at ~25.9?** → [strategy/roll-launch.md](strategy/roll-launch.md)
-- **Which partial stick magnitudes are live-valid in a land plan / why NEVER emit Y 192–254?** → [land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel](mechanics/land-movement.md#precise-stopping-live-valid-stick-magnitudes-l-target-and-the-c-up-speed-cancel). NB: this live-valid *stick-input* band is a different thing from the sim's [`Y171` partial-magnitude *regime*](model/land-sim.md#partial-magnitude-regime-y171-msd052) — don't conflate "partial stick" with "partial regime".
+### Land movement (walk, roll, turns, freeze)
+- **Where do I find each land tech / the shared model (two angles, proc states, bit-exact status)?** → [mechanics/land-movement.md](mechanics/land-movement.md) (the land index)
+- **How does walking accelerate / what are the two movement angles (facing vs travel) / the speedF foot-plant blend?** → [mechanics/walk-run.md](mechanics/walk-run.md)
+- **Is there a walk-before-run speed plateau (~5.0)?** → no — full stick goes straight to the 17 cap (the "plateau" was a phantom front roll) → [walk-run.md#walk--run-acceleration-baseline](mechanics/walk-run.md#walk--run-acceleration-baseline)
+- **What is a brakeslide / extended brakeslide (EBS) / why does ESS left-or-right hold speed almost forever / what is the wiggle EBS?** → is *facing* (not travel) relative to `csangle` → [mechanics/brakeslide-ebs.md](mechanics/brakeslide-ebs.md)
+- **How does the forward roll work / the 26 cap / chained + intermediate roll speeds / the frame-perfect roll-EBS?** → [mechanics/roll.md](mechanics/roll.md)
+- **What is the roll stab / the 49.22 single-frame lunge (CUT_F/CUT_A) that reaches a seam clip?** → [mechanics/roll-stab.md](mechanics/roll-stab.md)
+- **How do the big-reversal ground turns work (WAIT_TURN pivot / MOVE_TURN turn-around / SLIP skid)?** → [mechanics/ground-turns.md](mechanics/ground-turns.md)
+- **What are the targeted ballistic hops (sidehop / backflip) / the A=roll vs L+A=hop mapping / the ESS aim-turn?** → [mechanics/ballistic-hops.md](mechanics/ballistic-hops.md)
+- **How do I stop Link at an exact position (the C-up SUBJECTIVITY freeze) / B-cancel / why isn't the re-walk cold?** → [mechanics/precise-stop.md](mechanics/precise-stop.md)
+- **From a standstill, fastest way into a roll chain / why hold L on frame 1 / why the frame-6 roll caps at ~25.9?** → [strategy/roll-launch.md](strategy/roll-launch.md)
+- **Which partial stick magnitudes are live-valid in a land plan / why NEVER emit Y 192–254?** → [mechanics/precise-stop.md](mechanics/precise-stop.md). NB: this live-valid *stick-input* band is a different thing from the sim's [`Y171` partial-magnitude *regime*](model/land-sim.md#partial-magnitude-regime-y171-msd052) — don't conflate "partial stick" with "partial regime".
 
 ### Model — engine (core)
 - **Why f32/ctypes / op-order / `_F32_PI` / `cM_rad2s` truncation / the baked cos+sin tables / which matrix-quat ops are FMA-fused?** → [model/fp-faithfulness.md](model/fp-faithfulness.md)
@@ -87,7 +93,7 @@ you can triage in one glance.
 - **How does the land sim accumulate position (f32) / the `Y171` partial regime / the 7 red ULP tests?** → [model/land-sim.md](model/land-sim.md)
 - **How does the land planner reach a target (x,z) / the live-valid stick set / the C-up freeze to z=2000 / seam-clip vs RTA bars?** → [model/land-planner.md](model/land-planner.md)
 - **How does the land SETUP FINDER work (human-consistent discrete moves → ranked input seqs) / why re-simulate instead of summing displacements / which moves are "blocks" / why isn't walking one?** → [model/land-setup-finder.md](model/land-setup-finder.md)
-- **What are the targeted ballistic hops (sidehop / backflip) / the A=roll vs L+A=sidehop/backflip input mapping?** → [mechanics/land-movement.md#targeted-ballistic-hops-sidehop--backflip](mechanics/land-movement.md#targeted-ballistic-hops-sidehop--backflip)
+- **What are the targeted ballistic hops (sidehop / backflip) / the A=roll vs L+A=sidehop/backflip input mapping?** → [mechanics/ballistic-hops.md](mechanics/ballistic-hops.md)
 
 ### Provenance & open work
 - **Was <bug> a physics issue or an artifact?** (bug#2, 554, off-axis, omega grid, cosine table) → [history/resolved-bugs.md](history/resolved-bugs.md)
