@@ -23,7 +23,7 @@ exact-float targets hit at a **shallower start crawl** (k=5→k=3, ~57s→~2s, l
 frames for solve speed; partial-speed rolls are now live-gated. Open: off-axis octagon clamp; collision;
 A*. The chained-over-streams planner is done (modest ~1–3f). (Note:
 `reach_straight`/`reach_precise` rest are target-SENSITIVE, 0.1–9u — use `reach_freeze` for exact stops.)
-**Source:** `tww_sim/land/plan_land.py`; live-validated via `advanceseq`. Forward model:
+**Source:** `tww_sim/land/plan_land/`; live-validated via `advanceseq`. Forward model:
 [land sim](land-sim.md) · [land movement](../mechanics/land-movement.md).
 
 ---

@@ -1523,7 +1523,7 @@ cdef class LandCore:
     cdef public long long turn_shape_scale, turn_shape_max, turn_shape_min
     cdef public int state, direction
     cdef public double nspeed, speedF, msd, max_nspeed, roll_frame
-    cdef public bint _roll_entered, _l_prev, _pos_fallback
+    cdef public bint _roll_entered, _l_prev
     cdef public bint _subj_arm, _subj_ended
     cdef int _abtn_prev, _subj_frames, _cdown_run
     cdef double _anim_nspeed
@@ -1565,7 +1565,6 @@ cdef class LandCore:
         self.roll_frame = 0.0
         self._roll_entered = False
         self._l_prev = False
-        self._pos_fallback = False
         self._subj_arm = False
         self._subj_ended = False
         self._subj_frames = 0
@@ -1598,7 +1597,6 @@ cdef class LandCore:
         c.nspeed = self.nspeed; c.speedF = self.speedF; c.msd = self.msd
         c.max_nspeed = self.max_nspeed; c.roll_frame = self.roll_frame
         c._roll_entered = self._roll_entered; c._l_prev = self._l_prev
-        c._pos_fallback = self._pos_fallback
         c._subj_arm = self._subj_arm; c._subj_ended = self._subj_ended
         c._abtn_prev = self._abtn_prev; c._subj_frames = self._subj_frames; c._cdown_run = self._cdown_run
         c._anim_nspeed = self._anim_nspeed; c._has_anim_nspeed = self._has_anim_nspeed
