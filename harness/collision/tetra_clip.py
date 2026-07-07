@@ -13,9 +13,16 @@ end-of-last-frame position, unaffected by this frame's push. So a Tetra placed b
 the corner) adds a small extra displacement toward the corner on top of the roll, extending ``new``
 past the seam into the f32 clip window.
 
-Live-confirmed (Hyrule, GZLJ01): Tetra is the Type2 / weight-140 variant, so Link gets ``0.538×`` the
-overlap depth (see :mod:`tww_sim.core.cc_push`). The push is horizontal (``dy=0``) along
-``unit(link − tetra)``. Positions are f32 throughout (Link's ``cXyz`` is f32).
+Live-confirmed (Hyrule, GZLJ01): the game uses ``dCcS::SetPosCorrect`` (rank-table split), so with
+Link (weight 120, rank 5) vs Tetra (weight 140, rank 5) ``rank_tbl[5][5]=50`` → Link gets **0.50×**
+the overlap depth (NOT the mass-proportional 0.538 the old cCcS port assumed). The push is horizontal
+(``dy=0``) along ``unit(link − tetra)``. Positions are f32 throughout (Link's ``cXyz`` is f32).
+
+Cylinder caveat: Link's body Co cylinder is **R=30** (walking / FRONT_ROLL; R=50 only when carrying)
+and its center is the horizontal midpoint of the root & neck joints (animation-driven, offset from
+``current.pos``), not the feet — so ``sumR`` is 80, not 100, and the effective overlap for a given
+Tetra placement is approximate here (the exact center needs the pose from the anim engine). The
+pipeline uses ``old`` (settled feet) as Link's cyl center as a first-order proxy.
 """
 import math
 
@@ -25,8 +32,8 @@ from tww_sim.core.cc_push import co_push_link, WEIGHT_LINK, WEIGHT_TETRA_V5
 from harness.collision.gap_search import WALL_H, WALL_R, settle
 
 # Body *Co* cylinders that feed cM3d_Cross_CylCyl (distinct from the radius-35 wall cylinder):
-# Link R=50/H~81.25 standing (d_a_player_main.cpp:9760/9780); Tetra R=50/H=140 (live).
-LINK_CO_R, LINK_CO_H = 50.0, 81.25
+# Link R=30/H~81.25 (walking / FRONT_ROLL; d_a_player_main.cpp:9762/9780); Tetra R=50/H=140 (live).
+LINK_CO_R, LINK_CO_H = 30.0, 81.25
 TETRA_CO_R, TETRA_CO_H = 50.0, 140.0
 
 
@@ -68,10 +75,11 @@ def solve_min_overlap(old_xz, link_y, thrust, tris, tetra_w=WEIGHT_TETRA_V5,
     thx, thz = thrust[0] / tmag, thrust[1] / tmag          # unit thrust (toward corner)
     baseline = clip_with_push(old_xz, link_y, thrust, (old_xz[0] - 1e6, old_xz[1]), tris,
                               tetra_w=tetra_w, link_co_h=link_co_h, tetra_h=tetra_h)
+    sum_r = LINK_CO_R + TETRA_CO_R                          # 80 (Link R=30 + Tetra R=50)
     n = int(max_overlap / step) + 1
     for k in range(1, n):
         ov = k * step
-        d = 100.0 - ov                                     # center distance for this overlap
+        d = sum_r - ov                                     # center distance for this overlap
         tx, tz = old_xz[0] - thx * d, old_xz[1] - thz * d  # Tetra behind Link
         r = clip_with_push(old_xz, link_y, thrust, (tx, tz), tris,
                            tetra_w=tetra_w, link_co_h=link_co_h, tetra_h=tetra_h)
