@@ -69,6 +69,15 @@ foot term is along `current.angle.y`, the root-translate delta along `shape_angl
 different move, not this cut. So the diagonal-tail aim range is **±0x2000 (±45°)** off the roll
 direction (constant [`CUT_DIR_FWD`](../reference/constants.md#land-sword-cut-roll-stab)).
 
+**Dead end (do NOT re-chase): the side cuts `CUT_L`/`CUT_R` do NOT redirect the big lunge.** Same
+init-frame rule (`procCutL/R_init` sets `m34C2=1`, `m3700=0`, but not `current.angle.y`; the turning
+proc runs frame 2+), so their first frame is the **identical 49.22 STRAIGHT lunge** along the roll
+facing (live X=0 hard-left thrust → CUT_L proc 0x44, first frame 49.2202 at ang 0). And their tail is
+*weaker* than CUT_F (`checkPass` add 1.0 vs 8.0 → `mNormalSpeed` collapses to ~5, ~10u tail frames),
+so switching to them past 45° redirects *less*, not more. **No cut variant redirects the 49.22; the
+only way to aim the big frame is to aim the ROLL** (an aimed roll, above). `cutl/cutr.bck` are
+deliberately NOT parsed into the sim (no benefit; would be dead weight).
+
 ## Simulation
 
 [`tww_sim.land`](../../tww_sim/land/land.py) `CUT_F`/`CUT_A`, **Python path only**,
