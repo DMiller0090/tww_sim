@@ -282,32 +282,32 @@ can't be located within budget.
 - id: land-walk-constants
   question: "What are the on-ground walk cap, acceleration, release deceleration, and input latency?"
   answer: "Run cap mMaxNormalSpeed = 17; accel = +3.5/frame; release decel = -2.5/frame (then a cLib min-step snap tail); input latency = 2 frames on BOTH press and release."
-  page: mechanics/land-movement.md
+  page: mechanics/walk-run.md
   source: "land-movement.md Values table"
 
 - id: land-no-walk-plateau
   question: "Is there a walk-before-run speed plateau (~5.0) before Link reaches the run cap on flat ground?"
   answer: "No — full stick accelerates straight to the 17 cap with no plateau. The apparent ~16-frame 5.0 plateau in an early capture was a phantom FRONT ROLL (state 30) from a stray button, not a mechanic."
-  page: mechanics/land-movement.md
+  page: mechanics/walk-run.md
   source: "land-movement.md walk acceleration"
   hazard: true
 
 - id: land-ebs-facing-not-travel
   question: "During an extended brakeslide, is speed preservation governed by travel direction or facing?"
   answer: "Facing, not travel. ESS steering FACING toward csangle collapses decay to ~ -0.001/frame (held almost forever); facing toward csangle+180deg engages the -2.5/frame brake. In the decoupling test both had ~identical travel but opposite outcomes."
-  page: mechanics/land-movement.md
+  page: mechanics/brakeslide-ebs.md
   source: "land-movement.md 'Camera-relative speed preservation'"
 
 - id: land-roll-speed
   question: "What speed does a forward roll set, and what does a full-run roll reach?"
   answer: "mNormalSpeed = clamp(pre-roll speedF*1.5 + 0.5, 5.0, 26.0), set once at entry. A full-run roll (speedF 17) hits the 26 cap — well above the walk cap of 17 — which is why rolling is the workhorse ground-cover tech."
-  page: mechanics/land-movement.md
+  page: mechanics/roll.md
   source: "land-movement.md 'Roll (FRONT_ROLL)'"
 
 - id: land-partial-stick-band
   question: "Which partial stick magnitudes are safe for an offline land search, and which must never be emitted?"
   answer: "Restrict to Y <= 191 (msd <= 0.889) plus true full (128,255); NEVER emit Y in [192,254] — the sim over-reads msd vs live PADClamp there (e.g. (128,196) sim v=16.38 vs live 15.76), so plans diverge live."
-  page: mechanics/land-movement.md
+  page: mechanics/precise-stop.md
   source: "land-movement.md 'Live-valid stick magnitudes'"
   hazard: true
 
@@ -518,7 +518,7 @@ The weakness probed: does the agent find `DOLPHIN_CONTROL.md`, or start reading 
 - id: ctl-cdown-camera-freeze
   question: "When I hold L to target-walk (or measure steady-state decay at speed), what must I do with the C-stick every frame, and what breaks if I don't?"
   answer: "Hold C-stick DOWN (substickY=0) on every hold/targeting frame. Otherwise the auto-camera swings/flips, moving csangle — and because stick->direction is camera-relative, that moves Link's X off-axis and drifts the run off-model (or flips a fast swim's camera). csy in {0,128} freezes the sim's CameraManual, so C-down keeps you in-model. Only skip it if steering the camera IS the intent. Note: C-DOWN = camera-freeze/free-cam; C-UP (substickY=255) is the separate speed-cancel/instant-freeze — don't confuse them."
-  page: mechanics/land-movement.md
+  page: mechanics/precise-stop.md
   source: "land-movement.md 'L-target forward' (Hold C-DOWN...); DOLPHIN_CONTROL.md #Measuring steady-state stick decay"
   category: control
   hazard: true
