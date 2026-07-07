@@ -75,6 +75,38 @@ def disp_floor(interior_deg, wall_r=WALL_R):
     return wall_r / math.sin(half) if half > 1e-3 else float("inf")
 
 
+GROUND_NY_MIN = 0.5    # ny >= this == a ground/floor triangle (matches cBgW ground classify)
+
+
+def _bary_xz(v0, v1, v2, x, z):
+    """XZ-projected barycentric: (inside, interpolated_y) for point (x,z) in triangle v0v1v2. Used
+    only for a coarse standable-floor lookup, so plain doubles (not f32) are fine."""
+    det = (v1[2] - v2[2]) * (v0[0] - v2[0]) + (v2[0] - v1[0]) * (v0[2] - v2[2])
+    if abs(det) < 1e-9:
+        return False, None
+    a = ((v1[2] - v2[2]) * (x - v2[0]) + (v2[0] - v1[0]) * (z - v2[2])) / det
+    b = ((v2[2] - v0[2]) * (x - v2[0]) + (v0[0] - v2[0]) * (z - v2[2])) / det
+    c = 1.0 - a - b
+    eps = 1e-3
+    if a < -eps or b < -eps or c < -eps:
+        return False, None
+    return True, a * v0[1] + b * v1[1] + c * v2[1]
+
+
+def floor_ys_at(region_tris, x, z):
+    """All DZB ground-triangle heights under XZ point (x,z), sorted ascending. A seam is only a
+    reachable clip if Link can STAND next to it, and standability is a property of the static DZB
+    geometry (the ground mesh) — NOT of where Link currently is. Empty list == no floor here."""
+    ys = []
+    for t in region_tris:
+        if t["n"][1] < GROUND_NY_MIN:
+            continue
+        inside, y = _bary_xz(t["v"][0], t["v"][1], t["v"][2], x, z)
+        if inside:
+            ys.append(y)
+    return sorted(ys)
+
+
 def enumerate_seams(region_tris, box):
     """Find differing-normal vertical seam corners in ``box`` = (xmin,xmax,ymin,ymax,zmin,zmax).
 
@@ -233,8 +265,12 @@ def read_region_tris(box, expand=GATHER_R + 5.0):
     out = []
     for poly, (a, b, c, tid, grp) in enumerate(tris):
         vv = [verts[a], verts[b], verts[c]]
-        if not any(xmin - expand <= v[0] <= xmax + expand and zmin - expand <= v[2] <= zmax + expand
-                   for v in vv):
+        # AABB-overlap, NOT vertex-in-box: a large FLOOR tri can span the region with all verts
+        # outside it (GanonL floor poly 273) and get dropped, leaving the seam no standable floor.
+        txmin = min(v[0] for v in vv); txmax = max(v[0] for v in vv)
+        tzmin = min(v[2] for v in vv); tzmax = max(v[2] for v in vv)
+        if (txmax < xmin - expand or txmin > xmax + expand
+                or tzmax < zmin - expand or tzmin > zmax + expand):
             continue
         if min(v[1] for v in vv) > ymax + WALL_H[-1] + 10:
             continue
@@ -244,6 +280,31 @@ def read_region_tris(box, expand=GATHER_R + 5.0):
         out.append(dict(poly=poly, v=vv, n=n,
                         T=Tri(vv[0], vv[1], vv[2], plane=Plane(n[0], n[1], n[2], d))))
     return out, snap["stage"]
+
+
+def dump_region_tris(region, stage, path):
+    """Serialise a region (from :func:`read_region_tris`) to JSON so the SCAN can run with no Dolphin
+    at all — capture once live, scan/replay offline. Stores raw fields (verts, stored plane), not the
+    :class:`Tri` objects."""
+    import json
+    rows = [dict(poly=t["poly"], v=[list(v) for v in t["v"]], n=list(t["n"]),
+                 d=t["T"].pla.d) for t in region]
+    with open(path, "w") as f:
+        json.dump({"stage": stage, "tris": rows}, f)
+
+
+def load_region_tris(path):
+    """Inverse of :func:`dump_region_tris` — rebuild ``(region_tris, stage)`` from JSON, NO Dolphin."""
+    import json
+    with open(path) as f:
+        data = json.load(f)
+    out = []
+    for r in data["tris"]:
+        vv = [tuple(v) for v in r["v"]]
+        n = tuple(r["n"])
+        out.append(dict(poly=r["poly"], v=vv, n=n,
+                        T=Tri(vv[0], vv[1], vv[2], plane=Plane(n[0], n[1], n[2], r["d"]))))
+    return out, data["stage"]
 
 
 def main(argv):

@@ -280,6 +280,34 @@ def min_f32_clip(tris, old, new_center, link_y, box_ulps=400, wall_h=WALL_H, wal
     return dict(disp=best[0], new=best[1], old=(old[0], old[2]), n_clips=n)
 
 
+def first_f32_clip(tris, old, new_center, link_y, box_ulps=120, wall_h=WALL_H, wall_r=WALL_R,
+                   max_calls=None):
+    """EXISTENCE variant of :func:`min_f32_clip` — return the FIRST clipping f32 ``new`` found,
+    searched nearest-to-``new_center`` first (Chebyshev rings of growing ULP radius), then stop.
+
+    We do not need the minimum-displacement clip (that is :func:`min_f32_clip`), only proof that a
+    clip exists here plus one exact f32 ``new`` that performs it. ``new_center`` (a continuous point
+    just past the seam, inside the gap) is where a clip is most likely, so ring-search out from it and
+    early-exit. ``max_calls`` caps the CrrPos evaluations (a bounded search that finds nothing is an
+    honest 'unclippable-in-practice', since the position is f32). Returns ``(hit, n_calls)`` where
+    ``hit`` = ``dict(disp, new, old)`` or None."""
+    cx, cz = _f(new_center[0]), _f(new_center[1])
+    n = 0
+    for r in range(0, box_ulps + 1):
+        for i in range(-r, r + 1):
+            js = range(-r, r + 1) if abs(i) == r else (-r, r)
+            for j in js:
+                if max_calls is not None and n >= max_calls:
+                    return None, n
+                nx, nz = _next_f32(cx, i), _next_f32(cz, j)
+                _, info = crr_pos_walls(old, (nx, link_y, nz), tris, wall_h, wall_r)
+                n += 1
+                if (not info["line_hit"]) and (not info["wall_hit"]):
+                    disp = ((nx - old[0]) ** 2 + (nz - old[2]) ** 2) ** 0.5
+                    return dict(disp=disp, new=(nx, nz), old=(old[0], old[2])), n
+    return None, n
+
+
 def fan_offset_scale(tris, seam):
     """Estimate the perpendicular-offset scale of the seam gap = how far the two triangles of a
     wall disagree on where the seam-crossing lands, driven by their 1-ULP plane-normal difference.
