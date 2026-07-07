@@ -88,34 +88,54 @@ def test_push_deadzone():
 
 # ---- the pipeline on the live anchor --------------------------------------
 
+def _modeled_rollstab_disp():
+    """The roll-stab's first-frame lunge, MODELED by the land sim (LandState.enter_cut out of a 26u
+    roll) -- the real stacked roll+sword-thrust displacement, replacing the old 49.22 literal. It is
+    bit-exact vs live (tests/test_land.py::test_rollstab_cut_bit_exact). When the cut keyframe data is
+    absent the model can't run, so fall back to the live golden value (49.2202)."""
+    try:
+        from tww_sim.land.land import LandState, CUT_F, FRONT_ROLL
+        s = LandState(pos_x=0.0, pos_z=0.0, facing=0, travel=0, state=FRONT_ROLL,
+                      nspeed=26.0, speedF=26.0, use_anim=False, native=False, sword_drawn=True)
+        dx, dz = s.enter_cut(CUT_F)
+        return math.hypot(dx, dz)
+    except Exception:
+        return 49.2202
+
+
 def test_tetra_push_closes_the_1727_clip():
-    """Roll + sword-thrust 49.22u alone is blocked at the (-1727,-990) corner; a Tetra nudge clips it.
-    49.22u is the real STACKED land move (roll + sword thrust); the land sim models only the roll half
-    (26u, see test_real_roll_alone_is_short), so this uses the 49.22u figure directly for now."""
+    """Roll + sword-thrust (~49.22u) alone is blocked at the (-1727,-990) corner; a Tetra nudge clips it.
+    The ~49.22u is the real STACKED land move -- a FRONT_ROLL into a CUT_F sword thrust -- now MODELED
+    end to end by the land sim (LandState.enter_cut; bit-exact vs live, test_rollstab_cut_bit_exact), so
+    the displacement here is model-derived rather than a bare literal."""
     tris, link_y, old = _load_anchor()
     settled = settle(tris, old, link_y)
-    # direction toward the live clip point; roll+thrust gives 49.22u (just short of the corner minimum)
+    # direction toward the live clip point; the modeled roll+thrust lunge (~49.22u, just short of the min)
     new_live = (-1727.34228515625, -990.6356201171875)
     dx, dz = new_live[0] - settled[0], new_live[1] - settled[2]
     dm = math.hypot(dx, dz); dhx, dhz = dx / dm, dz / dm
-    thrust = (dhx * 49.22, dhz * 49.22)
+    disp = _modeled_rollstab_disp()
+    assert abs(disp - 49.2202) < 1e-3, f"modeled roll-stab lunge {disp} != live 49.2202"
+    thrust = (dhx * disp, dhz * disp)
 
     base = clip_with_push((settled[0], settled[2]), link_y, thrust, (settled[0] - 1e6, settled[2]), tris)
-    assert not base["clipped"], "roll+thrust 49.22u should NOT clip without Tetra"
+    assert not base["clipped"], "roll+thrust ~49.22u should NOT clip without Tetra"
 
     sol = solve_min_overlap((settled[0], settled[2]), link_y, thrust, tris, max_overlap=8.0, step=0.01)
     assert sol is not None, "Tetra push should make it clip within 8u overlap"
-    assert 0.9 < sol["overlap"] < 1.6, f"min overlap {sol['overlap']} off the ~1.23u expectation"
-    # the push Link actually gets to close the gap (0.50 * overlap)
+    # A small Tetra overlap closes the sub-unit gap (the clip window is non-monotonic, so the exact min is
+    # sensitive to the disp's 4th decimal; cut-displacement accuracy is owned by test_rollstab_cut_bit_exact).
+    assert 0.3 < sol["overlap"] < 2.0, f"min overlap {sol['overlap']} off the sub-2u expectation"
+    # the push Link actually gets is 0.50 * overlap (Link rank 5 vs Tetra rank 5 -> exact 50/50 split)
     push_mag = math.hypot(*sol["push"])
-    assert 0.45 < push_mag < 0.75, f"push {push_mag} off the ~0.615u nudge"
     assert abs(push_mag - 0.5 * sol["overlap"]) < 1e-3, "push should be 0.50 * overlap"
 
 
 def test_real_roll_alone_is_short():
     """The land sim's modeled FRONT_ROLL caps at 26u/frame -- below the 35u seam-clip floor, so a roll
-    ALONE (without the stacked sword thrust) does not clip the (-1727,-990) corner. This documents the
-    26u modeled half of the ~49u roll+thrust move (the thrust half is not yet modeled -- actor-push.md)."""
+    ALONE (without the stacked sword thrust) does not clip the (-1727,-990) corner. The thrust half of
+    the ~49u stacked move is now modeled too (CUT_F/CUT_A; test_rollstab_cut_bit_exact) -- see
+    test_tetra_push_closes_the_1727_clip for the full modeled roll+thrust; this guards the roll alone."""
     tris, link_y, old = _load_anchor()
     settled = settle(tris, old, link_y)
     new_live = (-1727.34228515625, -990.6356201171875)

@@ -20,6 +20,7 @@ up): `python tests/gen_land_golden.py`.
 The byte-exact checks only run WHEN the copyrighted anim keyframe data is present under _generated/anim/
 (dev machines); without it LandState falls back to the calibrated stand-in and they SKIP.
 """
+import json
 import os
 import struct
 
@@ -340,6 +341,67 @@ def test_roll_ebs_preserves_negative_speed():
     assert min(d, 65536 - d) < 0x0400
     if _ANIM:  # the roll->ATN->flip position tail is bit-exact
         assert_pos_bits(s, 'roll_ebs')
+
+
+# --- sword-thrust cut tier (roll stab: CUT_F fwd thrust / CUT_A L+B vertical slash) -----------
+
+# GOLDEN = live truth (GZLJ01 savestate 7) seeded at the cut-entry pos (roll pins speedF=26); enter_cut
+# runs the lunge, step() plays to WAIT. Model: land-movement.md. Cut data via parse_bck.py which=cuts.
+_CUTS_GOLDEN = os.path.join(os.path.dirname(__file__), "golden", "land_rollstab_cuts.json")
+
+
+def _cuts_available():
+    p = os.path.join(os.path.dirname(__file__), "..", "_generated", "anim", "link_anim_cuts.json")
+    return os.path.exists(p)
+
+
+_CUTS = _cuts_available()
+
+
+def _fbits_hex(h):
+    return struct.unpack(">f", struct.pack(">I", int(h, 16)))[0]
+
+
+@pytest.mark.skipif(not _CUTS, reason="cut keyframe data (_generated/anim/link_anim_cuts.json) not present")
+@pytest.mark.parametrize("cut", ["CUT_F", "CUT_A"])
+def test_rollstab_cut_bit_exact(cut):
+    from tww_sim.land.land import CUT_F, CUT_A
+    g = json.load(open(_CUTS_GOLDEN))[cut]
+    seed = g["seed"]
+    ct = CUT_F if cut == "CUT_F" else CUT_A
+    s = LandState(pos_x=_fbits_hex(seed["px_hex"]), pos_z=_fbits_hex(seed["pz_hex"]),
+                  facing=seed["facing"], travel=seed["travel"], state=FRONT_ROLL,
+                  nspeed=seed["nspeed"], speedF=seed["speedF"], use_anim=False, native=False,
+                  sword_drawn=True)
+    # entry frame (the 49.22 lunge) then play the anim out to WAIT.
+    s.enter_cut(ct)
+    for i, row in enumerate(g["frames"]):
+        if i > 0:
+            s.step(128, 255)                              # hold up; the cut proc drives motion, not the stick
+        assert f32_bits(s.pos_x) == int(row["px_hex"], 16), \
+            f"{cut} f{row['f']} pos_x 0x{f32_bits(s.pos_x):08x} != live {row['px_hex']}"
+        assert f32_bits(s.pos_z) == int(row["pz_hex"], 16), \
+            f"{cut} f{row['f']} pos_z 0x{f32_bits(s.pos_z):08x} != live {row['pz_hex']}"
+        tag = "WAIT" if s.state in (WAIT, FREE_WAIT) else s.state
+    # the cut has returned Link to idle standstill (WAIT) by the last golden frame
+    assert s.state in (WAIT, FREE_WAIT), f"{cut} should end in WAIT idle, got state {s.state}"
+
+
+def test_rollstab_first_frame_lunge_reaches_seam_floor():
+    # The clip-relevant fact, robust WITHOUT the anim data: the roll-stab's first CUT frame displaces far
+    # past the ~35u seam-clip floor (live 49.22u). Here we assert the modeled value with the anim data.
+    if not _CUTS:
+        pytest.skip("cut keyframe data not present")
+    from tww_sim.land.land import CUT_F
+    g = json.load(open(_CUTS_GOLDEN))["CUT_F"]
+    seed = g["seed"]
+    s = LandState(pos_x=_fbits_hex(seed["px_hex"]), pos_z=_fbits_hex(seed["pz_hex"]),
+                  facing=seed["facing"], travel=seed["travel"], state=FRONT_ROLL,
+                  nspeed=26.0, speedF=26.0, use_anim=False, native=False, sword_drawn=True)
+    dx, dz = s.enter_cut(CUT_F)
+    disp = (dx * dx + dz * dz) ** 0.5
+    assert abs(disp - 49.2202) < 1e-3, f"roll-stab lunge {disp} != 49.22"
+    assert disp > 35.0                                    # clears the hard seam-clip floor
 
 
 # --- ground-reversal turn procs (WAIT_TURN 23 / MOVE_TURN 24 / SLIP 25) ---------------------

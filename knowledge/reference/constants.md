@@ -154,6 +154,29 @@ cylinder above. All live-confirmed on GZLJ01 (2026-07-06).
 The **game uses `dCcS::SetPosCorrect`** (virtual override, JP 0x800AB1E4), whose weight split is the
 `rank_tbl` above — NOT the base `cCcS` mass-proportional split (JP 0x8024101C, never fires live).
 
+<a id="land-sword-cut-roll-stab"></a>
+## Land sword-cut (roll stab)
+
+The [roll stab](../mechanics/land-movement.md#roll-stab-sword-thrust-out-of-a-roll--the-seam-clip-lunge):
+a sword cut fired out of a FRONT_ROLL. HIO `daPy_HIO_cutF_c1`/`cutA_c1`
+(`d_a_player_HIO_data.inc:31/27`); procs `d_a_player_sword.inc:660/430`. Live-validated bit-exact (0 ULP,
+GZLJ01 savestate 7, 2026-07-06). Only the joint-0 (root) translate of `cutf.bck`/`cuta.bck` is used.
+
+| Constant | CUT_F | CUT_A | Meaning (field) |
+|----------|-------|-------|-----------------|
+| anim frame ctrl rate | **1.2** | 1.2 | `mFrameCtrlUnder[MOVE0]` rate (field_0x4) |
+| anim start frame | **4.0** | 4.0 | `setSingleMoveAnime` start (field_0x8); `+1.2/frame`, `EMode_NONE` end 19 |
+| checkPass launch frame | **6.0** | 6.0 | `field_0x28` → set `mNormalSpeed` |
+| `mNormalSpeed` launch | `\|speedF\|·0.2 + 8.0` | `\|speedF\|·0.2 + 10.0` | field_0x10 mult / field_0x14 add |
+| decel maxStep / minStep / scale | **0.95** / 0.5 / 0.7 | **2.6** / 0.5 / 0.7 | `cLib_addCalc` (field_0x18/0x1C/0x20) |
+| early-exit frame → WAIT | **17.0** | 16.0 | `getFrame() > field_0xC` → `checkNextMode(1)` |
+| first-frame lunge (from a 26 roll) | **49.220** | 49.220 | `speedF 26 + m3700.z(4.0)=23.220` (posMove m34C2==1) |
+
+The lunge = `speedF` (foot term, along `current.angle.y`) + the root-translate delta `m3700(t)−m3700(t−1)`
+(rotated by `shape_angle.y`); `m3700` is reset to 0 in `procCut*_init`, so frame 1 stacks the full root
+translate onto the carried roll speed. See [land-movement.md](../mechanics/land-movement.md#roll-stab-sword-thrust-out-of-a-roll--the-seam-clip-lunge)
+and [seam-clip.md](../mechanics/seam-clip.md).
+
 ## Camera (steering) — summary (full table migrates with the camera topic)
 
 | Constant | Value | Meaning | Source |

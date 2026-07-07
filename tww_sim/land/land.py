@@ -49,6 +49,8 @@ WAIT_TURN = 23    # daPyProc_WAIT_TURN_e    (pivot-in-place reversal from a stan
 MOVE_TURN = 24    # daPyProc_MOVE_TURN_e    (turn-around reversal, low speed / post-slip)
 SLIP = 25         # daPyProc_SLIP_e         (high-speed reversal skid, hands to MOVE_TURN)
 FRONT_ROLL = 30   # daPyProc_FRONT_ROLL_e   (A-button forward roll)
+CUT_A = 0x41      # daPyProc_CUT_A_e        (L+B neutral: vertical/overhead slash)
+CUT_F = 0x42      # daPyProc_CUT_F_e        (fwd+B: forward thrust; the roll-stab's 49.22 lunge)
 # Targeted ballistic hops (L-held + A + directional stick -> doStatus JUMP). Pure momentum + gravity,
 # no foot-plant (m3598==0), so position is scalar-exact without the anim engine. See land-movement.md.
 SIDE_STEP = 0x0A       # daPyProc_SIDE_STEP_e       (sidehop: stick L/R while targeting)
@@ -60,7 +62,8 @@ _STATE_TAG = {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL", WAIT_TURN: "WAI
               MOVE_TURN: "MOVETURN", SLIP: "SLIP", WAIT: "WAIT", FREE_WAIT: "WAIT",
               SUBJECTIVITY: "SUBJ",
               SIDE_STEP: "SIDEHOP", SIDE_STEP_LAND: "SIDEHOPLAND",
-              BACK_JUMP: "BACKFLIP", BACK_JUMP_LAND: "BACKFLIPLAND"}
+              BACK_JUMP: "BACKFLIP", BACK_JUMP_LAND: "BACKFLIPLAND",
+              CUT_F: "CUT_F", CUT_A: "CUT_A"}
 
 # mDirection enum (d_a_player_main.h daPy_lk_c::direction_e). getDirectionFromAngle buckets the
 # stick-vs-heading angle into these; ATN physics branches on it (fwd->Normal, back->AtnBack, side).
@@ -168,6 +171,21 @@ class LandState:
     # (with a neutral stick checkNextMode(1) is inert -- 4457 returns false when msd<=0.05 and no action
     # button -- so a neutral roll runs to ROLL_END; a held stick exits one frame early, e.g. the roll-EBS.)
 
+    # HIO mCut sword-thrust cuts (roll stab). d_a_player_HIO_data.inc:31/27, procCutF/A sword.inc:660/430;
+    # the roll-stab lunge model + why 49.22u: knowledge/mechanics/land-movement.md + reference/constants.md.
+    CUT_ANIM = {CUT_F: 'cutf', CUT_A: 'cuta'}
+    CUT_RATE = f32(1.2)             # field_0x4  = ANM_CUT frame-ctrl rate (mFrameCtrlUnder[MOVE0])
+    CUT_START = f32(4.0)            # field_0x8  = setSingleMoveAnime start frame (fc begins here)
+    CUT_END = f32(19.0)            # bck frameMax (EMode_NONE end); rate->0 clamp at end-0.001
+    CUT_PASS = f32(6.0)            # field_0x28 = checkPass frame -> set mNormalSpeed launch
+    CUT_LAUNCH_MUL = f32(0.2)      # field_0x10 = mNormalSpeed = |speedF|*this + <add>
+    CUT_DEC_SCALE = f32(0.7)       # field_0x20 = cLib_addCalc decel scale
+    CUT_DEC_MIN = f32(0.5)         # field_0x1C = cLib_addCalc decel minStep
+    # per-cut fields: field_0xC (getFrame()> -> checkNextMode(1) exit) / field_0x14 (add) / field_0x18 (max)
+    CUT_EARLY = {CUT_F: f32(17.0), CUT_A: f32(16.0)}   # field_0xC
+    CUT_LAUNCH_ADD = {CUT_F: f32(8.0), CUT_A: f32(10.0)}  # field_0x14
+    CUT_DEC_MAX = {CUT_F: f32(0.95), CUT_A: f32(2.6)}     # field_0x18
+
     # HIO mTurn (ground reversal turns), d_a_player_HIO_data.inc:22. WaitTurn pivots facing toward the
     # captured stick target; the min step (0x1F40) dominates -> ~8000/frame. (MoveTurn sweep: see its init.)
     TURN_MAX = 0x3CDF               # field_0x0 = cLib_addCalcAngleS max step (WaitTurn facing pivot)
@@ -209,7 +227,8 @@ class LandState:
 
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
-                 use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True, foot_native=True):
+                 use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True, foot_native=True,
+                 sword_drawn=False):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
         # Vertical state for the ballistic hops. pos_y accumulates in f32; ground_y = the jump-entry
@@ -246,6 +265,15 @@ class LandState:
         self.visited = set()                   # every proc state this run passed through (path assertions)
         self.roll_frame = 0.0                  # ANM_ROLLF frame ctrl during FRONT_ROLL (times the exit)
         self._roll_entered = False             # entry frame: don't advance the anim ctrl yet
+        # Sword-thrust cut (CUT_F / CUT_A) state -- the "roll stab". sword_drawn gates the roll->cut
+        # trigger (a cut only fires out of a roll if the sword is out; a bare roll routes to MOVE).
+        self.sword_drawn = bool(sword_drawn)   # gates the roll->cut trigger; see land-movement.md (roll stab)
+        self._b_held = False                   # swordButton (B) delivered this frame (roll->cut trigger)
+        self.cut_frame = 0.0                   # mFrameCtrlUnder[MOVE0] frame during a cut (times the lunge/exit)
+        self._cut_entered = False              # cut entry frame: no ctrl advance, nspeed carried, m3700_prev=0
+        self._cut_m3700 = (0.0, 0.0, 0.0)      # previous frame's m3700 (anim joint-0 translate); reset 0 at init
+        self._cut_add = (0.0, 0.0)             # this frame's rotated root-translate delta, added after the shared bottom
+        self._cut_anim_cache = None            # loaded cutf/cuta anim dict (j3d_eval), lazy
         self.turn_target = 0                   # mProcVar2.m34D4 (WaitTurn facing-pivot target)
         self.turn_shape_scale = 0              # MoveTurn shape-sweep cLib params (m34D0/m34D4/m34D6)
         self.turn_shape_max = 0
@@ -607,17 +635,125 @@ class LandState:
             if self.msd <= 0.05:
                 self.nspeed = f32(self.nspeed - self.ROLL_MIN)
             self._roll_exit(l_held)
-        elif self.roll_frame > self.ROLL_EARLY and self.msd > 0.05:
-            # getFrame()>field_0x10 with a pushed stick: checkNextMode(1) is NOT inert -> exit early.
+        elif self.roll_frame > self.ROLL_EARLY and (self.msd > 0.05 or (self._b_held and self.sword_drawn)):
+            # getFrame()>field_0x10 -> checkNextMode(1) (procFrontRoll 6866); inert only when neutral AND no
+            # buffered action -- a pushed stick (roll-EBS) or a buffered sword (roll stab) makes it fire.
             self._roll_exit(l_held)
 
     def _roll_exit(self, l_held):
-        """The roll's checkNextMode transition. -> ATN_MOVE if L held (procAtnMove_init), else MOVE
-        (procMove_init). On the MOVE path arm the walk re-entry morf; the walk blend re-inits its
-        frame ctrl to 0 because the roll left m34C3==0 (see enter_roll)."""
+        """The roll's checkNextMode transition. With a buffered sword button (B) and the sword drawn it
+        routes to a CUT (the "roll stab": L held -> CUT_A vertical slash, else CUT_F forward thrust),
+        carrying the roll's full speedF into the cut's first-frame lunge. Otherwise -> ATN_MOVE if L
+        held (procAtnMove_init), else MOVE (procMove_init) with the walk re-entry morf; the walk blend
+        re-inits its frame ctrl to 0 because the roll left m34C3==0 (see enter_roll)."""
+        if self._b_held and self.sword_drawn:
+            self._cut_init(CUT_A if l_held else CUT_F)
+            return
         self._check_next_mode(l_held)            # sets state (MOVE/ATN_MOVE) + mMaxNormalSpeed
         if self.state == MOVE and self._foot is not None:
             self._foot._pending_morf = self.MOVE_REENTRY_MORF
+
+    # --- sword-thrust cut procs (CUT_F 0x42 forward thrust / CUT_A 0x41 vertical slash) --------
+    def _cut_anim(self, cut_type):
+        """The parsed cutf/cuta BCK (core.anim.j3d_eval). Lazy + cached on the instance. The joint-0
+        translate track is the CUT's root-motion lunge (m3700). Dev-supplied keyframe data (gitignored
+        _generated/anim/link_anim_cuts.json); regenerate with harness/anim/parse_bck.py (cutf,cuta)."""
+        if self._cut_anim_cache is None:
+            from ..core.anim import j3d_eval as _J
+            import os as _os
+            here = _os.path.dirname(_os.path.abspath(__file__))
+            rb = here
+            while rb != _os.path.dirname(rb) and not _os.path.exists(_os.path.join(rb, 'pyproject.toml')):
+                rb = _os.path.dirname(rb)
+            path = _os.path.join(rb, '_generated', 'anim', 'link_anim_cuts.json')
+            self._cut_anim_cache = _J.load_anim(path)
+        return self._cut_anim_cache[self.CUT_ANIM[cut_type]]
+
+    def _cut_m3700_at(self, cut_type, frame):
+        """m3700 = the CUT anim's joint-0 (root) mTranslate at `frame`, via the J3D keyframe eval
+        (posMove reads getAnmTransform(0).getTransform(0); MOVE1 is NULL for a setSingleMoveAnime cut,
+        so there is no blend). Bit-exact vs the live m3700 (0 ULP)."""
+        from ..core.anim import j3d_eval as _J
+        t = _J.calc_transform(self._cut_anim(cut_type), 0, frame)['translate']
+        return (f32(t[0]), f32(t[1]), f32(t[2]))
+
+    def _cut_init(self, cut_type):
+        """procCutF_init / procCutA_init (d_a_player_sword.inc:660/430): setSingleMoveAnime(ANM_CUT*,
+        rate=1.2, start=4.0, ...); m3700 = 0; m34C2 = 1. mNormalSpeed keeps the entry value (the roll's
+        carried speedF) this frame. current.angle.y = shape_angle.y (travel snaps to facing)."""
+        self.state = cut_type
+        self.cut_frame = self.CUT_START
+        self._cut_entered = True
+        self._cut_m3700 = (0.0, 0.0, 0.0)        # m3700 = cXyz::Zero in init
+        self.travel = self.facing                # current.angle.y = shape_angle.y (procCutF sets it)
+        # No foot-engine pose: the cut anim isn't a foot-chain walk anim and m3598 stays 0 (speedF==nspeed),
+        # so position = joint-0 root lunge (_cut_m3700_at) + mNormalSpeed. Toe stream freezes (see the KB).
+
+    def _proc_cut(self, l_held):
+        """One CUT_F/CUT_A frame (procCutF/procCutA d_a_player_sword.inc:690/...). The frame ctrl advances
+        (+1.2, EMode_NONE), then: getFrame()>field_0xC -> checkNextMode(1) exit to WAIT; checkPass(6.0) ->
+        mNormalSpeed = |speedF|*0.2 + add; every frame cLib_addCalc decel. Entry frame: no advance, nspeed
+        carried. Position (the root-translate lunge) is applied in the shared pos block via _cut_add."""
+        ct = self.state
+        # No entry skip: init is dispatched under the roll, so _proc_cut first runs the frame AFTER init
+        # (the entry lunge is the pos block on the init frame). Advance the MOVE0 ctrl (EMode_NONE) below.
+        fc = f32(self.cut_frame + self.CUT_RATE)
+        if fc < self.CUT_START:
+            fc = self.CUT_START
+        end_clamp = f32(self.CUT_END - 0.001)
+        if fc >= self.CUT_END:
+            fc = end_clamp
+        self.cut_frame = fc
+        # exit: getFrame() > field_0xC (early-out; a held sword re-fires, but the neutral tail ends here)
+        if fc > self.CUT_EARLY[ct]:
+            self.state = WAIT
+            self.nspeed = 0.0
+            if self._foot is not None:
+                self._foot._pending_morf = self.MOVE_REENTRY_MORF
+            return
+        # checkPass(field_0x28): launch mNormalSpeed off the pre-cut speedF
+        if self._checkpass_none(fc, self.CUT_RATE, self.CUT_START, self.CUT_END, self.CUT_PASS):
+            self.nspeed = f32(f32(abs(self.speedF) * self.CUT_LAUNCH_MUL) + self.CUT_LAUNCH_ADD[ct])
+        self.nspeed = cLib_addCalc(self.nspeed, 0.0, self.CUT_DEC_SCALE, self.CUT_DEC_MAX[ct], self.CUT_DEC_MIN)
+
+    @staticmethod
+    def _checkpass_none(frame, rate, start, end, pass_frame):
+        """J3DFrameCtrl::checkPass, EMode_NONE arm (J3DAnimation.cpp:24): true iff pass_frame is crossed
+        this update. `frame` is the CURRENT (already-advanced) frame; it recomputes next internally."""
+        cur = frame
+        nxt = f32(cur + rate)
+        if nxt < start:
+            nxt = start
+        if nxt >= end:
+            nxt = f32(end - 0.001)
+        if cur <= nxt:
+            return cur <= pass_frame and pass_frame < nxt
+        return nxt <= pass_frame and pass_frame < cur
+
+    def enter_cut(self, cut_type=CUT_F):
+        """Programmatic roll-stab: run the CUT's ENTRY frame from the current state (mirrors the game's
+        procCut*_init frame, dispatched out of a roll). Carries the current speedF into the first-frame
+        lunge = speedF (foot term, m3598==0) + the ANM_CUT joint-0 root translate at frame 4.0 (m3700,
+        reset to 0 in init) -- the ~49.22u single-frame move that reaches the seam-clip floor. Advance the
+        rest of the animation with step() (which dispatches _proc_cut) until it returns to WAIT (idle).
+        Returns the entry-frame (dx, dz). Requires native=False (the cut is a Python-path proc)."""
+        if self._core is not None:
+            raise RuntimeError("enter_cut is a Python-path proc; construct LandState(native=False)")
+        self._cut_init(cut_type)                     # state=CUT*, cut_frame=4.0, m3700_prev=0, travel=facing
+        # --- entry frame pos update (mirrors the step() pos-block CUT branch) ---
+        self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
+        m3700 = self._cut_m3700_at(cut_type, self.cut_frame)
+        sp5c = (f32(m3700[0] - self._cut_m3700[0]), f32(m3700[1] - self._cut_m3700[1]),
+                f32(m3700[2] - self._cut_m3700[2]))
+        self._cut_m3700 = m3700
+        s = _cM_ssin_s16(self.facing); c = S.cM_scos_s16(self.facing)
+        add_x = f32(f32(sp5c[2] * s) + f32(sp5c[0] * c))
+        add_z = f32(f32(sp5c[2] * c) - f32(sp5c[0] * s))
+        px0, pz0 = self.pos_x, self.pos_z
+        self.pos_x = f32(f32(self.pos_x + f32(self.speedF * _cM_ssin_s16(self.travel))) + add_x)
+        self.pos_z = f32(f32(self.pos_z + f32(self.speedF * S.cM_scos_s16(self.travel))) + add_z)
+        self.visited.add(cut_type)
+        return (f32(self.pos_x - px0), f32(self.pos_z - pz0))
 
     # --- ground-reversal turn procs (WaitTurn 23 / MoveTurn 24 / Slip 25) ------------------
     def _proc_wait_turn_init(self):
@@ -852,6 +988,7 @@ class LandState:
         self._set_stick_data(asx, asy)
         l_held = bool(abtn & 0x40) or atrig >= 200      # checkAttentionLock proxy (digital/analog L)
         a_pressed = bool(abtn & 0x100)                   # doTrigger: A = the "do"/roll button
+        self._b_held = bool(abtn & 0x200)                # swordButton (B): buffered by the roll -> CUT on exit
         # mItemTrigger A/B RISING EDGE (checkSubjectEnd 5698): a HELD B misses it -> no exit. See KB.
         ab_edge = ((abtn & ~self._abtn_prev) & 0x300) != 0
         self._abtn_prev = abtn
@@ -955,7 +1092,9 @@ class LandState:
         elif proc == SLIP:
             self._proc_slip(l_held)              # checkNextMode / hand to MoveTurn when the skid dies
         elif proc == FRONT_ROLL:
-            self._proc_roll(l_held)              # checkNextMode on its exit frame
+            self._proc_roll(l_held)              # checkNextMode on its exit frame (-> CUT if B buffered)
+        elif proc in (CUT_F, CUT_A):
+            self._proc_cut(l_held)               # sword-thrust lunge; exits to WAIT when the anim passes field_0xC
         elif proc in (SIDE_STEP, BACK_JUMP):
             self._proc_ballistic(l_held)         # lands on the (1-frame-late) ground hit
         elif proc in (SIDE_STEP_LAND, BACK_JUMP_LAND):
@@ -1010,6 +1149,20 @@ class LandState:
             # m3598==0 here so speedF == mNormalSpeed, but posMoveFromFootPos still snaps |speedF|<0.05
             # to 0 (d_a_player_main.cpp:2418) -- the slip decel tail. See land-sim.md (slip-skid tail).
             self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
+        elif self.state in (CUT_F, CUT_A):
+            # Sword-thrust lunge: speedF (==nspeed, m3598==0) + posMove m34C2==1 root-translate delta
+            # (rotated by shape); entry frame m3700_prev==0 -> full root translate stacks (~49.22). See KB.
+            self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
+            m3700 = self._cut_m3700_at(self.state, self.cut_frame)
+            sp5c = (f32(m3700[0] - self._cut_m3700[0]), f32(m3700[1] - self._cut_m3700[1]),
+                    f32(m3700[2] - self._cut_m3700[2]))
+            self._cut_m3700 = m3700
+            s = _cM_ssin_s16(self.facing); c = S.cM_scos_s16(self.facing)   # rotate by shape_angle.y
+            self._cut_add = (f32(f32(sp5c[2] * s) + f32(sp5c[0] * c)),
+                             f32(f32(sp5c[2] * c) - f32(sp5c[0] * s)))
+        elif proc in (CUT_F, CUT_A):
+            # The cut EXITED to WAIT this frame (checkNextMode(1) set mNormalSpeed=0) -> position freezes.
+            self.speedF = 0.0
         elif self.state == ATN_MOVE and self._foot is not None:
             # ATN_MOVE: setBlendAtnMoveAnime poses the strafe/back anim. f31 = |nspeed*cos(m34E2)|/max
             # (cos=1 on flat); the pose warms the toe stream so an EBS-release MOVE rejoins bit-exact.
@@ -1030,8 +1183,16 @@ class LandState:
         # world motion is speedF along travel: speed.z = speedF*cos, x = speedF*sin. pos.{x,z} are f32
         # fields (cXyz) re-rounded each frame -> accumulate in f32, not an f64 sum. See knowledge/model/sim.md.
         d = self.speedF
+        px0, pz0 = self.pos_x, self.pos_z
         self.pos_x = f32(self.pos_x + f32(d * _cM_ssin_s16(self.travel)))
         self.pos_z = f32(self.pos_z + f32(d * S.cM_scos_s16(self.travel)))
+        # Sword-cut root-translate lunge (posMove m34C2==1) on top of the foot term, zeroed except on a
+        # CUT frame; the returned displacement is then the TRUE single-frame move (foot + lunge, ~49.22).
+        if self.state in (CUT_F, CUT_A):
+            self.pos_x = f32(self.pos_x + self._cut_add[0])
+            self.pos_z = f32(self.pos_z + self._cut_add[1])
+            d = math.hypot(self.pos_x - px0, self.pos_z - pz0)
+        self._cut_add = (0.0, 0.0)
         self.m34de = self.facing                 # m34DE = shape_angle.y (end-of-frame, 11287): last facing
         self.m34ea = self.m34dc                  # m34EA = m34DC (end-of-frame, 11289): last stick want
         # advance the shared camera for NEXT frame (its own 1-frame internal lag stacks on the

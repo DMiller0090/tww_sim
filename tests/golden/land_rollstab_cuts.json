@@ -1,0 +1,172 @@
+{
+ "CUT_F": {
+  "cut": "CUT_F",
+  "seed": {
+   "px_hex": "0x40b12f39",
+   "pz_hex": "0x44bbb54c",
+   "facing": 0,
+   "travel": 0,
+   "speedF": 26.0,
+   "nspeed": 26.0
+  },
+  "frames": [
+   {
+    "f": 39,
+    "proc": "CUT_F",
+    "px_hex": "0x40ae27e4",
+    "pz_hex": "0x44c1dc57"
+   },
+   {
+    "f": 40,
+    "proc": "CUT_F",
+    "px_hex": "0x40766ce6",
+    "pz_hex": "0x44c411d6"
+   },
+   {
+    "f": 41,
+    "proc": "CUT_F",
+    "px_hex": "0xbc67e100",
+    "pz_hex": "0x44c65010"
+   },
+   {
+    "f": 42,
+    "proc": "CUT_F",
+    "px_hex": "0xc08283d6",
+    "pz_hex": "0x44c84bb8"
+   },
+   {
+    "f": 43,
+    "proc": "CUT_F",
+    "px_hex": "0xc0c611a0",
+    "pz_hex": "0x44c9e297"
+   },
+   {
+    "f": 44,
+    "proc": "CUT_F",
+    "px_hex": "0xc0b99da8",
+    "pz_hex": "0x44caf462"
+   },
+   {
+    "f": 45,
+    "proc": "CUT_F",
+    "px_hex": "0xc0770258",
+    "pz_hex": "0x44cbbec2"
+   },
+   {
+    "f": 46,
+    "proc": "CUT_F",
+    "px_hex": "0xbf9472c4",
+    "pz_hex": "0x44cc5bb7"
+   },
+   {
+    "f": 47,
+    "proc": "CUT_F",
+    "px_hex": "0x3ff1501c",
+    "pz_hex": "0x44cce749"
+   },
+   {
+    "f": 48,
+    "proc": "CUT_F",
+    "px_hex": "0x4096581c",
+    "pz_hex": "0x44cd59fe"
+   },
+   {
+    "f": 49,
+    "proc": "CUT_F",
+    "px_hex": "0x40d96ed9",
+    "pz_hex": "0x44cd7edc"
+   },
+   {
+    "f": 50,
+    "proc": "WAIT",
+    "px_hex": "0x40d96ed9",
+    "pz_hex": "0x44cd7edc"
+   }
+  ]
+ },
+ "CUT_A": {
+  "cut": "CUT_A",
+  "seed": {
+   "px_hex": "0x40b12f39",
+   "pz_hex": "0x44bbb54c",
+   "facing": 0,
+   "travel": 0,
+   "speedF": 26.0,
+   "nspeed": 26.0
+  },
+  "frames": [
+   {
+    "f": 39,
+    "proc": "CUT_A",
+    "px_hex": "0x40ae27e4",
+    "pz_hex": "0x44c1dc57"
+   },
+   {
+    "f": 40,
+    "proc": "CUT_A",
+    "px_hex": "0x40766ce6",
+    "pz_hex": "0x44c41d09"
+   },
+   {
+    "f": 41,
+    "proc": "CUT_A",
+    "px_hex": "0xbc67e100",
+    "pz_hex": "0x44c631a9"
+   },
+   {
+    "f": 42,
+    "proc": "CUT_A",
+    "px_hex": "0xc08283d6",
+    "pz_hex": "0x44c7ceeb"
+   },
+   {
+    "f": 43,
+    "proc": "CUT_A",
+    "px_hex": "0xc0c611a0",
+    "pz_hex": "0x44c8d297"
+   },
+   {
+    "f": 44,
+    "proc": "CUT_A",
+    "px_hex": "0xc0b99da8",
+    "pz_hex": "0x44c91c62"
+   },
+   {
+    "f": 45,
+    "proc": "CUT_A",
+    "px_hex": "0xc0770258",
+    "pz_hex": "0x44c90be1"
+   },
+   {
+    "f": 46,
+    "proc": "CUT_A",
+    "px_hex": "0xbf9472c4",
+    "pz_hex": "0x44c8dc5b"
+   },
+   {
+    "f": 47,
+    "proc": "CUT_A",
+    "px_hex": "0x3ff1501c",
+    "pz_hex": "0x44c8b4ba"
+   },
+   {
+    "f": 48,
+    "proc": "CUT_A",
+    "px_hex": "0x4096581c",
+    "pz_hex": "0x44c892a2"
+   },
+   {
+    "f": 49,
+    "proc": "CUT_A",
+    "px_hex": "0x40d96ed9",
+    "pz_hex": "0x44c8411a"
+   },
+   {
+    "f": 50,
+    "proc": "WAIT",
+    "px_hex": "0x40d96ed9",
+    "pz_hex": "0x44c8411a"
+   }
+  ]
+ }
+}

@@ -118,6 +118,15 @@ def load_from_lkanm(lkanm_bytes_or_path, names=('walk', 'dash', 'waits', 'freeb'
     return out
 
 
+# Two output sets: the walk/dash foot-chain anims (foot_speedf), and the sword-cut root-motion anims
+# (land.py CUT_F/CUT_A use only the joint-0 translate; cutturnb = spin-attack roll cut, kept, unmodeled).
+_OUTPUTS = {
+    'link_anim_walk_dash.json': ('walk', 'dash', 'waits', 'freeb', 'rollf', 'rot', 'slip',
+                                 'atnwls', 'atnwrs', 'atnls', 'atnrs', 'atndls', 'atndrs', 'atnwb', 'atndb'),
+    'link_anim_cuts.json': ('cutf', 'cuta', 'cutturnb'),
+}
+
+
 def main():
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
     if 'lkanm' in o:
@@ -125,17 +134,22 @@ def main():
     else:
         from harness import dolphin_env                     # resolve from extract dir or ISO
         src = dolphin_env.object_arc_bytes('LkAnm')
-    anms = load_from_lkanm(src)
-    for nm, a in anms.items():
-        anim_tracks = sum(1 for axes in a['joints'] for kt in axes['t'] if kt.count > 1)
-        print("%s.bck: joints=%d frameMax=%d attr=%d decShift=%d  |S|=%d |R|=%d |T|=%d  (animated trans tracks=%d)" % (
-            nm, a['num_joints'], a['frame_max'], a['attribute'], a['dec_shift'],
-            len(a['scale_data']), len(a['rot_data']), len(a['trans_data']), anim_tracks))
     outdir = os.path.join(_rb, '_generated', 'anim')
     os.makedirs(outdir, exist_ok=True)
-    outp = os.path.join(outdir, 'link_anim_walk_dash.json')
-    json.dump({nm: to_jsonable(a) for nm, a in anms.items()}, open(outp, 'w'))
-    print("wrote", outp)
+    # `which=<file>` restricts to one output set (else emit both).
+    which = o.get('which')
+    for fname, names in _OUTPUTS.items():
+        if which and which not in fname:
+            continue
+        anms = load_from_lkanm(src, names=names)
+        for nm, a in anms.items():
+            anim_tracks = sum(1 for axes in a['joints'] for kt in axes['t'] if kt.count > 1)
+            print("%s.bck: joints=%d frameMax=%d attr=%d decShift=%d  |S|=%d |R|=%d |T|=%d  (animated trans tracks=%d)" % (
+                nm, a['num_joints'], a['frame_max'], a['attribute'], a['dec_shift'],
+                len(a['scale_data']), len(a['rot_data']), len(a['trans_data']), anim_tracks))
+        outp = os.path.join(outdir, fname)
+        json.dump({nm: to_jsonable(a) for nm, a in anms.items()}, open(outp, 'w'))
+        print("wrote", outp)
 
 
 if __name__ == '__main__':

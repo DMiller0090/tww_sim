@@ -111,10 +111,12 @@ the clip vs block outcome flips on the last few float bits. Faithful reproductio
 > **Reaching the floor needs a STACKED land move — a single roll is too slow.** The 35 u floor is a
 > hard lower bound for *any* corner, and Link's fastest **single** ground move is a **FRONT_ROLL at
 > 26.0 u** (`clamp(speedF·1.5+0.5, 5, 26)`, cap `0.5 + mMaxNormalSpeed·1.5`, `mMaxNormalSpeed = 17`;
-> walk ~14, dash ~17) — 26 < 35, so a roll (or walk/dash) *alone* clips no corner. The known clip uses
-> a **roll + sword thrust** stacked into one clip frame (~49 u total at the −1727 corner); the land sim
-> models the roll (26 u) bit-exact but **not yet** the sword-thrust component. See
-> [actor-push.md](actor-push.md) for the stacked-displacement + Tetra-push pipeline.
+> walk ~14, dash ~17) — 26 < 35, so a roll (or walk/dash) *alone* clips no corner. The clip uses a
+> **roll + sword thrust** (the [roll stab](land-movement.md#roll-stab-sword-thrust-out-of-a-roll--the-seam-clip-lunge)):
+> fire a CUT_F/CUT_A cut out of the roll and the cut's first frame stacks the animation root-translate
+> lunge (`m3700`, +23.22 u) onto the carried roll speed (26) for a **49.22 u** single frame. The land sim
+> now models this **bit-exact end to end** (`LandState` `CUT_F`/`CUT_A`, live 0 ULP) — the roll AND the
+> thrust half. See [actor-push.md](actor-push.md) for the stacked-displacement + Tetra-push pipeline.
 >
 > **⚠️ The search must run on f32 positions — a double-precision search FALSE-POSITIVES.** Link's
 > position is f32 (`cXyz` = three f32; `pm_pos`/`pm_old_pos` are `cXyz*`, `d_bg_s_acch.h`), and
