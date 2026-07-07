@@ -35,10 +35,7 @@ MODULE_SIZE_CAP = 800
 
 # Grandfathered oversized modules: PRE-EXISTING debt, not a license to grow. Each value is a hard
 # CEILING (current size) so the file can only SHRINK; split it to remove the entry (empty is the goal).
-MODULE_SIZE_ALLOWLIST = {
-    # 898-line swim physics core; pre-dates the land cleanup, splitting it is a separate follow-up.
-    "tww_sim/swim/sim.py": 898,
-}
+MODULE_SIZE_ALLOWLIST = {}
 
 # Soft-warn thresholds (advisory, never fail): approaching the module cap / the KB 250-line cap.
 MODULE_SOFT = 650
