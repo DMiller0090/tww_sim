@@ -116,6 +116,12 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
     CUT_EARLY = {CUT_F: f32(17.0), CUT_A: f32(16.0)}   # field_0xC
     CUT_LAUNCH_ADD = {CUT_F: f32(8.0), CUT_A: f32(10.0)}  # field_0x14
     CUT_DEC_MAX = {CUT_F: f32(0.95), CUT_A: f32(2.6)}     # field_0x18
+    # Diagonal-thrust aim turn: procCutF/A snap shape=travel to the latched m34D4 aim on the 1st cut
+    # proc frame (cLib min-step 0x1F40 >> any in-range diff). See knowledge/mechanics/roll-stab.md.
+    CUT_TURN_SCALE = 30            # mTurn.field_0x4 (cLib_addCalcAngleS scale)
+    CUT_TURN_MAX = 0x3CDF          # mTurn.field_0x0 (maxStep)
+    CUT_TURN_MIN = 0x1F40          # mTurn.field_0x2 (minStep; >> any in-range diff -> 1-frame snap)
+    CUT_DIR_FWD = 0x2000          # getDirectionFromAngle FORWARD band: |aim - facing| < this stays CUT_F
 
     # HIO mTurn (ground reversal turns), d_a_player_HIO_data.inc:22. WaitTurn pivots facing toward the
     # captured stick target; the min step (0x1F40) dominates -> ~8000/frame. (MoveTurn sweep: see its init.)
@@ -205,6 +211,8 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
         self._cut_m3700 = (0.0, 0.0, 0.0)      # previous frame's m3700 (anim joint-0 translate); reset 0 at init
         self._cut_add = (0.0, 0.0)             # this frame's rotated root-translate delta, added after the shared bottom
         self._cut_anim_cache = None            # loaded cutf/cuta anim dict (j3d_eval), lazy
+        self.cut_target = None                 # mProcVar2.m34D4: the latched thrust aim (shape snaps here
+        #                                        on the 1st cut proc frame). None -> straight (== roll facing).
         self.turn_target = 0                   # mProcVar2.m34D4 (WaitTurn facing-pivot target)
         self.turn_shape_scale = 0              # MoveTurn shape-sweep cLib params (m34D0/m34D4/m34D6)
         self.turn_shape_max = 0

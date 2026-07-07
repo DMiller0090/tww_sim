@@ -1,9 +1,9 @@
-# Constants — canonical values
+# Constants - canonical values
 
 **Answers:** What is the value of <some superswim constant>? Deadzone? Stick divisor? The
 turnaround angle threshold? Animation wrap points? The strobo band speeds?
 **Status:** validated (decomp + live) unless a row says otherwise.
-**Source:** per-row. This is the single source of truth — other pages link here instead of
+**Source:** per-row. This is the single source of truth - other pages link here instead of
 restating. If a number elsewhere disagrees with this table, this table wins and the other page
 is wrong.
 
@@ -27,7 +27,7 @@ is wrong.
 **Stick distance:** `mStickDistance = clamp((|raw − 128| − 15) / 54, 0, 1)` (cardinal).
 
 **Swim-input gate:** a frame counts as a swim input iff **`mStickDistance > 0.05`**
-(`d_a_player_main`), i.e. `hypot(dz_x, dz_y) > 2.7` after dead-zone removal — a *radial* test,
+(`d_a_player_main`), i.e. `hypot(dz_x, dz_y) > 2.7` after dead-zone removal - a *radial* test,
 not the dz-15 *square*. They differ only on a thin ring (~260 cells) just outside the square where
 one axis is 1–2 past the dead zone but the radial magnitude is still ≤ 0.05; the game blocks the
 tiny gain there. The sim uses this exact gate (`sim.stick_angle_deg` returns `None`), bit-identical
@@ -84,7 +84,7 @@ true_disp        = af_drag(v, anim) / (1 + 0.35·getSwimTimerRate(air))   # full
 | `field_0x7C` | **0.35** | swim-timer drag denominator coeff | decomp; backed out exact from live |
 | `getSwimTimerRate` | `1 − air/900` | air term; decomp `1 − itemTimeCount·0.0011111111` | d_a_player_swim.inc:283 |
 
-**`cM_scos` is the console cosine table, not `math.cos`** — a 4096-entry s16 table, low 4 bits
+**`cM_scos` is the console cosine table, not `math.cos`** - a 4096-entry s16 table, low 4 bits
 truncated (`index >> 4`, no interp). The ~5e-4 error vs true cos is amplified by the high-speed
 exit and the x598 scramble; using `math.cos` breaks bit-exactness. See [glossary](glossary.md#cm_scos).
 
@@ -94,7 +94,7 @@ exit and the x598 scramble; using `math.cos` breaks bit-exactness. See [glossary
 |----------|-------|--------|
 | Max air | **900** | reset on swim entry (`changeSwimProc`, d_a_player_swim.inc:126) | 
 | Air drain | **−1 / frame** | live |
-| Cold-swim air budget | **≈ 900 frames** | 900 air ÷ 1/frame — a cold cruise from full air lasts this long before drowning; the planner enforces it (`allow_drown=False`) | derived |
+| Cold-swim air budget | **≈ 900 frames** | 900 air ÷ 1/frame - a cold cruise from full air lasts this long before drowning; the planner enforces it (`allow_drown=False`) | derived |
 
 ## Turnaround / arrow angular budget
 
@@ -122,14 +122,14 @@ The legacy "−850 / −1650" community figures are the same bands, off by the a
 
 | Constant | Value | Meaning | Source |
 |----------|-------|---------|--------|
-| `charge_disp_factor` | **0.9466** | charge frames move ~5.3% LESS than ESS at the same (v,anim,air) | live (band 2 only — revalidate far from −1630) |
+| `charge_disp_factor` | **0.9466** | charge frames move ~5.3% LESS than ESS at the same (v,anim,air) | live (band 2 only - revalidate far from −1630) |
 | `avg_ess_rate` | `(4+3π)/(5π)` | mean fraction of speed retained as displacement while ESSing | tool closed-form |
 
 ## Collision (player wall cylinders)
 
 | Constant | Value | Meaning | Source |
 |----------|-------|---------|--------|
-| Wall radius | **35.0** | player wall-collision cylinder radius (standing/walking) — the "must-clear" distance for a seam clip | decomp `daPy_lk_c::setBgCheckParam` (d_a_player_main.cpp:10715) |
+| Wall radius | **35.0** | player wall-collision cylinder radius (standing/walking) - the "must-clear" distance for a seam clip | decomp `daPy_lk_c::setBgCheckParam` (d_a_player_main.cpp:10715) |
 | Wall cylinder heights | **30.1 / 89.9 / 125.0** | the 3 `dBgS_AcchCir` heights above Link at which LineCheck/WallCorrect probe | decomp same fn |
 | Point-in-triangle tolerance | **±20.0** (area units) | `cM3d_CrossX/Y/Z_Tri` signed-area edge slack, both windings | decomp `c_m3d.cpp` |
 | `cM3d_IsZero` (kZero) | **1e-5** | float "is zero" threshold in the collision math | decomp `c_m3d.h` |
@@ -153,7 +153,7 @@ cylinder above. All live-confirmed on GZLJ01 (2026-07-06).
 | Co deadzone | **1e-5** (`cM3d_IsZero(cross_len)`) | `dCcS::SetPosCorrect` skip threshold (base `cCcS` uses 1/125) | decomp `d_cc_s.cpp:190` |
 
 The **game uses `dCcS::SetPosCorrect`** (virtual override, JP 0x800AB1E4), whose weight split is the
-`rank_tbl` above — NOT the base `cCcS` mass-proportional split (JP 0x8024101C, never fires live).
+`rank_tbl` above - NOT the base `cCcS` mass-proportional split (JP 0x8024101C, never fires live).
 
 <a id="land-sword-cut-roll-stab"></a>
 ## Land sword-cut (roll stab)
@@ -172,11 +172,15 @@ GZLJ01 savestate 7, 2026-07-06). Only the joint-0 (root) translate of `cutf.bck`
 | decel maxStep / minStep / scale | **0.95** / 0.5 / 0.7 | **2.6** / 0.5 / 0.7 | `cLib_addCalc` (field_0x18/0x1C/0x20) |
 | early-exit frame → WAIT | **17.0** | 16.0 | `getFrame() > field_0xC` → `checkNextMode(1)` |
 | first-frame lunge (from a 26 roll) | **49.220** | 49.220 | `speedF 26 + m3700.z(4.0)=23.220` (posMove m34C2==1) |
+| diagonal-aim turn (scale/max/min) | 30 / 0x3CDF / **0x1F40** | same | `cLib_addCalcAngleS(shape, m34D4, mTurn.f4/f0/f2)`; min ≫ diff → snap |
+| in-line thrust aim range (`CUT_DIR_FWD`) | **0x2000** | 0x2000 | `\|aim − roll_facing\| < this` stays CUT_F (`getDirectionFromAngle`); else CUT_L/R |
 
 The lunge = `speedF` (foot term, along `current.angle.y`) + the root-translate delta `m3700(t)−m3700(t−1)`
 (rotated by `shape_angle.y`); `m3700` is reset to 0 in `procCut*_init`, so frame 1 stacks the full root
-translate onto the carried roll speed. See [land-movement.md](../mechanics/roll-stab.md)
-and [seam-clip.md](../mechanics/seam-clip.md).
+translate onto the carried roll speed. A **diagonal thrust** (roll straight, aim the stick + B) latches
+`m34D4` and snaps `shape=travel` to it on the first cut proc frame, rotating the tail by the aim while
+the 49.22 lunge stays along the roll facing (the diagonal 49.22 needs an aimed *roll*, live 2026-07-07).
+See [roll-stab.md](../mechanics/roll-stab.md) and [seam-clip.md](../mechanics/seam-clip.md).
 
 <a id="land-movement"></a>
 ## Land movement (walk / roll / ATN / hops)
@@ -225,7 +229,7 @@ The big-reversal ground-turn constants. Decomp `mSlip`/`mTurn`/`mMove`; see
 | WaitTurn facing pivot `mTurn.0x4/0x0/0x2` | `cLib_addCalcAngleS(scale 30, max 0x3CDF, min 0x1F40)` → ~0x1F40 (≈8000)/frame | |
 | MoveTurn facing sweep `cLib_addCalcAngleS(scale,max,min)` | 1-path 2 / (F0·4+0x4A56) / (F0·2) · slip-exit 3 / (F0·2) / F0 | F0 = `mMove.field_0x0` = 3000 |
 
-## Camera (steering) — summary (full table migrates with the camera topic)
+## Camera (steering) - summary (full table migrates with the camera topic)
 
 | Constant | Value | Meaning | Source |
 |----------|-------|---------|--------|

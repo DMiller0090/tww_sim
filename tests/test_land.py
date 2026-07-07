@@ -387,6 +387,58 @@ def test_rollstab_cut_bit_exact(cut):
     assert s.state in (WAIT, FREE_WAIT), f"{cut} should end in WAIT idle, got state {s.state}"
 
 
+@pytest.mark.skipif(not _CUTS, reason="cut keyframe data not present")
+@pytest.mark.parametrize("cut", ["CUT_F", "CUT_A"])
+def test_rollstab_diag_model_invariants(cut):
+    """The DIAGONAL thrust model (roll straight, aim the cut). Locks the decomp facts without needing
+    live data: (a) aim == roll facing is a no-op (bit-exact vs the default straight cut); (b) the entry
+    LUNGE is bit-exact independent of aim (procCutF has not run on the init frame -> shape unchanged);
+    (c) the first cut proc frame SNAPS facing=travel to the aim in ONE frame (0x1F40 min-step); (d) an
+    aim >= 0x2000 off the facing is rejected (dispatches CUT_L/R, not this cut). See spotcheck_rollstab_diag."""
+    from tww_sim.land.land import CUT_F, CUT_A
+    ct = CUT_F if cut == "CUT_F" else CUT_A
+    g = json.load(open(_CUTS_GOLDEN))[cut]; seed = g["seed"]
+
+    def fresh():
+        return LandState(pos_x=_fbits_hex(seed["px_hex"]), pos_z=_fbits_hex(seed["pz_hex"]),
+                         facing=seed["facing"], travel=seed["travel"], state=FRONT_ROLL,
+                         nspeed=26.0, speedF=26.0, use_anim=False, native=False, sword_drawn=True)
+
+    # (a) aim == facing is exactly the straight cut
+    a, b = fresh(), fresh()
+    la = a.enter_cut(ct); lb = b.enter_cut(ct, aim=seed["facing"])
+    assert f32_bits(a.pos_x) == f32_bits(b.pos_x) and f32_bits(a.pos_z) == f32_bits(b.pos_z)
+
+    # (b) the entry lunge is aim-independent (steer a +8deg diagonal; entry pos unchanged)
+    aim = (seed["facing"] + 0x0600) & 0xFFFF        # ~8.4deg off, well inside the +-0x2000 band
+    c = fresh(); lc = c.enter_cut(ct, aim=aim)
+    assert f32_bits(a.pos_x) == f32_bits(c.pos_x) and f32_bits(a.pos_z) == f32_bits(c.pos_z), \
+        "diagonal aim must NOT move the entry lunge (it fires along the roll facing)"
+    assert c.facing == seed["facing"], "shape unchanged on the init frame"
+
+    # (c) first cut proc frame snaps shape=travel to the aim, in one frame, and holds
+    c.step(128, 255)
+    assert c.facing == aim and c.travel == aim, "shape=travel must snap to the aim on the 1st proc frame"
+    c.step(128, 255)
+    assert c.facing == aim, "and hold there"
+
+    # (d) out-of-range aim is rejected (would be CUT_L / CUT_R)
+    d = fresh()
+    with pytest.raises(ValueError):
+        d.enter_cut(ct, aim=(seed["facing"] + 0x2000) & 0xFFFF)
+
+    # (e) AIMED-ROLL technique: a diagonal roll facing puts the 49.22 lunge along that facing (the
+    # only way to steer the big lunge; a forward roll can't). The lunge vector angle == the facing.
+    import math
+    theta = (seed["facing"] + 0x1000) & 0xFFFF      # +22.5deg roll
+    e = LandState(pos_x=0.0, pos_z=0.0, facing=theta, travel=theta, state=FRONT_ROLL,
+                  nspeed=26.0, speedF=26.0, use_anim=False, native=False, sword_drawn=True)
+    ex, ez = e.enter_cut(ct)
+    lunge_ang = int(round(math.degrees(math.atan2(ex, ez)) / 360.0 * 65536)) & 0xFFFF
+    dth = ((lunge_ang - theta + 32768) % 65536) - 32768
+    assert abs(dth) < 0x0080, "aimed-roll lunge must fire along the roll facing"
+
+
 def test_rollstab_first_frame_lunge_reaches_seam_floor():
     # The clip-relevant fact, robust WITHOUT the anim data: the roll-stab's first CUT frame displaces far
     # past the ~35u seam-clip floor (live 49.22u). Here we assert the modeled value with the anim data.

@@ -63,7 +63,10 @@ class _RollMixin:
         held (procAtnMove_init), else MOVE (procMove_init) with the walk re-entry morf; the walk blend
         re-inits its frame ctrl to 0 because the roll left m34C3==0 (see enter_roll)."""
         if self._b_held and self.sword_drawn:
-            self._cut_init(CUT_A if l_held else CUT_F)
+            # aim = mProcVar2.m34D4 = sVar2 (changeCutProc): the stick target m34E8 when pushed & unlocked,
+            # else shape_angle.y. A diagonal stick at the thrust rotates the cut tail (see _cut_init).
+            aim = self.target if (self.msd > 0.05 and not l_held) else self.facing
+            self._cut_init(CUT_A if l_held else CUT_F, aim=aim)
             return
         self._check_next_mode(l_held)            # sets state (MOVE/ATN_MOVE) + mMaxNormalSpeed
         if self.state == MOVE and self._foot is not None:

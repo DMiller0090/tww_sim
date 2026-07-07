@@ -8,7 +8,7 @@ The "roll stab": a cut dispatched out of a roll carries the roll's speedF into a
 from __future__ import annotations
 from ...core import mathlib as S
 from ...core.mathlib import f32, cLib_addCalc
-from ..constants import WAIT, CUT_F, _cM_ssin_s16
+from ..constants import WAIT, CUT_F, _cM_ssin_s16, cLib_addCalcAngleS, _dist_angle_s
 
 
 class _CutMixin:
@@ -36,14 +36,20 @@ class _CutMixin:
         t = _J.calc_transform(self._cut_anim(cut_type), 0, frame)['translate']
         return (f32(t[0]), f32(t[1]), f32(t[2]))
 
-    def _cut_init(self, cut_type):
+    def _cut_init(self, cut_type, aim=None):
         """procCutF_init / procCutA_init (d_a_player_sword.inc:660/430): setSingleMoveAnime(ANM_CUT*,
         rate=1.2, start=4.0, ...); m3700 = 0; m34C2 = 1. mNormalSpeed keeps the entry value (the roll's
-        carried speedF) this frame. current.angle.y = shape_angle.y (travel snaps to facing)."""
+        carried speedF) this frame. current.angle.y = shape_angle.y (travel snaps to facing).
+
+        `aim` = mProcVar2.m34D4 (the thrust's latched aim, param_0 in changeCutProc = sVar2 = the stick
+        target m34E8 when the stick is pushed & unlocked, else shape_angle.y). None -> straight-forward
+        (aim == the roll facing): shape never turns, the classic in-line lunge. A diagonal aim snaps
+        shape=travel to it on the FIRST proc frame (see _proc_cut), rotating the whole tail."""
         self.state = cut_type
         self.cut_frame = self.CUT_START
         self._cut_entered = True
         self._cut_m3700 = (0.0, 0.0, 0.0)        # m3700 = cXyz::Zero in init
+        self.cut_target = self.facing if aim is None else (int(aim) & 0xFFFF)   # mProcVar2.m34D4
         self.travel = self.facing                # current.angle.y = shape_angle.y (procCutF sets it)
         # No foot-engine pose: the cut anim isn't a foot-chain walk anim and m3598 stays 0 (speedF==nspeed),
         # so position = joint-0 root lunge (_cut_m3700_at) + mNormalSpeed. Toe stream freezes (see the KB).
@@ -70,6 +76,12 @@ class _CutMixin:
             if self._foot is not None:
                 self._foot._pending_morf = self.MOVE_REENTRY_MORF
             return
+        # Diagonal-thrust aim (procCutF/A, after the exit check): snap shape=travel toward the latched
+        # m34D4 (rotates the tail; entry lunge stayed in-line). KB mechanics/roll-stab.md (Steering).
+        if self.cut_target is not None and self.cut_target != self.facing:
+            self.facing = cLib_addCalcAngleS(self.facing, self.cut_target, self.CUT_TURN_SCALE,
+                                             self.CUT_TURN_MAX, self.CUT_TURN_MIN)
+        self.travel = self.facing
         # checkPass(field_0x28): launch mNormalSpeed off the pre-cut speedF
         if self._checkpass_none(fc, self.CUT_RATE, self.CUT_START, self.CUT_END, self.CUT_PASS):
             self.nspeed = f32(f32(abs(self.speedF) * self.CUT_LAUNCH_MUL) + self.CUT_LAUNCH_ADD[ct])
@@ -89,16 +101,26 @@ class _CutMixin:
             return cur <= pass_frame and pass_frame < nxt
         return nxt <= pass_frame and pass_frame < cur
 
-    def enter_cut(self, cut_type=CUT_F):
+    def enter_cut(self, cut_type=CUT_F, aim=None):
         """Programmatic roll-stab: run the CUT's ENTRY frame from the current state (mirrors the game's
         procCut*_init frame, dispatched out of a roll). Carries the current speedF into the first-frame
         lunge = speedF (foot term, m3598==0) + the ANM_CUT joint-0 root translate at frame 4.0 (m3700,
         reset to 0 in init) -- the ~49.22u single-frame move that reaches the seam-clip floor. Advance the
         rest of the animation with step() (which dispatches _proc_cut) until it returns to WAIT (idle).
+
+        `aim` (s16 world angle) = the DIAGONAL-thrust aim (mProcVar2.m34D4 = the stick target m34E8 sampled
+        at the thrust frame). None -> a straight in-line thrust (aim == the roll facing). The entry lunge
+        always fires along the roll facing; a diagonal aim only rotates the CUT TAIL (shape snaps to it on
+        the first proc frame). Fires CUT_F only while |aim - facing| < CUT_DIR_FWD (0x2000 = 45deg); a
+        larger aim would dispatch CUT_L / CUT_R instead (getDirectionFromAngle) -- caller must respect that.
         Returns the entry-frame (dx, dz). Requires native=False (the cut is a Python-path proc)."""
         if self._core is not None:
             raise RuntimeError("enter_cut is a Python-path proc; construct LandState(native=False)")
-        self._cut_init(cut_type)                     # state=CUT*, cut_frame=4.0, m3700_prev=0, travel=facing
+        if aim is not None and _dist_angle_s(int(aim) & 0xFFFF, self.facing) >= self.CUT_DIR_FWD:
+            raise ValueError("aim %d is >= 0x2000 off the roll facing %d -> dispatches CUT_L/R, not %s; "
+                             "the in-line CUT_F/A range is +-0x2000 (45deg)" % (int(aim) & 0xFFFF,
+                             self.facing, "CUT_F" if cut_type == CUT_F else "CUT_A"))
+        self._cut_init(cut_type, aim=aim)            # state=CUT*, cut_frame=4.0, m3700_prev=0, travel=facing
         # --- entry frame pos update (mirrors the step() pos-block CUT branch) ---
         self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
         m3700 = self._cut_m3700_at(cut_type, self.cut_frame)
