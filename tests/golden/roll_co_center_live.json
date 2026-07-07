@@ -1,0 +1,24 @@
+{
+  "_comment": "LIVE golden: Link's FRONT_ROLL body Co cylinder centre, captured on GZLJ01 (flooded Hyrule, 2026-07-06) with Link rolling PINNED against a wall so current.pos and shape_angle.y are constant and only the rollf pose moves mCyl's centre. Isolates daPy_lk_c::setCollision spD0.x/z = 0.5*(root+neck world joint XZ). Each row: [anim_frame (mFrameCtrlUnder[MOVE0]), live mCyl.center.x, live mCyl.center.z]. Roll entry (frame 0..~11) carries an oldframe-morf transient toward the pre-roll running pose; the clean-pose port is bit-exact once it settles (frames >~11). See tww_sim/core/anim/body_cyl.py + knowledge/mechanics/actor-push.md.",
+  "game": "GZLJ01",
+  "pos": [-1692.3140869140625, 0.16327035427093506, -955.1008911132812],
+  "shape_angle_y": 39507,
+  "cyl_R": 30.0,
+  "cyl_H": 81.25,
+  "frames": [
+    [0.0, -1699.3148, -964.7698],
+    [1.100000023841858, -1697.8843, -961.7236],
+    [2.200000047683716, -1699.4498, -965.0698],
+    [3.3000001907348633, -1702.1602, -972.1182],
+    [4.400000095367432, -1703.6716, -977.0936],
+    [5.5, -1709.1736, -981.5477],
+    [6.599999904632568, -1708.3596, -975.4545],
+    [7.699999809265137, -1703.4470, -967.5155],
+    [8.800000190734863, -1701.3218, -964.3842],
+    [9.90000057220459, -1697.4368, -960.3506],
+    [11.000000953674316, -1692.5947, -954.0175],
+    [12.100001335144043, -1688.9109, -947.5093],
+    [13.20000171661377, -1686.7205, -942.4386],
+    [14.300002098083496, -1687.6146, -942.1675]
+  ]
+}

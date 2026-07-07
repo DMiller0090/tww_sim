@@ -7,7 +7,10 @@ Tetra push supply the extra displacement a seam clip needs when the roll/thrust 
 reproduces the game on GZLJ01. The overlap math (`cM3d_Cross_CylCyl`) matches 60/60; the weight split
 is the **`dCcS::SetPosCorrect` rank table** (NOT the base `cCcS` mass-proportional split), confirmed
 by a live `m_cc_move` capture (`|Link.cc| / |Tetra.cc| = 1.0000` every frame → exact 50/50). Tetra's
-cylinder+weight and Link's cylinder are read live (Hyrule, GZLJ01, 2026-07-06).
+cylinder+weight and Link's cylinder are read live (Hyrule, GZLJ01, 2026-07-06). Link's **animated
+cylinder center** (root+neck joint midpoint) is a decomp-faithful anim-engine port
+([`body_cyl.roll_co_center`](../../tww_sim/core/anim/body_cyl.py)), **live-validated bit-exact** vs the
+game's `mCyl` centre during a FRONT_ROLL (2026-07-06).
 **Source:** decomp `dCcS::SetPosCorrect` / `dCcS::GetRank` / `rank_tbl` (`d_cc_s.cpp:138/153/180`),
 `cM3d_Cross_CylCyl` (`c_m3d.cpp:1553`), `cCcD_Stts::PlusCcMove` (`c_cc_d.cpp`), `daPy_lk_c::posMove`
 + `daPy_lk_c::setCollision` (`d_a_player_main.cpp:9748`) + player/Tetra weights (`:11233`,
@@ -47,9 +50,15 @@ his share on the **next** frame, before his own movement and before the wall che
 - **Link** weight **120** → `GetRank(120) = 5`. Body Co cylinder (`daPy_lk_c::setCollision`):
   **R = 30** while walking/rolling (`SetR(50)` *only* when `checkGrabWear()`, i.e. carrying/wearing
   an item); H ≈ `40.1 + (neck_jnt − toe_jnt)` ≈ 107 walking (81.25 in FRONT_ROLL). Its **center is
-  the horizontal midpoint of the root & neck joints** (from the animated skeleton — it *sways with
-  the walk*, live offset ~16–22 u from `current.pos`), vertical = the lower toe joint (FRONT_ROLL:
-  `= current.pos.y`). So Link's Co cylinder is **animation-driven**, not feet-centered.
+  the horizontal midpoint of the root & neck joints** (`0.5·(root+neck)` of the *world* anim matrices
+  `getAnmMtx(joint)[0/2][3]`, d_a_player_main.cpp:9753-9754), vertical = the lower toe joint
+  (FRONT_ROLL: `= current.pos.y`). So Link's Co cylinder is **animation-driven**, not feet-centered:
+  it sways ~16–22 u from `current.pos` while walking and, during a **FRONT_ROLL lunge, leads the feet
+  by 10–31 u** (peaks ~frame 5–6 of the roll). The offline port
+  [`tww_sim/core/anim/body_cyl.roll_co_center(pos, facing, frame)`](../../tww_sim/core/anim/body_cyl.py)
+  runs the same world-space FK the walk foot chain uses and is **live-validated bit-exact** (GZLJ01,
+  Link rolling pinned at a wall so pos/facing were constant; < 1 ULP once the roll-entry oldframe-morf
+  transient settles, ≤0.27 u residual on the first ~10 frames — see the module + `tests/test_body_cyl.py`).
 - **Tetra** (NPC `Zl1`) body Co cylinder **R = 50, H = 140, center = `current.pos`** (feet). Weight
   is `0xFF` (immovable, GetRank 10) by default in `createInit`, but **`0x8C` = 140 (GetRank 5)** for
   the `field_0x84F == 5` variant — and the **flooded-Hyrule Tetra is live-confirmed as that variant**
@@ -82,10 +91,19 @@ toward the corner does **not** clip alone; a Tetra overlap of **≈1.23 u** (pus
 non-monotonic — it first clips near disp ≈49.78 u.) The Tetra nudge still comfortably supplies the
 missing displacement; it just needs ~2× the overlap the (wrong) 0.538 model implied.
 
-> **Geometry caveat.** Because Link's Co cylinder is animation-driven (R=30, center = joint midpoint,
-> not the feet), the clip pipeline uses `old` (settled feet) as Link's cyl center as a first-order
-> proxy. An exact placement/timing solve needs the roll pose from the anim engine to get the true
-> cylinder center on the clip frame.
+> **Where the animated center matters.** The **overlap depth** (and so the push magnitude, ≈1.23 u /
+> ≈0.615 u above) is *placement-invariant*: the solver puts Tetra directly behind Link colinear with
+> the thrust, so `unit(center − tetra)` is the thrust direction and the depth is exactly the swept
+> overlap regardless of where the center sits. What the animated center **does** change is the
+> **physical world position Tetra must occupy** to realise that overlap — she stands behind the
+> *cylinder center*, not the feet, so at the lunge peak (frame ~5–6, center 31 u ahead of the feet)
+> the required Tetra position shifts **~31 u** further along the roll from the feet-proxy spot. Pass
+> `link_center=body_cyl.roll_co_center(pos, facing, frame)` to `clip_with_push` / `solve_min_overlap`
+> to place her correctly (the returned `tetra_xz`); omit it for the feet proxy. It also matters for a
+> **fixed** Tetra (spawned at a set world point, not placed optimally), where the true center changes
+> both the depth and the push direction. Still open (per handoff): the **real** per-frame roll+thrust
+> displacement (from the land sim) in place of the 49.22 u proxy, and *which* roll frame is the clip
+> frame (which fixes both the thrust and the center to use).
 
 ## Frame-lag caveat for setups
 
