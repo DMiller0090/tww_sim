@@ -12,7 +12,7 @@ limit before it breaks? How does the cross-track drift scale? What is the arrow 
 
 Instead of charging straight back-and-forth, you **tilt the alternation axis toward the target**.
 Link still snaps 180° each frame (see [turnaround](turnaround.md)), but now each pair of snaps
-points slightly toward the destination, so he **drifts toward it while still building speed** —
+points slightly toward the destination, so he **drifts toward it while still building speed**,
 forming the "tip of an arrow" pointing at the target. You trade charge rate for early progress.
 
 ## The closed-form model (parameterized by tilt α)
@@ -28,7 +28,7 @@ disp           = charge_disp_factor · true_disp(v, anim, air)
 ```
 
 So tilting trades **charge rate (`cos 2α`)** for steady **cross-track drift (`sin α`)**.
-`mStickDistance` stays capped at 1 — **tilt changes the cosine (the snap angle), not the
+`mStickDistance` stays capped at 1: **tilt changes the cosine (the snap angle), not the
 magnitude**. The decomp gain `delta = mStickDistance·3·cos(Δfacing)` is frame-exact.
 
 ### Live match
@@ -53,7 +53,7 @@ magnitude**. The decomp gain `delta = mStickDistance·3·cos(Δfacing)` is frame
 
 **Usable α ∈ [0°, ~20°]** (up to Xbias ≈ 180–190). Past that the two alternation targets fall
 within 135° of each other, the backward snap dies (see [turnaround](turnaround.md#beyond-the-budget-gradual-turn)),
-and the stick drives a **forward release** — speed LOSS with a large forward displacement. This is
+and the stick drives a **forward release**: speed LOSS with a large forward displacement. This is
 the same **45° angular budget** as the turnaround snap, expressed as a stick tilt.
 
 ## Arrow spin-up cost (2 frames)
@@ -64,7 +64,7 @@ frames**. A planner must charge this cost, or it will pick short arrow phases th
 
 ## Stick angle (why the dead zone matters)
 
-The tilt the game reads is **not** raw `atan2(ax, −ay)` — a **per-axis dead zone of 15** (the same
+The tilt the game reads is **not** raw `atan2(ax, −ay)`: a **per-axis dead zone of 15** (the same
 constant as the [decay curve](../reference/constants.md#stick-geometry)) is removed first. That is
 what makes a partial-Y arrow stick read the correct tilt: `(0,96)` → α ≈ 8° (raw atan2 would give
 ~14°). For an on-axis stick the closed form is exact; off-axis, the exact `mMainStickAngle` is read
@@ -78,16 +78,17 @@ closed form at the deadzone boundary and octagon. That table's `stick_dist`/`val
 `K = camAngle`). Stick→angle: `stickAngle = atan2(ax, −ay)` after the dead-zone-15, then
 `m34E8 = stickAngle + 180 + camAngle`; snap iff `|angdiff(m34E8, facing)| > 135°`. The chain
 reproduces facing to ≤ 0.6° and net drift bearing to ~1° live. `reorient_chain()` generalizes to
-any start/target axis via a facing-BFS (it is not hardcoded — see
+any start/target axis via a facing-BFS (it is not hardcoded, see
 [turnaround: reorienting](turnaround.md#reorienting-the-charge-axis-turnaround-chains)).
 
 > The state-54→55 **entry release** (the arrow↔cruise hand-off, live f1 −300→−24) is priced
 > separately by the planner, not inside the stepper.
 
-## Does arrow swimming save time? — NO (offline, exhaustive)
+## Does arrow swimming save time? No (offline, exhaustive)
+<a id="does-arrow-swimming-save-time--no-offline-exhaustive"></a>
 
 **Verdict: no.** An exhaustive offline insertion sweep (2026-07-02, 134 cells) inserted an arrow
-phase at every point of a straight swim — deep build → build→cruise transition → into cruise —
+phase at every point of a straight swim (deep build → build→cruise transition → into cruise)
 across distances 100k/200k/400k/800k, arrow lengths 30–300, and all schedule shapes, comparing
 total frames to the straight continuation from the *same* mid-swim state. **Every cell is a loss;
 zero wins.** Best case is **+4 frames** (400k, deep-build insertion at v≈−1280, length 60); losses
@@ -96,7 +97,7 @@ arrows +45–89).
 
 **Why:** cruising straight points the *whole* velocity at the target (ESS travels backward toward
 it); arrowing spends most speed on the perpendicular alternation axis and only the `sin α` sliver
-drifts toward target — so at any real cruise speed (v≈−300 to −1300) cruise's toward-target rate
+drifts toward target. So at any real cruise speed (v≈−300 to −1300) cruise's toward-target rate
 strictly beats arrow's. Arrow only out-progresses cruise at v≈0 (cold, before cruise spins up), a
 window too short to cover the reorient + [spin-up](#arrow-spin-up-cost-2-frames) overhead. This is
 why the from-cold planner also picks `n_arrow=0` (arrow lost by 2–4 there even with lengths
@@ -108,10 +109,10 @@ action set. It does not cover off-slate geometries, arrow interacting with reboo
 phase, obstacle-forced detours where cross-drift is "free," or any regime the sim itself
 mis-models. The claim is strong and mechanism-backed for the straight open-water swim, not a
 universal proof. If a future route has a lateral offset the straight plan must pay for anyway,
-re-test arrow there — that's the one shape the mechanism above could favor.
+re-test arrow there. That's the one shape the mechanism above could favor.
 
 The only regime not yet live-validated is the **cold entry release** (v≈0, state 54→55,
-[×598 scramble](../reference/glossary.md#x598)) — `ArrowState` is validated charged
+[×598 scramble](../reference/glossary.md#x598)). `ArrowState` is validated charged
 (v≈−300..−1300), not through the cold entry. But that is arrow's *only* near-break-even case and
 it still loses offline, and every high-v cell (validated regime) loses decisively, so a cold-start
 DTM would be confirmation, not an open risk. Sweep data + full write-up:
@@ -126,5 +127,5 @@ frames. (α↔Xbias: Xbias 160 ≈ α 8°, Xbias 180 ≈ α 18°.) See
 
 ## See also
 
-- [Turnaround](turnaround.md) — the snap mechanic and the 45° budget this lives inside.
+- [Turnaround](turnaround.md): the snap mechanic and the 45° budget this lives inside.
 - [Constants](../reference/constants.md#speed-gain-while-charging--arrow-swimming).
