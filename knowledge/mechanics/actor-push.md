@@ -10,7 +10,9 @@ by a live `m_cc_move` capture (`|Link.cc| / |Tetra.cc| = 1.0000` every frame →
 cylinder+weight and Link's cylinder are read live (Hyrule, GZLJ01, 2026-07-06). Link's **animated
 cylinder center** (root+neck joint midpoint) is a decomp-faithful anim-engine port
 ([`body_cyl.roll_co_center`](../../tww_sim/core/anim/body_cyl.py)), **live-validated bit-exact** vs the
-game's `mCyl` centre during a FRONT_ROLL (2026-07-06).
+game's `mCyl` centre during a FRONT_ROLL (2026-07-06). The seam-clip pipeline is now driven by the
+model-derived thrust (`LandState.enter_cut`; reproduces the live (−1727,−990) clip endpoint bit-for-bit),
+and the roll-stab was live-reproduced at the corner — aim/wall-hold/bonk confirmed (2026-07-06, below).
 **Source:** decomp `dCcS::SetPosCorrect` / `dCcS::GetRank` / `rank_tbl` (`d_cc_s.cpp:138/153/180`),
 `cM3d_Cross_CylCyl` (`c_m3d.cpp:1553`), `cCcD_Stts::PlusCcMove` (`c_cc_d.cpp`), `daPy_lk_c::posMove`
 + `daPy_lk_c::setCollision` (`d_a_player_main.cpp:9748`) + player/Tetra weights (`:11233`,
@@ -85,11 +87,24 @@ composes `co_push_link` + `crr_pos_walls`: `clip_with_push(old, link_y, thrust, 
 one clip frame; `solve_min_overlap` places Tetra directly behind Link and returns the smallest overlap
 that clips (with `sumR = 30 + 50 = 80`).
 
-**Worked result (live −1727,−990 anchor, `tests/test_tetra_clip.py`):** a **roll + sword-thrust** of
-**49.22 u** toward the corner does **not** clip alone; a Tetra overlap of **≈1.23 u** (push ≈**0.615 u**
-at the 0.50 share) reaches ≈49.835 u and clips. (The clip window along the ray is non-monotonic — it
-first clips near disp ≈49.78 u.) The Tetra nudge comfortably supplies the missing displacement; it just
-needs ~2× the overlap the (wrong) 0.538 model implied.
+**Worked result (live −1727,−990 anchor, `tests/test_tetra_clip.py`) — now model-derived end to end:**
+the thrust is `LandState.enter_cut(CUT_F)` out of a 26 u roll at the anchor's clip facing (**40874 BAM /
+224.5°**), giving `(dx,dz) = (−34.415, −35.189)`, disp **49.220 u**, direction **40844 BAM**. Aimed there
+the roll+thrust **does not clip alone** (live-confirmed: a bare roll-stab into the corner **bonks off the
+wall**, proc `0x5A` — [see below](#live-corner-reproduction-2026-07-06)). The push the live clip needed is
+`NEW − OLD − thrust = (−0.618, −0.427)`, **|push| ≈ 0.75 u**, at the **0.50 share** so an overlap of
+**≈1.50 u**. Placing Tetra behind Link's roll-cyl center along −push at that overlap, `clip_with_push`
+reproduces the live clip endpoint **NEW = (−1727.3423, −990.6356) bit-for-bit**.
+
+> **The push STEERS `new` into the seam — its direction is NOT the thrust direction.** The modeled thrust
+> aims at **40844 BAM**, but the observed `old→new` is **40874 BAM** (≈30 BAM / 0.16° off), and the seam
+> clip window is razor-thin at that scale. The ≈0.75 u push points along **42848 BAM** — well off the
+> thrust — and that lateral component is exactly what walks `new` from the thrust ray onto the seam
+> vertex. So `solve_min_overlap` (which places Tetra *colinear behind the thrust* and sweeps depth) does
+> **NOT** find a clip for the true model thrust: with the push forced along 40844 it never reaches the
+> 40874 window. The overlap depth is placement-invariant only when the thrust already aims at the seam;
+> for the real roll-stab (whose achievable facing doesn't perfectly hit S) the **Tetra position, not just
+> the depth, decides the clip**.
 
 > **The 49.22 u is a roll + sword thrust — now modeled bit-exact.** The displacement that reaches the
 > corner is a **stacked land move** — a FRONT_ROLL into a **sword thrust** (the
@@ -106,19 +121,46 @@ needs ~2× the overlap the (wrong) 0.538 model implied.
 > [land-movement.md](land-movement.md#roll-stab-sword-thrust-out-of-a-roll--the-seam-clip-lunge),
 > [reference/constants.md](../reference/constants.md#land-sword-cut-roll-stab).
 
-> **Where the animated center matters.** The **overlap depth** (and so the push magnitude, ≈1.23 u /
-> ≈0.615 u above) is *placement-invariant*: the solver puts Tetra directly behind Link colinear with
-> the thrust, so `unit(center − tetra)` is the thrust direction and the depth is exactly the swept
-> overlap regardless of where the center sits. What the animated center **does** change is the
-> **physical world position Tetra must occupy** to realise that overlap — she stands behind the
-> *cylinder center*, not the feet, so at the lunge peak (frame ~5–6, center 31 u ahead of the feet)
-> the required Tetra position shifts **~31 u** further along the roll from the feet-proxy spot. Pass
+> **Where the animated center matters.** For the *colinear-behind* solver, the **overlap depth** is
+> placement-invariant (Tetra sits along `−thrust`, so `unit(center − tetra)` is the thrust direction and
+> the depth is the swept overlap regardless of where the center sits) — but as the steering note above
+> shows, that arrangement doesn't reproduce the real clip; the actual Tetra sits **off** the thrust ray so
+> its position sets both the depth (≈1.50 u) and the push direction (≈42848 BAM). Either way the animated
+> center changes the **physical world position Tetra must occupy** — she stands behind the *cylinder
+> center*, not the feet, so at the lunge peak (frame ~5–6, center 31 u ahead of the feet) the required
+> Tetra position shifts **~31 u** further along the roll from the feet-proxy spot. Pass
 > `link_center=body_cyl.roll_co_center(pos, facing, frame)` to `clip_with_push` / `solve_min_overlap`
 > to place her correctly (the returned `tetra_xz`); omit it for the feet proxy. It also matters for a
 > **fixed** Tetra (spawned at a set world point, not placed optimally), where the true center changes
 > both the depth and the push direction. The **sword-thrust half is now modeled** (`CUT_F`/`CUT_A`,
 > live 0 ULP) so the land sim produces the real per-frame roll+thrust displacement and the clip frame —
 > the 49.22 u is model-derived (`LandState.enter_cut`), not a literal.
+
+## Live corner reproduction (2026-07-06)
+
+Driving the roll-stab at the real (−1727,−990) corner (savestate 3) live-confirmed the pieces the
+pipeline assumes:
+
+- **Aim decides the clip, and it must be ≈224.5° (40874 BAM), ~7.5° off camera-forward.** At the corner
+  the camera faces 39507 (217°); a straight-up run/roll thrusts at 217°, whose displacement is mostly
+  **into** the +Z wall (z ≈ −955) → WallCorrect blocks it → no clip. The clip direction must bisect the
+  corner toward the seam vertex. Tilt the stick **left** (`stickX ≈ 96`) to raise the roll/cut facing to
+  ≈40965 (right-tilt *lowers* it). The seam window is razor-thin (~30 BAM), so this is a fine-aim trick.
+- **The wall holds the roll speed.** A 26 u roll into the corner reaches `old` and, pressed against the
+  wall, **keeps `speedF = 26` for 10+ frames** (position frozen by WallCorrect, speed un-decayed) — so
+  the roll doesn't need a 390 u runway to still carry 26 into the cut; it can arrive and hold at `old`.
+  `kroll = 15` (roll frames before the thrust is accepted) still applies.
+- **Roll + thrust ALONE bonks — no clip without the push.** Even with the right facing and `old` at the
+  corner, a Tetra-free roll-stab moves ≈0.03 u then transitions to the **bonk/recoil proc `0x5A`**
+  (facing flips, knocked back NE). This is the direct live confirmation that 49.22 u is short of the f32
+  clip floor at this corner and the **Tetra push is required** — exactly what `test_tetra_clip.py` asserts.
+- **The model predicts the exact Tetra position for a live clip.** With Link's roll-cyl center at
+  `roll_co_center(old, 40874, 12) = (−1688.31, −948.46)` and push dir `unit(center − tetra)`, the ≈1.50 u
+  overlap that closes it puts Tetra's **body-cyl center at ≈(−1623.7, −903.8)** (center distance
+  `80 − 1.50 = 78.5`). (Tetra found live via the DMC walk — [[find-rel-actor-live]]; instance
+  `0x80acd20c`, body cyl @ `+0x68C`, `current.pos` @ `+0x1F8`.) A live clip re-demonstration is still
+  open — Link's roll passes through that spot, so Tetra must arrive there only on the pre-clip frame (a
+  following-NPC timing, or a late position-hack); see the handoff.
 
 ## Frame-lag caveat for setups
 

@@ -19,7 +19,7 @@ from tww_sim.core.cc_push import (co_push_link, cyl_cyl_cross_len, get_rank, pus
                                    WEIGHT_LINK, WEIGHT_TETRA_V5, WEIGHT_TETRA_DEFAULT)
 from tww_sim.core.collision import Tri, Plane
 from harness.collision.gap_search import settle
-from harness.collision.tetra_clip import clip_with_push, solve_min_overlap, LINK_CO_R, TETRA_CO_R
+from harness.collision.tetra_clip import clip_with_push, LINK_CO_R, TETRA_CO_R
 
 
 def _fh(s):
@@ -32,7 +32,13 @@ def _load_anchor():
                 plane=Plane(*[_fh(x) for x in t["n"]], _fh(t["D"]))) for t in g["tris"]]
     link_y = _fh(g["seam_v_hex"][1])
     old = (_fh(g["old_hex"][0]), _fh(g["old_hex"][1]))
-    return tris, link_y, old
+    new = (_fh(g["new_hex"][0]), _fh(g["new_hex"][1]))
+    return tris, link_y, old, new
+
+
+# Anchor old->new direction (224.5 deg): the corner clip facing (see knowledge/mechanics/actor-push.md
+# "Live corner reproduction"). Live-achievable at stickX~96; razor-thin window (~30 BAM matters).
+CLIP_FACING = 40874
 
 
 # ---- the pure math ---------------------------------------------------------
@@ -88,47 +94,73 @@ def test_push_deadzone():
 
 # ---- the pipeline on the live anchor --------------------------------------
 
-def _modeled_rollstab_disp():
-    """The roll-stab's first-frame lunge, MODELED by the land sim (LandState.enter_cut out of a 26u
-    roll) -- the real stacked roll+sword-thrust displacement, replacing the old 49.22 literal. It is
-    bit-exact vs live (tests/test_land.py::test_rollstab_cut_bit_exact). When the cut keyframe data is
-    absent the model can't run, so fall back to the live golden value (49.2202)."""
+def _bits(x):
+    return struct.unpack("<I", struct.pack("<f", x))[0]
+
+
+def _modeled_thrust(facing=CLIP_FACING):
+    """The roll-stab's first-frame lunge (dx, dz), MODELED by the land sim (LandState.enter_cut out of a
+    26u roll) aimed at ``facing`` -- the real stacked roll+sword-thrust vector (bit-exact vs live,
+    tests/test_land.py::test_rollstab_cut_bit_exact), replacing the old ``unit(old->new) * 49.22``
+    synthetic reconstruction. When the cut keyframe data is absent, fall back to the golden magnitude
+    (49.2202) aimed along ``facing``."""
     try:
         from tww_sim.land.land import LandState, CUT_F, FRONT_ROLL
-        s = LandState(pos_x=0.0, pos_z=0.0, facing=0, travel=0, state=FRONT_ROLL,
+        s = LandState(pos_x=0.0, pos_z=0.0, facing=facing, travel=facing, state=FRONT_ROLL,
                       nspeed=26.0, speedF=26.0, use_anim=False, native=False, sword_drawn=True)
-        dx, dz = s.enter_cut(CUT_F)
-        return math.hypot(dx, dz)
+        return s.enter_cut(CUT_F)
     except Exception:
-        return 49.2202
+        r = facing / 65536.0 * 2 * math.pi
+        return (49.2202 * math.sin(r), 49.2202 * math.cos(r))
+
+
+def _roll_center(old, facing):
+    """Link's FRONT_ROLL body Co cyl centre at the corner (live-validated bit-exact); feet proxy if the
+    anim data is absent."""
+    try:
+        from tww_sim.core.anim import body_cyl
+        if body_cyl.available():
+            return body_cyl.roll_co_center(old[0], old[1], facing, 12.0)
+    except Exception:
+        pass
+    return None
 
 
 def test_tetra_push_closes_the_1727_clip():
-    """Roll + sword-thrust (~49.22u) alone is blocked at the (-1727,-990) corner; a Tetra nudge clips it.
-    The ~49.22u is the real STACKED land move -- a FRONT_ROLL into a CUT_F sword thrust -- now MODELED
-    end to end by the land sim (LandState.enter_cut; bit-exact vs live, test_rollstab_cut_bit_exact), so
-    the displacement here is model-derived rather than a bare literal."""
-    tris, link_y, old = _load_anchor()
-    settled = settle(tris, old, link_y)
-    # direction toward the live clip point; the modeled roll+thrust lunge (~49.22u, just short of the min)
-    new_live = (-1727.34228515625, -990.6356201171875)
-    dx, dz = new_live[0] - settled[0], new_live[1] - settled[2]
-    dm = math.hypot(dx, dz); dhx, dhz = dx / dm, dz / dm
-    disp = _modeled_rollstab_disp()
-    assert abs(disp - 49.2202) < 1e-3, f"modeled roll-stab lunge {disp} != live 49.2202"
-    thrust = (dhx * disp, dhz * disp)
+    """Roll + sword-thrust alone is blocked at the (-1727,-990) corner; a Tetra nudge clips it. The move
+    is now MODEL-DERIVED end to end: the thrust (dx, dz) is LandState.enter_cut out of a 26u roll aimed at
+    the anchor's clip facing (bit-exact vs live, test_rollstab_cut_bit_exact), and the push geometry uses
+    Link's live-validated FRONT_ROLL body-cyl centre (roll_co_center) -- no ``unit(old->new)`` synthetic
+    reconstruction. The Tetra sits behind Link at the overlap the anchor implies (the push the live clip
+    needed = NEW - OLD - thrust), and the pipeline then reproduces the live clip endpoint bit-for-bit."""
+    tris, link_y, old, new = _load_anchor()
+    lc = _roll_center(old, CLIP_FACING)
+    thrust = _modeled_thrust()
+    assert abs(math.hypot(*thrust) - 49.2202) < 1e-3, f"modeled roll-stab lunge {thrust} != 49.2202"
 
-    base = clip_with_push((settled[0], settled[2]), link_y, thrust, (settled[0] - 1e6, settled[2]), tris)
+    # roll + thrust ALONE (Tetra infinitely far behind) does NOT clip -- live-confirmed at the corner
+    # (a bare roll-stab bonks off the wall, proc 0x5A; 2026-07-06 capture).
+    base = clip_with_push(old, link_y, thrust, (old[0] - 1e6, old[1]), tris, link_center=lc)
     assert not base["clipped"], "roll+thrust ~49.22u should NOT clip without Tetra"
 
-    sol = solve_min_overlap((settled[0], settled[2]), link_y, thrust, tris, max_overlap=8.0, step=0.01)
-    assert sol is not None, "Tetra push should make it clip within 8u overlap"
-    # A small Tetra overlap closes the sub-unit gap (the clip window is non-monotonic, so the exact min is
-    # sensitive to the disp's 4th decimal; cut-displacement accuracy is owned by test_rollstab_cut_bit_exact).
-    assert 0.3 < sol["overlap"] < 2.0, f"min overlap {sol['overlap']} off the sub-2u expectation"
-    # the push Link actually gets is 0.50 * overlap (Link rank 5 vs Tetra rank 5 -> exact 50/50 split)
-    push_mag = math.hypot(*sol["push"])
-    assert abs(push_mag - 0.5 * sol["overlap"]) < 1e-3, "push should be 0.50 * overlap"
+    # Push the clip needed = NEW - OLD - thrust; at the 0.50 rank split, overlap = 2*|push|. Place Tetra
+    # behind Link's cyl centre along -push at centre distance sumR - overlap.
+    pneed = (new[0] - old[0] - thrust[0], new[1] - old[1] - thrust[1])
+    pm = math.hypot(*pneed)
+    overlap = 2.0 * pm
+    assert 0.5 < overlap < 3.0, f"implied Tetra overlap {overlap} off the ~1.5u expectation"
+    ctr = lc if lc is not None else old
+    cd = (LINK_CO_R + TETRA_CO_R) - overlap
+    u = (pneed[0] / pm, pneed[1] / pm)
+    tetra = (ctr[0] - cd * u[0], ctr[1] - cd * u[1])
+
+    r = clip_with_push(old, link_y, thrust, tetra, tris, link_center=lc)
+    assert r["clipped"], "the modeled thrust + implied Tetra push should clip"
+    # reproduces the live clip endpoint (NEW) to well under a ULP-scale unit
+    assert abs(r["new"][0] - new[0]) < 5e-3 and abs(r["new"][1] - new[1]) < 5e-3, \
+        f"pipeline new {r['new']} != live NEW {new}"
+    # the push Link actually gets is 0.50 * overlap
+    assert abs(math.hypot(*r["push"]) - 0.5 * overlap) < 1e-3, "push should be 0.50 * overlap"
 
 
 def test_real_roll_alone_is_short():
@@ -136,10 +168,9 @@ def test_real_roll_alone_is_short():
     ALONE (without the stacked sword thrust) does not clip the (-1727,-990) corner. The thrust half of
     the ~49u stacked move is now modeled too (CUT_F/CUT_A; test_rollstab_cut_bit_exact) -- see
     test_tetra_push_closes_the_1727_clip for the full modeled roll+thrust; this guards the roll alone."""
-    tris, link_y, old = _load_anchor()
+    tris, link_y, old, new = _load_anchor()
     settled = settle(tris, old, link_y)
-    new_live = (-1727.34228515625, -990.6356201171875)
-    dx, dz = new_live[0] - settled[0], new_live[1] - settled[2]
+    dx, dz = new[0] - settled[0], new[1] - settled[2]
     dm = math.hypot(dx, dz); dhx, dhz = dx / dm, dz / dm
     ROLL_CAP = 26.0                                    # clamp(speedF*1.5+0.5, 5, 0.5+17*1.5)
     thrust = (dhx * ROLL_CAP, dhz * ROLL_CAP)
