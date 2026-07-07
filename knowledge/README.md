@@ -60,6 +60,7 @@ you can triage in one glance.
 ### Collision geometry
 - **How is stage/room collision stored in RAM (the DZB triangle mesh) / how do I reach it from a global / the vertex+triangle layout / ground vs wall vs roof / how do I view the live collision mesh in 3D?** → [mechanics/collision.md](mechanics/collision.md)
 - **Why do seam clips work (walking/rolling through a wall corner) / the float-precision root cause / why ≥~36 u + corner >90° + vertical walls / how do I predict one?** → [mechanics/seam-clip.md](mechanics/seam-clip.md)
+- **How does an actor push Link (the Tetra "nudge") / cyl-cyl overlap + weight split / can it supply the extra displacement for a seam clip?** → [mechanics/actor-push.md](mechanics/actor-push.md)
 
 ### Ocean world, refills & routing
 - **How is the sea laid out / why is only one island loaded / what's a sploosh zone / why route around quadrants?** → [mechanics/ocean-environment.md](mechanics/ocean-environment.md)
