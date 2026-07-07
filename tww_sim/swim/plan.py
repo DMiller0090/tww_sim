@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-superswim_plan.py - Unified-DP full-swim planner (skeleton).
+tww_sim/swim/plan.py - Unified-DP full-swim planner (skeleton).
 
 ONE shortest-path / forward-DP search over the whole swim, replacing the stacked
-per-phase optimizers in superswim_optimize.py. Phases are *transition functions*
-on a shared SwimState (superswim_sim.py), NOT nested search loops: adding a phase
+per-phase optimizers in tww_sim/swim/optimize.py. Phases are *transition functions*
+on a shared SwimState (tww_sim/swim/sim.py), NOT nested search loops: adding a phase
 == adding actions, ~free. See HANDOFF.md "NEXT BIG ITEM" and KNOWLEDGE.md
 §5 for the agreed design.
 
@@ -20,7 +20,7 @@ DOMINANCE (the pruning that makes it tractable):
   heading parity, and all the 54<->55 transition-lag fields) evolve identically
   forever. For min-frames-to-dest, among same-sig states the one with greater
   forward progress (-x) reaches the destination no later, so we keep only that one.
-  sig() is reused verbatim from superswim_optimize so the skeleton can't silently
+  sig() is reused verbatim from swim.optimize so the skeleton can't silently
   diverge from the validated min-frames optimizer (see selfcheck below).
 
 THE BLOWUP RISK IS x598, NOT PHASE COUNT (HANDOFF):
@@ -47,7 +47,7 @@ ACTIONS / PHASES (pluggable):
                           2-D heading + live validation first. See ARROW_TODO below.
 
 Usage:
-  py superswim_plan.py dest=D [v=-1630] [air=900] [anim=18.148]
+  python -m tww_sim.swim.plan dest=D [v=-1630] [air=900] [anim=18.148]
                        [phases=cruise,endgame] [max_frontier=8000] [selfcheck=1]
                        [viz=plan.html]
   Prints: per-layer frontier stats, the min-frames schedule, a dolphin seq string.
@@ -152,7 +152,7 @@ def plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),
       'astar'   (default) keep smallest _hcost -> rewards holding speed; required
                 for long (300+ frame) horizons or the myopic prune returns plans
                 WORSE than pure ESS (neutral-heavy, speed bled off -2/fr).
-      'forward' keep farthest -x -> matches superswim_optimize.beam_search_to_dest
+      'forward' keep farthest -x -> matches swim.optimize.beam_search_to_dest
                 exactly (use for selfcheck / short windows that don't cap hard).
     `cap` bounds the horizon (max frames before giving up).
 
@@ -663,7 +663,7 @@ def report_frontier(sizes, capped_layers):
 
 def selfcheck(dest, v, anim, air):
     """Prove the skeleton hasn't regressed the validated min-frames optimizer:
-    the DP (cruise+endgame) must match superswim_optimize.beam_search_to_dest frame
+    the DP (cruise+endgame) must match swim.optimize.beam_search_to_dest frame
     count on the same seed. (That result was live-confirmed frame-exact, 2026-06-27.)"""
     from .optimize import beam_search_to_dest
     r = plan_min_frames(dest, v, anim, air, actions=('ess', 'chg', 'neu'),

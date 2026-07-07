@@ -21,7 +21,7 @@ SCOPE: the normal flat, on-axis, free walk from a FREEB standing idle (the land_
 One walk burst. Attention/heavy/slope/ice, and re-entering idle after a stop, are future tiers.
 
 Requires the gitignored _generated/anim keyframe data (Link.arc/LkAnm.arc, dev-supplied); if it is
-absent `FootSpeedF()` raises and superswim.land falls back to its calibrated speedF stand-in. Use
+absent `FootSpeedF()` raises and tww_sim.land falls back to its calibrated speedF stand-in. Use
 `FootSpeedF.available()` to probe without raising.
 """
 import math

@@ -1,12 +1,12 @@
 """swim_exact.py — exact (decomp-grounded) movement DIRECTION + displacement MAGNITUDE for
 superswim, to make Link's world position bit-exact GIVEN the camera angle. Does NOT modify
-superswim_sim.py (imports it read-only for f32/cM_scos/cM_ssin/_TIMER_K).
+tww_sim/swim/sim.py (imports it read-only for f32/cM_scos/cM_ssin/_TIMER_K).
 
 Sources (US line nos; JP logic identical):
   - magnitude: d_a_player_main.cpp::posMoveFromFootPos ~2424-2431  (field_0x60=0.4, field_0x7C=0.35)
   - direction: d_a_player_swim.inc::setSpeedAndAngleSwim ~24-50    (m34E8 + 2x cLib_addCalcAngleS)
   - cLib_addCalcAngleS: c_lib.cpp:160-189
-  - getSwimTimerRate: d_a_player_swim.inc:280-294  (== superswim_sim _TIMER_K)
+  - getSwimTimerRate: d_a_player_swim.inc:280-294  (== swim.sim _TIMER_K)
 See knowledge/history/camera-predict-history.md for the full derivation + validation.
 """
 from __future__ import annotations

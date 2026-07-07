@@ -1,6 +1,6 @@
 """swim_coldstart.py - bit-exact COLD-START scramble for the superswim sim.
 
-Imports superswim_sim READ-ONLY (does NOT modify it). A SwimState subclass that fixes the
+Imports swim.sim READ-ONLY (does NOT modify it). A SwimState subclass that fixes the
 ONE cold-start inaccuracy: the base sim assumes the swim-initiation scramble oldframe is
 `f32(self.anim + 1.0)`, which is slate-phase-dependent and WRONG at the current slate.
 
@@ -36,7 +36,7 @@ class ColdStartSwimState(S.SwimState):
 
     Pass the live-logged controller rate as `mrate` (== move0_mrate at the seed frame, the
     same instant air/speed are written in the run_tests-style seeding). All other behaviour
-    is inherited verbatim from superswim_sim.SwimState -- only the cold-start scramble
+    is inherited verbatim from swim.sim.SwimState -- only the cold-start scramble
     oldframe is corrected. Warm pumps are untouched (they already log nothing / recompute).
     """
 

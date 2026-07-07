@@ -2,7 +2,7 @@
 
 The GameCube's Gekko/Broadway (PPC 750CL) does single-precision arithmetic with a FUSED
 multiply-add: `fmadds`/`fmsubs`/`fnmadds`/`fnmsubs` compute a*c(+/-)b to full internal width
-and round ONCE to single. The plain sim (superswim/sim.py `f32`) rounds every op separately
+and round ONCE to single. The plain sim (tww_sim/swim/sim.py `f32`) rounds every op separately
 (no FMA) -- correct for the swim physics as the decomp writes it (left-to-right adds/muls),
 but the J3D animation Hermite eval is written with genuine fmadds/fnmsubs (J3DAnimation.cpp
 inline asm), so a faithful port needs the fused ops here.
@@ -32,7 +32,7 @@ except ImportError:
     def _r(x):
         return _unpack("f", _pack("f", x))[0]
 
-# FAST PATH: the native Cython build (superswim/_fpc.pyx; C (float) cast, bit-identical to ctypes,
+# FAST PATH: the native Cython build (tww_sim/core/_fpc.pyx; C (float) cast, bit-identical to ctypes,
 # ~5x faster) when present, else the pure-Python `_r` fallback below (same result). Build: _build_native.py.
 try:
     from ._fpc import (f32, fmuls, fadds, fsubs, fdivs, fmadds, fmsubs, fnmadds,  # noqa: F401

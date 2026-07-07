@@ -4,7 +4,7 @@ an arbitrary (fractional) frame, bit-faithful to the console.
 Spec (tww/src/JSystem/J3DGraphAnimator/J3DAnimation.cpp):
   - J3DHermiteInterpolationS (L323): s16 rotation Hermite. The C comment is readable-but-not-
     identical; the authoritative version is the inline PPC asm (L342-363). Ported instruction-by-
-    instruction below with the fused ops from superswim.fp. s16 keyframe data is loaded via
+    instruction below with the fused ops from tww_sim.core.fp. s16 keyframe data is loaded via
     `psq_l ...,5` = GQR5 = S16 quant, scale 0 (OSInitFastCast) -> pure (float)s16.
   - JMAHermiteInterpolation (JMath.cpp:82): f32 scale/translate Hermite (plain C; ported with
     fused ops in source order -- validated empirically, see NOTE).

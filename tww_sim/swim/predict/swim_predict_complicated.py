@@ -17,7 +17,7 @@ drives cam[f]), so cam[f] is known before the stick is read. Per frame:
 (In the clean cruise regime cam barely moves per frame, so cam[f]==cam[f-1] and this matches
 swim_predict_exact's validated cruise path -- no regression.)
 
-Imports superswim_sim / swim_exact / camera_* / swim_* READ-ONLY. Modifies none.
+Imports swim.sim / swim_exact / camera_* / swim_* READ-ONLY. Modifies none.
 """
 from __future__ import annotations
 import sys, csv, math

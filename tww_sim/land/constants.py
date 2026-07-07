@@ -55,7 +55,7 @@ SUBJ_CAM_FLOOR = 9      # body frames after lock before the CAMERA (C-DOWN) exit
 CDOWN_RUN = 3           # acted C-down frames the m3C4 0->1->2 + report needs (== poll+4 with INPUT_DELAY)
 
 # speedF->pos FALLBACK: calibrated cLib chase toward mNormalSpeed, used only when the anim engine
-# (superswim.anim.foot_speedf) lacks keyframe data (endpoint +-3). With data, speedF is bit-exact.
+# (tww_sim.core.anim.foot_speedf) lacks keyframe data (endpoint +-3). With data, speedF is bit-exact.
 SPEEDF_CHASE = (0.5, 2.0, 1.4)   # (scale, maxStep, minStep) fit vs land_walk_gt.csv
 
 # Standing-idle FREEB frame-controller value at the land_flatwalk anchor (mFrameCtrlUnder[0]). It

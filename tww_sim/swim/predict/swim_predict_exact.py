@@ -2,10 +2,10 @@
 
 From slot 10 and a per-frame list of (main-stick sx,sy + C-stick csx,csy), predict every frame:
   - csangle (camera yaw)      -- camera_exact.CameraExact          (BIT-EXACT)
-  - potential_speed / anim / air / link_state  -- superswim_sim.SwimState (BIT-EXACT physics)
+  - potential_speed / anim / air / link_state  -- swim.sim.SwimState (BIT-EXACT physics)
   - link_x / link_z           -- swim_exact (exact direction chase + exact disp magnitude)
 
-Does NOT modify superswim_sim.py or any planner (imports them read-only).
+Does NOT modify tww_sim/swim/sim.py or any planner (imports them read-only).
 
 Per-frame ordering (matches the game; the "1-frame lags" are deterministic update ORDER, NOT
 SI-poll timing -- bug#2 is a pipe artifact, see memory):

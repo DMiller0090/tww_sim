@@ -2,7 +2,7 @@
 
 The game's main-stick -> angle is atan2f of the GC-clamped stick vector (JUTGamePad::CStick::update:
 mAngle = 10430.379f * atan2f(mPosX, -mPosY)), but the vector itself is Dolphin's byte->analog mapping
-+ deadzone/octagon clamp, which diverges from both the naive atan2 (superswim_sim.stick_angle_deg,
++ deadzone/octagon clamp, which diverges from both the naive atan2 (swim.sim.stick_angle_deg,
 good only to ~0.86deg) AND the pure SDK PADClamp (a decomp port disagrees at ~17.6% of cells; that is
 Dolphin's input layer, not the game math). So the sim MUST match Dolphin, and the angle is captured
 live for all 65536 cells in stick_angle_table.csv (harness/capture/stick_grid_redump.py: settle+verify

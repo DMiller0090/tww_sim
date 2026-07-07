@@ -5,7 +5,7 @@ Extends the unified cruise predictor (swim_predict_exact) with the LOGGED-mRate 
 (swim_coldstart.ColdStartSwimState) so the speed-BUILD phase is bit-exact too -- the piece
 that was blocked under the base sim's f32(anim+1.0) scramble assumption.
 
-Imports superswim_sim / swim_exact / camera_exact / swim_coldstart READ-ONLY. Modifies none.
+Imports swim.sim / swim_exact / camera_exact / swim_coldstart READ-ONLY. Modifies none.
 
 Per-frame ordering is identical to swim_predict_exact.predict (the camera updates LATER in the
 frame, so the heading consumes cam[f-1]):

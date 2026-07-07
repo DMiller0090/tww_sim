@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-superswim_optimize.py - Beam-search the optimal ESS/charge (reboost) schedule.
+tww_sim/swim/optimize.py - Beam-search the optimal ESS/charge (reboost) schedule.
 
-Uses the frame-exact physics in superswim_sim.py to search the full per-frame
+Uses the frame-exact physics in tww_sim/swim/sim.py to search the full per-frame
 decision space {ESS, charge} over a window, maximizing NET forward displacement
 (signed position along the swim axis, so reboost reversal frames are penalized
 exactly). Discovers boost count / timing / length as a solved optimum rather than
@@ -17,9 +17,9 @@ Two objectives:
     af_drag/air_drag cut its per-frame move, especially at low air).
 
 Usage:
-  py superswim_optimize.py [frames=200] [v=-1630] [air=900] [anim=18.148]
+  python -m tww_sim.swim.optimize [frames=200] [v=-1630] [air=900] [anim=18.148]
                            [beam=4000] [viz=opt.html]
-  py superswim_optimize.py dest=D [v=] [air=] [anim=] [beam=] [cap=2000]
+  python -m tww_sim.swim.optimize dest=D [v=] [air=] [anim=] [beam=] [cap=2000]
                            [neu=0|1] [viz=opt.html]
 
 Net forward progress = -x (sim ESS moves toward -x at heading 0; charge flips heading

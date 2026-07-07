@@ -1,9 +1,9 @@
-"""superswim.anim - the ported J3D under-body animation engine that drives land walk speedF.
+"""tww_sim.core.anim - the ported J3D under-body animation engine that drives land walk speedF.
 
 Pure-offline, FMA-faithful port of Link's foot-chain animation pipeline (the subsystem that
 posMoveFromFootPos reads to produce the walk/dash position speed `speedF`). No Dolphin dependency;
-imports only superswim.fp / superswim.sim. It powers the bit-exact land-walk position in
-superswim.land when the (copyrighted, gitignored) keyframe data is present under _generated/anim/.
+imports only tww_sim.core.fp / tww_sim.core.mathlib. It powers the bit-exact land-walk position in
+tww_sim.land when the (copyrighted, gitignored) keyframe data is present under _generated/anim/.
 
 Modules:
   j3d_eval  -- BCK keyframe eval (Hermite, s16/f32), calc_transform per joint/frame.
@@ -15,5 +15,5 @@ Modules:
 
 Data (link_anim_walk_dash.json, link_skeleton.json) is generated from the game's own Link.arc/
 LkAnm.arc by harness/anim/parse_bck.py + parse_bmd.py and lives in gitignored _generated/anim/ --
-it is NOT shipped. When absent, superswim.land falls back to its calibrated speedF stand-in.
+it is NOT shipped. When absent, tww_sim.land falls back to its calibrated speedF stand-in.
 """

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-superswim_sim.py - Offline physics sim for TWW superswimming (Phase A + B).
+tww_sim/swim/sim.py - Offline physics sim for TWW superswimming (Phase A + B).
 
 Pure-python reproduction of the swim physics validated live against Dolphin
 (see KNOWLEDGE.md). Lets us test reboost / peak-hold theories in
@@ -23,10 +23,10 @@ Heading model (Phase B, live-calibrated 2026-06-26):
   ESS/neutral never flip facing.
 
 Usage:
-  py superswim_sim.py seq "<act,n;act,n;...>" [v=-1630] [air=900] [anim=0] [every=0]
+  python -m tww_sim.swim.sim seq "<act,n;act,n;...>" [v=-1630] [air=900] [anim=0] [every=0]
       acts: ess (stick=110), ess:<rawY>, chg, neu     e.g. "ess,150" or
             "ess,20;chg,1;chg,1" (reboost). Mirrors dolphin_mem.py seq.
-  py superswim_sim.py essloop frames=N trig=LO,HI [boost=B] [v=..][air=..][anim=..]
+  python -m tww_sim.swim.sim essloop frames=N trig=LO,HI [boost=B] [v=..][air=..][anim=..]
       Closed-loop phase-triggered reboost, identical policy to dolphin essloop.
   Add  viz=out.html   to either to emit a self-contained animated movement viewer.
   Add  json=out.json  to dump the raw per-frame trace.
@@ -873,7 +873,7 @@ def main():
         rb, nboost = run_closed(essloop_actions(frames, lo, hi, boost), v, anim, air)
         print("baseline  ", end=""); summarize(base)
         print(f"reboost   ", end=""); summarize(rb, f"boosts={nboost}")
-        out = opts.get('viz', 'superswim_compare.html')
+        out = opts.get('viz', 'swim_compare.html')
         emit_viz(out, [{"name": "pure ESS", "color": "#58a6ff", "rows": base},
                        {"name": f"reboost b{boost}@{lo:.0f}-{hi:.0f}", "color": "#3fb950", "rows": rb}])
         return

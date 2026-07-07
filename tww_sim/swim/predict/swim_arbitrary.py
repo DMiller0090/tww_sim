@@ -63,7 +63,7 @@ class ArbitrarySwimState(ColdStartSwimState):
 
     # --- override the gain source: use the REAL stick + the EXACT (table) stick angle ---
     def _swim_facing(self, sx=None, sy=None):
-        """Mirrors superswim_sim.SwimState._swim_facing EXACTLY, except (a) it uses the real
+        """Mirrors swim.sim.SwimState._swim_facing EXACTLY, except (a) it uses the real
         per-frame stick (self._stick, not the cardinal token the base would pass), and (b) it
         takes the stick angle from the live-exact table (SA.angle_s16) instead of the
         atan2+dead-zone closed form (only good to ~0.86deg). Schedules the facing snap/turn for

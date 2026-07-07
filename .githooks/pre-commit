@@ -10,3 +10,6 @@ bash "$root/.githooks/check-comment-length.sh" || exit 1
 
 # 2. Knowledge-base doc gate: structure/link hygiene + stale-Source detection.
 bash "$root/.githooks/kb-doc-gate.sh" || exit 1
+
+# 3. Code hygiene gate: no stale superswim.* refs; no oversized module (see check-code-hygiene.sh).
+bash "$root/.githooks/check-code-hygiene.sh" || exit 1

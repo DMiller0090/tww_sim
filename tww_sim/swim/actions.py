@@ -3,7 +3,7 @@
 An *action* is one of ``ess`` / ``neu`` / ``chg`` (one game frame each). A *seq string* is the
 compact run-length form ``"ess,200;chg,2;neu,50"``. These helpers convert between actions, seq
 strings, and the per-frame stick element list consumed by ``dolphin_mem.advanceseq`` /
-``superswim_sim``. Kept Dolphin-free so the core package has no live dependency.
+``swim.sim``. Kept Dolphin-free so the core package has no live dependency.
 
 Previously these lived inside ``run_tests.py``; they were extracted here because ~30 scripts
 import them. ``run_tests.py`` now re-imports from this module.
