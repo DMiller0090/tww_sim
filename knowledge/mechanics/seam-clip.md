@@ -108,6 +108,14 @@ the clip vs block outcome flips on the last few float bits. Faithful reproductio
 > obtuse is (−1727,−990) at 90.57° (floor 49.26, true 49.90); the seven 90.0° corners don't even
 > reach the f32 lattice (no clip). Sub-49.22 is analytically impossible in that region.
 >
+> **Reaching the floor needs a STACKED land move — a single roll is too slow.** The 35 u floor is a
+> hard lower bound for *any* corner, and Link's fastest **single** ground move is a **FRONT_ROLL at
+> 26.0 u** (`clamp(speedF·1.5+0.5, 5, 26)`, cap `0.5 + mMaxNormalSpeed·1.5`, `mMaxNormalSpeed = 17`;
+> walk ~14, dash ~17) — 26 < 35, so a roll (or walk/dash) *alone* clips no corner. The known clip uses
+> a **roll + sword thrust** stacked into one clip frame (~49 u total at the −1727 corner); the land sim
+> models the roll (26 u) bit-exact but **not yet** the sword-thrust component. See
+> [actor-push.md](actor-push.md) for the stacked-displacement + Tetra-push pipeline.
+>
 > **⚠️ The search must run on f32 positions — a double-precision search FALSE-POSITIVES.** Link's
 > position is f32 (`cXyz` = three f32; `pm_pos`/`pm_old_pos` are `cXyz*`, `d_bg_s_acch.h`), and
 > `core.fp` is only console-faithful when fed f32 (its docstring: "callers feed f32"). A search that

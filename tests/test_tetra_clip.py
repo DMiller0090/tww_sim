@@ -89,10 +89,12 @@ def test_push_deadzone():
 # ---- the pipeline on the live anchor --------------------------------------
 
 def test_tetra_push_closes_the_1727_clip():
-    """Roll/thrust 49.22u alone is blocked at the (-1727,-990) corner; a Tetra nudge clips it."""
+    """Roll + sword-thrust 49.22u alone is blocked at the (-1727,-990) corner; a Tetra nudge clips it.
+    49.22u is the real STACKED land move (roll + sword thrust); the land sim models only the roll half
+    (26u, see test_real_roll_alone_is_short), so this uses the 49.22u figure directly for now."""
     tris, link_y, old = _load_anchor()
     settled = settle(tris, old, link_y)
-    # direction toward the live clip point; roll gives 49.22u (just short of the corner minimum)
+    # direction toward the live clip point; roll+thrust gives 49.22u (just short of the corner minimum)
     new_live = (-1727.34228515625, -990.6356201171875)
     dx, dz = new_live[0] - settled[0], new_live[1] - settled[2]
     dm = math.hypot(dx, dz); dhx, dhz = dx / dm, dz / dm
@@ -108,3 +110,19 @@ def test_tetra_push_closes_the_1727_clip():
     push_mag = math.hypot(*sol["push"])
     assert 0.45 < push_mag < 0.75, f"push {push_mag} off the ~0.615u nudge"
     assert abs(push_mag - 0.5 * sol["overlap"]) < 1e-3, "push should be 0.50 * overlap"
+
+
+def test_real_roll_alone_is_short():
+    """The land sim's modeled FRONT_ROLL caps at 26u/frame -- below the 35u seam-clip floor, so a roll
+    ALONE (without the stacked sword thrust) does not clip the (-1727,-990) corner. This documents the
+    26u modeled half of the ~49u roll+thrust move (the thrust half is not yet modeled -- actor-push.md)."""
+    tris, link_y, old = _load_anchor()
+    settled = settle(tris, old, link_y)
+    new_live = (-1727.34228515625, -990.6356201171875)
+    dx, dz = new_live[0] - settled[0], new_live[1] - settled[2]
+    dm = math.hypot(dx, dz); dhx, dhz = dx / dm, dz / dm
+    ROLL_CAP = 26.0                                    # clamp(speedF*1.5+0.5, 5, 0.5+17*1.5)
+    thrust = (dhx * ROLL_CAP, dhz * ROLL_CAP)
+    base = clip_with_push((settled[0], settled[2]), link_y, thrust, (settled[0] - 1e6, settled[2]), tris)
+    assert not base["clipped"], "a 26u roll alone must NOT clip (needs the stacked thrust)"
+    assert abs(base["disp"] - 26.0) < 0.02, "modeled roll displacement should be the 26u cap"

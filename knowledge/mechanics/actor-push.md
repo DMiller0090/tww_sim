@@ -85,11 +85,28 @@ composes `co_push_link` + `crr_pos_walls`: `clip_with_push(old, link_y, thrust, 
 one clip frame; `solve_min_overlap` places Tetra directly behind Link and returns the smallest overlap
 that clips (with `sumR = 30 + 50 = 80`).
 
-**Worked result (live −1727,−990 anchor, `tests/test_tetra_clip.py`):** a roll/thrust of **49.22 u**
-toward the corner does **not** clip alone; a Tetra overlap of **≈1.23 u** (push ≈**0.615 u** at the
-0.50 share) reaches ≈49.835 u displacement and clips. (The clip window along the roll ray is
-non-monotonic — it first clips near disp ≈49.78 u.) The Tetra nudge still comfortably supplies the
-missing displacement; it just needs ~2× the overlap the (wrong) 0.538 model implied.
+**Worked result (live −1727,−990 anchor, `tests/test_tetra_clip.py`):** a **roll + sword-thrust** of
+**49.22 u** toward the corner does **not** clip alone; a Tetra overlap of **≈1.23 u** (push ≈**0.615 u**
+at the 0.50 share) reaches ≈49.835 u and clips. (The clip window along the ray is non-monotonic — it
+first clips near disp ≈49.78 u.) The Tetra nudge comfortably supplies the missing displacement; it just
+needs ~2× the overlap the (wrong) 0.538 model implied.
+
+> **The 49.22 u is a roll + sword thrust; only the roll is modeled (was 06i NEXT #1, partially
+> resolved).** The displacement that reaches the corner is a **stacked land move** — a FRONT_ROLL into a
+> **sword thrust** (a sword-cut/lunge fired out of the roll). The land sim (`tww_sim/land/land.py`)
+> models the **roll** bit-exact — it caps at **26.0 u/frame** (`clamp(speedF·1.5+0.5, 5, 26)`,
+> `cap = 0.5 + mMaxNormalSpeed·1.5`, `mMaxNormalSpeed = 17`, `d_a_player_main.cpp:6817`) — which alone is
+> below the 35 u seam-clip floor. It does **not** yet model the **sword-thrust** proc that carries the
+> total to the ~49 u the corner needs (floor `wall_r/sin(interior/2) = 49.26 u`, true 49.90 u). The cut
+> procs live in [`d_a_player_sword.inc`](../../../tww/src/d/actor/d_a_player_sword.inc) — each sets a
+> forward `mNormalSpeed` from the pre-cut `speedF` (directional cuts:
+> `mNormalSpeed = fabsf(speedF)·field_0x10 + field_0x14`, e.g. cutF `26·0.2 + 8.0`; `procCutRoll`/
+> `procCutJump` are the roll-cut / jump-thrust variants), HIO constants `mCut.mCut{A,F,R,L,Roll,Jump}`
+> in [`d_a_player_HIO_data.inc`](../../../tww/src/d/actor/d_a_player_HIO_data.inc:27). So
+> `test_tetra_clip.py` still uses the 49.22 u figure directly, pending that model. **Still open:** port
+> the sword-thrust proc so the sim produces the real per-frame roll+thrust trajectory (and identifies
+> the clip frame), replacing the 49.22 u literal; then live-validate 0-ULP. The Tetra-push pipeline that
+> closes the gap is validated and unaffected.
 
 > **Where the animated center matters.** The **overlap depth** (and so the push magnitude, ≈1.23 u /
 > ≈0.615 u above) is *placement-invariant*: the solver puts Tetra directly behind Link colinear with
@@ -101,9 +118,9 @@ missing displacement; it just needs ~2× the overlap the (wrong) 0.538 model imp
 > `link_center=body_cyl.roll_co_center(pos, facing, frame)` to `clip_with_push` / `solve_min_overlap`
 > to place her correctly (the returned `tetra_xz`); omit it for the feet proxy. It also matters for a
 > **fixed** Tetra (spawned at a set world point, not placed optimally), where the true center changes
-> both the depth and the push direction. Still open (per handoff): the **real** per-frame roll+thrust
-> displacement (from the land sim) in place of the 49.22 u proxy, and *which* roll frame is the clip
-> frame (which fixes both the thrust and the center to use).
+> both the depth and the push direction. Still open (per handoff): model the **sword-thrust** half of
+> the stacked roll+thrust so the land sim produces the real per-frame displacement (and *which* frame
+> is the clip frame) in place of the 49.22 u literal — the roll half (26 u) is already bit-exact.
 
 ## Frame-lag caveat for setups
 
