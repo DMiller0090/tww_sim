@@ -107,6 +107,38 @@ def offset_window(tris, seam, link_y, ang, D=40.0, t_back=3.0,
     return hits
 
 
+def screen_gaps(tris, seam, link_y, D=40.0, t_back=3.0,
+                dir_half_deg=80.0, dir_step_deg=1.0, off_half=0.0005, off_step=2e-5,
+                merge_deg=4.0):
+    """Every bisector-relative travel direction within ``+/- dir_half_deg`` where the swept line
+    MISSES LineCheck (a gap exists), clustered into contiguous windows and returned as those windows'
+    centre rels, ORDERED by proximity to the bisector. Empty == no gap anywhere == unclippable.
+
+    Unlike :func:`find_clip` (which returns only the FIRST gap it hits, an oblique grazing edge on a
+    symmetric corner), this reports ALL gap windows so the caller can f32-search each: an asymmetric
+    corner's clip window is fully oblique (the head-on approach is covered by a long diagonal wall),
+    while a symmetric corner clips near the bisector — both must be found."""
+    base = bisector_dir(tris)
+    n = int(2 * dir_half_deg / dir_step_deg) + 1
+    gap_rels = []
+    for i in range(n):
+        rel = -dir_half_deg + i * dir_step_deg
+        ang = base + math.radians(rel)
+        if offset_window(tris, seam, link_y, ang, D, t_back, off_half, off_step):
+            gap_rels.append(rel)
+    if not gap_rels:
+        return []
+    centers, lo, prev = [], gap_rels[0], gap_rels[0]
+    for r in gap_rels[1:]:
+        if r - prev > merge_deg:
+            centers.append((lo + prev) / 2.0)
+            lo = r
+        prev = r
+    centers.append((lo + prev) / 2.0)
+    centers.sort(key=abs)
+    return centers
+
+
 def find_clip(tris, seam, link_y, D=40.0, t_back=3.0,
               dir_half_deg=50.0, dir_step_deg=0.5,
               off_half=0.006, off_step=2e-5, physical=True):

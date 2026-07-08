@@ -189,31 +189,11 @@ debug pos (`0x803D78FC`).
 
 ## Region scanner (existence + exact coords)
 
-[`seam_clip_check.py`](../../harness/collision/README.md) is the out-of-the-box "is there a clippable
-seam in this box, and with what exact coordinates?" front end (`clip_check` / `scan_region`, guarded by
-`tests/test_seam_clip_check.py`). It answers existence plus one physically-valid `(old, new)` that
-performs the clip, NOT the minimum displacement. Design points that matter:
-
-- **Screen, then f32 search.** A `find_clip` LineCheck-miss screen (geometry-aware, the necessary
-  condition) rejects unclippable seams cheaply; only passers run the f32-lattice search (`first_f32_clip`,
-  a per-seam CrrPos budget bounds it). This is what distinguishes a clippable corner (GanonL) from an
-  unclippable one (H_test chamfers): the within-wall plane fan does NOT (5 of 6 live GanonL clips have
-  bit-identical within-wall planes and still clip; the corner's cross-wall geometry drives the clip).
-- **Standable `old` from the DZB, not Link.** A reported clip's `old` must be a real standing spot: a
-  ground triangle under its XZ (floor Y from the ground mesh, never Link's live Y or the wall base), the
-  wall must reach that height, and `old` must be a WallCorrect fixed point in front of both walls. So the
-  scan is Dolphin-free and its region is independent of where Link is (`require_standable=False` /
-  `override_link_y=` opt out for synthetic geometry).
-- **f32 detection cannot be ULP-coarsened.** The offset window is a razor ~1e-5..1e-3 u regardless of
-  coordinate magnitude; scaling the scan step to the local ULP false-NEGATIVES near-origin razor clips
-  (it missed the live Hyrule seam). Keep detection fine; get speed from the screen.
-
-`harness/collision/validate_clips.py` confirms a scan's clips live (6/6 on GanonL). **Live-validation
-clean-placement gotcha:** to place Link at `old` for the swept clip frame you MUST write BOTH player
-class-pos triples (`[0x803AD860]+0x10c` and `+0x120`) and the debug `link_x/y/z`, so the placement sweep
-is zero-length. Hacking only the debug pos leaves `pm_old_pos` at Link's original position; the next
-CrrPos then sweeps that long line, crosses a wall, and snaps Link ~100 u away (a spurious BLOCK). Feed
-full f32 precision too (a 3-decimal-rounded `old`/`new` flips the razor verdict). See DOLPHIN_CONTROL.md.
+The out-of-the-box "is there a clippable seam in this box, and with what exact standable coordinates?"
+scanner (`seam_clip_check.clip_check` / `scan_region`), the full-game batch, and the CSV export for the
+collision viewer live on their own page: **[seam-clip-scanner.md](seam-clip-scanner.md)** (two-phase
+angular search for oblique clips, the standability gates for OOB skirts + step risers, seam-Y-at-floor,
+DZB-is-world-coords, and the clean-placement live-validation gotcha).
 
 <a id="fp-note"></a>**FP note.** `cM3d_CalcPla` is bit-exact (4506/4506 RAM planes) once you get four
 console-exact details right - all four verified live via a breakpoint at `PSVECMag`/`cM3d_CalcPla`
@@ -237,10 +217,9 @@ console-exact details right - all four verified live via a breakpoint at `PSVECM
 The port uses [`core.fp`](../../tww_sim/core/fp.py)'s `fmadds`/`fmuls`/`fadds`/`fmsubs`/`fnmsubs`.
 
 **old_pos matters.** The discriminator is the swept line, so the *exact* `old_pos` (Link's previous
-position) decides clip vs block at the razor edge. When feeding a raw brute-force initial, first
-**settle** it (a few `WallCorrect` iterations) - the game nudges an initial that overlaps the wall
-cylinder off the wall front before the swept frame, so its carried `pm_old_pos` differs from the
-placed position by ~0.08 u, which is enough to flip boundary cases.
+position) decides clip vs block at the razor edge. **Settle** a raw brute-force initial (a few
+`WallCorrect` iterations) first: the game nudges an initial overlapping the wall cylinder off the wall
+front, so its carried `pm_old_pos` differs from the placed position by ~0.08 u - enough to flip cases.
 
 ## See also
 - [mechanics/collision.md](collision.md) - the DZB triangle mesh, the `dBgS` manager, the live reader/viewer.

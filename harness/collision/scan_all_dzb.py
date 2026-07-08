@@ -63,7 +63,8 @@ def _write(path, stage, arc, dzb, xform, xnote, region, box, seams_n, clips):
         walls = sum(1 for t in region if abs(t["n"][1]) < WALL_NY_MAX)
         gnd = sum(1 for t in region if t["n"][1] >= GROUND_NY_MIN)
         w("# %s / %s :: %s\n\n" % (stage, arc, dzb))
-        w("transform: %s  (tx=%.2f tz=%.2f angY=%.2f)\n" % (xnote, xform[0], xform[1], xform[2]))
+        w("world coords: DZB stored in world space, MULT NOT applied  (%s: tx=%.2f tz=%.2f angY=%.2f)\n"
+          % (xnote, xform[0], xform[1], xform[2]))
         w("tris=%d walls=%d ground=%d  vertical_seams=%d  clippable=%d\n"
           % (len(region), walls, gnd, seams_n, len(clips)))
         if box:

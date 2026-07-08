@@ -3,9 +3,12 @@ load the room in-game. Feeds the same ``region_tris`` the live reader (``seam_sc
 produces, so the seam-clip scanner runs on any room offline.
 
 Pipeline: RARC archive (Yaz0-decompress if needed) -> ``room.dzb`` -> vertices + triangles ->
-world-transform by the stage ``MULT`` room placement (translation + Y-rotation) -> per-triangle planes
-via the bit-exact :func:`tww_sim.core.collision.calc_pla` (the DZB stores NO planes; the game computes
-them at load with the same ``cM3d_CalcPla``, so calc_pla reproduces the RAM planes exactly).
+per-triangle planes via the bit-exact :func:`tww_sim.core.collision.calc_pla` (the DZB stores NO
+planes; the game computes them at load with the same ``cM3d_CalcPla``, so calc_pla reproduces the RAM
+planes exactly). DZB vertices are ALREADY in world coordinates — the stage ``MULT`` room placement is
+NOT applied (verified: every non-identity-MULT room in the game is a ``sea`` room whose raw DZB centroid
+already equals its MULT; applying it double-offset the sea. Dungeons are MULT-identity). See
+:func:`region_from_dzb`.
 
 Disc layout (extracted): ``<extract>/files/res/Stage/<Stage>/Room<N>.arc`` (collision ``room.dzb``)
 and ``Stage.arc`` (``stage.dzs``, the ``MULT`` room-placement chunk). The extract dir is read from
@@ -15,7 +18,6 @@ and ``Stage.arc`` (``stage.dzs``, the ``MULT`` room-placement chunk). The extrac
     python -m harness.collision.dzb_iso stage=M_Dai room=18 no-standable
 """
 import json
-import math
 import os
 import struct
 import sys
@@ -105,13 +107,17 @@ def room_world_transform(stage, room, extract_dir=None):
 
 
 def region_from_dzb(dzb_bytes, tx=0.0, tz=0.0, ang=0.0):
-    """Build ``(region_tris, box)`` from raw DZB bytes, world-transformed by ``(tx, tz, angY_deg)``.
-    ``region_tris`` matches ``seam_scan.read_region_tris``: ``dict(poly, v, n, T)`` with ``T`` carrying
-    the bit-exact calc_pla plane and ``n`` its normal. Returns ``([], None)`` for an empty DZB."""
+    """Build ``(region_tris, box)`` from raw DZB bytes. ``region_tris`` matches
+    ``seam_scan.read_region_tris``: ``dict(poly, v, n, T)`` with ``T`` carrying the bit-exact calc_pla
+    plane and ``n`` its normal. Returns ``([], None)`` for an empty DZB.
+
+    DZB vertices are stored in WORLD coordinates — the stage ``MULT`` room placement is NOT applied.
+    Verified across every non-identity-MULT room in the game (all 50 are the ``sea`` grid): each room's
+    raw DZB centroid already matches its MULT (tx,tz) exactly (sea Room44 raw ~(-200000,+300000) ==
+    MULT), so applying MULT double-offsets it (the old bug: sea world coords ~2x out). Dungeon rooms are
+    MULT-identity, so this was a silent no-op for them. ``(tx,tz,ang)`` are accepted (callers still pass
+    the read MULT for the report header) but intentionally ignored here."""
     verts, tris = parse_dzb(dzb_bytes)
-    if tx or tz or ang:
-        c, s = math.cos(math.radians(ang)), math.sin(math.radians(ang))
-        verts = [(x * c + z * s + tx, y, -x * s + z * c + tz) for (x, y, z) in verts]
     region = []
     for poly, (a, b, c, _tid, _grp) in enumerate(tris):
         v0, v1, v2 = verts[a], verts[b], verts[c]

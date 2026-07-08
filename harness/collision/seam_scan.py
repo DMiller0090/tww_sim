@@ -107,46 +107,83 @@ def floor_ys_at(region_tris, x, z):
     return sorted(ys)
 
 
+# Corner walls need NOT store a bit-identical seam vertex (observed 0.09u XZ offset), so CLUSTER
+# vertical edges within this XZ tol instead of exact bucketing. See seam-clip-scanner.md "Enumeration".
+SEAM_XZ_TOL = 0.5
+
+
 def enumerate_seams(region_tris, box):
     """Find differing-normal vertical seam corners in ``box`` = (xmin,xmax,ymin,ymax,zmin,zmax).
 
     ``region_tris`` = list of ``dict(poly, v=[v0,v1,v2], n=(nx,ny,nz))`` (stored plane normal).
-    Returns a list of ``dict(S, polys, interior, floor)`` sorted by ``floor`` (most promising first).
+    Returns a list of ``dict(S, polys, interior, floor, test_y)`` sorted by ``floor`` (most promising
+    first). Vertical wall edges are clustered by XZ proximity (``SEAM_XZ_TOL``, y-span overlap) so a
+    corner whose two walls store slightly-offset seam vertices is still paired (see ``SEAM_XZ_TOL``).
     """
     xmin, xmax, ymin, ymax, zmin, zmax = box
     walls = [t for t in region_tris if abs(t["n"][1]) < WALL_NY_MAX]
-    # map vertical edge (canonical (x,z)-quantised key + y-pair) -> incident wall tris
-    edges = {}
+    # every vertical wall edge as [x, z, ylo, yhi, lo_vertex, tri]
+    ve = []
     for t in walls:
         v = t["v"]
         for i in range(3):
             a, b = v[i], v[(i + 1) % 3]
             if abs(a[0] - b[0]) < 0.05 and abs(a[2] - b[2]) < 0.05 and abs(a[1] - b[1]) > 1.0:
                 lo = a if a[1] < b[1] else b
-                key = (round(lo[0], 2), round(lo[2], 2), round(min(a[1], b[1]), 1))
-                e = edges.setdefault(key, {"S": lo, "tris": [], "ylo": lo[1], "yhi": max(a[1], b[1])})
-                e["tris"].append(t)
-                e["yhi"] = max(e["yhi"], a[1], b[1])
+                ve.append([lo[0], lo[2], min(a[1], b[1]), max(a[1], b[1]), lo, t])
+    # cluster edges within SEAM_XZ_TOL in XZ with overlapping y-span (union-find; O(n) via a grid of
+    # cell = tolerance, so a point's SEAM_XZ_TOL neighbourhood is within the 3x3 surrounding cells).
+    n = len(ve)
+    parent = list(range(n))
+
+    def find(i):
+        r = i
+        while parent[r] != r:
+            r = parent[r]
+        while parent[i] != r:
+            parent[i], i = r, parent[i]
+        return r
+
+    grid = {}
+    for i, e in enumerate(ve):
+        grid.setdefault((int(math.floor(e[0] / SEAM_XZ_TOL)), int(math.floor(e[1] / SEAM_XZ_TOL))),
+                        []).append(i)
+    for i, ei in enumerate(ve):
+        gx, gz = int(math.floor(ei[0] / SEAM_XZ_TOL)), int(math.floor(ei[1] / SEAM_XZ_TOL))
+        for dx in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                for j in grid.get((gx + dx, gz + dz), ()):
+                    if j <= i:
+                        continue
+                    ej = ve[j]
+                    if (abs(ei[0] - ej[0]) <= SEAM_XZ_TOL and abs(ei[1] - ej[1]) <= SEAM_XZ_TOL
+                            and ei[2] <= ej[3] and ej[2] <= ei[3]):
+                        ri, rj = find(i), find(j)
+                        if ri != rj:
+                            parent[ri] = rj
+    clusters = {}
+    for i in range(n):
+        clusters.setdefault(find(i), []).append(ve[i])
+
     seams = []
-    for key, e in edges.items():
-        S = e["S"]
-        # keep if the edge's vertical span overlaps the region Y (verticality makes the XZ gap
-        # height-invariant, so a tall wall based below ymin still clips at a height in-region).
-        if not (xmin <= S[0] <= xmax and zmin <= S[2] <= zmax
-                and e["yhi"] >= ymin and e["ylo"] <= ymax):
-            continue
+    for members in clusters.values():
         groups = {}
-        for t in e["tris"]:
-            groups.setdefault((round(t["n"][0], 4), round(t["n"][2], 4)), []).append(t)
+        for e in members:
+            groups.setdefault((round(e[5]["n"][0], 4), round(e[5]["n"][2], 4)), []).append(e[5])
         if len(groups) < 2:
-            continue                    # coplanar shared edge -> flat, unclippable
+            continue                    # single-normal edge cluster -> flat / free edge, not a corner
+        rep = min(members, key=lambda e: e[2])          # deepest edge is the representative seam vert
+        S = rep[4]
+        ylo = min(e[2] for e in members)
+        yhi = max(e[3] for e in members)
+        # keep if the corner's vertical span overlaps the region Y (verticality makes the XZ gap
+        # height-invariant, so a tall wall based below ymin still clips at a height in-region).
+        if not (xmin <= S[0] <= xmax and zmin <= S[2] <= zmax and yhi >= ymin and ylo <= ymax):
+            continue
         gk = sorted(groups, key=lambda k: -len(groups[k]))
-        nA = groups[gk[0]][0]["n"]
-        nB = groups[gk[1]][0]["n"]
-        interior = interior_angle_deg(nA, nB)
-        # standable test height: the edge base if it's in the region, else the region floor
-        test_y = min(max(e["ylo"], ymin), ymax)
-        seams.append(dict(S=tuple(S), polys=sorted(t["poly"] for t in e["tris"]),
+        interior = interior_angle_deg(groups[gk[0]][0]["n"], groups[gk[1]][0]["n"])
+        test_y = min(max(ylo, ymin), ymax)             # edge base if in-region, else the region floor
+        seams.append(dict(S=tuple(S), polys=sorted({e[5]["poly"] for e in members}),
                           interior=round(interior, 3), floor=round(disp_floor(interior), 3),
                           test_y=test_y))
     seams.sort(key=lambda s: s["floor"])
