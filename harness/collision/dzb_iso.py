@@ -104,28 +104,33 @@ def room_world_transform(stage, room, extract_dir=None):
     return 0.0, 0.0, 0.0
 
 
-def load_room_region(stage, room, extract_dir=None, transform=True):
-    """Return ``(region_tris, box, stage)`` for a room's collision, world-transformed and Dolphin-free.
+def region_from_dzb(dzb_bytes, tx=0.0, tz=0.0, ang=0.0):
+    """Build ``(region_tris, box)`` from raw DZB bytes, world-transformed by ``(tx, tz, angY_deg)``.
     ``region_tris`` matches ``seam_scan.read_region_tris``: ``dict(poly, v, n, T)`` with ``T`` carrying
-    the bit-exact calc_pla plane and ``n`` its normal. ``box`` is the room's XZ/Y AABB."""
-    sdir = _stage_dir(stage, extract_dir)
-    arc = read_rarc(os.path.join(sdir, "Room%d.arc" % room))
-    dzb = next(arc[k] for k in arc if k.lower().endswith(".dzb"))
-    verts, tris = parse_dzb(dzb)
-    if transform:
-        tx, tz, ang = room_world_transform(stage, room, extract_dir)
-        if tx or tz or ang:
-            c, s = math.cos(math.radians(ang)), math.sin(math.radians(ang))
-            verts = [(x * c + z * s + tx, y, -x * s + z * c + tz) for (x, y, z) in verts]
+    the bit-exact calc_pla plane and ``n`` its normal. Returns ``([], None)`` for an empty DZB."""
+    verts, tris = parse_dzb(dzb_bytes)
+    if tx or tz or ang:
+        c, s = math.cos(math.radians(ang)), math.sin(math.radians(ang))
+        verts = [(x * c + z * s + tx, y, -x * s + z * c + tz) for (x, y, z) in verts]
     region = []
     for poly, (a, b, c, _tid, _grp) in enumerate(tris):
         v0, v1, v2 = verts[a], verts[b], verts[c]
         T = Tri(v0, v1, v2)                                 # plane via bit-exact calc_pla
         region.append(dict(poly=poly, v=[v0, v1, v2], n=(T.pla.nx, T.pla.ny, T.pla.nz), T=T))
+    if not region:
+        return [], None
     xs = [c for t in region for c in (t["v"][0][0], t["v"][1][0], t["v"][2][0])]
     ys = [c for t in region for c in (t["v"][0][1], t["v"][1][1], t["v"][2][1])]
     zs = [c for t in region for c in (t["v"][0][2], t["v"][1][2], t["v"][2][2])]
-    box = (min(xs), max(xs), min(ys), max(ys), min(zs), max(zs))
+    return region, (min(xs), max(xs), min(ys), max(ys), min(zs), max(zs))
+
+
+def load_room_region(stage, room, extract_dir=None, transform=True):
+    """``(region_tris, box, stage)`` for a room's collision, world-transformed and Dolphin-free."""
+    arc = read_rarc(os.path.join(_stage_dir(stage, extract_dir), "Room%d.arc" % room))
+    dzb = next(arc[k] for k in arc if k.lower().endswith(".dzb"))
+    tx, tz, ang = room_world_transform(stage, room, extract_dir) if transform else (0.0, 0.0, 0.0)
+    region, box = region_from_dzb(dzb, tx, tz, ang)
     return region, box, stage
 
 
