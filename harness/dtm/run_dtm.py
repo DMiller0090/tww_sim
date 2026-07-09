@@ -36,7 +36,7 @@ CLI:
     python run_dtm.py ready=land [up=30] [neut=15] [anchor=land_flatwalk@twwgz]
                       [expect_pos_z=1095.42] [expect_state=5] [watch=1]
 """
-import sys, os, time, math, json, shutil, subprocess
+import sys, os, time, math, json, shutil, subprocess, struct
 # >>> repo bootstrap: locate tww_sim/ package + ../tools/ (dolphin_mem)
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
@@ -195,12 +195,57 @@ def _read_end(h, m):
     return end
 
 
+_PLAYER_PTR = 0x803AD860       # deref -> player object base (Pp); proc @+0x3100, speedF @+0x17C
+
+
+def _read_frame(h, m):
+    """Compact per-frame read for `log_frames` tracing: pos/facing/proc/speedF/nspeed/state. proc +
+    speedF come off the player chain (deref 0x803AD860) like spotcheck_rollstab / dtm_run_local."""
+    Pp = struct.unpack('>I', D.read_bytes(h, m, _PLAYER_PTR, 4))[0]
+    return {
+        "pos_x": D.read_named(h, m, "link_x"), "pos_z": D.read_named(h, m, "link_z"),
+        "facing": D.read_named(h, m, "facing") & 0xFFFF,
+        "state": D.read_named(h, m, "link_state"),
+        "proc": struct.unpack('>i', D.read_bytes(h, m, Pp + 0x3100, 4))[0],
+        "speedF": struct.unpack('>f', D.read_bytes(h, m, Pp + 0x17C, 4))[0],
+        "nspeed": D.read_named(h, m, "potential_speed"),
+    }
+
+
+def _log_playback(ready, log_frames, verbose):
+    """Per-frame trace of a movie playback (the `log_frames` path). Fast-polls (no 1s sleep) for the
+    anchor-loaded gate so it catches the movie near frame 0, PAUSES, then single-steps advance(1) +
+    _read_frame for `log_frames` frames (or until playback stops). Returns the list of per-frame dicts.
+    The caller should prepend a few idle frames so the state-gate window is wide enough to catch idle
+    (otherwise the fast-poll may land a couple frames in -- fine when aligning at a landmark)."""
+    t0 = time.time(); slate = None
+    while time.time() - t0 < 60:               # tight poll: catch the loaded savestate ASAP
+        slate = _attach_ready(ready)
+        if slate:
+            break
+        time.sleep(0.02)
+    if not slate:
+        raise SystemExit("log_playback: never reached the anchor-loaded gate")
+    D.control_pipe_quiet("pause")
+    h, m, _ = slate
+    if verbose:
+        print(f"  logging {log_frames} frames from the loaded gate (paused, single-stepping)")
+    frames = []
+    for i in range(log_frames):
+        frames.append(_read_frame(h, m))
+        D.control_pipe_quiet("advance", {"frames": 1})
+        if not _status().get("playing"):
+            frames.append(_read_frame(h, m))
+            break
+    return frames
+
+
 # --- the engine -----------------------------------------------------------------------
 def run_dtm(sticks, expected=None, *, game=None, anchor=DEFAULT_ANCHOR,
             template=DEFAULT_TEMPLATE, out=None, relaunch_dolphin=True,
             polls=4, seed=1, bootsecs=180, playsecs=360,
             min_air=800, tol=0.02, facing_tol=FACING_TOL_DEG, pos_tol=1.0,
-            ready=None, watch=False, verbose=True):
+            ready=None, watch=False, verbose=True, log_frames=None):
     """Author -> play -> read -> compare. Returns an endpoint dict (see module docstring).
 
     sticks   : list of {stickX, stickY, substickX?, substickY?} (one per game frame).
@@ -240,35 +285,77 @@ def run_dtm(sticks, expected=None, *, game=None, anchor=DEFAULT_ANCHOR,
     D.control_pipe_quiet("playmovie", {"path": out.replace('\\', '/'), "game": game})
     if verbose: print(f"playmovie {os.path.basename(out)}")
 
+    # PER-FRAME TRACE PATH: single-step + read each frame (diagnosing sim<->live divergence). Returns
+    # the log in end["log"] and the final logged frame as the end read; skips the exhaust free-run.
+    if log_frames:
+        frames = _log_playback(ready, int(log_frames), verbose)
+        D.control_pipe_quiet("pause")
+        h, m = D.attach()
+        end = _read_end(h, m)
+        end.update(ended=True, armed=True, frames=nframes, advanced=None, start=None, log=frames)
+        if verbose:
+            print(f"  logged {len(frames)} frames (end proc=0x{frames[-1]['proc']:02x} "
+                  f"pos=({frames[-1]['pos_x']:.2f},{frames[-1]['pos_z']:.2f}))")
+        return end
+
     # boot: wait for the anchor-loaded readiness gate, NOT the playing flag (true all through boot,
     # so it can't tell the anchor is in; resuming early drives inputs on a dead game -- play_sticks bug).
-    t0 = time.time(); slate = None
+    # SHORT-MOVIE HARDENING: a short movie can auto-play + exhaust before the 1s gate poll catches the
+    # loaded state, so also watch the frame counter -- played-then-stopped -> read the end directly.
+    t0 = time.time(); slate = None; saw_playing = False; frame_moved = False; last_frame = None
+    boot_exhausted = False
     while time.time() - t0 < bootsecs:
+        st = _status()
+        if st.get("playing"):
+            saw_playing = True
+        fr = st.get("frame")
+        if last_frame is not None and fr is not None and fr != last_frame:
+            frame_moved = True
+        last_frame = fr
         slate = _attach_ready(ready)
         if slate:
             if verbose: print(f"booted after {time.time()-t0:.1f}s (state={slate[2]['link_state']})")
             break
+        if saw_playing and frame_moved and not st.get("playing"):
+            boot_exhausted = True                # movie played+stopped before the gate caught it
+            if verbose: print(f"movie auto-played+exhausted during boot ({time.time()-t0:.1f}s); "
+                              f"reading end directly (gate missed -- short-movie path)")
+            break
         time.sleep(1.0)
-    if not slate:
-        raise SystemExit("never reached the anchor-loaded readiness gate")
-    armed = bool(_status().get("playing"))
-    # start-of-movie controllable values (frame 0, before any input) -- lets a caller seed
-    # its prediction to the ACTUAL anchor instead of assuming a fixed cold-start seed.
-    h0, m0, _ = slate
-    start = {k: D.read_named(h0, m0, k) for k in
-             ("potential_speed", "anim_frame", "air", "link_state")}
+    if not slate and not boot_exhausted:
+        raise SystemExit("never reached the anchor-loaded readiness gate (movie never played)")
+    armed = bool(_status().get("playing")) or saw_playing
 
-    # Read at exhaustion: free-run, read once playback stops. The emulator PAUSES at the last movie
-    # frame (PauseMovie, ensured by relaunch); no slow per-frame pipe stepping.
-    if watch and verbose:
-        print("  anchor loaded, paused at frame 0 -- RESUMING, watch Dolphin (short movie)")
-        time.sleep(2.0)
-    D.control_pipe_quiet("resume")
-    t1 = time.time(); ended = False
-    while time.time() - t1 < playsecs:
-        if not _status().get("playing"):
-            ended = True; break
-        time.sleep(0.3)
+    ended = True
+    if slate:
+        # start-of-movie controllable values (frame 0, before any input) -- lets a caller seed
+        # its prediction to the ACTUAL anchor instead of assuming a fixed cold-start seed.
+        h0, m0, _ = slate
+        start = {k: D.read_named(h0, m0, k) for k in
+                 ("potential_speed", "anim_frame", "air", "link_state")}
+        # Read at exhaustion: free-run, read once playback stops. The emulator PAUSES at the last movie
+        # frame (PauseMovie, ensured by relaunch); no slow per-frame pipe stepping.
+        if watch and verbose:
+            print("  anchor loaded, paused at frame 0 -- RESUMING, watch Dolphin (short movie)")
+            time.sleep(2.0)
+        D.control_pipe_quiet("resume")
+        t1 = time.time(); ended = False
+        while time.time() - t1 < playsecs:
+            if not _status().get("playing"):
+                ended = True; break
+            time.sleep(0.3)
+    else:
+        # short-movie path: the movie already exhausted during boot, so there is no frame-0 to read
+        # and nothing to resume. Confirm it has settled (frame counter stable), then read the end.
+        start = None
+        t1 = time.time(); stable = 0; last_frame = None
+        while time.time() - t1 < playsecs:
+            fr = _status().get("frame")
+            stable = stable + 1 if fr == last_frame else 0
+            last_frame = fr
+            if stable >= 4 and not _status().get("playing"):
+                break
+            time.sleep(0.3)
     D.control_pipe_quiet("pause")
 
     # PauseMovie can freeze before the final frame's air decrement commits, leaving the read one
