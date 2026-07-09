@@ -15,4 +15,5 @@ from .mathlib import (  # noqa: F401
     nfmod, fc_update, cLib_addCalc, cM_scos, cM_ssin_s16, cM_scos_s16,
     deg_to_s16, s16_signed, _F32_PI, ARROW_STICK_DEADZONE, angdiff_deg,
     _deadzone, stick_angle_deg, _COS_TABLE, _SIN_TABLE,
+    clamp_stick, main_stick_decode,
 )

@@ -1256,30 +1256,32 @@ cdef inline long long _s16c(long long x) nogil:
     x &= 0xFFFF
     return x - 0x10000 if x >= 0x8000 else x
 
-cdef void _clamp_stick_c(int x, int y, int* ox, int* oy) nogil:
-    """PADClamp ClampStick for the substick (min=15, max=59, xy=31). x,y are s8 (raw byte - 128)."""
+cdef void _clamp_stick_c(int x, int y, int min_, int max_, int xy, int* ox, int* oy) nogil:
+    """PADClamp ClampStick (Padclamp.c): per-axis dead-zone (subtract min_) + octagonal clamp (points
+    outside the octagon scaled onto its edge, each axis s8-truncated). x,y are s8 (raw byte - 128).
+    Params: main stick min=15/max=72/xy=40; sub (C-stick) min=15/max=59/xy=31."""
     cdef int sx = 1 if x >= 0 else -1
     cdef int sy = 1 if y >= 0 else -1
     if x < 0: x = -x
     if y < 0: y = -y
-    x = 0 if x <= 15 else x - 15
-    y = 0 if y <= 15 else y - 15
+    x = 0 if x <= min_ else x - min_
+    y = 0 if y <= min_ else y - min_
     if x == 0 and y == 0:
         ox[0] = 0; oy[0] = 0; return
     cdef int d
-    if 31 * y <= 31 * x:
-        d = 31 * x + (59 - 31) * y
+    if xy * y <= xy * x:
+        d = xy * x + (max_ - xy) * y
     else:
-        d = 31 * y + (59 - 31) * x
-    if 31 * 59 < d:
-        x = (31 * 59 * x) // d
-        y = (31 * 59 * y) // d
+        d = xy * y + (max_ - xy) * x
+    if xy * max_ < d:
+        x = (xy * max_ * x) // d
+        y = (xy * max_ * y) // d
     ox[0] = sx * x; oy[0] = sy * y
 
 def cstick_normalize(csx, csy):
     """Raw C-stick bytes -> (mStickCPosX, mStickCPosY). Bit-exact port of cam_bezier.cstick_normalize."""
     cdef int px, py
-    _clamp_stick_c(<int>csx - 128, <int>csy - 128, &px, &py)
+    _clamp_stick_c(<int>csx - 128, <int>csy - 128, 15, 59, 31, &px, &py)
     cdef double posx = f32(px / 42.0)
     cdef double posy = f32(py / 42.0)
     cdef double val = f32(_c_sqrt(f32(posx * posx) + f32(posy * posy)))
@@ -1408,20 +1410,6 @@ def land_init_consts(c):
     _LAND_CONSTS_READY = True
 
 
-cdef inline double _deadzone_c(double raw) nogil:
-    """mathlib._deadzone (per-axis, dz=15): subtract the dead-zone, keep sign, clamp at 0."""
-    cdef double o = raw - 128.0
-    cdef double m = _c_fabs(o) - 15.0
-    if m <= 0.0:
-        return 0.0
-    return _c_copysign(m, o)
-
-
-cdef inline long long _deg_to_s16_c(double deg) nogil:
-    """mathlib.deg_to_s16: round-half-to-even (Python round) then & 0xFFFF."""
-    return (<long long>_c_rint(deg / 360.0 * 65536.0)) & 0xFFFF
-
-
 cdef double _clib_addcalc(double value, double target, double scale,
                           double max_step, double min_step) nogil:
     """mathlib.cLib_addCalc (f32 chase). Bit-exact port."""
@@ -1491,7 +1479,7 @@ cdef long long _cam_step_target_c(long long cam_target, double stick_x, double s
 cdef double _cstick_posx_c(int csx, int csy) nogil:
     """cam_bezier.cstick_normalize -> mStickCPosX only (the camera yaw command needs just X)."""
     cdef int px, py
-    _clamp_stick_c(csx - 128, csy - 128, &px, &py)
+    _clamp_stick_c(csx - 128, csy - 128, 15, 59, 31, &px, &py)
     cdef double posx = f32(px / 42.0)
     cdef double posy = f32(py / 42.0)
     cdef double val = f32(_c_sqrt(f32(posx * posx) + f32(posy * posy)))
@@ -1503,7 +1491,7 @@ cdef double _cstick_posx_c(int csx, int csy) nogil:
 cdef double _cstick_posy_c(int csx, int csy) nogil:
     """cam_bezier.cstick_normalize -> mStickCPosY only (the C-up-cancel subjectivity gesture)."""
     cdef int px, py
-    _clamp_stick_c(csx - 128, csy - 128, &px, &py)
+    _clamp_stick_c(csx - 128, csy - 128, 15, 59, 31, &px, &py)
     cdef double posx = f32(px / 42.0)
     cdef double posy = f32(py / 42.0)
     cdef double val = f32(_c_sqrt(f32(posx * posx) + f32(posy * posy)))
@@ -1628,21 +1616,31 @@ cdef class LandCore:
 
     # --- stick layer (setStickData, 10530) ---
     cdef void _set_stick_data(self, int sx, int sy):
-        cdef double ax = _deadzone_c(<double>sx)
-        cdef double ay = _deadzone_c(<double>sy)
-        cdef double mag = _c_hypot(ax, ay) / 54.0
+        # Faithful PADClamp octagon clamp + JUTGamePad::CStick::update (STICK_MODE_1). Bit-exact twin
+        # of mathlib.main_stick_decode: msd = min(hypot(clamped)/54, 1) (f64, on-axis == the old naive
+        # value); angle = (s16)(10430.379f * atan2f(mPosX, -mPosY)) on the CLAMPED+normalized vector.
+        cdef int cx, cy
+        _clamp_stick_c(sx - 128, sy - 128, 15, 72, 40, &cx, &cy)
+        cdef double mag = _c_hypot(<double>cx, <double>cy) / 54.0
         if mag > 1.0:
             mag = 1.0
         self.msd = mag
-        cdef double ang, r
+        cdef double px, py, value
+        cdef long long ang
         if mag <= 0.05:
             self.target = self.travel
         else:
-            ang = _c_atan2(ax, -ay) * _DEG_PER_RAD
-            r = _c_fmod(ang, 360.0)
-            if r < 0.0:
-                r += 360.0
-            self.m34dc = (_deg_to_s16_c(r) + 0x8000) & 0xFFFF
+            px = f32(cx / 54.0)
+            py = f32(cy / 54.0)
+            value = f32(_c_sqrt(f32(f32(px * px) + f32(py * py))))
+            if value > 1.0:
+                px = f32(px / value)
+                py = f32(py / value)
+            if py == 0.0:
+                ang = 0x4000 if px > 0.0 else 0xC000
+            else:
+                ang = (<long long>f32(f32(10430.379) * f32(_c_atan2(px, -py)))) & 0xFFFF
+            self.m34dc = (ang + 0x8000) & 0xFFFF
             self.target = (self.m34dc + self.csangle) & 0xFFFF
 
     cdef inline int _get_dir(self, long long angle):

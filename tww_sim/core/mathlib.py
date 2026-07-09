@@ -128,8 +128,72 @@ def stick_angle_deg(sx, sy):
     This supersedes the old square-deadzone test (both dz axes 0); they agree everywhere
     except a thin ring just outside the dz-15 square (0 < hypot <= 2.7), where the game
     blocks a tiny gain the square test would let through. Bit-identical to the gold stick
-    table's `value <= 0.05` gate on all 65536 cells (verified), so no table dep needed."""
+    table's `value <= 0.05` gate on all 65536 cells (verified), so no table dep needed.
+
+    NOTE: this NAIVE per-axis atan2 is missing the octagonal clamp (see clamp_stick /
+    main_stick_decode); it is exact only on-axis / inside the octagon. Off-axis near-full
+    sticks need the clamped decode. Still used by swim + as the on-axis neutral gate."""
     ax, ay = _deadzone(sx), _deadzone(sy)
     if min(math.hypot(ax, ay) / 54.0, 1.0) <= 0.05:
         return None
     return math.degrees(math.atan2(ax, -ay)) % 360.0
+
+
+# --- PADClamp octagon clamp + faithful main-stick decode (from decomp; Padclamp.c + CStick::update) ---
+# Matches clean DTM, NOT the advancewith stick_angle_table.csv (why: knowledge/mechanics/walk-run.md).
+_STICK_RAD2S = f32(10430.379)          # JUTGamePad::CStick::update: mAngle = (s16)(10430.379f * atan2f)
+
+
+def clamp_stick(x, y, max_, xy, min_):
+    """PADClamp ClampStick (Padclamp.c): per-axis sign-split + abs, per-axis dead-zone (subtract
+    `min_`, floor 0), then an OCTAGONAL clamp -- a point outside the octagon (xy*max < d) is scaled
+    onto the octagon edge by xy*max/d and each axis is integer-truncated to s8. `x,y` are signed
+    (raw byte - 128). Returns the clamped signed (cx, cy). ClampRegion: main stick min=15/max=72/
+    xy=40; sub (C-stick) min=15/max=59/xy=31."""
+    sgx = 1 if x >= 0 else -1
+    sgy = 1 if y >= 0 else -1
+    x = -x if x < 0 else x
+    y = -y if y < 0 else y
+    x = 0 if x <= min_ else x - min_
+    y = 0 if y <= min_ else y - min_
+    if x == 0 and y == 0:
+        return 0, 0
+    if xy * y <= xy * x:
+        d = xy * x + (max_ - xy) * y
+    else:
+        d = xy * y + (max_ - xy) * x
+    if xy * max_ < d:
+        x = int(xy * max_ * x / d)     # C integer division truncates toward zero
+        y = int(xy * max_ * y / d)
+    return sgx * x, sgy * y
+
+
+def _clamped_angle_s16(cx, cy, clamp):
+    """JUTGamePad::CStick::update (STICK_MODE_1) angle from a CLAMPED integer vector: normalize by
+    `clamp` (54 main / 42 sub), cap magnitude at 1 (STICK_MODE_1 divides both axes by the magnitude),
+    then mAngle = (s16)(10430.379f * atan2f(mPosX, -mPosY)). f32 throughout; s16 truncates toward 0."""
+    px = f32(cx / clamp)
+    py = f32(cy / clamp)
+    value = f32(math.sqrt(f32(f32(px * px) + f32(py * py))))
+    if value > 1.0:
+        px = f32(px / value)
+        py = f32(py / value)
+    if py == 0.0:
+        return 0x4000 if px > 0.0 else 0xC000           # +/-0x4000 special-case (CStick::update)
+    return int(f32(_STICK_RAD2S * f32(math.atan2(px, -py)))) & 0xFFFF
+
+
+def main_stick_decode(sx, sy):
+    """Faithful (main-stick angle s16, mStickDistance) for a raw byte pair (0..255, center 128).
+    Returns (None, msd) for a neutral stick (mStickDistance <= 0.05). The angle is the `mMainStickAngle`
+    term in `m34DC = angle + 0x8000`; msd is `mStickDistance`. See clamp_stick / _clamped_angle_s16.
+
+    msd uses the f64 `min(hypot(clamped)/54, 1)` form (== the swim/land magnitude): on-axis / inside
+    the octagon the clamped vector equals the dead-zoned one, so msd + the neutral gate are byte-for-byte
+    what the naive decode gave (on-axis goldens + locked on-axis live tests unchanged); off-axis it is
+    corrected by the octagon clamp."""
+    cx, cy = clamp_stick(sx - 128, sy - 128, 72, 40, 15)
+    msd = min(math.hypot(cx, cy) / 54.0, 1.0)
+    if msd <= 0.05:
+        return None, msd
+    return _clamped_angle_s16(cx, cy, 54.0), msd

@@ -15,12 +15,19 @@ LIVE-FAITHFUL STICKS (hard-won): full deflection (255/1) and neutral (128,128) a
 partial magnitude (msd 0.3-0.7) is bit-exact; but the sim's msd = min(hypot/54, 1) CAPS, so near-full
 raw sticks (e.g. 128,197) read 1.0 in the sim while live PADClamp gives ~0.96 -- NEVER emit that
 ambiguous cap-boundary cell. `stick_for_bearing` emits the true corner for msd>=1 and msd*54 below it.
+
+CLAMP-AWARE INVERSE: the decode (`main_stick_decode`) now runs the PADClamp octagon clamp, which shifts a
+near-full OFF-AXIS byte's decoded angle by up to ~167 s16. The analytic byte below assumes the naive
+(unclamped) decode, so `stick_for_bearing` verifies its candidate against the real clamped decode and, when
+the clamp moved the angle, searches the byte neighborhood for the one whose CLAMPED decode best hits the
+target (hard-filtered to the requested magnitude band). On-axis / inside the octagon the clamp is a no-op,
+so the analytic candidate is returned unchanged (cardinals + partial creeps stay bit-identical).
 """
 from __future__ import annotations
 import math
 import struct
 
-from ...core.mathlib import deg_to_s16, ARROW_STICK_DEADZONE
+from ...core.mathlib import deg_to_s16, ARROW_STICK_DEADZONE, main_stick_decode
 
 # Dead-zoned deflection magnitude (per axis) before the 15-unit dead zone is added back per axis (see
 # stick_for_bearing). _STICK_R + DZ == 127 -> cardinals hit the full corners (255/1). See land-movement.md.
@@ -72,7 +79,36 @@ def stick_for_bearing(theta_s16, csangle=0, msd=1.0):
     dz = ARROW_STICK_DEADZONE
     sx = 128.0 + (math.copysign(abs(ax) + dz, ax) if abs(ax) > 1e-6 else 0.0)
     sy = 128.0 + (math.copysign(abs(ay) + dz, ay) if abs(ay) > 1e-6 else 0.0)
-    return (max(0, min(255, int(round(sx)))), max(0, min(255, int(round(sy)))))
+    cand = (max(0, min(255, int(round(sx)))), max(0, min(255, int(round(sy)))))
+    # Verify vs the real clamped decode; if the octagon clamp moved the angle, search the byte
+    # neighborhood for the best hit in the msd band (analytic-exact on-axis / inside octagon).
+    target_msd = min(max(msd, 0.0), 1.0)
+    best, best_key = cand, _bearing_miss(cand, stick_s16, target_msd)
+    if best_key[0] == 0:
+        return best
+    r_search = 3
+    while True:
+        cx, cy = cand
+        for bx in range(max(0, cx - r_search), min(255, cx + r_search) + 1):
+            for by in range(max(0, cy - r_search), min(255, cy + r_search) + 1):
+                key = _bearing_miss((bx, by), stick_s16, target_msd)
+                if key < best_key:
+                    best, best_key = (bx, by), key
+        if best_key[0] == 0 or r_search >= 11:
+            return best
+        r_search += 4
+
+
+def _bearing_miss(byte, target_stick_s16, target_msd, msd_band=0.03):
+    """Sort key (|angle error| s16, |msd error|) for how well `byte`'s CLAMPED decode
+    (`main_stick_decode`) matches a target stick angle at the requested magnitude. A neutral decode or
+    an out-of-band magnitude is rejected with a large key, so a full-deflection request can never be
+    satisfied by a low-magnitude byte that merely points the same way."""
+    ang, m = main_stick_decode(*byte)
+    if ang is None or abs(m - target_msd) > msd_band:
+        return (0x8000, 9.9)
+    aerr = abs(((ang - int(target_stick_s16) + 0x8000) & 0xFFFF) - 0x8000)
+    return (aerr, abs(m - target_msd))
 
 
 def _freeze_pos(state):

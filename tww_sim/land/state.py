@@ -36,7 +36,7 @@ release decel starts on the 3rd neutral-frame (live land_walk_gt.csv).
 from __future__ import annotations
 import math
 from ..core import mathlib as S
-from ..core.mathlib import f32, cLib_addCalc, cM_scos_s16, deg_to_s16, s16_signed, _deadzone, stick_angle_deg
+from ..core.mathlib import f32, cLib_addCalc, cM_scos_s16, s16_signed, main_stick_decode
 from ..core.camera import CameraManual, LAND_SCALE
 from .constants import *  # noqa: F401,F403  (proc enums, DIR_*, gates -- also re-exported by land.py)
 from .constants import _STATE_TAG, _cM_ssin_s16
@@ -298,15 +298,16 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
 
     # --- stick layer (setStickData, 10530) -------------------------------------------------
     def _set_stick_data(self, sx, sy):
-        """mStickDistance + m34E8 world target from a raw stick. mStickDistance uses the /54
-        deadzoned magnitude (PADClamp / JUTGamePad CStick), capped at 1. m34E8 = m34DC(stick)
-        + csangle, with m34DC = stickAngle + 0x8000 (up = away = forward)."""
-        self.msd = min(math.hypot(_deadzone(sx), _deadzone(sy)) / 54.0, 1.0)
-        sa = stick_angle_deg(sx, sy)            # decomp convention: 0=down .. 180=up
-        if sa is None:
+        """mStickDistance + m34E8 world target from a raw stick. The stick is run through PADClamp's
+        octagonal clamp + JUTGamePad::CStick::update (main_stick_decode) exactly as the console does:
+        mStickDistance = mMainStickValue (capped at 1), m34DC = mMainStickAngle + 0x8000, m34E8 =
+        m34DC + csangle. The octagon clamp is a no-op on-axis / inside the octagon and shifts the
+        near-full OFF-AXIS angle by a few s16 -- the decode fix that removes the sim-vs-live drift."""
+        ang, self.msd = main_stick_decode(sx, sy)
+        if ang is None:
             self.target = self.travel           # neutral: no want -> hold (irrelevant, gated)
         else:
-            self.m34dc = (deg_to_s16(sa) + 0x8000) & 0xFFFF
+            self.m34dc = (ang + 0x8000) & 0xFFFF
             self.target = (self.m34dc + self.csangle) & 0xFFFF
 
     # --- proc dispatch + per-frame step ----------------------------------------------------
