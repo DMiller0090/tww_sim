@@ -205,7 +205,9 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
         # Sword-thrust cut (CUT_F / CUT_A) state -- the "roll stab". sword_drawn gates the roll->cut
         # trigger (a cut only fires out of a roll if the sword is out; a bare roll routes to MOVE).
         self.sword_drawn = bool(sword_drawn)   # gates the roll->cut trigger; see land-movement.md (roll stab)
-        self._b_held = False                   # swordButton (B) delivered this frame (roll->cut trigger)
+        self._b_held = False                   # swordButton() (B mItemButton, HELD) this frame
+        self._b_trig = False                   # swordTrigger() (B mItemTrigger, RISING EDGE) this frame -- the
+        #                                        actual roll->cut trigger (a HELD B never re-fires the edge)
         self.cut_frame = 0.0                   # mFrameCtrlUnder[MOVE0] frame during a cut (times the lunge/exit)
         self._cut_entered = False              # cut entry frame: no ctrl advance, nspeed carried, m3700_prev=0
         self._cut_m3700 = (0.0, 0.0, 0.0)      # previous frame's m3700 (anim joint-0 translate); reset 0 at init
@@ -327,9 +329,11 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
         self._set_stick_data(asx, asy)
         l_held = bool(abtn & 0x40) or atrig >= 200      # checkAttentionLock proxy (digital/analog L)
         a_pressed = bool(abtn & 0x100)                   # doTrigger: A = the "do"/roll button
-        self._b_held = bool(abtn & 0x200)                # swordButton (B): buffered by the roll -> CUT on exit
-        # mItemTrigger A/B RISING EDGE (checkSubjectEnd 5698): a HELD B misses it -> no exit. See KB.
+        self._b_held = bool(abtn & 0x200)                # swordButton (B mItemButton, HELD)
+        # mItemTrigger RISING EDGE (on the delivered/delayed input): a HELD B misses it -> no exit. See KB.
+        # ab_edge = combined A|B (freeze checkSubjectEnd 5698); _b_trig = B-only (roll->cut swordTrigger 4203).
         ab_edge = ((abtn & ~self._abtn_prev) & 0x300) != 0
+        self._b_trig = ((abtn & ~self._abtn_prev) & 0x200) != 0
         self._abtn_prev = abtn
 
         moving = self.msd > 0.05

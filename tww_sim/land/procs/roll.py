@@ -51,9 +51,9 @@ class _RollMixin:
             if self.msd <= 0.05:
                 self.nspeed = f32(self.nspeed - self.ROLL_MIN)
             self._roll_exit(l_held)
-        elif self.roll_frame > self.ROLL_EARLY and (self.msd > 0.05 or (self._b_held and self.sword_drawn)):
+        elif self.roll_frame > self.ROLL_EARLY and (self.msd > 0.05 or (self._b_trig and self.sword_drawn)):
             # getFrame()>field_0x10 -> checkNextMode(1) (procFrontRoll 6866); inert only when neutral AND no
-            # buffered action -- a pushed stick (roll-EBS) or a buffered sword (roll stab) makes it fire.
+            # action -- a pushed stick (roll-EBS) or a B RISING EDGE (swordTrigger; a HELD B is not an edge) fires it.
             self._roll_exit(l_held)
 
     def _roll_exit(self, l_held):
@@ -62,8 +62,9 @@ class _RollMixin:
         carrying the roll's full speedF into the cut's first-frame lunge. Otherwise -> ATN_MOVE if L
         held (procAtnMove_init), else MOVE (procMove_init) with the walk re-entry morf; the walk blend
         re-inits its frame ctrl to 0 because the roll left m34C3==0 (see enter_roll)."""
-        if self._b_held and self.sword_drawn:
-            # aim = mProcVar2.m34D4 = sVar2 (changeCutProc): the stick target m34E8 when pushed & unlocked,
+        if self._b_trig and self.sword_drawn:
+            # swordTrigger() || m34C5 (checkNextActionFromButton 4203): the B RISING EDGE this frame dispatches
+            # changeCutProc. aim = mProcVar2.m34D4 = sVar2 (changeCutProc): the stick target m34E8 when pushed & unlocked,
             # else shape_angle.y. A diagonal stick at the thrust rotates the cut tail (see _cut_init).
             aim = self.target if (self.msd > 0.05 and not l_held) else self.facing
             self._cut_init(CUT_A if l_held else CUT_F, aim=aim)
