@@ -433,3 +433,109 @@ cpdef crr_pos_walls(old_pos, new_pos, tris, wall_h=(30.1, 89.9, 125.0), wall_r=3
     free(vtx); free(pla); free(wh)
     return (px, py, pz), {"line_hit": bool(line_hit), "wall_hit": bool(wall_hit),
                           "ran_line": bool(ran_line)}
+
+
+# ---- f32-lattice ring search (native port of gap_search.first_f32_clip) -----------------------
+# The seam-clip locator's hot loop: for a fixed settled ``old`` and a continuous ``new_center`` just
+# past the seam, enumerate f32-representable ``new`` on Chebyshev ULP rings out from ``new_center``
+# and return the FIRST that clips (line + wall both miss). The pure-Python ring tops out at ~40-95k
+# CrrPos/s because every candidate re-enters _load_tris (malloc + per-vertex Python attribute reads).
+# Loading the trilist ONCE and running the ring entirely in C collapses that overhead; verified 0-ULP
+# against the pure ring (same candidate order → identical FIRST hit and n_calls).
+
+cdef inline double _next_f32_c(double x, int d) nogil:
+    """The f32 that is ``d`` ULPs from f32 ``x`` (magnitude-directed: +d moves away from 0).
+    Bit-identical to gap_search._next_f32 (unsigned 32-bit wrap == Python's ``& 0xFFFFFFFF``)."""
+    cdef float fx = <float>x
+    cdef unsigned int b = (<unsigned int*>&fx)[0]
+    if x >= 0.0:
+        b = b + <unsigned int>d
+    else:
+        b = b - <unsigned int>d
+    cdef float out
+    (<unsigned int*>&out)[0] = b
+    return <double>out
+
+
+cdef inline bint _crr_clips(double o0, double o1, double o2,
+                            double nx0, double ny0, double nz0,
+                            double* vtx, double* pla, int n,
+                            double* wh, int nh, double wr) nogil:
+    """True iff CrrPos on old=(o0,o1,o2) -> new=(nx0,ny0,nz0) misses BOTH the swept LineCheck and
+    WallCorrect (a seam clip). Inlined crr_pos_walls with speed_y = 0, SHORT-CIRCUITED: only the
+    clip boolean is needed, not the corrected pos, so the moment either check hits we know it is not
+    a clip and stop. This skips the (expensive) WallCorrect on every line-blocked candidate — the
+    dominant case for a genuinely-unclippable corner (the budget-drainers), so it is where the win
+    lands. Bit-identical clip verdict to crr_pos_walls: a first-LineCheck hit or a WallCorrect hit
+    both force ``(not line_hit_final) ∧ (not wall_hit)`` False regardless of the skipped work."""
+    cdef double px = nx0, py = ny0, pz = nz0
+    cdef double dxz2 = _len2dsq(o0, o2, px, pz)
+    if dxz2 > fmuls(wr, wr):
+        if _line_check_c(o0, o1, o2, &px, &py, &pz, vtx, pla, n, wh, nh):
+            return False              # first LineCheck hit -> line_hit_final True -> not a clip
+    if _wall_correct_c(&px, py, &pz, 0.0, vtx, pla, n, wh, nh, wr):
+        return False                  # WallCorrect hit -> not a clip (second LineCheck irrelevant)
+    return True                       # both missed -> clip
+
+
+cpdef first_f32_clip(old_pos, new_center, link_y, tris, wall_h=(30.1, 89.9, 125.0),
+                     wall_r=35.0, int box_ulps=120, max_calls=None):
+    """Native EXISTENCE search: FIRST clipping f32 ``new`` on ULP rings out from ``new_center``.
+
+    ``old_pos`` = settled f32 (x,y,z); ``new_center`` = (x,z) guess just past the seam; ``link_y`` =
+    floor Y for ``new``. Returns ``(hit, n_calls)`` where ``hit`` = ``dict(disp, new, old)`` or None
+    (matches gap_search.first_f32_clip). ``max_calls`` caps CrrPos evaluations (None = box only)."""
+    cdef double* vtx
+    cdef double* pla
+    cdef double* wh
+    cdef int nh
+    cdef int n = _load_tris(tris, &vtx, &pla)
+    wh = _load_wh(wall_h, &nh)
+    cdef double o0 = old_pos[0], o1 = old_pos[1], o2 = old_pos[2]
+    cdef double ly = link_y, wr = wall_r
+    cdef double cx = <double><float>new_center[0]
+    cdef double cz = <double><float>new_center[1]
+    cdef long maxc = -1 if max_calls is None else <long>max_calls
+    cdef long ncalls = 0
+    cdef int r, i, j, k
+    cdef double nx, nz
+    cdef int state = 0          # 0 = keep going, 1 = found, 2 = capped
+    cdef double hnx = 0.0, hnz = 0.0
+    for r in range(0, box_ulps + 1):
+        i = -r
+        while i <= r:
+            # abs(i) == r → full j sweep [-r, r]; else only the two edge rows j ∈ {-r, r}
+            k = 0
+            while True:
+                if i == r or i == -r:
+                    j = -r + k
+                    if j > r:
+                        break
+                else:
+                    if k == 0:
+                        j = -r
+                    elif k == 1:
+                        j = r
+                    else:
+                        break
+                if maxc >= 0 and ncalls >= maxc:
+                    state = 2
+                    break
+                nx = _next_f32_c(cx, i)
+                nz = _next_f32_c(cz, j)
+                ncalls += 1
+                if _crr_clips(o0, o1, o2, nx, ly, nz, vtx, pla, n, wh, nh, wr):
+                    state = 1
+                    hnx = nx; hnz = nz
+                    break
+                k += 1
+            if state != 0:
+                break
+            i += 1
+        if state != 0:
+            break
+    free(vtx); free(pla); free(wh)
+    if state == 1:
+        disp = ((hnx - o0) ** 2 + (hnz - o2) ** 2) ** 0.5
+        return dict(disp=disp, new=(hnx, hnz), old=(o0, o2)), ncalls
+    return None, ncalls

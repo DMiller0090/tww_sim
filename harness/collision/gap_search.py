@@ -340,6 +340,22 @@ def first_f32_clip(tris, old, new_center, link_y, box_ulps=120, wall_h=WALL_H, w
     return None, n
 
 
+# FAST PATH: native (Cython) ring (_collc.first_f32_clip), 0-ULP vs the pure def above (absent .pyd ->
+# pure). Wrapper keeps the pure call signature. See knowledge/mechanics/seam-clip-scanner.md.
+_first_f32_clip_py = first_f32_clip
+try:
+    from tww_sim.core._collc import first_f32_clip as _first_f32_clip_native
+
+    def first_f32_clip(tris, old, new_center, link_y, box_ulps=120, wall_h=WALL_H, wall_r=WALL_R,
+                       max_calls=None):
+        return _first_f32_clip_native(old, new_center, link_y, tris, wall_h=wall_h, wall_r=wall_r,
+                                      box_ulps=box_ulps, max_calls=max_calls)
+
+    first_f32_clip.__doc__ = _first_f32_clip_py.__doc__
+except ImportError:
+    pass
+
+
 def fan_offset_scale(tris, seam):
     """Estimate the perpendicular-offset scale of the seam gap = how far the two triangles of a
     wall disagree on where the seam-crossing lands, driven by their 1-ULP plane-normal difference.

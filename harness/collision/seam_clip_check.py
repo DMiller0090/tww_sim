@@ -96,6 +96,36 @@ def _valid_initial(trilist, ground_tris, p, wallA, wallB, yspan, require_standab
     return _floor_at(ground_tris, p[0], p[2], yspan) is not None
 
 
+def _representative_link_y(ground_tris, S, base, half_cone, floor, yspan, override_link_y=None):
+    """A representative standable floor Y next to the seam (for the step-riser test / seam Y). Probes
+    several cone directions — not just the bisector, since an oblique-only floor still clips — at a
+    few settled-old distances. Returns the first floor found, ``override_link_y`` if given, or None
+    when there is no standable floor at the wall's height."""
+    if override_link_y is not None:
+        return override_link_y
+    for rel in (0.0, half_cone * 0.5, -half_cone * 0.5, half_cone, -half_cone):
+        a = base + math.radians(rel)
+        for dd in (floor, floor + 9.0, floor + 18.0):
+            ly = _floor_at(ground_tris, S[0] - dd * math.sin(a), S[1] - dd * math.cos(a), yspan)
+            if ly is not None:
+                return ly
+    return None
+
+
+def _is_step_riser(ground_tris, S, yspan, link_y):
+    """STEP / LEDGE RISER (not a clip): a floor staircase at the seam XZ that climbs to the wall CROWN
+    in <= GROUND_SNAP hops means Link ascends onto the top floor instead of clipping. See
+    seam-clip-scanner.md "Standability". False without a ground mesh or a floor."""
+    if not (ground_tris and link_y is not None):
+        return False
+    yhi = yspan[1]
+    reach = link_y
+    for fy in sorted(f for f in floor_ys_at(ground_tris, S[0], S[1]) if f >= link_y - STEP_EPS):
+        if fy - reach <= GROUND_SNAP + STEP_EPS:
+            reach = max(reach, fy)
+    return reach >= yhi - STEP_EPS
+
+
 def clip_check(barrier_tris, ground_tris, S, wallA, wallB,
                require_standable=True, override_link_y=None, roll_stab=ROLL_STAB_MAX, yspan=None):
     """Decide whether a single seam clips and, if so, return the exact coords that perform it.
@@ -129,34 +159,13 @@ def clip_check(barrier_tris, ground_tris, S, wallA, wallB,
     base = bisector_dir([wallA, wallA, wallB])          # front->back travel dir (into the wall)
     half_cone = interior / 2.0
 
-    # link_y = a representative standable floor for the step-riser check. Probe several cone directions
-    # (not just the bisector: an oblique-only floor still clips; bisector-only used to wrongly bail).
-    if override_link_y is not None:
-        link_y = override_link_y
-    else:
-        link_y = None
-        for rel in (0.0, half_cone * 0.5, -half_cone * 0.5, half_cone, -half_cone):
-            a = base + math.radians(rel)
-            for dd in (floor, floor + 9.0, floor + 18.0):
-                link_y = _floor_at(ground_tris, S[0] - dd * math.sin(a), S[1] - dd * math.cos(a), yspan)
-                if link_y is not None:
-                    break
-            if link_y is not None:
-                break
-        if link_y is None:
-            return nore("no standable floor next to the seam at the wall's height")
-
-    # STEP / LEDGE RISER (not a clip): if a floor staircase at the seam XZ climbs to the wall CROWN in
-    # <=GROUND_SNAP hops Link ascends. See seam-clip-scanner.md "Standability". Skipped without a mesh.
-    if ground_tris is not None and len(ground_tris) and link_y is not None:
-        yhi = yspan[1]
-        reach = link_y
-        for fy in sorted(f for f in floor_ys_at(ground_tris, S[0], S[1]) if f >= link_y - STEP_EPS):
-            if fy - reach <= GROUND_SNAP + STEP_EPS:
-                reach = max(reach, fy)
-        if reach >= yhi - STEP_EPS:
-            return nore("wall crown reachable by a ground-snap staircase (step/ledge riser) — "
-                        "Link ascends, not clippable")
+    # link_y = a representative standable floor for the step-riser check (several cone directions).
+    link_y = _representative_link_y(ground_tris, S, base, half_cone, floor, yspan, override_link_y)
+    if link_y is None:
+        return nore("no standable floor next to the seam at the wall's height")
+    if _is_step_riser(ground_tris, S, yspan, link_y):
+        return nore("wall crown reachable by a ground-snap staircase (step/ledge riser) — "
+                    "Link ascends, not clippable")
 
     trilist = [wallA, wallA, wallB] + list(barrier_tris)
 

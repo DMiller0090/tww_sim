@@ -141,7 +141,7 @@ def load_room_region(stage, room, extract_dir=None, transform=True):
 
 
 def main(argv):
-    from harness.collision.seam_clip_check import scan_region
+    from harness.collision.seam_locator import scan_region     # the shipped scanner
     stage, room, standable = "M_Dai", 18, True
     for a in argv:
         if a.startswith("stage="):

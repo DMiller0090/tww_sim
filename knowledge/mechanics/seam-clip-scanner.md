@@ -5,25 +5,34 @@ a performable `(old, new)`? What is the DETERMINISTIC clip model (why a clip = c
 unblocked)? What are the standability gates (OOB skirt, step riser)? Why does the reported seam Y sit at
 the floor, not the wall base? Why is the DZB read in world coords (no MULT)? How is the whole game
 batch-scanned into the collision-viewer CSVs?
-**Status:** model validated; scanner complete-but-slow (see "Current search + status"). The
-mechanism/root-cause is [seam-clip.md](seam-clip.md); this page is the tooling around it. Live-confirmed
-on GanonL (6/6, and the full room) and Hyrule seams (near-coincident pair, -1727 needs-push), all
-clean-placement CLIP drift 0. Guard: [`tests/test_seam_clip_check.py`](../../tests/test_seam_clip_check.py)
-(10 offline cases). **Source:** [`harness/collision/seam_clip_check.py`](../../harness/collision/README.md)
-(`clip_check` / `scan_region`), `gap_search.py` (`first_f32_clip`), `seam_scan.py` (`enumerate_seams`,
-`_gather`, `floor_ys_at`, `read_region_tris`), `dzb_iso.py` (offline disc reader), `window_dataset.py`
-(the ground-truth window-labeling oracle), `scan_all_dzb.py` + `export_seam_csv.py` (batch to CSV),
-`validate_clips.py` (live confirm). Cylinder / ground constants: `d_bg_s_acch.cpp`, `d_a_player_main.cpp`.
+**Status:** model validated; scanner complete AND fast (the shipped full-game batch scanner is
+`seam_locator`, an analytic superset of `clip_check` at ~8x). The mechanism/root-cause is
+[seam-clip.md](seam-clip.md); this page is the tooling around it. Live-confirmed on GanonL (6/6, and
+the full room) and Hyrule seams (near-coincident pair, -1727 needs-push), all clean-placement CLIP
+drift 0. Guards: [`tests/test_seam_clip_check.py`](../../tests/test_seam_clip_check.py) (single-seam
+`clip_check`, 10 cases) and [`tests/test_seam_locator.py`](../../tests/test_seam_locator.py) (the
+shipped locator: superset + structural gates + native-ring identity).
+**Source:** [`harness/collision/seam_locator.py`](../../harness/collision/README.md) (`scan_region` /
+`locate`, the shipped scanner), `seam_clip_check.py` (`clip_check`, the single-seam checker + the
+shared standability gates), `gap_search.py` (`first_f32_clip`; native ring in `core/_collc.pyx`),
+`seam_scan.py` (`enumerate_seams`, `_gather`, `floor_ys_at`, `read_region_tris`), `dzb_iso.py` (offline
+disc reader), `window_dataset.py` (the window-labeling oracle), `scan_all_dzb.py` (batch straight to
+CSV), `validate_clips.py` (live confirm). Cylinder / ground constants: `d_bg_s_acch.cpp`,
+`d_a_player_main.cpp`.
 
 ---
 
 ## What it answers
 
-`clip_check(barrier_tris, ground_tris, S, wallA, wallB, ...)` decides whether ONE seam clips and returns
-one physically-valid **standable** `(old, new)` that performs it: **existence + performable coords,
-NOT the minimum displacement** (that is `gap_search.min_f32_clip`, an O(box^2) lattice sweep).
-`scan_region` runs it over every enumerated seam in a box; it is pure geometry, no Dolphin (region live
-from `read_region_tris` or offline from `dzb_iso.load_room_region` / `seam_scan.load_region_tris`).
+`seam_locator.scan_region(region, box)` (the shipped scanner) and the older single-seam
+`clip_check(barrier_tris, ground_tris, S, wallA, wallB, ...)` both decide whether a seam clips and
+return one physically-valid **standable** `(old, new)` that performs it: **existence + performable
+coords, NOT the minimum displacement** (that is `gap_search.min_f32_clip`, an O(box^2) lattice sweep).
+Both are pure geometry, no Dolphin (region live from `read_region_tris` or offline from
+`dzb_iso.load_room_region` / `seam_scan.load_region_tris`). `seam_locator` is a strict superset of
+`clip_check`'s output: same structural gates, a more thorough anisotropic f32 search. On Hyrule room 0
+it returns 35 clips = all 34 of `clip_check`'s (0 misses) + 1 real one `clip_check`'s shallow search
+dropped, in 25 s vs 198 s.
 
 ## The reliable detector is the f32 lattice
 
@@ -44,30 +53,36 @@ validated against the bit-exact model (`window_dataset.py` oracle + the scratch 
   `180-interior`, so the back-wedge sector `{nA.d<0  and  nB.d<0}` is exactly `interior` wide, i.e.
   `+/-interior/2` about the bisector. Verified: 87/88 measured windows lie inside (one leaks 2deg under the
   +/-20 area tolerance). This bound is FIRM and analytic.
-- **An ISOLATED two-wall corner clips at EVERY direction in its cone** (confirmed identical across all
-  congruent kaze octagon facets, sharp *and* obtuse). So the clip DIRECTION is not special.
-- **Therefore: real clip = cone  AND  standable-floor  AND  valid-old  AND  NOT-barrier-blocked.** The narrow,
-  scattered, asymmetric windows seen in a real room are ENTIRELY barrier + floor pruning of the full
-  cone - not a property of the corner's angle. (Congruent octagon facets show wildly different real
-  windows precisely because their surrounding barriers/floors differ.)
-- **The old root-cause of the missed dump seams was a DISTANCE-coverage bug, not angle.** An oblique
-  approach settles its `old` FARTHER from the seam than the bisector clearance (`floor`), so a clip's
-  old sits at `floor + ~6..18 u`; the previous search probed only `floor + 0..2` and missed every
-  oblique clip (e.g. Hyrule (1127,1621), whose window is rel -34..-68 at those deeper distances).
+- **The cheap prune `{cone AND floor AND valid-old AND not-blocked}` is a SOUND SUPERSET, NOT the real
+  set.** It NEVER drops a real clip (`real_only = 0` on every test seam) but is not tight: for isolated
+  / barrier-free corners it passes the WHOLE cone, yet the f32 clips land only in a narrow sub-band.
+  **So the f32 verify is LOAD-BEARING, not an optional speed-up.** (This overturned the 07-06/07 model
+  that a bare corner "clips at every cone direction" and that real windows are "100% barrier+floor
+  pruning" - true in CONTINUOUS space, but the f32-REACHABLE set is a coord-magnitude-dependent subset;
+  migrated to [history/seam-scanner-analytic-attempts.md](../history/seam-scanner-analytic-attempts.md) #5.)
+- **The clip is a LINE property, so search it ANISOTROPICALLY.** For a fixed travel direction the
+  LineCheck-miss window is thin (~1e-3 u, the plane fan) in the PERPENDICULAR offset from the seam
+  vertex but broad ALONG travel. The old square-ULP ring conflated the two axes and missed high-coord
+  clips displaced along the wall. `seam_locator` verifies a coarse along-track world scan x a thin f32
+  box perpendicular, with the FULL trilist (barriers handled by the verify, never a cheap - and unsound -
+  direction-level block test).
+- **A DISTANCE-coverage bug caused the earliest missed seams.** An oblique approach settles its `old`
+  FARTHER from the seam than the bisector clearance (`floor`), so a clip's old sits at `floor + ~6..20 u`;
+  probing only `floor + 0..2` missed every oblique clip (e.g. Hyrule (1127,1621), window rel -34..-68 at
+  those deeper distances). `seam_locator` settles deep-first.
 
-## Current search + status (complete-ish but SLOW - the next lever is the cheap prune)
+## The shipped scanner: `seam_locator` (fast, complete, gated)
 
-`clip_check` now sweeps the analytic cone (`|rel| <= interior/2 + CONE_MARGIN`) hot-spot-first (bisector
-and both edges first, then mid-cone) at `DIST_OFFSETS` deep distances, early-exiting on the first
-standable clip (`CONE_BUDGET` / `PER_CALL_MAX` bound the unclippable-seam cost). Deep-distance coverage
-recovers the previously-missed oblique clips. **KNOWN LIMITATIONS (open for the next session):**
-(1) UNCLIPPABLE seams pay the full budget (~5-15 s each) because empty `first_f32_clip` rings drain it - 
-a full-game dump is impractical until this is fixed. (2) The very-highest-ULP oblique clips can still be
-missed at the current `PER_CALL_MAX`. The fix is NOT a bigger sweep - it is to **compute the prune
-cheaply** from the model above (cone is analytic; barrier-block + valid-old + floor are cheap
-per-direction tests), reducing the f32 work to a tiny verify. A naive "search the bare 2-wall corner
-first, then verify barriers at that `new*`" was tried and REJECTED (not reliably faster, and incomplete
- - it verifies around a single `new*`); see the history page for that dead end.
+Per hot-spot-ordered cone direction (bisector + edges first), settle one valid standable DEEP `old`
+(`DIST_OFFSETS`, deep-first), then VERIFY anisotropically (`S_LO..S_HI` along-track world steps x a
+`BOX_ULP`-thin perpendicular f32 box via `first_f32_clip`); first f32 clip wins. Cheap rejection comes
+from the standability gates (most unclippable seams have no standable floor). A per-seam `SEAM_BUDGET`
+bounds the sub-ULP cheap-pass-wide worst case (an isolated corner with no cheap SOUND unclippability
+proof; see history #6). Speed: the `first_f32_clip` ring is native (Cython, `core/_collc.pyx`) and
+SHORT-CIRCUITS the clip test (only the boolean is needed, so a first-LineCheck hit returns "not a clip"
+without running WallCorrect - the dominant case for the budget-draining unclippable corners). Together
+~4x over the pure ring: the hardest unclippable Hyrule corner dropped 4.75 s -> 1.1 s, the full room 106 s
+-> 25 s. The native ring is 0-ULP identical to the pure ring (gated).
 
 ## Standability: a reported `old` must be somewhere Link can stand AND collide
 
@@ -117,10 +132,13 @@ DZB stores none). NOTE: offline-verified (centroid == MULT is conclusive); a liv
 
 ## Batch to CSV to viewer
 
-`scan_all_dzb` scans every game DZB (streaming, resumable, skips DZBs whose `.md` exists) into
-`_generated/seam_scan/<stage>/<Arc>__<dzb>.md`. `export_seam_csv` converts those to
+`scan_all_dzb` scans every game DZB with `seam_locator` and writes one CSV per clippable DZB STRAIGHT
+into the in-Dolphin collision viewer's data dir,
 `tww-python-scripts/ww/data/seam_clips/<stage>/<Arc>__<dzb>.csv` (one row per clippable seam:
-seam / init / dest xyz + interior angle) for the in-Dolphin collision viewer's seam overlay.
+seam / init / dest xyz + interior angle). It streams (each DZB's CSV appears the moment it finishes, so
+the viewer live-updates) and is resumable (skips DZBs whose CSV exists). No intermediate `.md`. Room
+DZBs are world-transformed by the stage `MULT`; coords are written at FULL f32 precision (a rounded
+seam coord flips the razor CLIP verdict to BLOCK).
 
 ## Live validation: clean placement (HARD gotcha)
 

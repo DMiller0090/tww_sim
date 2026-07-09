@@ -28,12 +28,14 @@ which for a vertical wall involves the Y axis) with a `+-20` area tolerance, and
 the X and Z projections must be inside for a hit. The pure-XZ tangent model ignores all of that. A
 correct closed form must be derived from `_tri_in_2d`, not the 2D tangent.
 
-## 3. Full-cone brute sweep with deep distances - CORRECT but SLOW
+## 3. Full-cone brute sweep with deep distances - CORRECT, was slow, now SUPERSEDED
 
 Sweeping the analytic cone (`|rel| <= interior/2`) at deep old-distances (offset +0..+18) with hot-spot
-ordering DOES find the oblique clips (fixes the distance-coverage root cause). But UNCLIPPABLE seams
-(the majority) drain the whole per-seam budget on empty `first_f32_clip` rings (~5-18 s each), so a
-full-game dump is impractical. This is the current shipped state (complete-ish, slow).
+ordering DOES find the oblique clips (fixes the distance-coverage root cause). It was the shipped
+`clip_check` state and was SLOW: unclippable seams (the majority) drained the whole per-seam budget on
+empty `first_f32_clip` rings (~5-18 s each). SUPERSEDED 2026-07-08 by `seam_locator` (anisotropic
+search + native ring + LineCheck short-circuit), which made the full-game dump practical - see the
+scanner page. `clip_check` itself is retained as the single-seam checker.
 
 ## 4. "Search the bare 2-wall corner first, then verify barriers at that `new*`" - REJECTED
 
@@ -46,6 +48,38 @@ extras on (919,-7986)) because verifying around a SINGLE `new*` misses the other
 tiny box mis-includes barrier-blocked ones. The right shape is a per-direction CHEAP prune
 (barrier-line-block + valid-old + floor, all O(barriers), no f32 ring), reducing f32 work to a tiny
 verify only on surviving directions. That prune is the open work.
+
+## 5. "cone AND floor AND valid-old AND not-blocked EQUALS the real f32-clip set" - OVERTURNED (superset, not equal)
+
+The 2026-07-06/07 model on the scanner page claimed (a) an isolated 2-wall corner clips at EVERY
+direction in its cone, and (b) a real room's narrow windows are ENTIRELY barrier + floor pruning of
+that full cone. The 2026-07-08c first-experiment refuted the *equality*: the cheap set
+`{cone ∧ floor ∧ valid-old ∧ not-blocked}` is a **sound SUPERSET** of the real f32-clip set
+(`real_only = 0` on all Hyrule test seams, i.e. it never drops a real clip) but is **NOT tight**
+(`cheap_only` = 98-232 vs `both` = 29-30). For ISOLATED / barrier-free corners the cheap prune passes
+the WHOLE cone (FN0 (1127,1621) and FN1 (919,-7986) have zero barriers and a flat floor) yet the f32
+clips land only in a narrow sub-band. So claim (a) holds in CONTINUOUS space but the **f32-reachable**
+clip set is a coordinate-magnitude-dependent SUBSET of the cone (local ULP vs the ~1e-3 fan gap: FN2
+(3305,-17350), coord ~17350, ULP ~2e-3 > gap ~1e-3, has NO f32 clip anywhere), and claim (b) is FALSE
+for isolated corners (there the window is pure f32-lattice availability + the deep-old validity
+constraint, not barrier pruning). **Consequence: the f32 verify is LOAD-BEARING, not an optional
+speed-up.** The clip is a LINE property: thin (~1e-3) in the perpendicular offset ρ from the seam
+vertex, broad ALONG travel, so the verify must search ANISOTROPICALLY (this is what `seam_locator`
+does; the old square-ULP ring conflated the two axes and missed high-coord clips displaced along the
+wall).
+
+## 6. `offset_window` as an f32-reachability GATE, and a direction-level barrier-block prune - BOTH REJECTED
+
+Two cheap-prune ideas from the 07-08b plan, killed 07-08c:
+- **`offset_window` (continuous ρ-window) as a soundness proof of "no f32 clip here"** FAILS: its
+  synthetic short old (`t_back=3`) does not represent the settled-old clip, so it returns empty windows
+  for directions that genuinely clip. A continuous/double ρ-window is not a tight proxy for the
+  f32-reachable set (the false-positive caveat cuts both ways). There is **no cheap SOUND
+  unclippability proof for isolated corners**, hence `seam_locator`'s per-seam f32 budget cap.
+- **A direction-level barrier-block prune** (skip a direction if a barrier blocks the representative
+  line `old → S+0.45·dir`) is **UNSOUND**: a barrier can block the representative line while the true
+  clipping `new` threads PAST it (it false-negated m477, which the baseline finds). Barriers must be
+  handled by the full-trilist f32 verify, not a separate cheap test.
 
 ## Reusable assets left for the next session
 

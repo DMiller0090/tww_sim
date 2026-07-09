@@ -1,19 +1,28 @@
-"""Scan EVERY room/collision DZB in the extracted game for clippable seams, one output file per DZB,
-mirroring the disc's ``Stage/<stage>/`` folder layout. Streams as it goes (writes each DZB's file the
-moment it finishes and prints a progress line) and is resumable (skips DZBs whose output already
-exists), so a long full-game run can be interrupted and continued.
+"""Scan EVERY room/collision DZB in the extracted game for clippable seams and write one CSV per DZB
+straight into the in-Dolphin collision viewer's data dir, mirroring the disc's ``Stage/<stage>/``
+folder layout. Streams as it goes (writes each DZB's CSV the moment it finishes and prints a progress
+line) so the viewer can live-update, and is resumable (skips DZBs whose CSV already exists), so a
+long full-game run can be interrupted and continued.
 
-For each ``Room<N>.arc`` the DZB is world-transformed by the stage ``MULT`` room placement (validated
-identity for dungeons: GanonL via ISO reproduces its 40 live clips; Earth Temple room 18 = 0). Planes
-are the bit-exact ``calc_pla`` (the DZB stores none). Non-room DZBs (e.g. ``Stage.arc`` door collision)
-have no MULT room, so they are scanned in local coords and flagged; their world placement is unresolved.
+The scanner is :mod:`seam_locator` (the fast analytic locator — a superset of the older
+``seam_clip_check`` at ~8x). For each ``Room<N>.arc`` the DZB is world-transformed by the stage
+``MULT`` room placement (validated identity for dungeons: GanonL via ISO reproduces its 40 live
+clips; Earth Temple room 18 = 0). Planes are the bit-exact ``calc_pla`` (the DZB stores none).
+Non-room DZBs (e.g. ``Stage.arc`` door collision) have no MULT room, so they are scanned in local
+coords; their world placement is unresolved.
 
-    python -m harness.collision.scan_all_dzb                 # all stages
+Each clippable DZB becomes ``<stage>/<Arc>__<dzb>.csv`` with one row per clippable seam:
+    seam_x, seam_y, seam_z, init_x, init_y, init_z, dest_x, dest_y, dest_z, angle_deg
+(seam vertex at the standable floor Y, the standable initial/old position, the clip destination/new
+position, and the interior angle between the two walls). Coordinates are written at FULL f32
+precision — a seam clip is a sub-ULP razor, so rounding a coord turns a CLIP into a BLOCK. DZBs with
+no clippable seam write no file.
+
+    python -m harness.collision.scan_all_dzb                 # all stages -> viewer data dir
     python -m harness.collision.scan_all_dzb stage=M_Dai     # one stage
-    python -m harness.collision.scan_all_dzb no-standable    # include non-standable geometry clips
-
-Output: ``_generated/seam_scan/<stage>/<Arc>__<dzb>.md`` (gitignored, regenerable).
+    python -m harness.collision.scan_all_dzb out=/some/dir   # override the output dir
 """
+import csv
 import json
 import os
 import re
@@ -22,11 +31,11 @@ import sys
 import time
 
 from harness.collision.dzb_iso import read_rarc, region_from_dzb
-from harness.collision.seam_clip_check import scan_region
+from harness.collision.seam_locator import scan_region     # the shipped scanner (fast analytic superset)
 
-WALL_NY_MAX = 0.03
-GROUND_NY_MIN = 0.5
 _ROOM_RE = re.compile(r"^Room(\d+)$", re.I)
+CSV_HEADER = ["seam_x", "seam_y", "seam_z", "init_x", "init_y", "init_z",
+              "dest_x", "dest_y", "dest_z", "angle_deg"]
 
 
 def _extract_dir():
@@ -57,56 +66,49 @@ def _stage_mult(stage_dir):
     return out
 
 
-def _write(path, stage, arc, dzb, xform, xnote, region, box, seams_n, clips):
-    with open(path, "w", encoding="utf-8", newline="") as f:
-        w = f.write
-        walls = sum(1 for t in region if abs(t["n"][1]) < WALL_NY_MAX)
-        gnd = sum(1 for t in region if t["n"][1] >= GROUND_NY_MIN)
-        w("# %s / %s :: %s\n\n" % (stage, arc, dzb))
-        w("world coords: DZB stored in world space, MULT NOT applied  (%s: tx=%.2f tz=%.2f angY=%.2f)\n"
-          % (xnote, xform[0], xform[1], xform[2]))
-        w("tris=%d walls=%d ground=%d  vertical_seams=%d  clippable=%d\n"
-          % (len(region), walls, gnd, seams_n, len(clips)))
-        if box:
-            w("box=(%.1f, %.1f, %.1f, %.1f, %.1f, %.1f)\n" % box)
-        w("\n")
-        if not clips:
-            w("no clippable seams\n")
-            return
-        w("## clippable seams (%d)\n\n" % len(clips))
+def _g(x):
+    """Lossless float -> str (round-trips f32; a rounded seam coord flips CLIP to BLOCK)."""
+    return repr(float(x))
+
+
+def _write_csv(path, clips):
+    """One row per clippable seam; FULL precision. ``clips`` = seam_locator result dicts."""
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(CSV_HEADER)
         for r in clips:
-            w("S=(%.3f, %.3f, %.3f)  interior=%.2f  disp=%.4f  %s\n"
-              % (r["S"][0], r["S"][1], r["S"][2], r["interior"], r["disp"],
-                 "ROLL-STAB" if r["reachable_rollstab"] else "NEEDS-PUSH"))
-            w("  old=(%.5f, %.5f, %.5f)\n" % tuple(r["old"]))
-            w("  new=(%.5f, %.5f, %.5f)\n\n" % tuple(r["new"]))
+            S, old, new = r["S"], r["old"], r["new"]
+            w.writerow([_g(S[0]), _g(S[1]), _g(S[2]),
+                        _g(old[0]), _g(old[1]), _g(old[2]),
+                        _g(new[0]), _g(new[1]), _g(new[2]),
+                        _g(r["interior"])])
 
 
 def main(argv):
     only_stage = None
-    require_standable = "no-standable" not in argv
+    out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..",
+                                       "tww-python-scripts", "ww", "data", "seam_clips"))
     for a in argv:
         if a.startswith("stage="):
             only_stage = a[6:]
+        elif a.startswith("out="):
+            out = os.path.abspath(a[4:])
     root = os.path.join(_extract_dir(), "files", "res", "Stage")
-    outroot = os.path.join(os.path.dirname(__file__), "..", "..", "_generated", "seam_scan")
-    outroot = os.path.abspath(outroot)
     stages = sorted(d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d)))
     if only_stage:
         stages = [s for s in stages if s == only_stage]
-    # enumerate (stage, arc, dzbname) work items
+    # enumerate (stage, arc) work items
     work = []
     for stage in stages:
         sdir = os.path.join(root, stage)
         for arc in sorted(f for f in os.listdir(sdir) if f.lower().endswith(".arc")):
             work.append((stage, sdir, arc))
-    print("=== scanning %d arcs across %d stages -> %s ===" % (len(work), len(stages), outroot),
+    print("=== scanning %d arcs across %d stages -> %s ===" % (len(work), len(stages), out),
           flush=True)
     total_clips = total_dzb = errors = 0
     t0 = time.time()
     for wi, (stage, sdir, arc) in enumerate(work):
-        outdir = os.path.join(outroot, stage)
-        os.makedirs(outdir, exist_ok=True)
+        outdir = os.path.join(out, stage)
         try:
             files = read_rarc(os.path.join(sdir, arc))
         except Exception as e:
@@ -117,9 +119,9 @@ def main(argv):
         for dzbname, data in files.items():
             if not dzbname.lower().endswith(".dzb"):
                 continue
-            out = os.path.join(outdir, "%s__%s.md" % (os.path.splitext(arc)[0],
-                                                      os.path.splitext(dzbname)[0]))
-            if os.path.exists(out):
+            csvpath = os.path.join(outdir, "%s__%s.csv" % (os.path.splitext(arc)[0],
+                                                           os.path.splitext(dzbname)[0]))
+            if os.path.exists(csvpath):
                 total_dzb += 1
                 continue                                    # resume: already done
             m = _ROOM_RE.match(os.path.splitext(arc)[0])
@@ -127,27 +129,19 @@ def main(argv):
                 if mult is None:
                     mult = _stage_mult(sdir)
                 xform = mult.get(int(m.group(1)), (0.0, 0.0, 0.0))
-                xnote = "MULT room %s" % m.group(1)
             else:
-                xform, xnote = (0.0, 0.0, 0.0), "identity (assumed; non-room DZB, world placement unresolved)"
+                xform = (0.0, 0.0, 0.0)
             try:
                 region, box = region_from_dzb(data, *xform)
-                if not region:
-                    _write(out, stage, arc, dzbname, xform, xnote, [], None, 0, [])
-                    total_dzb += 1
-                    continue
-                seams_n_holder = {}
-                clips = scan_region(region, box, require_standable=require_standable, verbose=False)
-                # recover seam count for the header
-                from harness.collision.seam_scan import enumerate_seams
-                seams_n = len(enumerate_seams(region, box))
-                _write(out, stage, arc, dzbname, xform, xnote, region, box, seams_n, clips)
+                clips = scan_region(region, box, verbose=False) if region else []
+                if clips:
+                    os.makedirs(outdir, exist_ok=True)
+                    _write_csv(csvpath, clips)
                 total_dzb += 1
                 total_clips += len(clips)
                 tag = ("CLIPS=%d" % len(clips)) if clips else "clips=0"
-                print("  [%d/%d] %s/%s::%s tris=%d seams=%d %s"
-                      % (wi + 1, len(work), stage, arc, dzbname, len(region), seams_n, tag),
-                      flush=True)
+                print("  [%d/%d] %s/%s::%s tris=%d %s"
+                      % (wi + 1, len(work), stage, arc, dzbname, len(region), tag), flush=True)
             except Exception as e:
                 print("  [%d/%d] %s/%s::%s DZB-ERR %s"
                       % (wi + 1, len(work), stage, arc, dzbname, e), flush=True)
