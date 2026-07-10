@@ -11,6 +11,8 @@ import os
 
 import struct
 
+import pytest
+
 from tww_sim.core.collision import Tri, Plane, cross_lin_tri, calc_pla
 from harness.collision.seam_model import predict_clip
 from harness.collision.angle_experiment import build_angle, S, LINK_Y
@@ -93,8 +95,16 @@ def test_analytic_gap_finds_grid_false_negatives():
         assert rec is not None
 
 
+@pytest.mark.slow
 def test_flat_seam_unclippable():
     """A real FLAT (180 deg / coplanar) vertical seam is unclippable, verified at fan resolution.
+
+    SLOW (~55s, deselected by default; runs in CI / ``pytest -m slow``): this is a full-resolution
+    characterization sweep -- ~9.7M bit-exact ``crr_pos_walls`` calls (61 directions x 160k offsets).
+    The cost is intrinsic: ``off_step`` (5e-8) is deliberately finer than the seam's plane fan
+    (~1.4e-7 here), and the module docstring makes "no gap found" trustworthy ONLY when the offset
+    step is finer than the fan -- so the resolution cannot be coarsened without weakening the proof.
+    The fast bit-exact guards (calc_pla goldens, row-1 clips, the 1727 anchor) stay in the default run.
     Golden = the Hyrule flat wall at x=-157.578 (GZLJ01), seam pair poly 2360/2355 whose stored
     planes differ by only 1 ULP in nx + 5 ULP in D. The analytic gap search, scanning the offset
     an order of magnitude finer than that fan, finds NO clip: the two coplanar quads tile the wall,
