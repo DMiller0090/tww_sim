@@ -39,11 +39,13 @@ STANDING PRINCIPLE ON CALIBRATION (this is why past sessions drifted):
 READ, IN THIS ORDER, before proposing anything or touching code:
   1. harness/rollstab/README.md: the pipeline, run protocol, verification, the
      ## Status section (current state), and the "Dead ends" list.
-  2. The newest _notes/seam-clip-live-validation-handoff-*.md: this session's starting
+  2. harness/rollstab/ROADMAP.md: the multi-phase NORTH STAR (toward the Tetra seam
+     clip) -- which phase is open and what its live-gated "done" is.
+  3. The newest _notes/seam-clip-live-validation-handoff-*.md: this session's starting
      point and next step.
-  3. knowledge/strategy/seam-clip-solver.md: why the acceptance region is f32 DUST and
+  4. knowledge/strategy/seam-clip-solver.md: why the acceptance region is f32 DUST and
      every candidate must be tested exactly, not against a fitted ribbon.
-  4. knowledge/history/seam-clip-dead-ends.md: the full RULED-OUT ledger (sessions 4-9).
+  5. knowledge/history/seam-clip-dead-ends.md: the full RULED-OUT ledger (sessions 4-9).
 Then restate, before editing anything: (a) current state in one paragraph, (b) the
 specific goal for THIS session, (c) your plan. If the session message names no goal,
 the goal IS the newest handoff's "Next step"; if there is no handoff yet, ask.

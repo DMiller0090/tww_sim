@@ -75,7 +75,10 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-- **OBJECTIVE MET (session 10): LIVE CLIP CONFIRMED, 0-ULP.** A solver hit planned entirely
+- **North star: the TETRA seam clip, pure-sim** -- the phased plan (wall collision -> ground ->
+  CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **W (wall collision in
+  the stepper, 0-ULP live-gated)**.
+- **Phase 0 / kaze OBJECTIVE MET (session 10): LIVE CLIP CONFIRMED, 0-ULP.** A solver hit planned entirely
   offline from the idle13 anchor's rest state shipped as a clean DTM and clipped through the
   seam live: the cut fired on the predicted frame at the bit-identical position
   (`d(old) = (0.000000, 0.000000)`, old=(9071.9804688,303.1956787),
