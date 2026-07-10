@@ -78,6 +78,7 @@ you can triage in one glance.
 - **What are the targeted ballistic hops (sidehop / backflip) / the A=roll vs L+A=hop mapping / the ESS aim-turn?** → [mechanics/ballistic-hops.md](mechanics/ballistic-hops.md)
 - **How do I stop Link at an exact position (the C-up SUBJECTIVITY freeze) / B-cancel / why isn't the re-walk cold?** → [mechanics/precise-stop.md](mechanics/precise-stop.md)
 - **From a standstill, fastest way into a roll chain / why hold L on frame 1 / why the frame-6 roll caps at ~25.9?** → [strategy/roll-launch.md](strategy/roll-launch.md)
+- **How do we plan and validate a roll-stab SEAM CLIP (dust acceptance, live calibration, the knobs)?** → [strategy/seam-clip-solver.md](strategy/seam-clip-solver.md)
 - **Which partial stick magnitudes are live-valid in a land plan / why NEVER emit Y 192–254?** → [mechanics/precise-stop.md](mechanics/precise-stop.md). NB: this live-valid *stick-input* band is a different thing from the sim's [`Y171` partial-magnitude *regime*](model/land-sim.md#partial-magnitude-regime-y171-msd052) — don't conflate "partial stick" with "partial regime".
 
 ### Model — engine (core)
