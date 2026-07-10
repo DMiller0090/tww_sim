@@ -54,7 +54,7 @@ def angle_s16(sx: int, sy: int) -> int | None:
     if sx == 128:                                   # on-axis: closed form is exact
         return S.deg_to_s16(S.stick_angle_deg(sx, sy))
     raise KeyError(f"stick ({sx},{sy}) missing (table complete={_COMPLETE}); "
-                   f"re-run tww-python-scripts/stick_angle_grid_dump.py to rebuild the full grid")
+                   f"re-run harness/capture/stick_grid_redump.py to rebuild the full grid")
 
 
 def has(sx: int, sy: int) -> bool:

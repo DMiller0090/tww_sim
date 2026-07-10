@@ -132,9 +132,8 @@ DZB stores none). NOTE: offline-verified (centroid == MULT is conclusive); a liv
 
 ## Batch to CSV to viewer
 
-`scan_all_dzb` scans every game DZB with `seam_locator` and writes one CSV per clippable DZB STRAIGHT
-into the in-Dolphin collision viewer's data dir,
-`tww-python-scripts/ww/data/seam_clips/<stage>/<Arc>__<dzb>.csv` (one row per clippable seam:
+`scan_all_dzb` scans every game DZB with `seam_locator` and writes one CSV per clippable DZB into
+`_generated/seam_clips/<stage>/<Arc>__<dzb>.csv` (override with `out=`; one row per clippable seam:
 seam / init / dest xyz + interior angle). It streams (each DZB's CSV appears the moment it finishes, so
 the viewer live-updates) and is resumable (skips DZBs whose CSV exists). No intermediate `.md`. Room
 DZBs are world-transformed by the stage `MULT`; coords are written at FULL f32 precision (a rounded

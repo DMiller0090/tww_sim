@@ -25,10 +25,9 @@ is on the far side of S, the one-frame displacement can never beat that floor: ~
 corner, ~37.6 u for a 137° corner. A more obtuse corner has a lower floor but a narrower f32 gap.
 
 Grounded in decomp: positions f32 (``cXyz``, ``pm_pos``/``pm_old_pos`` = ``cXyz*``, d_bg_s_acch.h);
-model = ``tww_sim.core.collision`` (bit-exact ``CrrPos``). Live geometry via ``collision_geo``
-(imported by file path — see DOLPHIN_CONTROL.md) + stored planes at ``[cBgW+0x88] + poly*0x18``.
+model = ``tww_sim.core.collision`` (bit-exact ``CrrPos``). Live geometry via
+``harness.collision.collision_geo`` + stored planes at ``[cBgW+0x88] + poly*0x18``.
 """
-import importlib.util
 import math
 import os
 import struct
@@ -262,22 +261,13 @@ def scan_seam(region_tris, seam, link_y=None,
 
 
 # --------------------------------------------------------------------- live reading
-def _load_collision_geo():
-    ww = os.path.join(os.path.dirname(__file__), "..", "..", "..", "tww-python-scripts", "ww",
-                      "collision_geo.py")
-    spec = importlib.util.spec_from_file_location("collision_geo", os.path.abspath(ww))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
 def read_region_tris(box, expand=GATHER_R + 5.0):
     """Read the static room mesh from a running Dolphin and return the region's wall+near tris as
     ``dict(poly, v, n, T)`` (T = a :class:`Tri` with the STORED plane). Reads geometry via
     ``collision_geo`` and per-triangle planes from ``[cBgW+0x88] + poly*0x18``. Needs Dolphin up
     (target with ``DOLPHIN_PID``); imports ``dolphin_mem`` via the repo/tools bootstrap on sys.path."""
     import dolphin_mem as dm
-    cg = _load_collision_geo()
+    from harness.collision import collision_geo as cg
     h, mem1 = dm.attach()
 
     class _R:

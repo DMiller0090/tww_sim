@@ -4,8 +4,8 @@ Memory-source-agnostic: every read goes through a small ``rd`` reader object exp
 ``read_bytes(gc_addr, n)`` (big-endian GameCube memory). Two adapters use the SAME cull-scan:
   * :class:`HostReader` — host process, via ``dolphin_mem`` (ReadProcessMemory). Used by this
     CLI and by harness/cull_viewer/server.py.
-  * an in-Dolphin ``dolphin.memory`` reader — see the tww-python-scripts ``cull_viewer.py``,
-    which runs this logic *inside* Dolphin (no attach; frame-synced).
+  * an in-Dolphin ``dolphin.memory`` reader — an in-Dolphin ``cull_viewer`` runs this same logic
+    *inside* Dolphin (no attach; frame-synced).
 
 What it reads (JP/GZLJ01, confirmed live 2026-07-05 vs the .dmw watch file + US decomp layout;
 see knowledge/mechanics/culling.md):
@@ -49,7 +49,7 @@ VC = {"near": 0xC8, "far": 0xCC, "fovy": 0xD0, "aspect": 0xD4,
 CLIPPER_ADDR = 0x80398bfc
 CLIPPER_FP = struct.pack(">fff", 60.0, 1.28, 1.0)  # fovy/aspect/near fingerprint (fallback locator)
 
-# actor list / fopAc_ac_c (JP; ACTOR_LIST_HEAD from tww-python-scripts ww/addresses)
+# actor list / fopAc_ac_c (JP)
 ACTOR_LIST_HEAD = 0x803654CC     # u32 -> head node of the intrusive actor list
 NODE_NEXT = 0x00                 # node->next
 NODE_GPTR = 0x0C                 # node->actor (fopAc_ac_c*)
@@ -134,7 +134,10 @@ def _proc_name(pid):
     global _PROC_NAMES
     if _PROC_NAMES is None:
         _PROC_NAMES = {}
-        csvp = os.path.join(os.path.dirname(_rb), "tww-python-scripts", "ww", "data", "proc_name_structs.csv")
+        # Optional proc-id -> name map (falls back to "#<id>"); untracked game data -- supply at
+        # _generated/proc_name_structs.csv or via TWW_PROC_NAMES.
+        csvp = os.environ.get("TWW_PROC_NAMES") or os.path.join(
+            _rb, "_generated", "proc_name_structs.csv")
         try:
             import csv
             with open(csvp, newline="") as f:

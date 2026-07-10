@@ -4,7 +4,7 @@
 the currently-loaded collision from a global? What's the vertex/triangle layout? How does the game
 classify a triangle as ground vs wall vs roof? How do I see the live collision mesh in 3D?
 **Status:** validated - the in-RAM `cBgD_t` layout matches Winditor's on-disk DZB format
-byte-for-byte; live reader (`tww-python-scripts/ww/collision_geo.py`) walks the `dBgS` manager and
+byte-for-byte; live reader (`harness/collision/collision_geo.py`) walks the `dBgS` manager and
 its floor-triangle report matches `dBgS_LinkAcch`'s current ground poly (stage `H_test`, GZLJ01,
 2026-07-06). The land sim now consumes WALLS from this groundwork (see
 [Sim integration status](#sim-integration-status) + [wall-response.md](wall-response.md)).

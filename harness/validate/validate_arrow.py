@@ -58,11 +58,10 @@ def check_slot9():
           if ok else "MISMATCH")
     return ok
 
-# Game-exact stick->angle dump (tww-python-scripts). 11k+ raw (x,y)->angle(u16) rows,
-# pre-camera (= our stickAngle). Validates stick_angle_deg (atan2 + dead-zone 15) against
-# ground truth across the whole gate, not just the 3 live arrow points. Skips if absent.
-STICK_DUMP = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          "tww-python-scripts", "ww", "data", "INPUT_DUMP_MAIN.csv")
+# Game-exact stick->angle dump validating stick_angle_deg gate-wide. Optional, untracked (copyrighted
+# game RAM): supply at _generated/INPUT_DUMP_MAIN.csv or via TWW_STICK_DUMP (harness/capture/stick_grid_redump.py).
+STICK_DUMP = os.environ.get("TWW_STICK_DUMP") or os.path.join(
+    _rb, "_generated", "INPUT_DUMP_MAIN.csv")
 
 def check_stick_table():
     if not os.path.exists(STICK_DUMP):

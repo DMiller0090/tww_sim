@@ -1,5 +1,5 @@
 """Scan EVERY room/collision DZB in the extracted game for clippable seams and write one CSV per DZB
-straight into the in-Dolphin collision viewer's data dir, mirroring the disc's ``Stage/<stage>/``
+into ``_generated/seam_clips/`` (override with ``out=``), mirroring the disc's ``Stage/<stage>/``
 folder layout. Streams as it goes (writes each DZB's CSV the moment it finishes and prints a progress
 line) so the viewer can live-update, and is resumable (skips DZBs whose CSV already exists), so a
 long full-game run can be interrupted and continued.
@@ -18,7 +18,7 @@ position, and the interior angle between the two walls). Coordinates are written
 precision — a seam clip is a sub-ULP razor, so rounding a coord turns a CLIP into a BLOCK. DZBs with
 no clippable seam write no file.
 
-    python -m harness.collision.scan_all_dzb                 # all stages -> viewer data dir
+    python -m harness.collision.scan_all_dzb                 # all stages -> _generated/seam_clips
     python -m harness.collision.scan_all_dzb stage=M_Dai     # one stage
     python -m harness.collision.scan_all_dzb out=/some/dir   # override the output dir
 """
@@ -86,8 +86,10 @@ def _write_csv(path, clips):
 
 def main(argv):
     only_stage = None
-    out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..",
-                                       "tww-python-scripts", "ww", "data", "seam_clips"))
+    # Regenerable artifact -> the gitignored _generated/ tree (override with out=). No sibling-repo
+    # write target: this repo depends only on ../tools/, never ../tww-python-scripts/.
+    out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
+                                       "_generated", "seam_clips"))
     for a in argv:
         if a.startswith("stage="):
             only_stage = a[6:]
