@@ -96,6 +96,18 @@ contradicted. Read alongside the "Dead ends" list in the README (this is the ful
 14. **speedF must be 17.0 at the A press (hard gate).** A sub-cap walk gives a sub-26 roll and a shrunk
     lunge that never reaches behind the seam planes. Gate it everywhere; it is not tunable down.
 
+## K0 mid-run calibration + the "anchor lottery" (sessions 8-9; superseded session 10)
+
+Pinning the sim to one live run at a mid-cruise row K0 (position + fc phases + m359C/m35B4 + a
+re-posed toe stream) verified bit-exact on the CRUISE -- but at cap m3598 == 0, so the cruise
+exposes none of the pose-dependent state, and the calibration silently left it sim-derived. Dip
+frames (m3598 > 0) then consumed wrong poses and shipped hits missed live by ~0.3u; each anchor
+looked like an independent "lottery draw". Session 10 replaced it with the from-rest exact model
+(rest-blend seeding + stored mFootData poses + end-of-frame draw pos + world Y + turn lean +
+dtm_make's 255->254 delivered-byte calibration) and the "lottery" vanished: the first robust hit
+shipped clipped live 0-ULP. Lesson: a calibration verified only on a regime that HIDES state is
+not a calibration of that state.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

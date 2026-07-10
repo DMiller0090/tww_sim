@@ -2,11 +2,12 @@
 
 **Answers:** How do we plan a roll-stab that clips through a razor-thin wall seam, and validate it
 live? What does the acceptance region actually look like? Why must every candidate be tested with
-exact geometry instead of a fitted window? Why does the walk have to be live-calibrated first?
-**Status:** SIM-VALIDATED end to end (bit-exact vs live through cruise/arcs/dips/roll on verified
-anchors); in-sim genuine clips found routinely; the LIVE clip delivery is the open last step (see
-`harness/rollstab/README.md` for the run protocol and status).
-**Source:** sessions 7-9 (2026-07-09/10), `_notes/seam-clip-live-validation-handoff-*.md`;
+exact geometry instead of a fitted window? What made the sim bit-exact from rest?
+**Status:** LIVE-DELIVERED (2026-07-10): a solver hit shipped as a clean DTM landed 0-ULP on the
+sim's predicted cut (kaze r11, idle13 anchor) and threaded the seam. Regression:
+`tests/test_rollstab_rest.py` (live goldens).
+**Source:** sessions 7-10 (2026-07-09/10), `_notes/seam-clip-live-validation-handoff-*.md`;
+run protocol + model term list in `harness/rollstab/README.md`;
 collision model [`mechanics/collision.md`](../mechanics/collision.md) (CrrPos, Force25Bit);
 cut mechanics in [`mechanics/land-movement.md`](../mechanics/land-movement.md) (roll stab);
 constants in [`reference/constants.md#land-movement`](../reference/constants.md#land-movement).
@@ -28,18 +29,26 @@ along-band. Consequences:
 - The roll carries the full 49.2202 lunge only from a capped walk: speedF == 17.0 at the A press
   is a hard gate (a sub-cap walk shrinks the lunge below the seam's displacement floor).
 
-## Why live calibration, and what it seeds
+## The sim is bit-exact FROM REST -- plan sequences need no live calibration
 
-Walk startup speed is animation-read (`posMoveFromFootPos`), and the from-rest entry is only
-characterized for the fresh-idle anchors. The solver therefore starts every plan with a fixed
-constant-stick prefix and pins the sim to ONE live run at a row K0: position, the under-body
-frame-controller phases, the `m359C`/`m35B4` smoothing state, and a re-posed toe stream. After
-that the sim is bit-exact vs live through cruise, bearing arcs, partial-magnitude dips, and the
-roll. The cruise alone cannot verify this (at cap `m3598 = 0` hides the anim state); the gate is
-a dip diagnostic (one partial-magnitude frame, then per-frame diff).
+The from-rest model (`harness/rollstab/rest.rest_state`) matches live 0-ULP from row 0
+through walk entry, cruise, arcs, partial-magnitude dips, and the roll. The terms that closed it
+(decomp-grounded; full list + code pointers in `harness/rollstab/README.md`): the WAIT(4) rest
+blend with procWait's per-frame re-init (the f31 frame round-trip), the anchor's STORED delayed
+foot poses (a translated anchor keeps the pre-mint position's rounding noise), the end-of-frame
+draw position (setWorldMatrix runs post-integration), Link's world Y in the pose base, the MOVE
+turn lean (setMoveSlantAngle's m351C), and dtm_make's 255->254 stick delivery calibration --
+plans must sim the DELIVERED bytes, never the raw plan bytes.
 
-## Knobs (mid-walk, from the calibrated state)
+The mid-run K0 calibration this replaces patched only the state a cruise can see (m3598 == 0
+hides the toe stream), which is why its dips missed live; historical detail in the session 8-10
+handoffs.
 
+## Knobs (from rest)
+
+- **Start crawl** (the 1D approach): K<=3 partial-magnitude sticks (msd 0.52..0.889, bearing F)
+  in the first rows, while speed is low -- each partial shifts the whole downstream trajectory
+  along-track by a fine quantum, densely filling the A-press 17u phase grid.
 - **Bearing arcs** (hold an off-bearing stick 1-3 frames, facing returns to F): gross lateral
   shift of the roll line, several units of reach.
 - **Partial-magnitude fines** (1 frame): anim-phase roll-drift classes (discrete perp steps) and
@@ -49,7 +58,7 @@ a dip diagnostic (one partial-magnitude frame, then per-frame diff).
 Dead ends recorded so nobody repeats them: two-segment pursuit walks (perp treads quantize with a
 dead band exactly over the window), per-move-set live bias correction (arc-dependent, not
 transferable), a from-rest roll as an anim canonicalizer (does not resync), anchor-z transfer
-aiming (live reseeding flips the press frame; the landing is chaotic). Full ledger (sessions 4-9,
-sim-artifact traps, single-ray infeasibility, delivery rules):
+aiming (live reseeding flips the press frame; the landing is chaotic), K0 mid-run calibration
+(see above). Full research log:
 [history/seam-clip-dead-ends.md](../history/seam-clip-dead-ends.md); run protocol in
 `harness/rollstab/README.md`.

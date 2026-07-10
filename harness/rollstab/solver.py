@@ -1,12 +1,17 @@
-"""Calibrated dust solver: search the mid-walk input knobs for a genuine+clear roll-stab clip.
+"""From-rest dust solver: search the input knobs for a genuine+clear roll-stab clip.
 
-Run shape (from the calibrated warm state, harness.rollstab.calibrate):
-    [cruise on the F aim stick, with MOVES placed lead frames before the A press]
-    + [A] + [15 aim] + [B edge] + [aim tail]        (the cut fires 2 frames after the B edge)
+Run shape (from the anchor's REST state, harness.rollstab.rest.rest_state -- bit-exact from
+row 0, no live calibration):
+    [start-crawl sticks (rows 0..k-1)] + [cruise on the F aim stick, with MOVES placed lead
+    frames before the A press] + [A] + [15 aim] + [B edge] + [aim tail]
 
-Knobs:
-  * moves  -- (lead, stick) 1-frame partial-magnitude / neighbor-cell "fines" (anim-phase roll
-              drift + speed dip) and (lead, stick, dur) bearing ARCS (gross lateral shift);
+Knobs (all sticks are dtm_stick-calibrated -- sim ONLY the bytes dtm_make will deliver):
+  * start  -- the 1D-approach START CRAWL: up to START_KMAX partial-magnitude sticks (msd
+              0.52..0.889 + full, aimed at F) in the FIRST rows, while speed is LOW -- each
+              partial shifts the whole downstream trajectory along-track by a fine quantum
+              (the dense fill that made the freeze planner's 0-ULP targeting work);
+  * moves  -- (lead, stick) 1-frame partial-magnitude "fines" and (lead, stick, dur) bearing
+              ARCS (gross lateral shift of the roll line);
   * A_proj -- the press threshold (z phase, 17u grid).
 
 Acceptance is EXACT per candidate, never a fitted residual: genuine_clip on the run's real
@@ -28,35 +33,39 @@ if _rb not in sys.path:
 from tww_sim.land.land import FRONT_ROLL, CUT_F, CUT_A
 from tww_sim.land.plan_land import stick_for_bearing
 from harness.rollstab import geometry as G
-from harness.rollstab import calibrate as C
+from harness.rollstab import rest as C
 
 HITS_PATH = os.path.join(_rb, '_generated', 'rollstab_hits.json')
 ZLO, ZHI = 302.6, 308.2        # old_z clear band (roll stops at the face below ~302.6)
+START_KMAX = 3                 # start-crawl window (K<=3: low-speed micro-moves, 1D approach)
 _BASE = {}
 
 
 def base(anchor):
     if anchor not in _BASE:
-        _BASE[anchor] = C.calibrated_state(anchor)
+        _BASE[anchor] = C.rest_state(anchor)
     return _BASE[anchor].clone()
 
 
-def run(anchor, moves, A_proj=-506.0, tail=8):
-    """One exact run. moves = [(lead, stick[, dur]), ...] placed lead frames before the A press
-    (fixpoint placement: the press frame is threshold-derived, so placement iterates to a fixed
-    point). Returns an info dict (old/new/rho/z/genuine/clear/spF_at_A/stream) or None."""
+def run(anchor, moves, A_proj=-506.0, tail=8, start=()):
+    """One exact run from REST. `start` = sticks for stream rows 0..len-1 (the acceleration
+    micro-crawl; the entry acts them with the 2-frame delay). `moves` = [(lead, stick[, dur]),
+    ...] placed lead frames before the A press (fixpoint placement: the press frame is
+    threshold-derived, so placement iterates to a fixed point). Returns an info dict
+    (old/new/rho/z/genuine/clear/spF_at_A/stream) or None."""
     _, straight, aim = C.sticks_of(anchor)
+    start = tuple(start)
     placed = None
     for _ in range(4):
         s = base(anchor)
         suffix = []
         ci = 0
         cross = None
-        for _ in range(80):
-            if G.along((s.pos_x, s.pos_z)) >= A_proj:
+        for _ in range(90):
+            if ci >= len(start) and G.along((s.pos_x, s.pos_z)) >= A_proj:
                 cross = ci
                 break
-            stk = aim
+            stk = start[ci] if ci < len(start) else aim
             if placed is not None and ci in placed:
                 stk = placed[ci]
             s.step(stk[0], stk[1])
@@ -70,7 +79,7 @@ def run(anchor, moves, A_proj=-506.0, tail=8):
             dur = mv[2] if len(mv) > 2 else 1
             for d in range(dur):
                 idx = cross - ld + d
-                if idx < 0 or idx >= cross or idx in want:
+                if idx < len(start) or idx >= cross or idx in want:
                     return None
                 want[idx] = stk
         if want != (placed or {}):
@@ -99,40 +108,68 @@ def run(anchor, moves, A_proj=-506.0, tail=8):
         gen = G.genuine_clip(old, new)
         clear = gen and not any(G.seg_blocked(roll_pts[i], roll_pts[i + 1])
                                 for i in range(len(roll_pts) - 1))
-        stream = [(aim[0], aim[1], 0)] * (C.K0 + 1) + suffix
-        # rows 0..NPREF-1 are the prefix; kaze anchors have straight == aim byte-wise (README).
-        assert straight == aim, "prefix stick differs from aim: author the prefix explicitly"
         return dict(fired=True, old=old, new=new, rho=G.perp(old), z=old[1],
                     genuine=gen, clear=clear, spF_at_A=spF_at_A,
                     facing=rows[cut_i][3], cut_proc=rows[cut_i][0],
                     disp=math.hypot(new[0] - old[0], new[1] - old[1]),
-                    n_roll=len(roll_pts), stream=stream)
+                    n_roll=len(roll_pts), stream=suffix)
     return None
 
 
-def fine_family(mstep=0.004, leads=(4, 5, 6, 7, 10)):
-    out, seen = [], set()
-    seed = G.load_seed('kaze_r11_rollstab_idle2@twwgz')
+def start_family(anchor, kmax=START_KMAX):
+    """The 1D-approach start-crawl lattice: distinct dtm-calibrated sticks at bearing F, full +
+    every distinct live-valid partial (msd 0.889..0.52, the movement gate band -- the (0.889,1)
+    band is live-divergent, see plan_land._freeze_start_lattice). Combos are k-tuples with the
+    NON-FULL stick count kept low (each run is exact; the full x full.. prefix is the baseline).
+    Ordered shallow-first so cheap candidates come first."""
+    seed = G.load_seed(anchor)
     cs = seed['csangle'] & 0xFFFF
+    full = C.dtm_stick(stick_for_bearing(G.F, cs, 1.0))
+    alph, seen = [], {full}
+    for j in range(889, 519, -1):
+        stk = C.dtm_stick(stick_for_bearing(G.F, cs, j / 1000.0))
+        if stk not in seen:
+            seen.add(stk)
+            alph.append(stk)
+    combos = []
+    for stk in alph:                                     # k=1: one partial first frame
+        combos.append((stk,))
+    for stk in alph:                                     # k=2: partial + full, full + partial
+        combos.append((stk, full))
+        combos.append((full, stk))
+    for stk in alph:                                     # k=3: one partial in three slots
+        combos.append((stk, full, full))
+        combos.append((full, stk, full))
+        combos.append((full, full, stk))
+    for a in alph[::4]:                                  # k=2 double-partial (coarse subsample)
+        for b in alph[::4]:
+            combos.append((a, b))
+    return combos
+
+
+def fine_family(anchor, mstep=0.004, leads=(4, 5, 6, 7, 10)):
+    out, seen = [], set()
+    seed = G.load_seed(anchor)
+    cs = seed['csangle'] & 0xFFFF
+    aim = C.dtm_stick(stick_for_bearing(G.F, cs, 1.0))
     for j in range(-4, 5):
         m = 0.999
         while m >= 0.50:
-            stk = stick_for_bearing((G.F + 16 * j) & 0xFFFF, cs, m)
+            stk = C.dtm_stick(stick_for_bearing((G.F + 16 * j) & 0xFFFF, cs, m))
             if stk not in seen:
                 seen.add(stk)
                 out.append(stk)
             m -= mstep
-    aim = stick_for_bearing(G.F, cs, 1.0)
     return [(ld, stk) for stk in out if stk != aim for ld in leads]
 
 
-def arc_family(bstep=50, durs=(1, 2, 3), leads=(10, 9, 8, 7), min_settle=5):
+def arc_family(anchor, bstep=50, durs=(1, 2, 3), leads=(10, 9, 8, 7), min_settle=5):
     out, seen = [], set()
-    seed = G.load_seed('kaze_r11_rollstab_idle2@twwgz')
+    seed = G.load_seed(anchor)
     cs = seed['csangle'] & 0xFFFF
-    aim = stick_for_bearing(G.F, cs, 1.0)
+    aim = C.dtm_stick(stick_for_bearing(G.F, cs, 1.0))
     for d in list(range(-1000, -149, bstep)) + list(range(150, 1001, bstep)):
-        stk = stick_for_bearing((G.F + d) & 0xFFFF, cs, 1.0)
+        stk = C.dtm_stick(stick_for_bearing((G.F + d) & 0xFFFF, cs, 1.0))
         for dur in durs:
             for ld in leads:
                 if ld - dur < min_settle:
@@ -145,9 +182,10 @@ def arc_family(bstep=50, durs=(1, 2, 3), leads=(10, 9, 8, 7), min_settle=5):
     return out
 
 
-def _record(hits, r, moves, A_proj, anchor):
+def _record(hits, r, moves, A_proj, start, anchor):
     hits.append(dict(anchor=anchor, moves=[[m[0], list(m[1])] + list(m[2:]) for m in moves],
-                     A_proj=A_proj, K0=C.K0, old=list(r['old']), new=list(r['new']),
+                     A_proj=A_proj, start=[list(x) for x in start],
+                     old=list(r['old']), new=list(r['new']),
                      rho=r['rho'], facing=r['facing'], disp=r['disp'], cut_proc=r['cut_proc'],
                      n_roll=r['n_roll'], stream=[list(x) for x in r['stream']]))
     os.makedirs(os.path.dirname(HITS_PATH), exist_ok=True)
@@ -155,48 +193,52 @@ def _record(hits, r, moves, A_proj, anchor):
 
 
 def search(anchor, nhits=4, do_drill=False, K=60, levels=2):
-    """Catalog singles, then (arc x fine) ranked by nearest-dust prediction, then (optionally)
-    iterative-deepening drill on the nearest configs. Every accept is the exact run."""
+    """Arc/fine singles, then the start-crawl sweep (dense along-track fill), then (optionally)
+    an iterative-deepening drill combining the nearest configs. Every accept is the exact run."""
     t0 = time.time()
     r0 = run(anchor, [])
     print('baseline old=(%.7f,%.7f) z=%.4f rho=%+0.6f' % (
           r0['old'][0], r0['old'][1], r0['z'], r0['rho']), flush=True)
     hits, samples, n = [], [], 0
 
-    def check(moves, A_proj):
+    def check(moves, A_proj, start=()):
         nonlocal n
         n += 1
-        r = run(anchor, moves, A_proj)
+        r = run(anchor, moves, A_proj, start=start)
         if (r is None or not r.get('fired') or r['facing'] != G.F or r['spF_at_A'] != 17.0):
             return None
-        samples.append((r['old'][0], r['old'][1], [list(m) for m in moves], A_proj))
+        samples.append((r['old'][0], r['old'][1], [list(m) for m in moves], A_proj,
+                        [list(x) for x in start]))
         if (ZLO <= r['z'] <= ZHI) and r['genuine'] and r['clear']:
-            print('CLIP moves=%s A=%.0f old=(%.7f,%.7f) rho=%+0.6f (%.0fs)' % (
-                  moves, A_proj, r['old'][0], r['old'][1], r['rho'], time.time() - t0),
-                  flush=True)
-            _record(hits, r, moves, A_proj, anchor)
+            print('CLIP start=%s moves=%s A=%.0f old=(%.7f,%.7f) rho=%+0.6f (%.0fs)' % (
+                  list(start), moves, A_proj, r['old'][0], r['old'][1], r['rho'],
+                  time.time() - t0), flush=True)
+            _record(hits, r, moves, A_proj, start, anchor)
         return r
 
     A_projs = (-506.0, -512.0, -500.0)
-    fam = arc_family() + fine_family()
+    fam = arc_family(anchor) + fine_family(anchor)
     for mv in fam:
         for A in A_projs:
             check([mv], A)
             if len(hits) >= nhits:
                 return hits
     print('singles done: %d runs, hits=%d (%.0fs)' % (n, len(hits), time.time() - t0), flush=True)
+    starts = start_family(anchor)
+    for st in starts:
+        check([], A_projs[0], start=st)
+        if len(hits) >= nhits:
+            return hits
+    print('start-crawl done: %d runs, hits=%d (%.0fs)' % (n, len(hits), time.time() - t0),
+          flush=True)
     if not do_drill:
         return hits
-    # drill: extend the configs nearest to genuine dust with one more move per level
-    dust = [(x, z) for x, z, _, _ in samples if G.pred_genuine((x, z))]
-    pool = {json.dumps(s[2]) + str(s[3]): s for s in samples}
-
+    # drill: extend the configs nearest to genuine dust with one more move / a start crawl
     def score(x, z):
-        # x-column match dominates: the razor is thin in x and the z knobs are dense
+        # x-column match dominates: the razor is thin in x and the along-track knobs are dense
         best = 1e9
-        zc = z
         for gx, gz in _dust_cache():
-            d = math.hypot((gx - x) * 200.0, gz - zc)
+            d = math.hypot((gx - x) * 200.0, gz - z)
             best = min(best, d)
         return best
 
@@ -217,23 +259,30 @@ def search(anchor, nhits=4, do_drill=False, K=60, levels=2):
             print('dust cache: %d pts' % len(_dc), flush=True)
         return _dc
 
+    pool = {json.dumps(s[2]) + str(s[3]) + json.dumps(s[4]): s for s in samples}
     for lvl in range(levels):
         cands = sorted(pool.values(), key=lambda s: score(s[0], s[1]))[:K]
         print('drill level %d (best %.5f)' % (lvl, score(cands[0][0], cands[0][1])), flush=True)
-        for x, z, moves, A in cands:
+        for x, z, moves, A, start in cands:
             used = set()
             for m in moves:
                 dur = m[2] if len(m) > 2 else 1
                 used |= set(range(m[0] - dur + 1, m[0] + 1))
-            for mv in fam:
+            movesT = [tuple([m[0], tuple(m[1])] + list(m[2:])) for m in moves]
+            startT = tuple(tuple(x2) for x2 in start)
+            for mv in fam:                       # one more arc/fine on this config
                 dur = mv[2] if len(mv) > 2 else 1
                 if set(range(mv[0] - dur + 1, mv[0] + 1)) & used:
                     continue
-                nm = [tuple([m[0], tuple(m[1])] + list(m[2:])) for m in moves] + [mv]
-                check(nm, A)
+                check(movesT + [mv], A, start=startT)
                 if len(hits) >= nhits:
                     return hits
-        pool = {json.dumps(s[2]) + str(s[3]): s for s in samples}
+            if not startT:                       # or a start crawl under this config
+                for st in start_family(anchor)[:120]:
+                    check(movesT, A, start=st)
+                    if len(hits) >= nhits:
+                        return hits
+        pool = {json.dumps(s[2]) + str(s[3]) + json.dumps(s[4]): s for s in samples}
     print('done: %d runs, hits=%d (%.0fs)' % (n, len(hits), time.time() - t0), flush=True)
     return hits
 

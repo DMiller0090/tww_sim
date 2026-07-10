@@ -1,10 +1,9 @@
 """Ship gate + clean-DTM delivery for a solver hit.
 
-Gate: replay the hit's LITERAL post-seed stream through the calibrated seed (calibrate.
-apply_calibration at row K0, mirroring the run) and assert: the CUT fires, old/new 0-ULP vs the
-hit, genuine_clip, approach_clear, new behind BOTH wall planes, and a sliver z-margin (the live
-landing can sit ~1e-4 off the sim on shifted-anchor generations, so require pred_genuine to hold
-at old_z +- MARGIN_Z).
+Gate: replay the hit's LITERAL stream FROM REST (rest.rest_state -- bit-exact from row 0,
+no live calibration) and assert: the CUT fires, old/new 0-ULP vs the hit, genuine_clip,
+approach_clear, new behind BOTH wall planes, and a sliver z-margin (require pred_genuine to hold
+at old_z +- MARGIN_Z; with the rest-exact model this is belt-and-braces, not a residual budget).
 
 Deliver: author DTM = [seed] + stream + WATCH_TAIL neutral frames (~2s so the clip is visible),
 play via run_dtm(log_frames=N) (clean DTM, NEVER advancewith), and confirm per-frame that the cut
@@ -26,7 +25,7 @@ if _tb not in sys.path:
 from tww_sim.land.land import FRONT_ROLL, CUT_F, CUT_A
 from tww_sim.core.fp import f32 as _f
 from harness.rollstab import geometry as G
-from harness.rollstab import calibrate as C
+from harness.rollstab import rest as C
 from harness.rollstab.solver import HITS_PATH
 
 PLAN_PATH = os.path.join(_rb, '_generated', 'rollstab_ship_plan.json')
@@ -39,14 +38,10 @@ def bits(x):
 
 
 def replay(anchor, stream):
-    s = C.base_state(anchor)
+    s = C.rest_state(anchor)
     rows = []
-    for k, (sx, sy, b) in enumerate(stream):
+    for sx, sy, b in stream:
         s.step(sx, sy, buttons=b)
-        if k == C.K0:
-            calib = json.load(open(C.CALIB_PATH))
-            assert calib['anchor'] == anchor
-            C.apply_calibration(s, calib, C.K0)
         rows.append((s.state & 0xFF, s.pos_x, s.pos_z, s.facing & 0xFFFF))
     return rows
 
