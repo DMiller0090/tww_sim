@@ -77,7 +77,24 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 
 - **North star: the TETRA seam clip, pure-sim** -- the phased plan (wall collision -> ground ->
   CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **C** (Phase W + Phase G
-  both DONE; the remaining Phase-W full-room block-grid cull is speed-only).
+  DONE; Phase C's Tetra-counterpart model now DONE, see next; the CC-push stepper integration +
+  three-way ordering remain. The remaining Phase-W full-room block-grid cull is speed-only).
+- **Phase C Tetra FOLLOW + attention DONE (session 14): the Tetra counterpart state, LIVE-GATED
+  0-ULP.** The type-5 (following) Tetra's per-frame model is decomp-faithful and bit-exact vs live:
+  `tww_sim/core/npc_zl1.Zl1FollowState.step(link_pos)` runs the `optn_1`/`optn_2` idle<->move state
+  machine (`d_a_npc_zl1.cpp`) -- engage at 3D dist > 230, turn (`cLib_addCalcAngleS 4/0x800/0x80`),
+  accelerate (`cLib_chaseF` 1 u/f) to a distance-capped target speed (`0.04*sqrt(dist^2-130^2)`, max
+  10), decelerate, stop <=130 -- then `posMoveF`/`calcSpeed`/`posMove` + a flat-ground `CrrPos` Y
+  clamp. Live gate: `harness/rollstab/capture_tetra_follow.py` teleports Tetra far on slot 3, logs
+  her chase back to a stationary Link; the offline replay matches **0-ULP over 119 frames** (pos +
+  facing + speedF + action-state), engage->cruise->stop (fixture `fixtures/hyrule_tetra_follow.json`,
+  regression `tests/test_tetra_follow.py`; seed from frame 1 past the 1-frame post-teleport settle).
+  Also `zl1_attention_active(link_pos, link_facing, tetra_pos)`: the decomp-exact L-target / talk /
+  speak AVOID region (`dist_table[0xAB]`: XZ < 300, |dy| < 300, Link facing within +-90deg of Tetra)
+  so a planner routes the setup so an A/L press near her doesn't talk/lock instead. Mechanic page
+  `knowledge/mechanics/tetra-follow.md`. Open Phase-C items: the `GetCCMoveP` term at the decomp's
+  frame point, the three-way CC-push -> WallCorrect -> net-overlap ordering, the attention live
+  reticle confirmation, and the Tetra read-lag (the gate used a stationary Link).
 - **Phase G DONE (session 13): the Tetra floor is FLAT -> ground collision is a no-op for this clip.**
   Measured before modeling (as ROADMAP prescribes): the walkable floor Link's roll crosses at the
   (-1727,-990) Tetra corner (flooded Hyrule, savestate slot 3) is a single flat tri (poly 2917),

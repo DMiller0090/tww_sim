@@ -62,6 +62,7 @@ you can triage in one glance.
 - **What happens each frame when Link walks/rolls INTO a wall (the CrrPos wall pass) / wall-hold / roll bonk vs grind / why A against a wall sidles instead of rolling / how does the sim run walls?** → [mechanics/wall-response.md](mechanics/wall-response.md)
 - **Why do seam clips work (walking/rolling through a wall corner) / the float-precision root cause / why ≥~36 u + corner >90° + vertical walls / how do I predict one?** → [mechanics/seam-clip.md](mechanics/seam-clip.md)
 - **How does an actor push Link (the Tetra "nudge") / cyl-cyl overlap + weight split / can it supply the extra displacement for a seam clip?** → [mechanics/actor-push.md](mechanics/actor-push.md)
+- **When/how does Tetra follow Link (follow radius, speed), and when can Link lock onto / talk to her (the region a planner must avoid)?** → [mechanics/tetra-follow.md](mechanics/tetra-follow.md)
 
 ### Ocean world, refills & routing
 - **How is the sea laid out / why is only one island loaded / what's a sploosh zone / why route around quadrants?** → [mechanics/ocean-environment.md](mechanics/ocean-environment.md)

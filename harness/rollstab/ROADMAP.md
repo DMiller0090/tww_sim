@@ -59,15 +59,26 @@ Tetra spot ever shows slope -- the signal Phase G modeling has become load-beari
 
 ## Phase C -- CC collision Link<->Tetra in the stepper
 
-The model is live-confirmed but lives in standalone probes (`cc_push.py`/`tetra_clip.py`,
+The push model is live-confirmed but lives in standalone probes (`cc_push.py`/`tetra_clip.py`,
 [[tetra-push-model]]): dCcS rank-table 50/50 split, Link Co R=30, joint-midpoint center, push
-STEERS. Missing:
-- The per-frame `GetCCMoveP` term at the decomp's exact point in the frame.
-- A **Tetra counterpart state**: her per-frame position/Cyl + reactions. DECIDE (with Dereck):
-  full NPC model vs a captured per-frame schedule (anchor-style) -- the schedule bounds plan
-  length but is far cheaper.
+STEERS.
+
+**Tetra counterpart state DONE (session 14).** Decided with Dereck: a PARTIAL `daNpc_Zl1_c` model,
+not a full NPC port and not a captured schedule -- her FOLLOW behaviour (she chases Link when he
+gets too far) plus the LOCK-ON/TALK region (so a planner avoids accidentally talking/locking her).
+`tww_sim/core/npc_zl1.Zl1FollowState` (the `optn_1`/`optn_2` idle<->move follow: engage > 230, turn,
+accelerate to `0.04*sqrt(dist^2-130^2)` capped 10, stop <= 130) is **live-gated 0-ULP** on slot 3
+(`capture_tetra_follow.py`, `tests/test_tetra_follow.py`), and `zl1_attention_active` is the
+decomp-exact avoid predicate (`dist_table[0xAB]`: XZ < 300, ±90deg cone). Mechanic page
+`knowledge/mechanics/tetra-follow.md`.
+
+Still missing to close Phase C:
+- The per-frame `GetCCMoveP` term at the decomp's exact point in the frame (wire Tetra's `m_cc_move`
+  recoil, which `Zl1FollowState.step` already accepts via `cc_move`, into the CC pass).
 - The three-way ordering CC-push -> WallCorrect -> net overlap (this interaction IS the clip
   mechanism; order comes from the decomp, not intuition).
+- Live reticle confirmation of the attention region; the Tetra read-lag (the follow gate used a
+  stationary Link); walls/gap-jump in the follow path (reuse `core.collision`).
 
 ## Phase R -- residuals (parallel, pick up when they block)
 
