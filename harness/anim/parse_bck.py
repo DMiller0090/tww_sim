@@ -121,10 +121,11 @@ def load_from_lkanm(lkanm_bytes_or_path, names=('walk', 'dash', 'waits', 'freeb'
 # Two output sets: the walk/dash foot-chain anims (foot_speedf), and the sword-cut root-motion anims
 # (land.py CUT_F/CUT_A use only the joint-0 translate; cutturnb = spin-attack roll cut, kept, unmodeled).
 _OUTPUTS = {
-    # 'dashs' = the sword-drawn dash (getAnmData mSwordAnmIndexTable[ANM_DASH]): different LEG rotations
-    # than the sheathed 'dash', walk/waits unchanged. See knowledge/model/anim-engine.md.
-    'link_anim_walk_dash.json': ('walk', 'dash', 'dashs', 'waits', 'freeb', 'rollf', 'rot', 'slip',
-                                 'atnwls', 'atnwrs', 'atnls', 'atnrs', 'atndls', 'atndrs', 'atnwb', 'atndb'),
+    # 'dashs'/'walks' = the sword-drawn dash/walk (getAnmData mSwordAnmIndexTable; different leg
+    # rotations than the sheathed clips, waits unchanged). See knowledge/model/anim-engine.md.
+    'link_anim_walk_dash.json': ('walk', 'walks', 'dash', 'dashs', 'waits', 'freeb', 'rollf', 'rot',
+                                 'slip', 'atnwls', 'atnwrs', 'atnls', 'atnrs', 'atndls', 'atndrs',
+                                 'atnwb', 'atndb'),
     'link_anim_cuts.json': ('cutf', 'cuta', 'cutturnb'),
 }
 

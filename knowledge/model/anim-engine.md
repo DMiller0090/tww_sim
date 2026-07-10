@@ -96,11 +96,12 @@ lands 1 ULP low and the entry-morf jnt0.z is +5 ULP (see [history](../history/re
 `setBlendMoveAnime` names the DASH slot `ANM_DASH`, but the resource it resolves to depends on the
 equipped item: `getAnmData` (`d_a_player_main.cpp`) indexes `mSwordAnmIndexTable` when the sword is
 equipped, mapping `ANM_DASH → dRes_INDEX_LKANM_BCK_DASHS_e` (the sword-drawn dash). `dashs.bck` has
-**different leg-joint rotations** than the sheathed `dash.bck` (jnt 34/36/37/38/39; walk/waits are
-unchanged - `WALKS` legs == `WALK`), so the posed foot toe (and hence `posMoveFromFootPos`'s
-`f31_2`) differs. The sim must pose `dashs` for the DASH slot whenever the sword is out:
-`UnderAnimState(sword=True)` selects it (regimes 2 and 3), threaded from `LandState.sword_drawn`
-through `FootSpeedF`.
+**different leg-joint rotations** than the sheathed `dash.bck` (jnt 34/36/37/38/39), so the posed
+foot toe (and hence `posMoveFromFootPos`'s `f31_2`) differs. The same table also maps
+`ANM_WALK → WALKS` (`d_a_player_main_data.inc:698`; waits unchanged): `walks.bck`'s legs are
+near-identical to `walk`'s but not byte-equal, so the sim poses the sword variants for BOTH slots
+whenever the sword is out: `UnderAnimState(sword=True)` selects `dashs` (regimes 2 and 3) and
+`walks` (regimes 1 and 2), threaded from `LandState.sword_drawn` through `FootSpeedF`.
 
 This was invisible for months because a pure DASH cruise has `m3598 = 0`, so the toe term drops out
 of `speedF` (= `nspeed`) and the wrong dash pose never moved position - the from-rest on-axis suite

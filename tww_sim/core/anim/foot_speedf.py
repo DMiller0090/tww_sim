@@ -299,10 +299,10 @@ class FootSpeedF:
         m = float(morf) if morf is not None else -1.0
         self.st.fc0.update()                        # actor execute advances the walk ctrl this frame
         self.st.fc1.update()
-        self.st._set_move_anime(0.0, H_38, H_40, 'waits', 'walk', 2, m)
+        self.st._set_move_anime(0.0, H_38, H_40, 'waits', self.st._walk, 2, m)
         self.st.m3598 = 0.0
-        state = dict(move0='waits', move1='walk', f0=self.st.fc0.frame, f1=self.st.fc1.frame,
-                     ratio=self.st.ratio, m3598=0.0, morf=(m >= 0.0))
+        state = dict(move0='waits', move1=self.st._walk, f0=self.st.fc0.frame,
+                     f1=self.st.fc1.frame, ratio=self.st.ratio, m3598=0.0, morf=(m >= 0.0))
         self._foot_speedf(0.0, msd, state, m)
         return 0.0
 

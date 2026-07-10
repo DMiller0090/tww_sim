@@ -36,6 +36,8 @@ ANIM_META = {
     'freeb': (244, EMode_NONE),
     'waits': (60, EMode_LOOP),
     'walk':  (32, EMode_LOOP),
+    'walks': (32, EMode_LOOP),   # ANM_WALKS: the sword-drawn walk (getAnmData sword table maps
+    #                              ANM_WALK -> WALKS); LEG pose differs from 'walk', same meta.
     'dash':  (32, EMode_LOOP),
     'dashs': (32, EMode_LOOP),   # ANM_DASHS: the sword-drawn dash (getAnmData sword table); LEG pose
     #                              differs from 'dash', same frameMax/attribute. See anim-engine.md.
@@ -163,9 +165,10 @@ class UnderAnimState:
         self.m34C3 = m34C3          # current blend-anim state id (0 = single, else the r29)
         self.ratio = 0.0            # getRatio(1) = walk-slot weight
         self.m3598 = 0.0
-        # Sword equipped -> getAnmData swaps ANM_DASH for ANM_DASHS (different leg pose -> different toe).
-        # walk/waits unchanged. See knowledge/model/anim-engine.md.
+        # Sword: getAnmData maps ANM_DASH -> DASHS and ANM_WALK -> WALKS (waits unchanged);
+        # different leg pose -> different toe. See knowledge/model/anim-engine.md.
         self._dash = 'dashs' if sword else 'dash'
+        self._walk = 'walks' if sword else 'walk'
         self.fc0.frame = float(move0_frame)
         self.fc0.end = float(ANIM_META[move0_anim][0])
         self.fc0.attribute = ANIM_META[move0_anim][1]
@@ -179,6 +182,7 @@ class UnderAnimState:
         c.move0 = self.move0; c.move1 = self.move1
         c.m34C3 = self.m34C3; c.ratio = self.ratio; c.m3598 = self.m3598
         c._dash = self._dash
+        c._walk = self._walk
         return c
 
     def _set_move_anime(self, f27, f28, f25, r27, r28, r29, i_morf):
@@ -206,13 +210,13 @@ class UnderAnimState:
         """daPy_lk_c::setBlendMoveAnime (2966), flat free-walk path. Returns whether morf triggered."""
         f30 = fp.fdivs(abs(fp.fmuls(nspeed, m34E2_cos)), H_MAXSPEED)
         morf = False
-        if f30 < H_2C:                                   # regime 1: WAITS <-> WALK
+        if f30 < H_2C:                                   # regime 1: WAITS <-> WALK (sword: WALKS)
             f25_2 = fp.fdivs(f30, H_2C)
             self.m3598 = fp.fsubs(1.0, fp.fmuls(fp.fsubs(1.0, H_60), f25_2))
-            morf = self._set_move_anime(f25_2, H_38, H_40, 'waits', 'walk', 1, i_morf)
-        elif f30 < H_30:                                 # regime 2: WALK <-> DASH (sword: DASHS)
+            morf = self._set_move_anime(f25_2, H_38, H_40, 'waits', self._walk, 1, i_morf)
+        elif f30 < H_30:                                 # regime 2: WALK <-> DASH (sword: WALKS/DASHS)
             f1 = fp.fdivs(fp.fsubs(f30, H_2C), fp.fsubs(H_30, H_2C))
-            morf = self._set_move_anime(f1, H_40, H_48, 'walk', self._dash, 1, i_morf)
+            morf = self._set_move_anime(f1, H_40, H_48, self._walk, self._dash, 1, i_morf)
             self.m3598 = fp.fmuls(H_60, fp.fsubs(1.0, f1))
         else:                                            # regime 3: DASH cruise (sword: DASHS)
             morf = self._set_move_anime(1.0, H_48, H_48, self._dash, self._dash, 1, i_morf)
