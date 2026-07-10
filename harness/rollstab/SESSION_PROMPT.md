@@ -6,13 +6,13 @@ NOTHING time-sensitive: current state (what is solved, what is open) lives in th
 authoritative. If this file and the README status ever disagree about state, the README
 is right and this file is stale.
 
-To start a session, paste:
+To start a session, paste this ONE line, the SAME every time:
 
-    Read harness/rollstab/SESSION_PROMPT.md and follow it. Then read the README
-    ## Status section and the newest _notes/seam-clip-live-validation-handoff-*.md
-    for current state.
-    This session's goal: <one line, or "continue the handoff's next step">
-    Restate current state + your plan before editing anything.
+    Read harness/rollstab/SESSION_PROMPT.md and follow it.
+
+That is all that is needed. The default action is to continue the newest handoff's
+"Next step". To steer somewhere else on a given session, add a goal after that line
+(optional), e.g. "... This session's goal: <one line>."
 
 ---
 
@@ -45,7 +45,8 @@ READ, IN THIS ORDER, before proposing anything or touching code:
      every candidate must be tested exactly, not against a fitted ribbon.
   4. knowledge/history/seam-clip-dead-ends.md: the full RULED-OUT ledger (sessions 4-9).
 Then restate, before editing anything: (a) current state in one paragraph, (b) the
-specific goal for THIS session, (c) your plan.
+specific goal for THIS session, (c) your plan. If the session message names no goal,
+the goal IS the newest handoff's "Next step"; if there is no handoff yet, ask.
 
 DO NOT REOPEN SOLVED WORK. The README ## Status says what is already bit-exact / shipped
 / found-routinely. Do not rewrite the sim model, the solver acceptance test, or the
