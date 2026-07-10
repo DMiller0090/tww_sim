@@ -20,6 +20,10 @@ from tww_sim.swim.sim import _deadzone
 import math
 from tww_sim.core.anim.foot_speedf import FootSpeedF
 
+# Deselected by default: the reach_* planner sweeps are heavy searches (>90s pure-Python), not
+# 0-ULP asserts. Run with `pytest -m slow`; see the slow-offline-tests memory (build native _anmc).
+pytestmark = pytest.mark.slow
+
 _ANIM = FootSpeedF.available()
 
 SEED = dict(pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0, state=FREE_WAIT,

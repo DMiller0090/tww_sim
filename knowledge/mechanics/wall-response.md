@@ -3,13 +3,16 @@
 **Answers:** What does the game do, each frame, when Link's body meets a wall? Where in the frame
 does the correction run, what state does it leave for the procs, and how does the sim reproduce it
 0-ULP? Why does A against a wall not roll? When does a roll bonk vs grind?
-**Status:** LIVE-GATED 0-ULP (2026-07-10): four clean-DTM gates on a minted kaze r11 anchor
-(head-on hold, oblique slide, roll bonk/crash, slow-roll grind) all per-frame bit-exact.
-Regression: `tests/test_rollstab_walls.py` (live goldens) + `tests/test_land_walls.py` (mechanics).
+**Status:** LIVE-GATED 0-ULP (2026-07-10): four single-face clean-DTM gates on a minted kaze r11
+anchor (head-on hold, oblique slide, roll bonk/crash, slow-roll grind) plus a CORNER gate (walk
+into the 110-degree seam vertex, two walls correct per frame) all per-frame bit-exact.
+Regression: `tests/test_rollstab_walls.py` + `tests/test_rollstab_corner.py` (live goldens) +
+`tests/test_land_walls.py` (mechanics).
 **Source:** decomp `d_a_player_main.cpp` (execute 11407-11411, setBgCheckParam 10680,
 setNormalSpeedF 2311, procFrontRoll 6838/6869, procFrontRollCrash 6891, setFrontWallType 4552),
-`d_bg_s_acch.cpp` (CrrPos 209, LineCheck 175), `d_bg_w.cpp` (RwgWallCorrect 43); session-11
-handoff. Constants: [reference/constants.md#land-movement](../reference/constants.md#land-movement).
+`d_bg_s_acch.cpp` (CrrPos 209, LineCheck 175), `d_bg_w.cpp` (RwgWallCorrect 43, WallCorrectRp 261,
+WallCorrectGrpRp 296), `c_bg_w.cpp` (ClassifyPlane 145); session-11/12 handoffs.
+Constants: [reference/constants.md#land-movement](../reference/constants.md#land-movement).
 
 ## Where the wall pass sits in the frame
 
@@ -57,6 +60,29 @@ PREVIOUS frame's flags. Consumers:
   SIDLE, `procWHideReady`. The ATTACK/roll dispatch never runs. You cannot roll from against a
   wall; back off or face > 45 deg away first.
 
+## Corner ordering: two walls in one frame (the DZB traversal)
+
+WallCorrect pushes the cylinder out of each overlapping wall SEQUENTIALLY -- every correction
+moves the position the next one sees -- so when two non-coplanar walls engage in one frame (a
+corner) the poly VISITATION ORDER changes the resolved position. The order is fixed by the DZB
+block-grid walk (`d_bg_w.cpp`): `WallCorrectGrpRp` (groups: this group's octree first via
+`m_tree_idx`, then child groups `m_first_child` -> `m_next_sibling`) -> `WallCorrectRp` (octree
+depth-first, children `mChild[0..7]` in index order; at a leaf the block's WALL rwg list then its
+roof list) -> `RwgWallCorrect` (the block's wall linked list). Roofs are near-horizontal so they
+no-op in WallCorrect; only walls reorder anything.
+
+The whole order is reconstructable STATICALLY from the DZB header tables, because `ClassifyPlane`
+(`c_bg_w.cpp:145`) builds each block's wall rwg list in ASCENDING poly index -- so the runtime
+`pm_rwg`/`pm_blk` linked lists need not be read; a block's wall polys, sorted, ARE its list.
+`harness/rollstab/capture_walls.py` walks `m_b_tbl`/`m_tree_tbl`/`m_g_tbl` and writes the room's
+wall polys in exact game order (with the stored, bit-exact planes) to
+`fixtures/kaze_r11_walls_ordered.json`. Far polys are visited too and simply
+no-op (the correction's `seg > wallRR` early-out), so the full ordered list is safe to feed the sim
+-- ORDER, not membership, is what a corner needs. At the kaze seam this puts wallA (poly 705)
+before wallB (poly 713): same block (137), ascending index. The corner gate confirmed it live:
+walking into the vertex wedges the cylinder between both walls, and the game-ordered mesh matches
+bit-for-bit where the SWAPPED order diverges (24/48 frames), i.e. the ordering is load-bearing.
+
 ## The sim (Phase W)
 
 `LandState(walls=[Tri...])` opts in (`land/walls.py`); wall-free behavior stays byte-identical.
@@ -67,14 +93,17 @@ crash proc is fully modeled (positions are pure momentum, exact without ROLLFMIS
 sidle is NOT: the sim just forbids the roll and latches the sticky `sidle_blocked` flag, and a
 bonk shows up as `FRONT_ROLL_CRASH` in `state`/`visited`. **Planners must reject either.**
 
+For a corner, feed the traversal-ordered mesh (`load_ordered_mesh`); for a single face the
+hand-picked `load_geo_tris` subset suffices (order-free). The `wall_angle`/`cir_hit` the pass
+stores are per-cylinder (one poly's angle per cylinder), so a corner leaves the LAST-corrected
+wall's angle -- fine for the current consumers (wall-hold, bonk) which only test a head-on cone.
+
 Scope/caveats (the open edges, in priority order):
 
-- **Corner ordering**: corrections mutate the position sequentially, so when two NON-coplanar
-  walls engage in one frame the poly ORDER matters. The game's order is its block/octree
-  traversal; the sim takes the caller's list order. Single-face interactions (all four gates)
-  are order-free. Needed for the seam-corner and Tetra work.
-- **Mesh coverage**: the sim only knows the tris it is given (kaze fixture = the corner + faceB).
-  A full-room mesh in the game's traversal order is the roadmap item.
+- **Full-room mesh + block-grid cull**: `wall_traversal_order` emits the whole room in order
+  (765 walls at kaze r11) and the sim iterates all of them (~33 ms/frame pure-Python). Correct
+  but unoptimized; a spatial pre-cull (the game's octree AABB test) would speed the solver if a
+  corner ever enters the 2-minute budget. Far polys are already no-ops, so a cull is pure speed.
 - **Not wall-passed yet**: the ballistic hops and the C-up freeze's early-return frames.
 - **Post-crash walking** consumes an unwarmed ROLLFMIS toe stream (the anim dump lacks
   `rollfmis`). Same flagged class as the late-roll drawn poses.
@@ -88,4 +117,6 @@ Scope/caveats (the open edges, in priority order):
 - [collision.md](collision.md) - the collision system + geometry readers this builds on.
 - [seam-clip.md](seam-clip.md) - the CrrPos FP port + why razor seams thread it.
 - [roll.md](roll.md) · [land-movement.md](land-movement.md) - the procs the wall state feeds.
-- `harness/rollstab/wallgate.py` - the four live gates (mint / plan / run / verify / golden).
+- `harness/rollstab/wallgate.py` - the four single-face live gates (mint / plan / run / verify).
+- `harness/rollstab/cornergate.py` + `capture_walls.py` - the corner gate + the traversal-order
+  mesh capture (reconstructs the DZB block-grid walk statically; reads RAM via `../tools/`).

@@ -16,7 +16,7 @@ only on a confirmed live per-frame comparison, never on offline plausibility.
 
 Live clip 0-ULP; pure sim, no calibration. See README `## Status` + the session-10 handoff.
 
-## Phase W -- WALL collision in the stepper (CORE DONE 2026-07-10; remainder below)
+## Phase W -- WALL collision in the stepper (DONE 2026-07-10: single-face + corner ordering)
 
 **DONE (session 11):** `LandState(walls=)` runs the per-frame CrrPos wall pass
 (`core.collision.acch_crr_pos`) + the proc wall feedback (wall-hold, m3570 bonk latch,
@@ -25,12 +25,18 @@ live gates (head-on / oblique slide / roll crash / slow-roll grind) BIT-EXACT pe
 minted faceB anchor; goldens + `tests/test_rollstab_walls.py`; model page
 `knowledge/mechanics/wall-response.md`. The original "done ==" bar is met for single-face walls.
 
-**Remainder (pick up before/with Phase C):**
-- Corner (multi-wall) correction ORDER: the game's grp/octree/rwg traversal fixes the poly order
-  when two non-coplanar walls correct in one frame; the sim takes the caller's list order today.
-  Capture the room's wall polys in traversal order (extend `collision_geo.py` to walk
-  pm_blk/m_nt_tbl/pm_rwg) -> a corner gate at the kaze seam.
-- Full room mesh in-sim + the block-grid lookup if the 2-minute search budget needs it.
+**DONE (session 12): corner (multi-wall) correction ORDER.** When two non-coplanar walls correct
+in one frame the poly order decides the result. The game's order is its DZB block-grid walk
+(`WallCorrectGrpRp` -> `WallCorrectRp` octree DFS -> `RwgWallCorrect`); since `ClassifyPlane`
+builds each block's wall list in ascending poly index it is reconstructable statically from the DZB
+header tables. `capture_walls.py` reconstructs that walk and writes the room's ordered wall mesh;
+the sim loads it via `load_ordered_mesh`. Corner gate (`cornergate.py`) on the minted
+`kaze_r11_wallcorner` anchor: CORNER GATE BIT-EXACT 48/48 (24 two-wall frames), swapped order
+diverges. Golden + `tests/test_rollstab_corner.py`. wallA(705) before wallB(713), block 137.
+
+**Remainder (speed-only; pick up if a corner enters the solver budget):**
+- Full-room block-grid AABB cull: the sim iterates all 765 ordered walls (~33 ms/frame
+  pure-Python). Far polys already no-op, so the game's octree cull is a pure speed optimization.
 - Walls for the ballistic hops + the freeze's early-return frames (no gate exercises them yet).
 - NEW non-wall gap found by the grind gate: mid-run stop -> re-walk blend is not bit-exact
   (see README Status); becomes load-bearing for any plan that fully stops mid-run.

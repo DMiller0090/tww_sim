@@ -12,9 +12,15 @@ Two invariants are gated here:
 """
 import os
 
+import pytest
+
 from harness.collision.seam_scan import load_region_tris
 from harness.collision import seam_clip_check as SCC
 from harness.collision import seam_locator as SL
+
+# Deselected by default: the region-wide f32 verify is a heavy search (>90s pure-Python), not a
+# 0-ULP assert. Run with `pytest -m slow`; see the slow-offline-tests memory (build native _collc).
+pytestmark = pytest.mark.slow
 
 _G = os.path.join(os.path.dirname(__file__), "golden")
 

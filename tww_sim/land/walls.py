@@ -30,15 +30,26 @@ WALL_R = 35.0
 GRAVITY = f32(-2.5)
 
 
+def _mk_tri(t):
+    return Tri(t["v"][0], t["v"][1], t["v"][2],
+               plane=Plane(t["n"][0], t["n"][1], t["n"][2], t["d"]))
+
+
 def load_geo_tris(path):
     """Wall tris from a *_geo.json fixture (kaze_r11_geo.json layout: wallA/wallB/barrier with
-    stored plane n/d). Order: wallA, wallB, then the barrier set -- the corner pair first."""
+    stored plane n/d). Order: wallA, wallB, then the barrier set -- the corner pair first. Used by
+    the single-face gates; for a CORNER gate use :func:`load_ordered_mesh` (game traversal order)."""
     geo = json.load(open(path))
+    return [_mk_tri(geo["wallA"]), _mk_tri(geo["wallB"])] + [_mk_tri(t) for t in geo["barrier"]]
 
-    def mk(t):
-        return Tri(t["v"][0], t["v"][1], t["v"][2],
-                   plane=Plane(t["n"][0], t["n"][1], t["n"][2], t["d"]))
-    return [mk(geo["wallA"]), mk(geo["wallB"])] + [mk(t) for t in geo["barrier"]]
+
+def load_ordered_mesh(path):
+    """Wall tris from a *_walls_ordered.json fixture (``{polys:[{v,n,d}, ...]}``, captured by
+    ``harness/rollstab/capture_walls``) in the game's WallCorrect traversal order. Feed THIS at a
+    corner: when the cylinder overlaps two non-coplanar walls in one frame the sim corrects against
+    them in the same order the game does (far polys are visited too and simply no-op)."""
+    mesh = json.load(open(path))
+    return [_mk_tri(t) for t in mesh["polys"]]
 
 
 def sidle_blocks_roll(st):

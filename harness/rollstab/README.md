@@ -76,8 +76,21 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
 - **North star: the TETRA seam clip, pure-sim** -- the phased plan (wall collision -> ground ->
-  CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **W remainder** (corner
-  poly ordering + full-room mesh), then **G/C**.
+  CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **G/C** (Phase W single-
+  face + corner ordering both DONE; only a full-room block-grid cull remains, speed-only).
+- **Phase W CORNER ORDERING DONE (session 12): multi-wall WallCorrect in game order, LIVE-GATED
+  0-ULP.** When the cylinder wedges between two non-coplanar walls, WallCorrect corrects them
+  sequentially, so the poly ORDER decides the result. The game's order is its DZB block-grid walk
+  (`WallCorrectGrpRp` -> `WallCorrectRp` octree DFS -> `RwgWallCorrect`), and since `ClassifyPlane`
+  builds each block's wall list in ascending poly index it is reconstructable STATICALLY from the
+  DZB header tables. `capture_walls.py` reconstructs that walk and writes the room's walls in exact
+  game order to `fixtures/kaze_r11_walls_ordered.json` (stored bit-exact planes) -> the sim loads it
+  via `land.walls.load_ordered_mesh`. Corner gate (`cornergate.py`): walk into the
+  110-deg seam vertex on the minted `kaze_r11_wallcorner` anchor; **CORNER GATE BIT-EXACT** per
+  frame (48/48, incl. 24 two-wall frames), and the SWAPPED order diverges (24/48) so the ordering
+  is load-bearing. Golden `tests/golden/rollstab_corner.json`, regression
+  `tests/test_rollstab_corner.py` (incl. an order-load-bearing guard). At kaze the seam is wallA
+  (poly 705) before wallB (poly 713): same block 137, ascending index.
 - **Phase W CORE DONE (session 11): WALLS IN THE STEPPER, LIVE-GATED 0-ULP.** `LandState(walls=)`
   runs the player-faithful per-frame CrrPos wall pass (`core.collision.acch_crr_pos`: every-frame
   LineCheck with the full normal-add/WallHDirect response, WallCorrect with the mid-frame gravity
@@ -89,9 +102,9 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
   regression `tests/test_rollstab_walls.py`; mechanics page `knowledge/mechanics/wall-response.md`.
   - Planner-rejection contract: a bonk = FRONT_ROLL_CRASH in `visited`; a sidle-suppressed roll
     sets the sticky `sidle_blocked` (the sidle proc itself is intentionally unmodeled).
-  - Phase-W open edges: corner (multi-wall) correction ORDER = the game's block/octree traversal
-    (sim takes list order; single-face is order-free), full-room mesh capture, walls for the
-    ballistic hops + freeze frames.
+  - Phase-W open edge (speed-only): a full-room block-grid AABB cull so a corner could enter the
+    2-minute solver budget (the sim iterates all 765 ordered walls today, ~33 ms/frame pure-Python;
+    far polys already no-op, so a cull is pure speed). Walls for the ballistic hops + freeze frames.
   - **NEW flagged gap (non-wall, found by the grind gate): mid-run stop -> re-walk.** A full stop
     to WAIT and MOVE re-entry is NOT bit-exact (the WAIT row matched; the re-walk entry speedF
     diverged). From-rest entries are exact; avoid full stops inside plans until modeled.
