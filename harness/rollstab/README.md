@@ -76,8 +76,21 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
 - **North star: the TETRA seam clip, pure-sim** -- the phased plan (wall collision -> ground ->
-  CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **G/C** (Phase W single-
-  face + corner ordering both DONE; only a full-room block-grid cull remains, speed-only).
+  CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **C** (Phase W + Phase G
+  both DONE; the remaining Phase-W full-room block-grid cull is speed-only).
+- **Phase G DONE (session 13): the Tetra floor is FLAT -> ground collision is a no-op for this clip.**
+  Measured before modeling (as ROADMAP prescribes): the walkable floor Link's roll crosses at the
+  (-1727,-990) Tetra corner (flooded Hyrule, savestate slot 3) is a single flat tri (poly 2917),
+  normal (0,1,0), plane Y=0.16327, spanning the entire roll footprint old->seam. Verified by an
+  INDEPENDENT method (normal recomputed from raw vertices via cross-product == the game's stored
+  plane == (0,1,8e-08); a dense grid over the whole roll region finds no other walkable-height tri).
+  The 25-deg surface sharing the XZ footprint sits ~560u overhead (terrain) and is never touched. So
+  `getGroundAngle` r3 = 0 (already hardcoded in the sim's speedF `cM_scos` scale; r3<0 x0.85 never
+  fires) and m35B8 per-foot ground-lift is provably 0 -- the existing flat-floor model applies to the
+  Tetra clip unchanged; NO GroundCross/getGroundAngle/m35B8 modeling needed. Self-contained capture
+  `harness/rollstab/capture_ground.py` (`dolphin_mem` only, capture_walls.py pattern) -> fixture
+  `fixtures/hyrule_tetra_ground.json`; regression `tests/test_tetra_ground.py` (flatness + footprint
+  coverage + single-plane; goes RED if a future Tetra spot ever shows slope).
 - **Phase W CORNER ORDERING DONE (session 12): multi-wall WallCorrect in game order, LIVE-GATED
   0-ULP.** When the cylinder wedges between two non-coplanar walls, WallCorrect corrects them
   sequentially, so the poly ORDER decides the result. The game's order is its DZB block-grid walk

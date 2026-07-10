@@ -41,12 +41,21 @@ diverges. Golden + `tests/test_rollstab_corner.py`. wallA(705) before wallB(713)
 - NEW non-wall gap found by the grind gate: mid-run stop -> re-walk blend is not bit-exact
   (see README Status); becomes load-bearing for any plan that fully stops mid-run.
 
-## Phase G -- GROUND collision (scope after measuring)
+## Phase G -- GROUND collision (DONE 2026-07-10: the Tetra floor is FLAT -> no-op)
 
-First measure the Tetra spot's floor: if flat, this phase shrinks to nearly nothing. Otherwise:
-GroundCross/mAcch ground hits, `getGroundAngle` (the sim hardcodes the slope term r3=0 in the
-speedF `cM_scos(r3)` scale + the r3<0 x0.85 branch), and the m35B8 per-foot ground-lift
-(provably 0 on flat; already on the Phase R suspect list).
+Measured first, as planned: the walkable floor Link's roll crosses at the (-1727,-990) Tetra corner
+is PERFECTLY FLAT. `harness/rollstab/capture_ground.py` (self-contained, `dolphin_mem` only) samples
+the DZB ground along the whole roll footprint old->seam (flooded Hyrule, savestate slot 3): a single
+tri (poly 2917), normal (0,1,0), plane Y=0.16327, covers the entire footprint; the normal recomputed
+from raw vertices == the game's stored plane == (0, 1, 8e-08). (The ~25-deg surface that shares the
+XZ footprint sits ~560u OVERHEAD -- Hyrule terrain -- and the roll at Y~0.16 never touches it; that
+was the only thing that could have made "flat" wrong, and it is ruled out.) So `getGroundAngle`'s
+slope term r3 = 0 (the sim already hardcodes r3=0 in the speedF `cM_scos` scale; the r3<0 x0.85
+branch never fires) and the m35B8 per-foot ground-lift is provably 0 -- the existing flat-floor model
+(exact at kaze, also flat) applies to the Tetra clip UNCHANGED. No GroundCross / getGroundAngle /
+m35B8 modeling is needed. Fixture `fixtures/hyrule_tetra_ground.json`; regression
+`tests/test_tetra_ground.py` (flatness + full-footprint coverage + single-plane; goes RED if a future
+Tetra spot ever shows slope -- the signal Phase G modeling has become load-bearing).
 
 ## Phase C -- CC collision Link<->Tetra in the stepper
 
