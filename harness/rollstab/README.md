@@ -47,6 +47,11 @@ BIT-EXACT-vs-live pipeline built in sessions 7-9 (2026-07-09/10); the narrative 
 
 ## Status (2026-07-10)
 
+> SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
+> that changes `harness/rollstab/*.py` without touching this file, so keep it current.
+> The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+
 - Sim inaccuracies RESOLVED: sword-drawn DASHS (commit 0901d21) + WALKS (this package's commit)
   + the calibration's anim-phase/m359C/toe-stream seeding. Verified bit-exact live through every
   plan element on the idle2/idle12 anchors.

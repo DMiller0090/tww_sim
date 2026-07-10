@@ -13,3 +13,6 @@ bash "$root/.githooks/kb-doc-gate.sh" || exit 1
 
 # 3. Code hygiene gate: no stale superswim.* refs; no oversized module (see check-code-hygiene.sh).
 bash "$root/.githooks/check-code-hygiene.sh" || exit 1
+
+# 4. Seam-clip status gate: harness/rollstab/*.py changes must update the README ## Status.
+bash "$root/.githooks/check-rollstab-status.sh" || exit 1
