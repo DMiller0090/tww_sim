@@ -114,13 +114,15 @@ class FootSpeedF:
             return False
 
     def __init__(self, idle_frame=70.0, idle_anim=IDLE_ANIM, pos_x=0.0,
-                 pos_z=764.0791015625, facing=0, native=True):
+                 pos_z=764.0791015625, facing=0, native=True, sword=False):
         self.anm, self.sk = fk.load()                 # raises if the data is absent
         self.idle_anim = idle_anim
+        self.sword = bool(sword)                       # sword equipped -> DASH poses as DASHS (leg pose)
         self._core = None                             # fused native engine (set up below if available)
         self._idle_frame_py = float(idle_frame)       # backing store for the idle_frame property
         self.idle_end = float(ANIM_META[idle_anim][0])
-        self.st = UnderAnimState(move0_anim=idle_anim, move0_frame=self.idle_frame, m34C3=0)
+        self.st = UnderAnimState(move0_anim=idle_anim, move0_frame=self.idle_frame, m34C3=0,
+                                 sword=self.sword)
         from .foot_fk import FootFK
         self.ff = FootFK(self.anm, self.sk)
         # Link's world pose for the frame being posed (the foot FK runs from worldBase(pos)). LandState
@@ -143,13 +145,16 @@ class FootSpeedF:
         self._pending_py = None                        # morf to apply on the next step (Python fallback store)
         # Fused native path (one C call/frame): the Python seeding above already left the engine's
         # old-pose correct + produced draw0; w_init captures the toe stream. Python st/ff = fallback.
-        if native and _N is not None and getattr(self.ff, '_engine', None) is not None:
+        # The native _anmc hardcodes C_DASH (no DASHS in its 15-anim array), so sword=True forces the
+        # pure-Python foot path here (correctness over speed). See knowledge/model/anim-engine.md.
+        use_native = native and not self.sword
+        if use_native and _N is not None and getattr(self.ff, '_engine', None) is not None:
             _N.init_anim_consts(NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO)   # idempotent
             code2idx = [self.ff._anim_idx[name] for name in ANIM_ORDER]
             self._core = self.ff._engine
             self._core.init_anim(code2idx)
             self._core.w_init(ANIM_CODE[idle_anim], self._idle_frame_py, draw0)
-        elif not native:
+        elif not use_native:
             # Force the pure-Python st/ff path (drop only the C-resident STATE; native math accel stays)
             # -- the SUBJECTIVITY freeze lives on the Python UnderAnimState. draw0/seed above left t1/t2 exact.
             self.ff._engine = None
@@ -163,6 +168,7 @@ class FootSpeedF:
         c = FootSpeedF.__new__(FootSpeedF)
         c.anm = self.anm; c.sk = self.sk
         c.idle_anim = self.idle_anim
+        c.sword = self.sword
         c.idle_end = self.idle_end
         c.pos_x = self.pos_x; c.pos_z = self.pos_z; c.facing = self.facing
         c.started = self.started; c.stopped = self.stopped

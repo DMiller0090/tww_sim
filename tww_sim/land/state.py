@@ -165,7 +165,7 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
                  use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True, foot_native=True,
-                 sword_drawn=False):
+                 sword_drawn=False, idle_anim=None):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
         # Vertical state for the ballistic hops. pos_y accumulates in f32; ground_y = the jump-entry
@@ -229,8 +229,10 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
         if use_anim:
             try:
                 from ..core.anim.foot_speedf import FootSpeedF
+                kw = {} if idle_anim is None else {"idle_anim": idle_anim}
                 self._foot = FootSpeedF(idle_frame=float(idle_frame), pos_x=self.pos_x,
-                                        pos_z=self.pos_z, facing=self.facing, native=foot_native)
+                                        pos_z=self.pos_z, facing=self.facing, native=foot_native,
+                                        sword=self.sword_drawn, **kw)
             except (FileNotFoundError, OSError, ImportError):
                 self._foot = None
         # Native land physics: fused C engine present -> the whole per-frame step is one LandCore call;

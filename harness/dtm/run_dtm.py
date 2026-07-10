@@ -139,8 +139,9 @@ def swim_ready(min_air=800):
 
 
 def land_ready(v):
-    """Land anchor loaded: Link in the on-ground idle/move action state (link_state 5)."""
-    return v["link_state"] == 5
+    """Land anchor loaded: Link in an on-ground idle action state (FREE_WAIT 5 or the post-walk
+    WAIT 4 -- anchors minted after a walk-and-stop settle rest in 4)."""
+    return v["link_state"] in (4, 5)
 
 
 def _attach_ready(ready):
@@ -209,6 +210,7 @@ def _read_frame(h, m):
         "proc": struct.unpack('>i', D.read_bytes(h, m, Pp + 0x3100, 4))[0],
         "speedF": struct.unpack('>f', D.read_bytes(h, m, Pp + 0x17C, 4))[0],
         "nspeed": D.read_named(h, m, "potential_speed"),
+        "anim": D.read_named(h, m, "anim_frame"),
     }
 
 

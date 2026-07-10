@@ -575,3 +575,29 @@ def test_clone_midwalk_bit_exact():
         for j in range(k, n):
             c.step(*_CLONE_ARC[j])
             assert snap(c) == ref[j], f"clone@k={k} diverged at frame {j}"
+
+
+def test_under_anim_selects_dashs_when_sword():
+    """UnderAnimState maps the DASH slot to 'dashs' when the sword is equipped (getAnmData's
+    mSwordAnmIndexTable) and to plain 'dash' when sheathed, across regime 2 (WALK<->DASH blend) and
+    regime 3 (DASH cruise). This is the anim-selection half of the DASHS fix; the live 0-ULP foot
+    pose is tests/dolphin/spotcheck_swordwalk.py. Pure state machine, no keyframe data needed."""
+    from tww_sim.core.anim.anim_state import UnderAnimState
+    sw = UnderAnimState(move0_anim='dashs', move0_frame=10.0, m34C3=1, sword=True).step(17.0)
+    assert (sw['move0'], sw['move1']) == ('dashs', 'dashs'), "sword regime-3 must pose dashs/dashs"
+    sh = UnderAnimState(move0_anim='dash', move0_frame=10.0, m34C3=1, sword=False).step(17.0)
+    assert (sh['move0'], sh['move1']) == ('dash', 'dash'), "sheathed regime-3 must pose dash/dash"
+    r2 = UnderAnimState(move0_anim='dashs', move0_frame=10.0, m34C3=1, sword=True).step(12.75)
+    assert r2['move1'] == 'dashs', "sword regime-2 dash slot (MOVE1) must be dashs"
+
+
+@pytest.mark.skipif(not _ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_sword_dash_forces_python_foot_path():
+    """The native _anmc engine has no DASHS in its hardcoded 15-anim array, so it cannot pose the
+    sword-drawn dash. FootSpeedF must drop to the pure-Python foot path whenever sword=True (even
+    with native requested), or LandState(sword_drawn=True) would silently pose 'dash' and read the
+    wrong toe. See knowledge/model/anim-engine.md "Sword-drawn dash is DASHS, not DASH"."""
+    sw = FootSpeedF(native=True, sword=True)
+    assert sw._core is None, "sword-drawn dash must force the Python foot path (native can't pose DASHS)"
+    assert sw.clone()._core is None, "the sword-mode Python-path fallback must survive clone()"
+    FootSpeedF(native=True, sword=False)   # sheathed dash still constructs (native when built, else Py)
