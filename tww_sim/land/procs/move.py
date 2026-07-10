@@ -15,11 +15,21 @@ from ..constants import (MOVE, MOVE_TURN, WAIT, FREE_WAIT, WAIT_TURN, ATN_MOVE,
 class _MoveMixin:
     # --- setNormalSpeedF (2301), walk path -------------------------------------------------
     def _set_normal_speed_f(self, param_1, param_2, param_3, param_4):
-        """The accel/decel integrator. Flat wall-free ground => no event/heavy/grab (dVar10 =
-        msd * (max*msd)), no slide polygon, no wall deflect. dVar10 is the speed cap this
-        frame; below it the cLib_addCalc chases up (param_1 injects the accel step directly),
-        above it (release) it cLib-decays down."""
+        """The accel/decel integrator. Flat ground => no event/heavy/grab (dVar10 =
+        msd * (max*msd)), no slide polygon. dVar10 is the speed cap this frame; below it the
+        cLib_addCalc chases up (param_1 injects the accel step directly), above it (release)
+        it cLib-decays down. A wall hit (last frame's CrrPos flags, 2311) scales the cap by
+        1 - cos(travel+0x8000 - wallAngleY)*0.6 when heading into the wall (|diff| < 0x4000)
+        -- the wall-hold: a head-on walk targets 0.4x. Inert without a walls mesh."""
         dVar10 = f32(self.msd * f32(self.max_nspeed * self.msd))   # target/cap speed
+        if self.wall_hit:
+            uVar2 = 0
+            for i in range(3):                  # first wall-hit cylinder's angle (2313)
+                if self.wall_cir_hit[i]:
+                    uVar2 = s16_signed((self.travel + 0x8000) - self.wall_angle[i])
+                    break
+            if abs(uVar2) < 0x4000:
+                dVar10 = f32(dVar10 * f32(1.0 - f32(cM_scos_s16(uVar2) * self.WALL_SPEED_DOWN)))
         if dVar10 < self.nspeed:                # decelerating toward the (lower) cap
             temp_f0 = f32(self.nspeed - dVar10)
             temp_f3 = param_3 if temp_f0 > param_3 else temp_f0

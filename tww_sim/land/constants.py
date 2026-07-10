@@ -19,6 +19,7 @@ WAIT_TURN = 23    # daPyProc_WAIT_TURN_e    (pivot-in-place reversal from a stan
 MOVE_TURN = 24    # daPyProc_MOVE_TURN_e    (turn-around reversal, low speed / post-slip)
 SLIP = 25         # daPyProc_SLIP_e         (high-speed reversal skid, hands to MOVE_TURN)
 FRONT_ROLL = 30   # daPyProc_FRONT_ROLL_e   (A-button forward roll)
+FRONT_ROLL_CRASH = 31  # daPyProc_FRONT_ROLL_CRASH_e (roll bonk: reversed momentum + airborne bounce)
 CUT_A = 0x41      # daPyProc_CUT_A_e        (L+B neutral: vertical/overhead slash)
 CUT_F = 0x42      # daPyProc_CUT_F_e        (fwd+B: forward thrust; the roll-stab's 49.22 lunge)
 # Targeted ballistic hops (L-held + A + directional stick -> doStatus JUMP). Pure momentum + gravity,
@@ -28,7 +29,8 @@ SIDE_STEP_LAND = 0x0B  # daPyProc_SIDE_STEP_LAND_e  (sidehop recovery -> WAIT)
 BACK_JUMP = 0x22       # daPyProc_BACK_JUMP_e       (backflip: stick back while targeting)
 BACK_JUMP_LAND = 0x23  # daPyProc_BACK_JUMP_LAND_e  (backflip recovery -> WAIT)
 
-_STATE_TAG = {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL", WAIT_TURN: "WAITTURN",
+_STATE_TAG = {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL", FRONT_ROLL_CRASH: "CRASH",
+              WAIT_TURN: "WAITTURN",
               MOVE_TURN: "MOVETURN", SLIP: "SLIP", WAIT: "WAIT", FREE_WAIT: "WAIT",
               SUBJECTIVITY: "SUBJ",
               SIDE_STEP: "SIDEHOP", SIDE_STEP_LAND: "SIDEHOPLAND",

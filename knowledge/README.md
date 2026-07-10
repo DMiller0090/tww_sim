@@ -1,22 +1,22 @@
 # tww_sim knowledge base
 
-The retrieval-first knowledge base for TWW player physics — **superswimming** (swim) and **land**
-movement — plus strategy, the shared engine, and the sim/planner model. **Start here** — find your
+The retrieval-first knowledge base for TWW player physics - **superswimming** (swim) and **land**
+movement - plus strategy, the shared engine, and the sim/planner model. **Start here** - find your
 question below, follow the link, read one small page.
 
 ## How this is organized
 
-Knowledge is split by **layer** — different kinds of fact with different lifespans:
+Knowledge is split by **layer** - different kinds of fact with different lifespans:
 
 | Layer | What | Lifespan |
 |-------|------|----------|
-| [`mechanics/`](mechanics/) | Game truth — formulas, constants, decomp-grounded behavior | timeless |
-| [`strategy/`](strategy/) | TAS heuristics — reboost, dips, phase ordering | evolves |
-| [`model/`](model/) | How the sim/planner implements it — engine (FP, anim), swim, land | tracks code |
+| [`mechanics/`](mechanics/) | Game truth - formulas, constants, decomp-grounded behavior | timeless |
+| [`strategy/`](strategy/) | TAS heuristics - reboost, dips, phase ordering | evolves |
+| [`model/`](model/) | How the sim/planner implements it - engine (FP, anim), swim, land | tracks code |
 | [`reference/`](reference/) | [Constants](reference/constants.md), [addresses](reference/addresses.md), [glossary](reference/glossary.md), [commands](reference/commands.md), [data](reference/data.md) | lookup |
 | [`history/`](history/) | Provenance, dead ends, superseded conclusions, open questions | frozen |
 
-**`history/` is not current truth** — its pages carry a `status: historical` banner. When you grep
+**`history/` is not current truth** - its pages carry a `status: historical` banner. When you grep
 for an answer, prefer the mechanics/strategy/model/reference pages; only read history for "how did we
 get here" or provenance. Every page opens with an **`Answers:` / `Status:` / `Source:`** header so
 you can triage in one glance.
@@ -59,6 +59,7 @@ you can triage in one glance.
 
 ### Collision geometry
 - **How is stage/room collision stored in RAM (the DZB triangle mesh) / how do I reach it from a global / the vertex+triangle layout / ground vs wall vs roof / how do I view the live collision mesh in 3D?** → [mechanics/collision.md](mechanics/collision.md)
+- **What happens each frame when Link walks/rolls INTO a wall (the CrrPos wall pass) / wall-hold / roll bonk vs grind / why A against a wall sidles instead of rolling / how does the sim run walls?** → [mechanics/wall-response.md](mechanics/wall-response.md)
 - **Why do seam clips work (walking/rolling through a wall corner) / the float-precision root cause / why ≥~36 u + corner >90° + vertical walls / how do I predict one?** → [mechanics/seam-clip.md](mechanics/seam-clip.md)
 - **How does an actor push Link (the Tetra "nudge") / cyl-cyl overlap + weight split / can it supply the extra displacement for a seam clip?** → [mechanics/actor-push.md](mechanics/actor-push.md)
 
@@ -70,7 +71,7 @@ you can triage in one glance.
 ### Land movement (walk, roll, turns, freeze)
 - **Where do I find each land tech / the shared model (two angles, proc states, bit-exact status)?** → [mechanics/land-movement.md](mechanics/land-movement.md) (the land index)
 - **How does walking accelerate / what are the two movement angles (facing vs travel) / the speedF foot-plant blend?** → [mechanics/walk-run.md](mechanics/walk-run.md)
-- **Is there a walk-before-run speed plateau (~5.0)?** → no — full stick goes straight to the 17 cap (the "plateau" was a phantom front roll) → [walk-run.md#walk--run-acceleration-baseline](mechanics/walk-run.md#walk--run-acceleration-baseline)
+- **Is there a walk-before-run speed plateau (~5.0)?** → no - full stick goes straight to the 17 cap (the "plateau" was a phantom front roll) → [walk-run.md#walk--run-acceleration-baseline](mechanics/walk-run.md#walk--run-acceleration-baseline)
 - **What is a brakeslide / extended brakeslide (EBS) / why does ESS left-or-right hold speed almost forever / what is the wiggle EBS?** → is *facing* (not travel) relative to `csangle` → [mechanics/brakeslide-ebs.md](mechanics/brakeslide-ebs.md)
 - **How does the forward roll work / the 26 cap / chained + intermediate roll speeds / the frame-perfect roll-EBS?** → [mechanics/roll.md](mechanics/roll.md)
 - **What is the roll stab / the 49.22 single-frame lunge (CUT_F/CUT_A) that reaches a seam clip?** → [mechanics/roll-stab.md](mechanics/roll-stab.md)
@@ -79,18 +80,18 @@ you can triage in one glance.
 - **How do I stop Link at an exact position (the C-up SUBJECTIVITY freeze) / B-cancel / why isn't the re-walk cold?** → [mechanics/precise-stop.md](mechanics/precise-stop.md)
 - **From a standstill, fastest way into a roll chain / why hold L on frame 1 / why the frame-6 roll caps at ~25.9?** → [strategy/roll-launch.md](strategy/roll-launch.md)
 - **How do we plan and validate a roll-stab SEAM CLIP (dust acceptance, live calibration, the knobs)?** → [strategy/seam-clip-solver.md](strategy/seam-clip-solver.md)
-- **Which partial stick magnitudes are live-valid in a land plan / why NEVER emit Y 192–254?** → [mechanics/precise-stop.md](mechanics/precise-stop.md). NB: this live-valid *stick-input* band is a different thing from the sim's [`Y171` partial-magnitude *regime*](model/land-sim.md#partial-magnitude-regime-y171-msd052) — don't conflate "partial stick" with "partial regime".
+- **Which partial stick magnitudes are live-valid in a land plan / why NEVER emit Y 192–254?** → [mechanics/precise-stop.md](mechanics/precise-stop.md). NB: this live-valid *stick-input* band is a different thing from the sim's [`Y171` partial-magnitude *regime*](model/land-sim.md#partial-magnitude-regime-y171-msd052) - don't conflate "partial stick" with "partial regime".
 
-### Model — engine (core)
+### Model - engine (core)
 - **Why f32/ctypes / op-order / `_F32_PI` / `cM_rad2s` truncation / the baked cos+sin tables / which matrix-quat ops are FMA-fused?** → [model/fp-faithfulness.md](model/fp-faithfulness.md)
 - **How does the J3D anim runtime work / the 42-joint skeleton / Hermite keyframes / world-space foot FK / `PSMTXQuat` / how does the toe become `speedF`?** → [model/anim-engine.md](model/anim-engine.md)
 
-### Model — swim
+### Model - swim
 - **Why f32 / the console cosine table / CHARGE_DISP_FACTOR / cold-start mRate?** → [model/swim-sim.md](model/swim-sim.md)
 - **How does the planner search / why are mid-swim pumps off by default / the crossover decomposition / the speed-retention prune?** → [model/planner.md](model/planner.md)
 - **What are the predict/ modules / the off-axis residual?** → [model/predictors.md](model/predictors.md)
 
-### Model — land
+### Model - land
 - **How does the land sim accumulate position (f32) / the `Y171` partial regime / the 7 red ULP tests?** → [model/land-sim.md](model/land-sim.md)
 - **How does the land planner reach a target (x,z) / the live-valid stick set / the C-up freeze to z=2000 / seam-clip vs RTA bars?** → [model/land-planner.md](model/land-planner.md)
 - **How does the land SETUP FINDER work (human-consistent discrete moves → ranked input seqs) / why re-simulate instead of summing displacements / which moves are "blocks" / why isn't walking one?** → [model/land-setup-finder.md](model/land-setup-finder.md)
@@ -113,15 +114,15 @@ you can triage in one glance.
 ```
 
 Keep pages **small and single-topic** (one Read should answer the question). Put dated narrative and
-superseded findings in `history/`, not in the truth pages. One canonical value per constant — link
+superseded findings in `history/`, not in the truth pages. One canonical value per constant - link
 to [constants.md](reference/constants.md) instead of restating numbers.
 
-If a topic has an **unresolved verdict**, give it a short `## Open question — <current status>`
+If a topic has an **unresolved verdict**, give it a short `## Open question - <current status>`
 section *in the truth page* (state the current best answer + "unproven"), and link to `history/` for
-the provenance. The definitive *current* answer must be reachable from the truth layer — not only
+the provenance. The definitive *current* answer must be reachable from the truth layer - not only
 from a `status: historical` page. (Validated by the doc-eval: weak agents were told to prefer
 non-history pages, so an answer that lives only in history is effectively hidden.)
 
-The KB is regression-tested by a bounded weak-agent eval — the question bank + run protocol under
+The KB is regression-tested by a bounded weak-agent eval - the question bank + run protocol under
 [`_eval/`](_eval/) (Tier-A retrieval / Tier-B comprehension, run by fanning out weak sub-agents;
 agents must never read `_eval/` itself, the answer key).

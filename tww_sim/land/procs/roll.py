@@ -7,7 +7,7 @@ pushed-stick early-turn). The roll->cut ("roll stab") hand-off lives in _roll_ex
 """
 from __future__ import annotations
 from ...core.mathlib import f32
-from ..constants import FRONT_ROLL, MOVE, CUT_A, CUT_F
+from ..constants import FRONT_ROLL, MOVE, CUT_A, CUT_F, _dist_angle_s
 
 
 class _RollMixin:
@@ -27,6 +27,12 @@ class _RollMixin:
         self.nspeed = v
         self.facing = self.target                # shape_angle.y = m34E8 (already snapped when moving)
         self.travel = self.facing                # current.angle.y = shape_angle.y (6837)
+        # m3570 latch (6838): a roll STARTED already wall-hit facing the wall (within
+        # mRoll.field_0x4) disables the mid-roll crash -- it grinds instead of bonking.
+        self._roll_m3570 = not (
+            self.wall_cir_hit[0]
+            and _dist_angle_s((self.travel + 0x8000) & 0xFFFF, self.wall_angle[0])
+            <= self.ROLL_BONK_ANGLE)
         self.state = FRONT_ROLL
         self.roll_frame = 0.0
         self._roll_entered = True
@@ -55,6 +61,14 @@ class _RollMixin:
             # getFrame()>field_0x10 -> checkNextMode(1) (procFrontRoll 6866); inert only when neutral AND no
             # action -- a pushed stick (roll-EBS) or a B RISING EDGE (swordTrigger; a HELD B is not an edge) fires it.
             self._roll_exit(l_held)
+        elif (self.speedF >= self.ROLL_BONK_SPEED and self._roll_m3570
+              and self.wall_hit and self.wall_cir_hit[0]
+              and _dist_angle_s((self.travel + 0x8000) & 0xFFFF, self.wall_angle[0])
+              <= self.ROLL_BONK_ANGLE
+              and self.ROLL_BONK_FMIN <= self.roll_frame <= self.ROLL_BONK_FMAX):
+            # The roll bonk (6869): a mid-roll head-on wall hit (last frame's CrrPos flags)
+            # at speedF >= 10 inside frames [6, 15] crashes -- procFrontRollCrash_init.
+            self._crash_init()
 
     def _roll_exit(self, l_held):
         """The roll's checkNextMode transition. With a buffered sword button (B) and the sword drawn it

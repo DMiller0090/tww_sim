@@ -40,16 +40,19 @@ from ..core.mathlib import f32, cLib_addCalc, cM_scos_s16, s16_signed, main_stic
 from ..core.camera import CameraManual, LAND_SCALE
 from .constants import *  # noqa: F401,F403  (proc enums, DIR_*, gates -- also re-exported by land.py)
 from .constants import _STATE_TAG, _cM_ssin_s16
+from .walls import wall_pass, sidle_blocks_roll
 from .procs.move import _MoveMixin
 from .procs.atn import _AtnMixin
 from .procs.roll import _RollMixin
+from .procs.crash import _CrashMixin
 from .procs.cut import _CutMixin
 from .procs.turn import _TurnMixin
 from .procs.ballistic import _BallisticMixin
 from .procs.freeze import _FreezeMixin
 
 
-class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _BallisticMixin, _FreezeMixin):
+class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _TurnMixin,
+                _BallisticMixin, _FreezeMixin):
     """One Link on flat, wall-free ground, stepped frame by frame. The land analogue of
     SwimState. Carries the two-angle model first-class (travel = current.angle.y velocity
     direction; facing = shape_angle.y visual body direction) even though the on-axis walk
@@ -161,13 +164,39 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
     # Terminal fall velocity (mAutoJump.field_0x10 global default, d_a_player_HIO_data.inc:116): speed.y
     # is clamped to this after gravity each frame (posMoveFromFootPos 2472). Never reached on a flat hop.
     MAX_FALL = f32(-175.0)
+    # The default per-frame gravity, mAutoJump.field_0xC, reset by commonProcInit on EVERY proc
+    # change (5826) -- the grounded speed.y at CrrPos time (the hop procs override at entry).
+    GRAVITY = f32(-2.5)
+
+    # Wall interaction (ROADMAP Phase W; active only with a `walls=` mesh -- flags stay False
+    # without one, leaving every wall-free path byte-identical).
+    WALL_SPEED_DOWN = f32(0.6)     # mBasic.field_0x14: setNormalSpeedF wall-hit target *= 1-cos*this
+    ROLL_BONK_ANGLE = 5000         # mRoll.field_0x4:  |travel+0x8000 - wallAngleY| bonk/latch window
+    ROLL_BONK_FMIN = f32(6.0)      # mRoll.field_0x34: bonk anim-frame window lo
+    ROLL_BONK_FMAX = f32(15.0)     # mRoll.field_0x38: bonk anim-frame window hi
+    ROLL_BONK_SPEED = f32(10.0)    # mRoll.field_0x3C: speedF floor for the crash
+    CRASH_SPEED_MUL = f32(0.4)     # mRoll.field_0x40: crash mNormalSpeed = speedF * this (reversed)
+    CRASH_VY = f32(7.0)            # mRoll.field_0x44: crash speed.y launch
+    CRASH_ANIM_START = f32(6.0)    # mRoll.field_0x28: ANM_ROLLFMIS start (rate 0 while airborne)
+    CRASH_ANIM_END = f32(24.0)     # mRoll.field_0x2:  ANM_ROLLFMIS end (rate<0.01 exit)
+    CRASH_ANIM_RATE = f32(0.7)     # mRoll.field_0x24: rate set at the landing
+    CRASH_EARLY = f32(20.0)        # mRoll.field_0x30: getFrame()> -> checkNextMode(1) exit
 
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
                  use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True, foot_native=True,
-                 sword_drawn=False, idle_anim=None):
+                 sword_drawn=False, idle_anim=None, walls=None):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
+        # Phase W: `walls` = WALL tris in game traversal order -> the per-frame CrrPos wall
+        # pass (land/walls.py). None => byte-identical wall-free. See mechanics/wall-response.md.
+        self._walls = walls
+        self.wall_hit = False                    # mAcch.ChkWallHit() (aggregate, 1-frame late)
+        self.wall_cir_hit = (False, False, False)  # mAcchCir[i].ChkWallHit()
+        self.wall_angle = (0, 0, 0)              # mAcchCir[i].GetWallAngleY() (s16)
+        self.line_hit = False                    # LINE_CHECK_HIT
+        # Planner-rejection signal (sidle-suppressed roll); a bonk = FRONT_ROLL_CRASH in visited.
+        self.sidle_blocked = False
         # Vertical state for the ballistic hops. pos_y accumulates in f32; ground_y = the jump-entry
         # height. Seed pos_y from live for a bit-exact airtime (the vertical rounding is magnitude-dependent).
         self.pos_y = f32(pos_y)
@@ -239,7 +268,8 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
                 self._foot = None
         # Native land physics: fused C engine present -> the whole per-frame step is one LandCore call;
         # absent (or native=False, REQUIRED for the ballistic hops the C twin lacks) -> bit-identical Python.
-        self._core = self._build_core() if native else None
+        # A walls mesh forces the Python path too (the C twin has no wall response).
+        self._core = self._build_core() if (native and walls is None) else None
 
     def _build_core(self):
         """Build the native LandCore over the fused PoseEngine, seeded from this LandState's current
@@ -436,8 +466,13 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
                 elif jdir == DIR_BACKWARD:
                     self._back_jump_init()
             elif moving and self.state in (MOVE, ATN_MOVE):
-                self.facing = self.target
-                self._roll_init()
+                # A against a wall offers SIDLE, not the roll (setDoStatus 2241 preempts
+                # ATTACK, 4188); the guard forbids the roll, the sidle stays unmodeled.
+                if self._walls is not None and sidle_blocks_roll(self):
+                    self.sidle_blocked = True    # sticky: planners reject this input stream
+                else:
+                    self.facing = self.target
+                    self._roll_init()
 
         # dispatch the active proc body. WAIT/FREE_WAIT/MOVE/ATN_MOVE run their speed/angle update then
         # checkNextMode (the arbiter: starts locomotion from idle, routes reversals to the turn procs).
@@ -463,6 +498,8 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
             self._proc_slip(l_held)              # checkNextMode / hand to MoveTurn when the skid dies
         elif proc == FRONT_ROLL:
             self._proc_roll(l_held)              # checkNextMode on its exit frame (-> CUT if B buffered)
+        elif proc == FRONT_ROLL_CRASH:
+            self._proc_crash(l_held)             # roll bonk: airborne bounce, lands, plays out ROLLFMIS
         elif proc in (CUT_F, CUT_A):
             self._proc_cut(l_held)               # sword-thrust lunge; exits to WAIT when the anim passes field_0xC
         elif proc in (SIDE_STEP, BACK_JUMP):
@@ -519,6 +556,15 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
             # m3598==0 here so speedF == mNormalSpeed, but posMoveFromFootPos still snaps |speedF|<0.05
             # to 0 (d_a_player_main.cpp:2418) -- the slip decel tail. See land-sim.md (slip-skid tail).
             self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
+        elif self.state == FRONT_ROLL_CRASH:
+            # Roll-bonk bounce: reversed momentum + gravity arc; the ground snap runs AFTER
+            # the wall pass below (game order). Pose stream caveat: procs/crash.py.
+            self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
+            crash_y0 = self.pos_y
+            self.speed_y = f32(self.speed_y + self.gravity)
+            if self.speed_y < self.MAX_FALL:
+                self.speed_y = f32(self.MAX_FALL)
+            self.pos_y = f32(self.pos_y + self.speed_y)
         elif self.state in (CUT_F, CUT_A):
             # Sword-thrust lunge: speedF (==nspeed, m3598==0) + posMove m34C2==1 root-translate delta
             # (rotated by shape); entry frame m3700_prev==0 -> full root translate stacks (~49.22). See KB.
@@ -561,6 +607,23 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
         if self.state in (CUT_F, CUT_A):
             self.pos_x = f32(self.pos_x + self._cut_add[0])
             self.pos_z = f32(self.pos_z + self._cut_add[1])
+        # mAcch.CrrPos wall pass: after integration, before the deferred draw (the game's
+        # order; scope + caveats in mechanics/wall-response.md).
+        if self._walls is not None and self.state not in (SIDE_STEP, BACK_JUMP,
+                                                          SIDE_STEP_LAND, BACK_JUMP_LAND):
+            if self.state == FRONT_ROLL_CRASH:
+                wall_pass(self, px0, pz0, y_old=crash_y0, y_mid=self.pos_y,
+                          sy=self.speed_y, snap=False)
+            else:
+                wall_pass(self, px0, pz0)
+        if self.state == FRONT_ROLL_CRASH:
+            # GroundCheck after the wall pass: snap iff ground_h > the dipped y (strict).
+            if self.ground_y > self.pos_y:
+                self.pos_y = f32(self.ground_y)
+                self.speed_y = 0.0
+                self.ground_hit = True
+            else:
+                self.ground_hit = False
         # Deferred foot draw: base at post-integration pos with LAST frame's lean (setWorldMatrix
         # runs before setMoveSlantAngle, 11551); then the slant updates for the next frame.
         if self._foot is not None and self._foot.defer_draw:

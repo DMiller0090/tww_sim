@@ -47,12 +47,21 @@ import struct
 
 from .fp import f32 as _f, fadds, fsubs, fmuls, fdivs, fmadds, fmsubs, fnmsubs
 
-# cM3d_IsZero threshold (kZero, c_m3d.h). Distinct from the point-in-triangle 20.0 area tolerance.
+# LEGACY IsZero threshold, frozen as live-validated (real console value is 2^-18 -- the acch_*
+# layer uses that via is_zero_x; the two only differ in [2^-18, 1e-5), see wall-response.md).
 G_CM3D_F_ABS_MIN = 1.0e-5
 
 
 def is_zero(x):
     return abs(_f(x)) < G_CM3D_F_ABS_MIN
+
+
+# Exact console threshold (2^-18) for the acch_* layer.
+_IS0X = 2.0 ** -18
+
+
+def is_zero_x(x):
+    return abs(_f(x)) < _IS0X
 
 
 def fsqrt(a):
@@ -438,6 +447,199 @@ def crr_pos_walls(old_pos, new_pos, tris, wall_h=(30.1, 89.9, 125.0), wall_r=35.
         lh2, pos = line_check(old_pos, pos, tris, wall_h)
         line_hit = line_hit or lh2
     return pos, {"line_hit": line_hit, "wall_hit": wall_hit, "ran_line": ran_line}
+
+
+# Player-faithful per-frame CrrPos (the acch_* layer, ROADMAP Phase W). Model + differences
+# from the frozen crr_pos_walls above: knowledge/mechanics/wall-response.md.
+
+def sqrtf_c(x):
+    """MSL std::sqrtf (math.h:89): frsqrte double estimate + 3 Newton iterations in DOUBLE,
+    then f32(x*guess). NOT correctly rounded -- differs from f32(math.sqrt) at boundary cases."""
+    x = _f(x)
+    if x > 0.0:
+        g = frsqrte(float(x))
+        g = 0.5 * g * (3.0 - g * g * x)
+        g = 0.5 * g * (3.0 - g * g * x)
+        g = 0.5 * g * (3.0 - g * g * x)
+        return _f(x * g)
+    return x
+
+
+def _cross_cir_lin_x(cx, cy, r, x0, y0, dirx, diry):
+    """cM2d_CrossCirLin with the exact console sqrtf + IsZero threshold (the acch twin of
+    cross_cir_lin above). Furthest intersection of ray (x0,y0)+t*(dir) with circle (cx,cy,r)."""
+    fv1 = fsubs(x0, cx); fv15 = fsubs(y0, cy)
+    d13 = fadds(fmuls(dirx, dirx), fmuls(diry, diry))
+    d14 = fmuls(2.0, fadds(fmuls(dirx, fv1), fmuls(diry, fv15)))
+    c = fsubs(fadds(fmuls(fv1, fv1), fmuls(fv15, fv15)), fmuls(r, r))
+    t = 0.0
+    if is_zero_x(d13):
+        if not is_zero_x(d14):
+            t = fdivs(_f(-c), d14)
+    else:
+        disc = fsubs(fmuls(d14, d14), fmuls(fmuls(4.0, d13), c))
+        if is_zero_x(disc):
+            t = fdivs(_f(-d14), fmuls(2.0, d13))
+        elif disc >= 0.0:
+            k = fdivs(1.0, fmuls(2.0, d13))
+            s = sqrtf_c(disc)
+            r1 = fmuls(k, fadds(_f(-d14), s))
+            r2 = fmuls(k, fsubs(_f(-d14), s))
+            t = r1 if r1 > r2 else r2
+    if is_zero_x(t):
+        return x0, y0
+    return fadds(x0, fmuls(t, dirx)), fadds(y0, fmuls(t, diry))
+
+
+def acch_line_check(old_pos, pos, tris, wall_h, whd):
+    """dBgS_Acch::LineCheck (d_bg_s_acch.cpp:175), full wall response. Sweeps the centre line
+    old->pos at each cylinder height; on the NEAREST front crossing: snap pos to it, add the
+    plane normal (VECAdd), latch whd[i] = pos.y (SetWallHDirect) if the normal has an XZ part,
+    then y -= wallH. Ground-classed polys (n.y >= 0.5) take the y -= 1 branch (the mid-line
+    GroundCheck is not modeled -- pass WALL tris only). Mutates whd; returns (hit_any, pos)."""
+    pos = list(pos)
+    hit_any = False
+    for i, h in enumerate(wall_h):
+        start = (old_pos[0], fadds(old_pos[1], h), old_pos[2])
+        end = (pos[0], fadds(pos[1], h), pos[2])
+        cur_end = end
+        hit_tri = None
+        for tri in tris:                     # LineCross: each front crossing shrinks the line,
+            crossed, pt = cross_lin_tri(start, cur_end, tri, a=True, b=False)
+            if crossed:                      # so the last accepted crossing is the nearest
+                cur_end = pt
+                hit_tri = tri
+        if hit_tri is not None:
+            hit_any = True
+            pos[0], pos[1], pos[2] = cur_end
+            n = hit_tri.pla
+            if not (n.ny >= 0.5):            # !cBgW_CheckBGround -> wall response
+                pos[0] = fadds(pos[0], n.nx)               # VECAdd(pos, normal, pos)
+                pos[1] = fadds(pos[1], n.ny)
+                pos[2] = fadds(pos[2], n.nz)
+                if not is_zero_x(sqrtf_c(fadds(fmuls(n.nx, n.nx), fmuls(n.nz, n.nz)))):
+                    whd[i] = pos[1]                        # SetWallHDirect(pm_pos->y)
+                pos[1] = fsubs(pos[1], h)
+            else:                            # ground-classed poly under the line
+                pos[1] = fsubs(pos[1], 1.0)
+    return hit_any, tuple(pos)
+
+
+def acch_wall_correct(pos, tris, wall_h, wall_r, speed_y, whd, add_y=0.0):
+    """dBgS::WallCorrect -> dBgW::RwgWallCorrect over `tris` (game traversal order) x cylinders,
+    exact response. Slice height sp7C = whd[i] if LineCheck latched it, else
+    (add_y + (pos.y + h)) - speed_y with the MID-FRAME dipped pos.y/speed.y (WallCorrect runs
+    before the ground snap). Returns (pos, cir_hit[3], cir_angle[3], wall_hit)."""
+    from .mathlib import cM_atan2s
+    pos = list(pos)
+    wrr = fmuls(wall_r, wall_r)              # CalcWallRR
+    ncir = len(wall_h)
+    cir_hit = [False] * ncir
+    cir_ang = [0] * ncir
+    agg = False
+    for tri in tris:
+        n = tri.pla
+        sp68 = sqrtf_c(fadds(fmuls(n.nx, n.nx), fmuls(n.nz, n.nz)))
+        if is_zero_x(sp68):
+            continue
+        sp6C = fdivs(1.0, sp68)
+        for i in range(ncir):
+            h = wall_h[i]
+            sp78 = fmuls(sp6C, wall_r)
+            sp50x = fmuls(sp78, n.nx); sp50z = fmuls(sp78, n.nz)
+            if whd[i] is not None:                       # ChkWallHDirect
+                sp7C = whd[i]
+            else:
+                sp7C = fsubs(fadds(add_y, fadds(pos[1], h)), speed_y)
+            s0 = fsubs(tri.v0[1], sp7C)
+            s1 = fsubs(tri.v1[1], sp7C)
+            s2 = fsubs(tri.v2[1], sp7C)
+            if (s0 > 0.0 and s1 > 0.0 and s2 > 0.0) or (s0 < 0.0 and s1 < 0.0 and s2 < 0.0):
+                continue
+            zc = is_zero_x(s0) + is_zero_x(s1) + is_zero_x(s2)
+            if zc == 1:
+                continue
+            if (s0 > 0.0 and s1 <= 0.0 and s2 <= 0.0) or (s0 < 0.0 and s1 >= 0.0 and s2 >= 0.0):
+                i0, i1, i2 = 0, 1, 2
+            elif (s1 > 0.0 and s0 <= 0.0 and s2 <= 0.0) or (s1 < 0.0 and s0 >= 0.0 and s2 >= 0.0):
+                i0, i1, i2 = 1, 0, 2
+            else:
+                i0, i1, i2 = 2, 0, 1
+            s = (s0, s1, s2)
+            sp90 = fsubs(s[i0], s[i1]); sp94 = fsubs(s[i0], s[i2])
+            if is_zero_x(sp90) or is_zero_x(sp94):
+                continue
+            sp98 = fdivs(_f(-s[i1]), sp90); sp9C = fdivs(_f(-s[i2]), sp94)
+            V = (tri.v0, tri.v1, tri.v2)
+            vx = (V[0][0], V[1][0], V[2][0]); vz = (V[0][2], V[1][2], V[2][2])
+            a, b, c = i0, i1, i2
+            cx0 = fadds(vx[b], fmuls(sp98, fsubs(vx[a], vx[b])))
+            cy0 = fadds(vz[b], fmuls(sp98, fsubs(vz[a], vz[b])))
+            cx1 = fadds(vx[c], fmuls(sp9C, fsubs(vx[a], vx[c])))
+            cy1 = fadds(vz[c], fmuls(sp9C, fsubs(vz[a], vz[c])))
+            cx0o = fadds(cx0, sp50x); cy0o = fadds(cy0, sp50z)
+            cx1o = fadds(cx1, sp50x); cy1o = fadds(cy1, sp50z)
+            on, ccx, ccy, seg = len2dsq_pnt_seg(pos[0], pos[2], cx0o, cy0o, cx1o, cy1o)
+            d4 = fsubs(ccx, pos[0]); d8 = fsubs(ccy, pos[2])
+            if seg > wrr or fadds(fmuls(d4, sp50x), fmuls(d8, sp50z)) < 0.0:
+                continue
+            if on:                                       # positionWallCorrect
+                move = fmuls(sqrtf_c(seg), sp6C)
+                pos[0] = fadds(pos[0], fmuls(move, n.nx))
+                pos[2] = fadds(pos[2], fmuls(move, n.nz))
+            else:                                        # endpoint (seam-vertex) push-out
+                # The decomp SUBTRACTS the offset back off the shifted endpoints (d_bg_w.cpp:187)
+                # -- an f32 round-trip, f32((c+off)-off) != c in general, so keep the round-trip.
+                cx0 = fsubs(cx0o, sp50x); cy0 = fsubs(cy0o, sp50z)
+                cx1 = fsubs(cx1o, sp50x); cy1 = fsubs(cy1o, sp50z)
+                e0 = len2dsq(cx0, cy0, pos[0], pos[2])
+                e1 = len2dsq(cx1, cy1, pos[0], pos[2])
+                onx = _f(-n.nx); ony = _f(-n.nz)
+                if e0 < e1:
+                    if e0 > wrr or abs(fsubs(e0, wrr)) < 0.008:
+                        continue
+                    fx, fy = _cross_cir_lin_x(pos[0], pos[2], wall_r, cx0, cy0, onx, ony)
+                    pos[0] = fadds(pos[0], fsubs(cx0, fx)); pos[2] = fadds(pos[2], fsubs(cy0, fy))
+                else:
+                    if e1 > wrr or abs(fsubs(e1, wrr)) < 0.008:
+                        continue
+                    fx, fy = _cross_cir_lin_x(pos[0], pos[2], wall_r, cx1, cy1, onx, ony)
+                    pos[0] = fadds(pos[0], fsubs(cx1, fx)); pos[2] = fadds(pos[2], fsubs(cy1, fy))
+            agg = True                                   # SetWallHit (all three branches)
+            cir_hit[i] = True                            # SetWallCirHit
+            cir_ang[i] = cM_atan2s(n.nx, n.nz)           # SetWallAngleY
+    return tuple(pos), cir_hit, cir_ang, agg
+
+
+def acch_crr_pos(old_pos, new_pos, tris, speed_y=0.0, wall_h=(30.1, 89.9, 125.0), wall_r=35.0,
+                 ground_check_offset=60.0, line_check_flag=True, add_y=0.0):
+    """The wall part of dBgS_Acch::CrrPos (d_bg_s_acch.cpp:209) as the player runs it:
+    conditional LineCheck (always, for the player: line_check_flag == the LINE_CHECK bit) ->
+    WallCorrect -> re-LineCheck if a wall corrected. `new_pos` is the POST-integration,
+    PRE-ground-snap position (y dipped by gravity); `speed_y` the post-gravity speed.y.
+    Returns (pos, info) with per-cylinder hit flags + wall angles for the procs."""
+    old = tuple(_f(c) for c in old_pos)
+    pos = tuple(_f(c) for c in new_pos)
+    whd = [None] * len(wall_h)
+    lowH_R = _f(wall_r)                      # GetWallAllLowH_R: R of the lowest-height cylinder
+    line_hit = False
+    ran = False
+    if not is_zero_x(lowH_R):
+        distXZ2 = len2dsq(old[0], old[2], pos[0], pos[2])
+        temp7 = fadds(min(wall_h), old[1])                 # lowH + old.y
+        temp8 = fadds(ground_check_offset, pos[1])
+        distY = fsubs(old[1], pos[1])
+        if (distXZ2 > fmuls(lowH_R, lowH_R) or temp7 > temp8
+                or distY > ground_check_offset or line_check_flag):
+            ran = True
+            line_hit, pos = acch_line_check(old, pos, tris, wall_h, whd)
+    pos, cir_hit, cir_ang, wall_hit = acch_wall_correct(pos, tris, wall_h, wall_r,
+                                                        speed_y, whd, add_y)
+    if wall_hit and ran:
+        lh2, pos = acch_line_check(old, pos, tris, wall_h, whd)
+        line_hit = line_hit or lh2
+    return pos, {"wall_hit": wall_hit, "cir_hit": cir_hit, "wall_angle": cir_ang,
+                 "line_hit": line_hit, "ran_line": ran}
 
 
 # FAST PATH: native Cython (tww_sim/core/_collc.pyx) ports the crr_pos_walls hot path, bit-IDENTICAL

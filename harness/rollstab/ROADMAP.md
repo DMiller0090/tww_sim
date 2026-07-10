@@ -16,24 +16,24 @@ only on a confirmed live per-frame comparison, never on offline plausibility.
 
 Live clip 0-ULP; pure sim, no calibration. See README `## Status` + the session-10 handoff.
 
-## Phase W -- WALL collision in the stepper (NEXT)
+## Phase W -- WALL collision in the stepper (CORE DONE 2026-07-10; remainder below)
 
-Today walls exist only as post-hoc checks (`geometry.seg_blocked` on trajectories computed as if
-no walls exist); the live game blocks/slides/holds. Goal: `LandState.step` responds to walls
-0-ULP.
+**DONE (session 11):** `LandState(walls=)` runs the per-frame CrrPos wall pass
+(`core.collision.acch_crr_pos`) + the proc wall feedback (wall-hold, m3570 bonk latch,
+FRONT_ROLL_CRASH modeled, the sidle A-guard with the `sidle_blocked` planner signal). All four
+live gates (head-on / oblique slide / roll crash / slow-roll grind) BIT-EXACT per frame on the
+minted faceB anchor; goldens + `tests/test_rollstab_walls.py`; model page
+`knowledge/mechanics/wall-response.md`. The original "done ==" bar is met for single-face walls.
 
-- Promote the proven primitives (`core/collision.py` `calc_pla`/`crr_pos_walls`, bit-exact vs
-  RAM planes incl. Force25Bit) into a per-frame CrrPos position RESPONSE: block + slide, not a
-  boolean. Decomp-first: the player's mAcch/dBgS CrrPos + WallCorrect pipeline and its exact
-  ORDER within the execute frame (one anchor point is known: `current.pos += *mStts.GetCCMoveP()`
-  right after posMoveFromFootPos, d_a_player_main.cpp:2558; the mAcch pass sits elsewhere).
-- Wall-hit STATE into the procs: `mAcch.ChkWallHit()` (roll bonk / short-stop -- a walled roll
-  cannot build to the 26 cap; wall-hold; procWait's L wall-snap). Session 5's live trace (roll
-  freezes at the kaze face z~304 while the old sim rolled through) is a free first gate.
-- Full room mesh in-sim (the live reader `collision_geo.py` exists; kaze fixture exists) + the
-  game's block-grid spatial lookup so the 2-minute search budget survives.
-- **Done ==** walks and rolls INTO walls (head-on + oblique slide + roll bonk) reproduce live
-  per-frame 0-ULP on minted kaze anchors, committed as goldens with a regression test.
+**Remainder (pick up before/with Phase C):**
+- Corner (multi-wall) correction ORDER: the game's grp/octree/rwg traversal fixes the poly order
+  when two non-coplanar walls correct in one frame; the sim takes the caller's list order today.
+  Capture the room's wall polys in traversal order (extend `collision_geo.py` to walk
+  pm_blk/m_nt_tbl/pm_rwg) -> a corner gate at the kaze seam.
+- Full room mesh in-sim + the block-grid lookup if the 2-minute search budget needs it.
+- Walls for the ballistic hops + the freeze's early-return frames (no gate exercises them yet).
+- NEW non-wall gap found by the grind gate: mid-run stop -> re-walk blend is not bit-exact
+  (see README Status); becomes load-bearing for any plan that fully stops mid-run.
 
 ## Phase G -- GROUND collision (scope after measuring)
 

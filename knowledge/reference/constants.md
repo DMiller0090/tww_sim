@@ -208,12 +208,18 @@ The walk/run, brakeslide/EBS, roll, and ballistic-hop constants. Decomp `d_a_pla
 | roll-EBS (frame-perfect) | full-run roll → hold L+down through roll → release L into ESS-down → **≈ −23.1** | live |
 | sidehop `procSideStep_init` | `nspeed = cM_scos(6200)·30`, `speed.y = cM_ssin(6200)·30`, gravity **−2.4** | `mSideStep` `d_a_player_HIO_data.inc:223` |
 | backflip `procBackJump_init` | `nspeed = 22.5`, `speed.y = 19.0`, gravity **−3.0** | `mBackJump` `:102` |
+| default gravity (grounded speed.y at CrrPos) | **−2.5**/fr | `mAutoJump.field_0xC`, reset by `commonProcInit` (5826) |
+| wall cylinders (ground state) | heights **30.1 / 89.9 / 125.0**, radius **35** | `setBgCheckParam` 10680 ([wall-response.md](../mechanics/wall-response.md)) |
+| wall-hit speed slow (head-on ×0.4) | target `×(1 − cos(diff)·`**0.6**`)`, `\|diff\| < 0x4000` | `mBasic.field_0x14` (setNormalSpeedF 2311) |
+| roll bonk window | head-on ≤ **5000**, anim frame **[6, 15]**, speedF ≥ **10** | `mRoll.0x4/0x34/0x38/0x3C` (procFrontRoll 6869) |
+| roll crash (bonk fired) | `nspeed = speedF·`**0.4** reversed, `speed.y = `**7.0**; ROLLFMIS start 6 → end 24, rate **0.7** at landing, early-exit frame > **20** | `mRoll.0x40/0x44/0x28/0x2/0x24/0x30` |
+| sidle (A-at-wall) window | wall-hit + facing ray `25+r` hits `\|n_y\|≤0.05` wall + facing ≤ **0x2000** off head-on → SIDLE, no roll | `setFrontWallType` 4552 |
 
 | proc | `link_state` |
 |------|-----|
 | WAIT · FREE_WAIT · MOVE · ATN_MOVE | 4 · 5 · 6 · 7 |
 | WAIT_TURN · MOVE_TURN · SLIP | 0x17/23 · 0x18/24 · 0x19/25 |
-| FRONT_ROLL · SIDE_STEP(+LAND) · BACK_JUMP(+LAND) | 30 · 0x0A/0x0B · 0x22/0x23 |
+| FRONT_ROLL(+CRASH) · SIDE_STEP(+LAND) · BACK_JUMP(+LAND) | 30/**31** · 0x0A/0x0B · 0x22/0x23 |
 
 <a id="land-turn-procs"></a>
 ## Land turn procs (SLIP / MOVE_TURN / WAIT_TURN)

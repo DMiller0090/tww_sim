@@ -76,8 +76,25 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
 - **North star: the TETRA seam clip, pure-sim** -- the phased plan (wall collision -> ground ->
-  CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **W (wall collision in
-  the stepper, 0-ULP live-gated)**.
+  CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **W remainder** (corner
+  poly ordering + full-room mesh), then **G/C**.
+- **Phase W CORE DONE (session 11): WALLS IN THE STEPPER, LIVE-GATED 0-ULP.** `LandState(walls=)`
+  runs the player-faithful per-frame CrrPos wall pass (`core.collision.acch_crr_pos`: every-frame
+  LineCheck with the full normal-add/WallHDirect response, WallCorrect with the mid-frame gravity
+  dip, console `sqrtf_c`, exact 2^-18 IsZero) + the proc feedback (setNormalSpeedF wall-hold, the
+  m3570 roll-bonk latch, FRONT_ROLL_CRASH fully modeled, the sidle A-guard). Four clean-DTM gates
+  on the minted `kaze_r11_wallgate_faceB` anchor (head-on hold / oblique slide / roll crash /
+  slow-roll grind) verified **WALL GATE BIT-EXACT** per frame (pos bits + proc + facing), via
+  `wallgate.py` (mint/plan/run/verify/golden). Goldens `tests/golden/rollstab_wall_*.json` +
+  regression `tests/test_rollstab_walls.py`; mechanics page `knowledge/mechanics/wall-response.md`.
+  - Planner-rejection contract: a bonk = FRONT_ROLL_CRASH in `visited`; a sidle-suppressed roll
+    sets the sticky `sidle_blocked` (the sidle proc itself is intentionally unmodeled).
+  - Phase-W open edges: corner (multi-wall) correction ORDER = the game's block/octree traversal
+    (sim takes list order; single-face is order-free), full-room mesh capture, walls for the
+    ballistic hops + freeze frames.
+  - **NEW flagged gap (non-wall, found by the grind gate): mid-run stop -> re-walk.** A full stop
+    to WAIT and MOVE re-entry is NOT bit-exact (the WAIT row matched; the re-walk entry speedF
+    diverged). From-rest entries are exact; avoid full stops inside plans until modeled.
 - **Phase 0 / kaze OBJECTIVE MET (session 10): LIVE CLIP CONFIRMED, 0-ULP.** A solver hit planned entirely
   offline from the idle13 anchor's rest state shipped as a clean DTM and clipped through the
   seam live: the cut fired on the predicted frame at the bit-identical position
