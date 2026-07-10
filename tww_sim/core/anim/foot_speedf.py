@@ -114,7 +114,7 @@ class FootSpeedF:
             return False
 
     def __init__(self, idle_frame=70.0, idle_anim=IDLE_ANIM, pos_x=0.0,
-                 pos_z=764.0791015625, facing=0, native=True, sword=False):
+                 pos_z=764.0791015625, pos_y=0.0, facing=0, native=True, sword=False):
         self.anm, self.sk = fk.load()                 # raises if the data is absent
         self.idle_anim = idle_anim
         self.sword = bool(sword)                       # sword equipped -> DASH poses as DASHS (leg pose)
@@ -129,10 +129,22 @@ class FootSpeedF:
         # updates it via set_pos BEFORE each step; seeded here at the anchor rest pose.
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
+        # Link's world Y: the m37B4 base-cancellation rounding depends on |Y| (fk.world_base
+        # docstring) -- a y=-6534 floor shifts pose coords by ULPs vs the old py=0.
+        self.pos_y = float(pos_y)
+        # shape_angle.z: the MOVE turn lean (m351C >> 1, setMoveSlantAngle) baked into the model
+        # base by setWorldMatrix's ZXYrotM. 0 at rest and on any straight walk.
+        self.lean = 0
         self.facing = int(facing) & 0xFFFF
-        self.ff.set_pos(self.pos_x, self.pos_z, facing=self.facing)
+        self.ff.set_pos(self.pos_x, self.pos_z, py=self.pos_y, facing=self.facing)
         self.started = False
         self.stopped = False
+        self._rest_blend = False                       # seed_rest_blend() from-rest mode (WAIT(4) blend)
+        self._rest_noops = 0                           # leading alignment no-op steps (DTM gate padding)
+        # Deferred-draw mode: pose at frame END / post-integration pos like the game (see
+        # finish_draw docstring). Off by default: legacy pre-integration draw, byte-identical.
+        self.defer_draw = False
+        self._pending_draw = None
         # Seed the FootFK old pose + delayed toe stream (t1=draw_{N-1}, t2=draw_{N-2}) with the
         # idle rest pose. Pre-walk seeds only feed m3598==0 frames (speedF==0), so they're immaterial.
         self.ff.seed(idle_anim, self.idle_frame)
@@ -170,11 +182,16 @@ class FootSpeedF:
         c.idle_anim = self.idle_anim
         c.sword = self.sword
         c.idle_end = self.idle_end
-        c.pos_x = self.pos_x; c.pos_z = self.pos_z; c.facing = self.facing
+        c.pos_x = self.pos_x; c.pos_z = self.pos_z; c.pos_y = self.pos_y; c.facing = self.facing
+        c.lean = self.lean
         c.started = self.started; c.stopped = self.stopped
         c._single_entered = self._single_entered
         c._idle_frame_py = self._idle_frame_py
         c._pending_py = self._pending_py
+        c._rest_blend = self._rest_blend
+        c._rest_noops = self._rest_noops
+        c.defer_draw = self.defer_draw
+        c._pending_draw = self._pending_draw
         c.st = self.st.clone()
         c.ff = self.ff.clone()
         c._core = c.ff._engine                 # fused engine lives on the cloned FootFK (None in Py mode)
@@ -205,18 +222,79 @@ class FootSpeedF:
         else:
             self._pending_py = v
 
-    def set_pos(self, px, pz, facing=0):
+    def set_pos(self, px, pz, facing=0, py=None, lean=None):
         """LandState calls this each frame BEFORE stepping, with the CURRENT (pre-integration) world
         pos + shape_angle.y. The foot FK poses from worldBase(pos), so the toe carries the game's
-        world-magnitude quantization for THIS frame's draw (stored into the toe stream)."""
+        world-magnitude quantization for THIS frame's draw (stored into the toe stream). `py` =
+        Link's world Y; `lean` = shape_angle.z (the m351C>>1 MOVE turn lean, setWorldMatrix's
+        ZXYrotM z term). Omitting either keeps the previous value."""
         self.pos_x = fp.f32(px)
         self.pos_z = fp.f32(pz)
+        if py is not None:
+            self.pos_y = fp.f32(py)
+        if lean is not None:
+            self.lean = int(lean) & 0xFFFF
         self.facing = int(facing) & 0xFFFF
         if self._core is not None:
-            self._core.set_pos(self.pos_x, 0.0, self.pos_z, self.facing)
+            self._core.set_pos(self.pos_x, self.pos_y, self.pos_z, self.facing)
 
     def _apply_base(self):
-        self.ff.set_pos(self.pos_x, self.pos_z, facing=self.facing)
+        self.ff.set_pos(self.pos_x, self.pos_z, py=self.pos_y, facing=self.facing, lean=self.lean)
+
+    def seed_rest_blend(self, d_frame, w_frame, d_rate, w_rate, m359C, m35B4=0.0, noops=0,
+                        t1=None, t2=None):
+        """Seed the anchor-REST WAIT(4) under-body state so the sim is bit-exact FROM REST -- no
+        mid-run live calibration. A sword-drawn WAIT(4) anchor rests in the setMoveAnime(ANM_WAITS,
+        ANM_WALK, r29=2) blend at ratio 0: MOVE0=WAITS advancing at `d_rate` (1.1), MOVE1=WALK(S)
+        advancing at `w_rate`, both live every rest frame, with posMoveFromFootPos running (so the
+        toe stream + the m359C 0.3/0.7 recursion are ACTIVE at rest). Args are the live rest values
+        (mint captures them into the anchor's seed json): d_frame/w_frame/d_rate/w_rate = the two
+        J3DFrameCtrl phases+rates (player +0x2F64/+0x2F78/+0x2F60/+0x2F74), m359C/m35B4 = the
+        smoothing state (+0x34C4/+0x34DC). `noops` = leading step() calls to IGNORE entirely: a
+        savestate-anchored DTM's first frames exist only for row alignment (the game has not run
+        yet), verified live = 2 for the run_dtm pipeline (see harness/rollstab/calibrate.py).
+
+        `t1`/`t2` (flat 12-tuples [rtoe, ltoe, rheel, lheel] xyz) = the anchor's STORED delayed
+        foot poses, read from RAM (mFootData[i].field_0x018/0x00C; JP player +0x3CF8/+0x3CEC and
+        +0x3E10/+0x3E04): t2 directly at rest, t1 after ONE paused frame-advance. Pass them for a
+        TRANSLATED (minted) anchor -- the stored poses carry the ORIGINAL position's f32 rounding
+        noise, which re-posing at the shifted position cannot reproduce (this was the ~1e-4
+        translated-anchor z residual of session 9). When omitted, both are re-posed at the current
+        anchor pos (exact for anchors resting where they were captured).
+        Python foot path only (the fused native engine carries no WAIT-blend rest state)."""
+        if self._core is not None:
+            raise NotImplementedError("seed_rest_blend needs the pure-Python foot path (native=False)")
+        st = self.st
+        w_anim = st._walk
+        st.move0 = 'waits'
+        st.move1 = w_anim
+        st.m34C3 = 2
+        st.ratio = 0.0
+        st.m3598 = 0.0
+        st.fc0.set(ANIM_META['waits'][1], 0.0, float(ANIM_META['waits'][0]), float(d_rate),
+                   float(d_frame))
+        st.fc1.set(ANIM_META[w_anim][1], 0.0, float(ANIM_META[w_anim][0]), float(w_rate),
+                   float(w_frame))
+        # Rest toe stream: the last two drawn rest poses; the step_feet calls also leave the
+        # ff internal old pose (morf source). Explicit t1/t2 captures then override the compose inputs.
+        f0p = _f32(d_frame - d_rate)
+        if f0p < 0.0:
+            f0p = _f32(f0p + float(ANIM_META['waits'][0]))
+        f1p = _f32(w_frame - w_rate)
+        if f1p < 0.0:
+            f1p = _f32(f1p + float(ANIM_META[w_anim][0]))
+        self._apply_base()
+        self.t2 = self.ff.step_feet('waits', w_anim, f0p, f1p, st.ratio, -1.0)
+        self.t1 = self.ff.step_feet('waits', w_anim, float(d_frame), float(w_frame), st.ratio, -1.0)
+        if t1 is not None:
+            self.t1 = tuple(_f32(v) for v in t1)
+        if t2 is not None:
+            self.t2 = tuple(_f32(v) for v in t2)
+        self.prev_f312 = float(m359C)
+        self.m35B4 = _f32(m35B4)
+        self._rest_blend = True
+        self._rest_noops = int(noops)
+        self.defer_draw = True     # from-rest exactness requires the game's end-of-frame draw pos
 
     def enter_single(self, anim, morf, start=0.0, end=None, rate=1.0):
         """setSingleMoveAnime(anim, rate, start, end, morf) (12794): the under-body switches to a single
@@ -363,6 +441,27 @@ class FootSpeedF:
 
         if not self.started:
             if nspeed <= 0.0:
+                if self._rest_blend:
+                    # seed_rest_blend WAIT frame (see its docstring): alignment no-ops touch
+                    # NOTHING; then real rest frames advance the ctrls + run the toe recursion.
+                    if self._rest_noops > 0:
+                        self._rest_noops -= 1
+                        return 0.0
+                    st = self.st
+                    st.fc0.update()
+                    st.fc1.update()
+                    # procWait re-inits the blend EVERY idle frame: the f31 frame/60*60 round-trip
+                    # is NOT an f32 identity and fc1 = f31*32 (setBlendMoveAnime idle arm, no morf).
+                    st._set_move_anime(0.0, H_38, H_40, 'waits', st._walk, 2, -1.0)
+                    st.m3598 = 0.0
+                    self._apply_base()
+                    cur = self.ff.step_feet(st.move0, st.move1, st.fc0.frame, st.fc1.frame,
+                                            st.ratio, -1.0)
+                    compose = _N.foot_compose if _N is not None else _py_foot_compose
+                    _, f312 = compose(self.t1, self.t2, 0.0, msd, st.m3598,
+                                      self.prev_f312, self.m35B4)
+                    self._shift(cur, f312, msd)
+                    return 0.0
                 # input-latency / standing frame: keep drawing the idle so its drift is carried
                 # into the toe stream; the game's m3598 here is 0 so speedF is 0 regardless.
                 self.idle_frame = fp.fadds(self.idle_frame, 1.0)
@@ -393,12 +492,33 @@ class FootSpeedF:
         1-frame-delayed plant toe delta f31_2 with the recursive smoothing, and compose
         speedF = nspeed*(1-m3598) +/- f31_2*m3598. The plant/delta/smoothing/compose tail runs in C
         (_anmc.foot_compose) when available, else the bit-identical _py_foot_compose. t1 = the toe
-        DRAWN last frame (1-frame delay), t2 = the frame before (both flat 12-tuples)."""
-        self._apply_base()
-        cur = self.ff.step_feet(state['move0'], state['move1'], state['f0'], state['f1'],
-                                state['ratio'], i_morf=morf)
+        DRAWN last frame (1-frame delay), t2 = the frame before (both flat 12-tuples).
+
+        defer_draw: the compose consumes only t1/t2, so speedF is exact BEFORE the draw; the game
+        actually draws at frame END (post-integration pos), so the draw is stashed for
+        finish_draw() after the caller moves."""
         compose = _N.foot_compose if _N is not None else _py_foot_compose
         speedF, f312 = compose(self.t1, self.t2, nspeed, msd, state['m3598'],
                                self.prev_f312, self.m35B4)
+        if self.defer_draw:
+            self._pending_draw = (state, morf, f312, msd)
+            return speedF
+        self._apply_base()
+        cur = self.ff.step_feet(state['move0'], state['move1'], state['f0'], state['f1'],
+                                state['ratio'], i_morf=morf)
         self._shift(cur, f312, msd)
         return speedF
+
+    def finish_draw(self):
+        """Deferred-draw completion: pose this frame's foot at the CURRENT (post-integration) base
+        -- the caller re-set_pos's with the moved position first -- and shift the toe stream. Call
+        once per frame after integration when defer_draw is on; a frame with no stashed draw (WAIT
+        rest / stopped / no foot step) is a no-op."""
+        if self._pending_draw is None:
+            return
+        state, morf, f312, msd = self._pending_draw
+        self._pending_draw = None
+        self._apply_base()
+        cur = self.ff.step_feet(state['move0'], state['move1'], state['f0'], state['f1'],
+                                state['ratio'], i_morf=morf)
+        self._shift(cur, f312, msd)

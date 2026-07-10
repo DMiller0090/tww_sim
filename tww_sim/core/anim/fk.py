@@ -114,7 +114,7 @@ def psmtx_inverse(m):
     return inv
 
 
-def world_base(px, py, pz, facing=0):
+def world_base(px, py, pz, facing=0, lean=0):
     """Build (worldBase, m37B4) for the CL model's setBaseTRMtx (d_a_player_main.cpp:9559-9575).
     worldBase = transS(px,py,pz) . ZXYrotM(0, facing, 0)  (flat ground: shape_angle.x/z == 0), and
     m37B4 = PSMTXInverse(worldBase). For the FOOT toe f31_2 only rows 0 and 2 (X,Z) matter, so the
@@ -133,6 +133,13 @@ def world_base(px, py, pz, facing=0):
     R = [[c, 0.0, s], [0.0, 1.0, 0.0], [ns, 0.0, c]]
     T = (fp.f32(px), fp.f32(py), fp.f32(pz))
     base = [[R[i][0], R[i][1], R[i][2], T[i]] for i in range(3)]
+    lean = int(lean) & 0xFFFF
+    if lean:
+        # shape_angle.z != 0 (the MOVE turn lean, m351C >> 1): mDoMtx_ZXYrotM concats ZrotS onto
+        # the Y-rotated base -- skipped entirely when z == 0, so the lean-free path is untouched.
+        cz = jma_cos(lean); sz = jma_sin(lean)
+        Rz = [[cz, fp.f32(-sz), 0.0, 0.0], [sz, cz, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]
+        base = mtx_concat(base, Rz)
     return base, psmtx_inverse(base)
 
 
@@ -238,7 +245,13 @@ try:
     _N.init_tables(S._COS_TABLE, S._SIN_TABLE)
     mtx_concat = _N.mtx_concat
     mtx_mult_vec = _N.mtx_mult_vec
-    world_base = _N.world_base          # transS.ZXYrotM + PSMTXInverse, per foot-FK frame
+    _world_base_py = world_base
+
+    def world_base(px, py, pz, facing=0, lean=0):
+        # Native fast path (no lean arg); the Python def carries the shape_angle.z lean concat.
+        if lean:
+            return _world_base_py(px, py, pz, facing, lean)
+        return _N.world_base(px, py, pz, facing)
 except ImportError:
     pass
 

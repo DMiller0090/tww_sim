@@ -186,6 +186,8 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
         self.m34dc = int(facing) & 0xFFFF      # stick want-angle pre-csangle (m34E8 = m34dc + csangle)
         self.m34ea = int(facing) & 0xFFFF      # PREVIOUS frame's m34dc (slip stick-flip detector, 11289)
         self.m34de = int(facing) & 0xFFFF      # PREVIOUS frame's shape_angle.y (11287; WAIT idle-anim turn-step)
+        self.m351C = 0                         # MOVE turn-lean state (setMoveSlantAngle, 9499);
+        #                                        shape_angle.z = m351C >> 1 tilts the setWorldMatrix base
         self.state = int(state)                # link_state / mCurProc
         self.nspeed = f32(nspeed)              # mNormalSpeed (potential_speed) -- bit-exact
         self.speedF = f32(speedF)              # position-integrating speed
@@ -231,8 +233,8 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
                 from ..core.anim.foot_speedf import FootSpeedF
                 kw = {} if idle_anim is None else {"idle_anim": idle_anim}
                 self._foot = FootSpeedF(idle_frame=float(idle_frame), pos_x=self.pos_x,
-                                        pos_z=self.pos_z, facing=self.facing, native=foot_native,
-                                        sword=self.sword_drawn, **kw)
+                                        pos_z=self.pos_z, pos_y=self.pos_y, facing=self.facing,
+                                        native=foot_native, sword=self.sword_drawn, **kw)
             except (FileNotFoundError, OSError, ImportError):
                 self._foot = None
         # Native land physics: fused C engine present -> the whole per-frame step is one LandCore call;
@@ -268,6 +270,28 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
         else:
             s._core = None
         return s
+
+    # setMoveSlantAngle HIO constants (daPy_HIO_move_c1, d_a_player_HIO_data.inc)
+    SLANT_THRESH = f32(0.95)       # field_0x4C: |speedF|/max above this -> lean chases
+    SLANT_GAIN = f32(1.6)          # field_0x50: lean target per turn-delta tread
+    SLANT_DECAY = f32(0.35)        # field_0x54: off-MOVE / slow decay factor
+    SLANT_SCALE, SLANT_MAX, SLANT_MIN = 4, 200, 100   # field_0xC / 0x8 / 0xA (addCalcAngleS)
+
+    def _set_move_slant_angle(self):
+        """daPy_lk_c::setMoveSlantAngle (d_a_player_main.cpp:9499): the MOVE turn-lean state m351C.
+        Runs at frame end AFTER setWorldMatrix (11561), so the lean it computes tilts the NEXT
+        frame's base. target = 1.6 * (s16)(m34DE - shape_angle.y) * ((|speedF|/17 - 0.95)/0.05)
+        while in MOVE above the speed threshold; else m351C decays by 35% (s16-truncated, snap to
+        0 when the decrement truncates away). m34DE here is still the frame-START value (11287)."""
+        fvar1 = f32(abs(f32(self.speedF / self.max_nspeed)))
+        if self.state == MOVE and fvar1 > self.SLANT_THRESH:
+            ratio = f32(f32(fvar1 - self.SLANT_THRESH) / f32(1.0 - self.SLANT_THRESH))
+            tgt = int(f32(f32(self.SLANT_GAIN * s16_signed(self.m34de - self.facing)) * ratio))
+            self.m351C = cLib_addCalcAngleS(self.m351C, tgt & 0xFFFF,
+                                            self.SLANT_SCALE, self.SLANT_MAX, self.SLANT_MIN)
+        else:
+            sv = int(f32(s16_signed(self.m351C) * self.SLANT_DECAY))
+            self.m351C = 0 if sv == 0 else (self.m351C - sv) & 0xFFFF
 
     def _sync_from_core(self):
         """Copy the LandCore's post-step public fields back onto this LandState (for tests/planners
@@ -459,7 +483,7 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
         # Before posing, set Link's CURRENT (pre-integration) world pos + shape_angle.y: the foot FK runs
         # from worldBase(pos) to carry world-magnitude quantization. See knowledge/model/sim.md.
         if self._foot is not None:
-            self._foot.set_pos(self.pos_x, self.pos_z, facing=self.facing)
+            self._foot.set_pos(self.pos_x, self.pos_z, facing=self.facing, py=self.pos_y)
         # speedF -> position. ROLL/SLIP = momentum; WAIT_TURN frozen; MOVE + MOVE_TURN tail + ATN_MOVE use
         # the anim engine (only the SLIP tail keeps the fallback); single-anim procs pose to warm the stream.
         if self.state in (SIDE_STEP, BACK_JUMP):
@@ -537,6 +561,13 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CutMixin, _TurnMixin, _Balli
         if self.state in (CUT_F, CUT_A):
             self.pos_x = f32(self.pos_x + self._cut_add[0])
             self.pos_z = f32(self.pos_z + self._cut_add[1])
+        # Deferred foot draw: base at post-integration pos with LAST frame's lean (setWorldMatrix
+        # runs before setMoveSlantAngle, 11551); then the slant updates for the next frame.
+        if self._foot is not None and self._foot.defer_draw:
+            self._foot.set_pos(self.pos_x, self.pos_z, facing=self.facing, py=self.pos_y,
+                               lean=s16_signed(self.m351C) >> 1)
+            self._foot.finish_draw()
+            self._set_move_slant_angle()
             d = math.hypot(self.pos_x - px0, self.pos_z - pz0)
         self._cut_add = (0.0, 0.0)
         self.m34de = self.facing                 # m34DE = shape_angle.y (end-of-frame, 11287): last facing

@@ -155,14 +155,20 @@ class FootFK:
         c.m37b4 = self.m37b4
         return c
 
-    def set_pos(self, px, pz, py=0.0, facing=0):
-        """Set Link's world pose for the frame about to be posed. Only X/Z (and facing) affect the
-        foot toe f31_2; py is immaterial (Y column unused). No-op when world FK is disabled. With the
-        engine, worldBase + m37B4 are built + kept in C (no per-frame Python list round-trip)."""
+    def set_pos(self, px, pz, py=0.0, facing=0, lean=0):
+        """Set Link's world pose for the frame about to be posed. X, Z, facing AND Y all matter:
+        the base is removed by the f32 inverse m37B4, and the cancellation rounding is magnitude-
+        dependent in every axis (a y=-6534 floor perturbs pose Y coords by ULPs vs py=0 -- found
+        live on kaze r11, 2026-07-10). Pass Link's real world Y. `lean` = shape_angle.z (the MOVE
+        turn lean m351C>>1, setMoveSlantAngle) -- Python path only. No-op when world FK is
+        disabled. With the engine, worldBase + m37B4 are built + kept in C (no per-frame Python
+        list round-trip)."""
         if self._engine is not None:
+            if lean:
+                raise NotImplementedError("turn lean needs the pure-Python foot path (native=False)")
             self._engine.set_pos(px, py, pz, facing)
         elif self.world:
-            self.base, self.m37b4 = fk.world_base(px, py, pz, facing)
+            self.base, self.m37b4 = fk.world_base(px, py, pz, facing, lean)
 
     def _blend_joint(self, move0, move1, f0, f1, ratio, jnt, rate):
         """Blended (quat, trans, scale) for one joint, then oldframe-morf toward the stored old pose.
