@@ -80,7 +80,8 @@ knowledge/history/seam-clip-dead-ends.md. That is what keeps the ledger alive.
 STALL RULE: if you get stuck, or are about to spend real effort outside the handoff's
 plan, surface it before continuing.
 
-Savestate slot 5 = kaze flat room for roll clips.
+Savestate slot 5 = kaze flat room for roll clips. Savestate slot 3 = flooded-Hyrule Tetra corner
+(-1727,-990) for the north-star Tetra clip (Phase C+).
 
 When you hit a Dolphin / lookup gotcha with no existing doc, document it (whichever
 fits: ../tools/DOLPHIN_CONTROL.md, KB, or memory) before moving on.
