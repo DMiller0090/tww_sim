@@ -49,5 +49,7 @@ a dip diagnostic (one partial-magnitude frame, then per-frame diff).
 Dead ends recorded so nobody repeats them: two-segment pursuit walks (perp treads quantize with a
 dead band exactly over the window), per-move-set live bias correction (arc-dependent, not
 transferable), a from-rest roll as an anim canonicalizer (does not resync), anchor-z transfer
-aiming (live reseeding flips the press frame; the landing is chaotic). Full details:
+aiming (live reseeding flips the press frame; the landing is chaotic). Full ledger (sessions 4-9,
+sim-artifact traps, single-ray infeasibility, delivery rules):
+[history/seam-clip-dead-ends.md](../history/seam-clip-dead-ends.md); run protocol in
 `harness/rollstab/README.md`.
