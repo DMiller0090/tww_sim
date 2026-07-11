@@ -8,10 +8,12 @@ this, and where do the numbers come from?
 ([`tww_sim/core/npc_zl1.Zl1FollowState`](../../tww_sim/core/npc_zl1.py)) reproduces the live
 type-5 Tetra frame-for-frame across engage → turn → accelerate → distance-capped cruise →
 decelerate → stop (`tests/test_tetra_follow.py`, fixture `fixtures/hyrule_tetra_follow.json` from
-`harness/rollstab/capture_tetra_follow.py`, flooded Hyrule savestate slot 3). The lock-on/talk
-region (`zl1_attention_active`) is decomp-exact; its live reticle confirmation is still open (see
-Open below). Partial model on purpose - event/demo/cutscene, message flow, eye/joint control, and
-water FX are out of scope.
+`harness/rollstab/capture_tetra_follow.py`, flooded Hyrule savestate slot 3). Her BG collision
+(`mObjAcch.CrrPos` WallCorrect, R=50/half-H=30) is also live-validated 0-ULP (corner-wall eject,
+`fixtures/hyrule_tetra_wallcorrect.json`) - the wall-brace that holds her as a stable pusher when
+the clip shoves her into the corner. The lock-on/talk region (`zl1_attention_active`) is
+decomp-exact; its live reticle confirmation is still open (see Open below). Partial model on purpose
+- event/demo/cutscene, message flow, eye/joint control, and water FX are out of scope.
 **Source:** decomp GZLJ01 `daNpc_Zl1_c` (`optn_1`/`optn_2`/`optn_action1`, `createInit`,
 `init_ZL1_5`, `chk_areaIN`, `setAttention`; `d_a_npc_zl1.cpp`), `dAttention_c::calcWeight` +
 `check_distace` + `check_flontofplayer` (`d_attention.cpp`) + `dist_table` (`d_att_dist.cpp`),
@@ -50,8 +52,27 @@ gates compare `dist²` to the squared thresholds.
 **10 u/f** (accel 1 u/f, speed scaled by `0.04·√(dist² − 130²)`), and **decelerates to a full stop
 once he is back within 130 u**. Live: peak speedF 9.23 at ~250 u, settling to a stop at ~132 u.
 
-Walls / gaps (`optn_2`'s `move_jmp` hop, `CrrPos` XZ correction) are **not** modelled - the open-area
-follow is exact; a follow path into a wall/ledge is a follow-up (it reuses `core.collision`).
+## BG collision (her `mObjAcch.CrrPos` wall pass)
+
+Every frame `_execute` runs `mObjAcch.CrrPos` after `posMove`. `mObjAcch` is a `dBgS_ObjAcch :
+public dBgS_Acch` that does **not** override `CrrPos`, so her wall/ground pass is the *same*
+player-faithful pass ported for Phase W (`core.collision.acch_crr_pos`); she differs from Link only
+in (a) her wall-check cylinder, a **single** `dBgS_AcchCir` at **R=50, half-H=30**
+(`mAcchCir.SetWall(30,50)`, `mObjAcch.Set(..., tbl_size=1, ...)`; Link has a 3-band R=35 cylinder),
+and (b) the poly pass-through flag (`SetObj` → `mbObjThrough`, matters only for polys carrying that
+attribute bit). `Zl1FollowState.step(walls=...)` runs it with her cylinder. On the flat corner
+floor/water she floats with **speed.y == 0 every frame** (live-confirmed), so the pass runs
+`speed_y = 0` (at 1-ULP scale `speed_y = -4.5` mis-ejects a wall-corrected XZ by 1 ULP).
+
+The follow's 130 u keep-distance means she never touches a wall in a *normal* chase (the wall pass
+no-ops, live 0-ULP over 119 frames). It becomes load-bearing in the **clip**: the plan pushes Tetra
+**into the corner** (Link shoves her via the Co push), then rolls in for the slash. Wedged in the
+corner, her `CrrPos` WallCorrect **cancels her CC recoil** (she would otherwise recoil away each
+overlap frame, the [[tetra-push-model]] frame-lag caveat), so the wall **braces her as a stable
+pusher** delivering the nudge on the roll-clip frame. Live-validated 0-ULP: overlapping the corner
+`+x` wall (x = −1727, normal +x) she ejects to the exact live XZ (`capture_tetra_wallcorrect.py` →
+`fixtures/hyrule_tetra_wallcorrect.json`, `tests/test_tetra_follow.py`). The `move_jmp` gap hop
+(over a ledge) is still unmodelled (no gate exercises it; the corner floor is flat).
 
 ## Lock-on / talk / speak region (planner AVOID)
 
@@ -98,16 +119,18 @@ These are un-versioned source literals → the GZLJ01 (JP) values equal the deco
 | Lock-on/talk XZ range | **300.0** (`mDistXZMax`, adjust 0) | eligibility + release radius | `d_att_dist.cpp` 0xAB |
 | Lock-on/talk ΔY band | **(−300, 300)** | `mDeltaYMin/Max` | `d_att_dist.cpp` 0xAB |
 | Front cone | **±0x4000 (90°)** | bits `0x0004` → reject `|angle1| > 0x4000` | `check_flontofplayer` |
+| BG wall cylinder | **R=50, half-H=30** (single AcchCir) | `mObjAcch.CrrPos` WallCorrect | `d_a_npc_zl1.cpp:3022` |
+| Grounded speed.y | **0** (floats on corner water) | wall-pass `speed_y` (1-ULP sensitive) | live |
 
 ## Open / follow-ups
 
 - **Live reticle confirmation** of the lock-on/talk region (drive Link toward Tetra, read the
   attention lock state, confirm the 300 u / ±90° boundary). The predicate is decomp-exact but
   unverified against the on-screen reticle.
-- **Read-lag** (which frame's Link pos Tetra reads) is unpinned - the live gate used a stationary
+- **Read-lag** (which frame's Link pos Tetra reads) is unpinned - the follow gate used a stationary
   Link. A moving-Link capture would fix it (cf. the foot 1-frame lag in [[land-bitperfect-frontier]]).
-- **Walls / gap-jump** in the follow path (`move_jmp`, `CrrPos` XZ) - reuse `core.collision` when a
-  follow path needs them.
+- **`move_jmp` gap hop** (over a ledge) is unmodelled - no gate exercises it and the corner floor is
+  flat. The wall half of `CrrPos` IS modelled (validated above).
 
 ## See also
 - [mechanics/actor-push.md](actor-push.md) - the CC "Co" push this Tetra feeds into a seam clip

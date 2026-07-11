@@ -91,10 +91,16 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
   regression `tests/test_tetra_follow.py`; seed from frame 1 past the 1-frame post-teleport settle).
   Also `zl1_attention_active(link_pos, link_facing, tetra_pos)`: the decomp-exact L-target / talk /
   speak AVOID region (`dist_table[0xAB]`: XZ < 300, |dy| < 300, Link facing within +-90deg of Tetra)
-  so a planner routes the setup so an A/L press near her doesn't talk/lock instead. Mechanic page
-  `knowledge/mechanics/tetra-follow.md`. Open Phase-C items: the `GetCCMoveP` term at the decomp's
-  frame point, the three-way CC-push -> WallCorrect -> net-overlap ordering, the attention live
-  reticle confirmation, and the Tetra read-lag (the gate used a stationary Link).
+  so a planner routes the setup so an A/L press near her doesn't talk/lock instead. Her **BG
+  collision** is also modeled + LIVE-GATED 0-ULP: `mObjAcch.CrrPos` is the SAME `dBgS_Acch::CrrPos`
+  pass as Phase W (`dBgS_ObjAcch` subclass, no override) with her single R=50/half-H=30 AcchCir;
+  `Zl1FollowState.step(walls=)` runs it. She floats with speed.y==0 on the corner (live), so the
+  pass uses speed_y=0 (a -4.5 dip is 1 ULP off). Validated by a corner-wall eject
+  (`fixtures/hyrule_tetra_wallcorrect.json`) - this WallCorrect is the wall-brace that cancels her CC
+  recoil so she holds as a stable pusher (the plan: push Tetra into the corner, roll in, she nudges).
+  Mechanic page `knowledge/mechanics/tetra-follow.md`. Open Phase-C items: the `GetCCMoveP` term at
+  the decomp's frame point, the three-way CC-push -> WallCorrect -> net-overlap ordering, the
+  attention live reticle confirmation, and the Tetra read-lag (the follow gate used a stationary Link).
 - **Phase G DONE (session 13): the Tetra floor is FLAT -> ground collision is a no-op for this clip.**
   Measured before modeling (as ROADMAP prescribes): the walkable floor Link's roll crosses at the
   (-1727,-990) Tetra corner (flooded Hyrule, savestate slot 3) is a single flat tri (poly 2917),

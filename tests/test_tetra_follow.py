@@ -22,10 +22,14 @@ import json
 import os
 
 from tww_sim.core.npc_zl1 import (Zl1FollowState, zl1_attention_active,
-                                   ATTN_XZ_MAX, ATTN_FRONT_HALF_ANGLE)
+                                   ATTN_XZ_MAX, ATTN_FRONT_HALF_ANGLE, WALL_R, WALL_H)
+from tww_sim.core.collision import acch_crr_pos
+from tww_sim.land.walls import load_ordered_mesh
 
 _rb = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIX = os.path.join(_rb, 'fixtures', 'hyrule_tetra_follow.json')
+WALLS_FIX = os.path.join(_rb, 'fixtures', 'hyrule_tetra_walls_ordered.json')
+WC_FIX = os.path.join(_rb, 'fixtures', 'hyrule_tetra_wallcorrect.json')
 
 
 def _fix():
@@ -65,6 +69,20 @@ def test_follow_exercises_full_cycle():
     assert 3 in stts and 4 in stts, 'capture never engaged/idled'
     assert stts[-1] == 3, 'capture did not settle back to idle'
     assert max(speeds) > 9.0, 'capture never reached the distance-scaled speed plateau'
+
+
+def test_wallcorrect_bitexact_vs_live():
+    """Her BG WallCorrect (mObjAcch.CrrPos, R=50/half-H=30) ejects her from a corner-wall overlap
+    to the exact live position. This is the wall-brace that holds her as a stable pusher when the
+    clip shoves her into the corner. Fixture from capture_tetra_wallcorrect.py; on the flat
+    floor/water she floats with speed.y == 0 (live), so the pass runs speed_y = 0."""
+    wc = json.load(open(WC_FIX))
+    walls = load_ordered_mesh(WALLS_FIX)
+    pos, info = acch_crr_pos(tuple(wc['old']), tuple(wc['new']), walls,
+                             speed_y=0.0, wall_h=WALL_H, wall_r=WALL_R)
+    assert info['wall_hit'] is True
+    assert pos[0] == wc['ejected'][0], ('x', pos[0], wc['ejected'][0])
+    assert pos[2] == wc['ejected'][2], ('z', pos[2], wc['ejected'][2])
 
 
 def test_attention_region_boundaries():

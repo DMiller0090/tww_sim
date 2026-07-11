@@ -35,8 +35,13 @@ Constants live in ``knowledge/reference/constants.md`` (Zl1 follow + attention);
 page is ``knowledge/mechanics/tetra-follow.md``.
 """
 from .fp import f32 as _f, fadds, fsubs, fmuls, fmadds
-from .collision import fsqrt
+from .collision import fsqrt, acch_crr_pos
 from . import mathlib as S
+
+# Tetra's BG wall-check cylinder: a single dBgS_AcchCir SetWall(halfH=30, R=50) (d_a_npc_zl1.cpp:3022);
+# her mObjAcch (dBgS_ObjAcch : dBgS_Acch, no CrrPos override) runs the Phase-W acch_crr_pos. KB: tetra-follow.md.
+WALL_R = 50.0
+WALL_H = (30.0,)
 
 # --- Zl1 HIO follow params (daNpc_Zl1_HIO_c::daNpc_Zl1_HIO_c a_prm_tbl, d_a_npc_zl1.cpp:85) ---
 FOLLOW_KEEP_DIST = 130.0        # field_34: the distance she holds (target speed 0 at/below it)
@@ -203,29 +208,44 @@ class Zl1FollowState:
         raise ValueError("Zl1FollowState models only the type-5 idle/move follow states "
                          "(stt 3/4); got stt=%r" % (self.stt,))
 
-    def step(self, link_pos, cc_move=(0.0, 0.0, 0.0), ground_y=None):
+    def step(self, link_pos, cc_move=(0.0, 0.0, 0.0), ground_y=None, walls=None):
         """Advance one game frame given Link's world position ``link_pos`` (x, y, z).
 
         Order matches ``daNpc_Zl1_c::_execute`` (type-5 gameplay path): run the action function
         (sets ``speedF`` + turns ``angle.y``), then ``posMoveF(this, GetCCMoveP())`` == ``calcSpeed``
         (XZ from ``speedF`` along ``angle.y``; Y += gravity) + ``posMove`` (pos += speed, then +=
-        the consumed CC recoil ``cc_move``), then the flat-ground ``CrrPos`` Y clamp.
+        the consumed CC recoil ``cc_move``), then ``mObjAcch.CrrPos`` (the wall pass + ground clamp).
 
         ``cc_move`` = Tetra's ``m_cc_move`` recoil consumed this frame (0 when not overlapping
         Link; wired up by the CC-push integration). ``ground_y`` = flat floor height to clamp Y to
-        (None leaves Y integrating under gravity -- only correct in freefall, not the corner)."""
+        (None leaves Y integrating under gravity). ``walls`` = the room's ordered wall tris
+        (``land.walls.load_ordered_mesh``) to run her per-frame ``CrrPos`` wall correction with her
+        R=50 / half-H=30 cylinder; None skips it (open-area follow, no wall in reach)."""
         self._run_action(link_pos)
 
+        old = (self.x, self.y, self.z)                     # pm_old_pos (frame-start, ground-snapped)
         # calcSpeed: xSpeed = speedF * cM_ssin(angle.y); zSpeed = speedF * cM_scos(angle.y).
         # cM_ssin/cM_scos take the s16 angle directly (JMASSin/JMASCos table lookup).
         x_speed = fmuls(self.speedF, S.cM_ssin_s16(self.angle_y))
         z_speed = fmuls(self.speedF, S.cM_scos_s16(self.angle_y))
         # posMove: pos += speed, then += CC recoil (componentwise f32 adds).
-        self.x = fadds(fadds(self.x, x_speed), _f(cc_move[0]))
-        self.z = fadds(fadds(self.z, z_speed), _f(cc_move[2]))
-        # Y: gravity then flat-ground CrrPos clamp (the Tetra floor is flat -- Phase G).
-        y_speed = fadds(self.y, _f(GRAVITY)) if ground_y is None else self.y
-        self.y = fadds(y_speed, _f(cc_move[1])) if ground_y is None else _f(ground_y)
+        nx = fadds(fadds(old[0], x_speed), _f(cc_move[0]))
+        nz = fadds(fadds(old[2], z_speed), _f(cc_move[2]))
+        # Y: on the flat corner floor/water she floats with speed.y == 0 (live), so the CrrPos slice
+        # sees speed_y = 0 (a -4.5 dip mis-ejects a wall-corrected XZ by 1 ULP); free-fall accrues it.
+        if ground_y is not None:
+            sy = _f(0.0)
+            ny = old[1]
+        else:
+            sy = _f(GRAVITY)
+            ny = fadds(fadds(old[1], sy), _f(cc_move[1]))
+
+        if walls is not None:
+            # mObjAcch.CrrPos wall pass (same dBgS_Acch::CrrPos core as Phase W), her cylinder.
+            (nx, ny, nz), _info = acch_crr_pos(old, (nx, ny, nz), walls,
+                                               speed_y=sy, wall_h=WALL_H, wall_r=WALL_R)
+        self.x, self.z = nx, nz
+        self.y = _f(ground_y) if ground_y is not None else ny
         return self
 
 

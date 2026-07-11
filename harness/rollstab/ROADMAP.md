@@ -69,16 +69,21 @@ gets too far) plus the LOCK-ON/TALK region (so a planner avoids accidentally tal
 `tww_sim/core/npc_zl1.Zl1FollowState` (the `optn_1`/`optn_2` idle<->move follow: engage > 230, turn,
 accelerate to `0.04*sqrt(dist^2-130^2)` capped 10, stop <= 130) is **live-gated 0-ULP** on slot 3
 (`capture_tetra_follow.py`, `tests/test_tetra_follow.py`), and `zl1_attention_active` is the
-decomp-exact avoid predicate (`dist_table[0xAB]`: XZ < 300, ±90deg cone). Mechanic page
-`knowledge/mechanics/tetra-follow.md`.
+decomp-exact avoid predicate (`dist_table[0xAB]`: XZ < 300, ±90deg cone). Her **BG collision** is
+modelled too (`mObjAcch.CrrPos` = the same Phase-W `dBgS_Acch::CrrPos`, `dBgS_ObjAcch` subclass, her
+single R=50/half-H=30 AcchCir; `step(walls=)`), LIVE-GATED 0-ULP by a corner-wall eject. This
+WallCorrect is the **wall-brace** the plan relies on: push Tetra into the corner, roll in for the
+slash, and the wall cancels her CC recoil so she holds as a stable pusher delivering the nudge.
+Mechanic page `knowledge/mechanics/tetra-follow.md`.
 
 Still missing to close Phase C:
 - The per-frame `GetCCMoveP` term at the decomp's exact point in the frame (wire Tetra's `m_cc_move`
   recoil, which `Zl1FollowState.step` already accepts via `cc_move`, into the CC pass).
 - The three-way ordering CC-push -> WallCorrect -> net overlap (this interaction IS the clip
-  mechanism; order comes from the decomp, not intuition).
+  mechanism; order comes from the decomp, not intuition). NOTE the wall-brace: WallCorrect on Tetra
+  cancels her recoil when she is wedged in the corner, so a wedged Tetra pushes like an immovable.
 - Live reticle confirmation of the attention region; the Tetra read-lag (the follow gate used a
-  stationary Link); walls/gap-jump in the follow path (reuse `core.collision`).
+  stationary Link); the `move_jmp` gap hop (unmodelled, no gate needs it yet).
 
 ## Phase R -- residuals (parallel, pick up when they block)
 
