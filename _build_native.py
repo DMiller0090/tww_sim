@@ -9,17 +9,23 @@ All are OPTIONAL: when a .pyd is absent the pure-Python fallbacks run (same resu
     python _build_native.py _collc     # build only the collision accelerator
 """
 import sys
-from setuptools import setup
+from setuptools import setup, Extension
 from Cython.Build import cythonize
 
 _SOURCES = {
     "_fpc": "tww_sim/core/_fpc.pyx",
     "_anmc": "tww_sim/core/anim/_anmc.pyx",
     "_collc": "tww_sim/core/_collc.pyx",
+    "_shovec": "tww_sim/core/_shovec.pyx",
 }
+# _shovec's sweep_par uses OpenMP (prange); MSVC flag. Exactness is untouched: /openmp does not
+# change FP codegen, and every op is an explicit <float> cast.
+_OMP = {"_shovec": ["/openmp"]}
 
 sel = [a for a in sys.argv[1:] if a in _SOURCES]
-srcs = [_SOURCES[k] for k in (sel or _SOURCES)]
+exts = [Extension(_SOURCES[k].replace("/", ".").rsplit(".pyx", 1)[0].replace(".pyx", ""),
+                  [_SOURCES[k]], extra_compile_args=_OMP.get(k, []))
+        for k in (sel or _SOURCES)]
 # strip our own args so setuptools only sees build_ext
 sys.argv = [sys.argv[0], "build_ext", "--inplace"]
-setup(name="tww_sim_native", ext_modules=cythonize(srcs, language_level=3))
+setup(name="tww_sim_native", ext_modules=cythonize(exts, language_level=3))

@@ -1,0 +1,1377 @@
+{
+ "stage": "Hyrule",
+ "slot": 6,
+ "ground_y": 0.1632676,
+ "link_base": "0x80ac6c6c",
+ "tetra_base": "0x80acd20c",
+ "tetra_placed_at": 18,
+ "tetra_placed_xz": [
+  -1665.0,
+  -936.0
+ ],
+ "sword_drawn": false,
+ "seq": [
+  "seed",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "walk",
+  "roll",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "thrust",
+  "hold",
+  "hold",
+  "hold",
+  "hold",
+  "hold"
+ ],
+ "frames": [
+  {
+   "f": 0,
+   "tag": "seed",
+   "link": {
+    "proc": 4,
+    "pos": [
+     -1362.3699951171875,
+     0.16326218843460083,
+     -608.7899780273438
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 0.0,
+    "nspeed": 0.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -4.336732387542725,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   }
+  },
+  {
+   "f": 1,
+   "tag": "walk",
+   "link": {
+    "proc": 4,
+    "pos": [
+     -1362.3699951171875,
+     0.16326218843460083,
+     -608.7899780273438
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 0.0,
+    "nspeed": 0.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -13.336732864379883,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 2,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1362.3699951171875,
+     0.16326218843460083,
+     -608.7899780273438
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 0.0,
+    "nspeed": 3.5,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -26.836732864379883,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 3,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1364.2252197265625,
+     0.16326160728931427,
+     -610.6912841796875
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 2.6564340591430664,
+    "nspeed": 7.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -44.83673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 4,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1368.6077880859375,
+     0.16326022148132324,
+     -615.1828002929688
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 6.275449275970459,
+    "nspeed": 10.5,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -67.33673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 5,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1376.462158203125,
+     0.16325774788856506,
+     -623.232421875
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 11.24669361114502,
+    "nspeed": 14.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -94.33673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 6,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1388.3345947265625,
+     0.1632540076971054,
+     -635.3998413085938
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 17.0,
+    "nspeed": 17.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -125.83673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 7,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1400.20703125,
+     0.16325028240680695,
+     -647.5672607421875
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 17.0,
+    "nspeed": 17.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -161.83673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 8,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1412.0794677734375,
+     0.16324907541275024,
+     -659.7346801757812
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 17.0,
+    "nspeed": 17.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -202.33673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 9,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1423.951904296875,
+     0.16324998438358307,
+     -671.902099609375
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 17.0,
+    "nspeed": 17.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -247.33673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 10,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1435.8243408203125,
+     0.1632509082555771,
+     -684.0695190429688
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 17.0,
+    "nspeed": 17.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -296.83673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 11,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1447.69677734375,
+     0.1632518172264099,
+     -696.2369384765625
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 17.0,
+    "nspeed": 17.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -350.83673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 12,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1459.5692138671875,
+     0.16325272619724274,
+     -708.4043579101562
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 17.0,
+    "nspeed": 17.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -409.33673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 13,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1471.441650390625,
+     0.16325365006923676,
+     -720.57177734375
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 17.0,
+    "nspeed": 17.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -472.33673095703125,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 14,
+   "tag": "walk",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1483.3140869140625,
+     0.16325455904006958,
+     -732.7391967773438
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 17.0,
+    "nspeed": 17.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -539.8367309570312,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 15,
+   "tag": "roll",
+   "link": {
+    "proc": 6,
+    "pos": [
+     -1495.1865234375,
+     0.1632554680109024,
+     -744.9066162109375
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 17.0,
+    "nspeed": 17.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -611.8367309570312,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 256,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 16,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1513.3443603515625,
+     0.1632559597492218,
+     -763.515625
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -688.3367309570312,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 17,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1531.502197265625,
+     0.16325736045837402,
+     -782.1246337890625
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1670.0,
+     -769.3367309570312,
+     -3000.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 18,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1549.6600341796875,
+     0.16325876116752625,
+     -800.733642578125
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1665.0,
+     0.16326892375946045,
+     -936.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 19,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1567.81787109375,
+     0.16326016187667847,
+     -819.3426513671875
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1665.0,
+     0.16326892375946045,
+     -936.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 20,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1585.9757080078125,
+     0.1632615476846695,
+     -837.95166015625
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1665.0,
+     0.16326892375946045,
+     -936.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 21,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1604.133544921875,
+     0.16326294839382172,
+     -856.5606689453125
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1665.0,
+     0.16326892375946045,
+     -936.0
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 22,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1618.94775390625,
+     0.16326400637626648,
+     -870.6414794921875
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1668.3436279296875,
+     0.16326923668384552,
+     -940.255615234375
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 23,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1631.9561767578125,
+     0.16326476633548737,
+     -880.6868286132812
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1673.4930419921875,
+     0.16326923668384552,
+     -940.255615234375
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 24,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1644.1312255859375,
+     0.1632654070854187,
+     -889.2423095703125
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1677.4603271484375,
+     0.16326923668384552,
+     -940.2357177734375
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 25,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1654.8570556640625,
+     0.16326577961444855,
+     -894.1321411132812
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1677.4608154296875,
+     0.16326923668384552,
+     -940.1821899414062
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 26,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1666.375244140625,
+     0.16326594352722168,
+     -896.427734375
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1677.460693359375,
+     0.16326923668384552,
+     -940.1900024414062
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 27,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1680.516845703125,
+     0.1632661074399948,
+     -898.6073608398438
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1677.46044921875,
+     0.16326923668384552,
+     -940.2159423828125
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 28,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1692.843505859375,
+     0.16326633095741272,
+     -901.5299682617188
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1677.4600830078125,
+     0.16326923668384552,
+     -940.2515258789062
+    ],
+    "shape_y": 7043,
+    "angle_y": 7043,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 29,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1692.802001953125,
+     0.1632666438817978,
+     -905.7409057617188
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1675.1507568359375,
+     0.16326923668384552,
+     -940.255615234375
+    ],
+    "shape_y": 4995,
+    "angle_y": 4995,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 30,
+   "tag": "thrust",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1692.7733154296875,
+     0.1632668673992157,
+     -908.6351928710938
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1671.3887939453125,
+     0.16326923668384552,
+     -940.255615234375
+    ],
+    "shape_y": 2947,
+    "angle_y": 2947,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 512,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 31,
+   "tag": "hold",
+   "link": {
+    "proc": 30,
+    "pos": [
+     -1692.751953125,
+     0.16326703131198883,
+     -910.7935791015625
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1662.607421875,
+     0.16326923668384552,
+     -940.255615234375
+    ],
+    "shape_y": 899,
+    "angle_y": 899,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 32,
+   "tag": "hold",
+   "link": {
+    "proc": 66,
+    "pos": [
+     -1692.5799560546875,
+     0.1632683426141739,
+     -928.2022094726562
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 26.0,
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1649.2578125,
+     0.16326923668384552,
+     -940.255615234375
+    ],
+    "shape_y": 64387,
+    "angle_y": 64387,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 33,
+   "tag": "hold",
+   "link": {
+    "proc": 66,
+    "pos": [
+     -1692.4808349609375,
+     0.16326908767223358,
+     -938.2329711914062
+    ],
+    "shape_y": 40842,
+    "angle_y": 40842,
+    "speedF": 12.250000953674316,
+    "nspeed": 12.250000953674316,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1633.5953369140625,
+     0.16326923668384552,
+     -940.255615234375
+    ],
+    "shape_y": 62339,
+    "angle_y": 62339,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 34,
+   "tag": "hold",
+   "link": {
+    "proc": 90,
+    "pos": [
+     -1692.5643310546875,
+     0.16326846182346344,
+     -929.7889404296875
+    ],
+    "shape_y": 40842,
+    "angle_y": 8074,
+    "speedF": 12.0,
+    "nspeed": 12.0,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1623.0789794921875,
+     0.16326923668384552,
+     -940.0906372070312
+    ],
+    "shape_y": 60291,
+    "angle_y": 60291,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  },
+  {
+   "f": 35,
+   "tag": "hold",
+   "link": {
+    "proc": 90,
+    "pos": [
+     -1692.0220947265625,
+     0.1632678061723709,
+     -921.0797119140625
+    ],
+    "shape_y": 40842,
+    "angle_y": 8074,
+    "speedF": 10.875,
+    "nspeed": 10.875,
+    "shape_z": 0,
+    "m351C": 0
+   },
+   "tetra": {
+    "pos": [
+     -1616.0263671875,
+     0.16326923668384552,
+     -940.255615234375
+    ],
+    "shape_y": 58243,
+    "angle_y": 58243,
+    "speedF": 0.0,
+    "stt": 2
+   },
+   "inp": {
+    "stickX": 128,
+    "stickY": 255,
+    "substickX": 128,
+    "substickY": 128,
+    "buttons": 0,
+    "triggerL": 0
+   }
+  }
+ ]
+}

@@ -172,6 +172,19 @@ the golden push STATICALLY, but that is not the dynamically-reachable push (see 
     is blocked on coupled-sim SPEED (~1.3s/sim, 99% in `acch_crr_pos` over all 765 walls; needs the Phase-W
     wall cull + precomputed roll/cut tables before a timing x placement sweep is feasible).
 
+19. **Plow-mediated Tetra staging never clips at the slot-6 straight-in corner (session 21, exhaustive).**
+    With the exact >=100k sims/sec engine (`tww_sim/core/_shovec`), 13M+ coupled sims over placement
+    x[-1725,-1600] z[-1000,-860] x thrust steps 13/14/15 x EVERY placement step earlier than the last
+    pre-cut step: 0 genuine. ~98% of un-walled cut endpoints are already BEHIND the seam plane -- the razor
+    is the CrrPos block, and a plow-perturbed `old` never lands on a threading sliver. This closes the
+    session-20 "not proven across timings" gap for this approach line. The staging that DOES clip (and was
+    live-confirmed) is the last-pre-cut-step graze placement: `old` stays on the wall pin, one clean push.
+
+20. **Transferring a threading push between different `old`s (session 21).** The session-18 golden push
+    (-0.618,-0.427) does NOT thread from the straight-roll wall pin (`pred_genuine(pin, golden)` False):
+    the acceptance slivers are a function of `old`'s exact bits. Search pushes per-old (the polar graze
+    sweep over the FULL angular range, 0.05 deg x 0.002u depth); never re-aim a known-good push at a new old.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

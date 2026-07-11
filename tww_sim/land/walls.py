@@ -52,6 +52,25 @@ def load_ordered_mesh(path):
     return [_mk_tri(t) for t in mesh["polys"]]
 
 
+def cull_walls(tris, xmin, zmin, xmax, zmax, margin=250.0):
+    """Order-preserving XZ AABB cull (the Phase-W speed edge): drop tris whose XZ bounding box
+    misses the run's region expanded by ``margin``. Far polys are exact no-ops in both LineCheck
+    (the swept segment stays inside the region) and WallCorrect (interaction reach is bounded by
+    wall_r + the r-offset, << margin), so the culled pass is BIT-IDENTICAL to the full mesh for
+    any trajectory confined to the region -- validate per run (gate: tests/test_shove_fixture.py).
+    Region = the AABB of every position either actor visits; pick ``margin`` >= wall reach
+    (2*wall_r) + the largest single-frame displacement (cut lunge ~50u) with headroom."""
+    x0, z0, x1, z1 = xmin - margin, zmin - margin, xmax + margin, zmax + margin
+    out = []
+    for t in tris:
+        xs = (t.v0[0], t.v1[0], t.v2[0])
+        zs = (t.v0[2], t.v1[2], t.v2[2])
+        if max(xs) < x0 or min(xs) > x1 or max(zs) < z0 or min(zs) > z1:
+            continue
+        out.append(t)
+    return out
+
+
 def sidle_blocks_roll(st):
     """The A-dispatch guard: TRUE when the game would offer SIDLE instead of the roll, so the
     sim must NOT roll (the sidle proc itself is deliberately unmodeled -- planners just avoid

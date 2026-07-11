@@ -116,6 +116,40 @@ def roll_co_center(pos_x, pos_z, facing, frame, shape_z=0):
     return cx, cz
 
 
+def roll_co_chain_consts(facing, frame, shape_z=0):
+    """EXACT decomposition of :func:`roll_co_center` into position-independent per-level translate
+    constants, for the table-driven fast coupled engine (Phase T search).
+
+    In ``fk.mtx_concat`` the world translate column accumulates as ``t' = fadds(dot, t)`` where
+    ``dot`` = (accumulated rotation row) . (local translate) -- both position-INdependent for a
+    fixed (facing, lean, anim frame). The base translate is exactly ``pos`` (a lean concat leaves
+    it untouched: the Z-rot's translate column is 0). So the centre is reproduced bit-exactly by
+    chaining constant f32 adds onto ``pos``::
+
+        tx = pos_x;  for c in chain: tx = fadds(c[0], tx)      # same for z with c[1]
+        cx = fmuls(0.5, fadds(tx_root, tx_neck))
+
+    Returns ``(root_chain, neck_chain)``: each a list of (cx, cz) f32 constants, one per joint
+    level. Gated identical to ``roll_co_center`` in tests/test_shove_fast.py."""
+    anm, ch_root, ch_neck = _chains()
+    roll = anm['rollf']
+    base, _ = fk.world_base(0.0, 0.0, 0.0, facing, shape_z)
+
+    def consts(chain):
+        cur = [row[:] for row in base]
+        out = []
+        for j in chain:
+            lm = _local_mtx(roll, j, frame)
+            dots = [fp.fmadds(cur[i][2], lm[2][3],
+                              fp.fmadds(cur[i][1], lm[1][3],
+                                        fp.fmuls(cur[i][0], lm[0][3]))) for i in range(3)]
+            out.append((dots[0], dots[2]))
+            cur = fk.mtx_concat(cur, lm)
+        return out
+
+    return consts(ch_root), consts(ch_neck)
+
+
 def available():
     """True iff the generated anim + skeleton data is present."""
     try:
