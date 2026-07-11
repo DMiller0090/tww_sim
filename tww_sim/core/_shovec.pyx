@@ -963,11 +963,16 @@ cdef class ShoveCtx:
         return self.cos_t[(ang & 0xFFFF) >> 4]
 
     cdef int _run(self, double place_x, double place_z, int placed_step,
-                  double* out, double* trace, int* candbuf) noexcept nogil:
+                  double* out, double* trace, int* candbuf,
+                  double link_x0, double link_z0) noexcept nogil:
         """The coupled roll from entry through the CUT entry step. ``out`` (12 doubles):
         [genuine, old_x, old_z, new_x, new_z, push_x, push_z, engaged, tet_x, tet_z, behindA, behindB].
-        ``trace`` (optional, nsteps*4): per-step (link_x, link_z, tet_x, tet_z). Returns 0."""
-        cdef double lx = self.link_x0, lz = self.link_z0, ly = self.link_y
+        ``trace`` (optional, nsteps*4): per-step (link_x, link_z, tet_x, tet_z). ``link_x0/z0`` =
+        Link's roll-entry position (a SEARCH KNOB: the schedule tables are position-independent,
+        so shifting the entry point -- roll timing along the approach line, or a lateral offset --
+        reuses the same compiled schedule). ``placed_step=0`` seeds Tetra as an INITIAL condition
+        (no mid-run write). Returns 0."""
+        cdef double lx = f32(link_x0), lz = f32(link_z0), ly = self.link_y
         cdef double tx = self.tet_x0, ty = self.tet_y0, tz = self.tet_z0
         cdef int tang = self.tet_ang0
         cdef double tspd = self.tet_speedF0
@@ -1120,22 +1125,29 @@ cdef class ShoveCtx:
         out[11] = _plane_func(self.wb[0], self.wb[1], self.wb[2], self.wb[3], f32(pred_x), self.link_geo_y, f32(pred_z))
         return 0
 
-    def run_one(self, double place_x, double place_z, int placed_step):
-        """One placement -> dict(genuine, old, new, push, engaged, tetra, behind)."""
+    def run_one(self, double place_x, double place_z, int placed_step,
+                link_x0=None, link_z0=None):
+        """One placement -> dict(genuine, old, new, push, engaged, tetra, behind).
+        ``link_x0/z0`` override Link's roll-entry position (default: the schedule's)."""
         cdef double out[12]
+        cdef double lx0 = self.link_x0 if link_x0 is None else link_x0
+        cdef double lz0 = self.link_z0 if link_z0 is None else link_z0
         cdef int* cb = <int*>malloc(self.ntris * sizeof(int))
-        self._run(place_x, place_z, placed_step, out, NULL, cb)
+        self._run(place_x, place_z, placed_step, out, NULL, cb, lx0, lz0)
         free(cb)
         return dict(genuine=bool(out[0]), old=(out[1], out[2]), new=(out[3], out[4]),
                     push=(out[5], out[6]), engaged=bool(out[7]), tetra=(out[8], out[9]),
                     behind=(out[10], out[11]))
 
-    def run_trace(self, double place_x, double place_z, int placed_step):
+    def run_trace(self, double place_x, double place_z, int placed_step,
+                  link_x0=None, link_z0=None):
         """One placement -> (result_dict, per-step [(link_x, link_z, tet_x, tet_z), ...])."""
         cdef double out[12]
+        cdef double lx0 = self.link_x0 if link_x0 is None else link_x0
+        cdef double lz0 = self.link_z0 if link_z0 is None else link_z0
         cdef double* tr = <double*>malloc(self.nsteps * 4 * sizeof(double))
         cdef int* cb = <int*>malloc(self.ntris * sizeof(int))
-        self._run(place_x, place_z, placed_step, out, tr, cb)
+        self._run(place_x, place_z, placed_step, out, tr, cb, lx0, lz0)
         free(cb)
         steps = [(tr[k * 4], tr[k * 4 + 1], tr[k * 4 + 2], tr[k * 4 + 3])
                  for k in range(self.cut_step + 1)]
@@ -1144,38 +1156,52 @@ cdef class ShoveCtx:
                      push=(out[5], out[6]), engaged=bool(out[7]), tetra=(out[8], out[9]),
                      behind=(out[10], out[11])), steps)
 
-    def sweep(self, placements, int placed_step):
+    def sweep(self, placements, int placed_step, link_x0=None, link_z0=None):
         """Evaluate many placements (single-threaded); returns list of (genuine, old_x, old_z,
         new_x, new_z, push_x, push_z, engaged, behindA, behindB) per placement."""
         cdef double out[12]
         cdef double px, pz
+        cdef double lx0 = self.link_x0 if link_x0 is None else link_x0
+        cdef double lz0 = self.link_z0 if link_z0 is None else link_z0
         cdef int* cb = <int*>malloc(self.ntris * sizeof(int))
         res = []
         for (px, pz) in placements:
-            self._run(px, pz, placed_step, out, NULL, cb)
+            self._run(px, pz, placed_step, out, NULL, cb, lx0, lz0)
             res.append((bool(out[0]), out[1], out[2], out[3], out[4],
                         out[5], out[6], bool(out[7]), out[10], out[11]))
         free(cb)
         return res
 
-    def sweep_par(self, placements, int placed_step):
+    def sweep_par(self, placements, int placed_step, link_x0=None, link_z0=None):
         """OpenMP parallel sweep over placements (bit-identical to sweep; runs are independent).
-        Returns the same tuple list."""
+        Also accepts per-item 4-tuples (px, pz, lx0, lz0) to vary Link's entry point in the same
+        sweep (the plow-aside search: Tetra initial spot x Link entry). Returns the same tuple list."""
         cdef Py_ssize_t n = len(placements), i
-        cdef double* pxz = <double*>malloc(n * 2 * sizeof(double))
+        cdef double* pxz = <double*>malloc(n * 4 * sizeof(double))
         cdef double* outs = <double*>malloc(n * 12 * sizeof(double))
         cdef int nt = self.ntris
+        cdef double dlx0 = self.link_x0 if link_x0 is None else link_x0
+        cdef double dlz0 = self.link_z0 if link_z0 is None else link_z0
         cdef int* cb
         for i in range(n):
-            pxz[i * 2 + 0] = placements[i][0]
-            pxz[i * 2 + 1] = placements[i][1]
+            it = placements[i]
+            pxz[i * 4 + 0] = it[0]
+            pxz[i * 4 + 1] = it[1]
+            pxz[i * 4 + 2] = it[2] if len(it) > 2 else dlx0
+            pxz[i * 4 + 3] = it[3] if len(it) > 2 else dlz0
         with nogil, parallel():
             cb = <int*>malloc(nt * sizeof(int))    # thread-private candidate buffer
             for i in prange(n, schedule='static'):
-                self._run(pxz[i * 2], pxz[i * 2 + 1], placed_step, outs + i * 12, NULL, cb)
+                self._run(pxz[i * 4], pxz[i * 4 + 1], placed_step, outs + i * 12, NULL, cb,
+                          pxz[i * 4 + 2], pxz[i * 4 + 3])
             free(cb)
         res = [(bool(outs[i * 12]), outs[i * 12 + 1], outs[i * 12 + 2], outs[i * 12 + 3],
                 outs[i * 12 + 4], outs[i * 12 + 5], outs[i * 12 + 6], bool(outs[i * 12 + 7]),
                 outs[i * 12 + 10], outs[i * 12 + 11]) for i in range(n)]
         free(pxz); free(outs)
         return res
+
+    @property
+    def entry(self):
+        """(link_x0, link_z0, cut_step): the schedule's default roll-entry point + cut step."""
+        return (self.link_x0, self.link_z0, self.cut_step)

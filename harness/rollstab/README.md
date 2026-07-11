@@ -75,7 +75,20 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-- **Phase T (session 21): THE TETRA SEAM CLIP IS LIVE-CONFIRMED -- one-shot, planned pure-sim.**
+- **Phase T (session 21b, Dereck's correction): the ACCEPTED mechanism is the PUSH-ASIDE -- Tetra
+  stands in place from the start (an initial setup var) and Link's roll PLOWS her aside into the
+  clip-delivering position. NO mid-run writes.** The session-21 live "clip" below placed Tetra by
+  teleport ON the last pre-cut frame -- that is a mid-run hack, so it is a VALIDATION artifact (it
+  live-proves the engine, the graze-push physics, and the acceptance 0-ULP end-to-end), NOT the
+  solve. The push-aside is NOT impossible: manual testing produced a **50.6u displacement** even
+  with a bad angle/position (the clip needs ~49.99), so the earlier "plow-mediated staging never
+  clips" result only means the SEARCHED SLICE was too thin -- one Link approach line, one entry
+  point, 3 thrust steps. The search must widen: **roll timing (= Link's roll-entry point along the
+  approach line -- the biggest knob, now a per-run engine param `link_x0/z0`, gated 15/15 vs the
+  Python engine), Link lateral placement, a much wider/finer Tetra initial-position space, thrust
+  timing, and roll angle (a schedule re-extract with a facing override)**. Tetra-from-the-start =
+  `placed_step=0` (an initial condition, not a hack). See the session-21 handoff for the search plan.
+- **Phase T (session 21): the fast exact engine + a teleport-staged live validation.**
   The two session-20 blockers fell in one session:
   1. **The fast coupled sim (>=100k sims/sec, EXACT -- not a predictor).** `tww_sim/core/_shovec.pyx`
      (build: `python _build_native.py _shovec`) runs the full coupled Link-roll + Tetra dynamics in C:
@@ -90,30 +103,31 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
      OpenMP `sweep_par`. Gated BIT-IDENTICAL to the live-validated Python `couple_replay` engine per
      placement (`harness/rollstab/fast_shove.py::gate_vs_reference`; `tests/test_shove_fast.py`).
      1.3 s/sim -> ~10 us/sim: a ~130,000x speedup.
-  2. **The staging that threads (found by `harness/rollstab/search_shove.py`).** Plow-mediated pushes
-     never clip (13M+ coarse sims, 0 genuine -- session-20's mutual exclusion holds: a plow knocks
-     `old` off the pin). The winner is the **last-pre-cut-step graze**: teleport-place Tetra on the
-     pre-cut Co-centre's graze circle at the LAST step before the CUT dispatch, so `old` stays exactly
-     on the wall pin and exactly ONE overlap check feeds the cut with a clean ~0.6-0.83u seam-ward
-     push. The polar micro-search (angle 0.05 deg x depth 0.002u; the push sliver is dust, a 0.25u
-     grid finds nothing) found **10 genuine coupled clips across 3 thrust timings**, all bit-confirmed
-     vs the Python engine. NOTE: the pin `old` has its OWN slivers -- the session-18 golden push does
-     NOT thread from it (`pred_genuine(pin, golden_push)` is False); never transfer a push between olds.
-  3. **LIVE (slot 6): the clip happened.** `capture_cc_push slot=6 ... thrust_at=14 place_after_roll=14
-     tcx=-1625.9922189608035 tcz=-923.4329080655332`: Link rolls to the pin (-1692.3143311, -955.0761108),
-     Tetra appears on the graze, the UP+B CUT_F fires, and Link lands at **(-1727.45263671875,
-     -990.7470703125)** -- bit-for-bit the sim's genuine `new`, BEHIND the seam past the (-1727,-990)
-     corner. Replay: both actors 0-ULP on the placement + clip frames (the parked-Tetra free-fall rows
-     and the post-clip CUT tail are the known out-of-scope gaps). Locked fixture
-     `fixtures/hyrule_tetra_clip_live.json`, gate `tests/test_shove_fast.py` (also gates the cull, the
-     chain-consts decomposition, and native==Python). Per the targeted-oneshot directive the Tetra
-     placement is a teleport (setup vars controlled); staging her there by gameplay = TAS-replication,
-     explicitly later.
+  2. **A teleport-staged staging that threads (found by `harness/rollstab/search_shove.py`), kept as
+     validation only (see 21b -- it is a mid-run hack, not the accepted mechanism).** The coarse sweep
+     (13M+ sims, ONE approach line / entry point x thrust 13-15 x all placement steps) found no
+     plow-mediated clip in THAT slice; the **last-pre-cut-step graze** (Tetra teleported onto the
+     pre-cut Co-centre's graze circle so `old` stays on the wall pin and one clean ~0.6-0.83u
+     seam-ward push feeds the cut) found **10 genuine coupled clips across 3 thrust timings** via the
+     polar micro-search (angle 0.05 deg x depth 0.002u; the push sliver is dust, a 0.25u grid finds
+     nothing), all bit-confirmed vs the Python engine. NOTE: acceptance slivers are per-`old`-bits --
+     the session-18 golden push does NOT thread from the pin (`pred_genuine(pin, golden_push)` is
+     False); never transfer a push between olds.
+  3. **LIVE (slot 6): the teleport-staged clip reproduced, proving the whole physics chain.**
+     `capture_cc_push slot=6 ... thrust_at=14 place_after_roll=14 tcx=-1625.9922189608035
+     tcz=-923.4329080655332`: Link rolls to the pin (-1692.3143311, -955.0761108), Tetra appears on
+     the graze, the UP+B CUT_F fires, and Link lands at **(-1727.45263671875, -990.7470703125)** --
+     bit-for-bit the sim's genuine `new`, BEHIND the seam past the (-1727,-990) corner. Replay: both
+     actors 0-ULP on the placement + clip frames (the parked-Tetra free-fall rows and the post-clip
+     CUT tail are the known out-of-scope gaps). Locked fixture `fixtures/hyrule_tetra_clip_live.json`,
+     gate `tests/test_shove_fast.py` (also gates the cull, the chain-consts decomposition, and
+     native==Python). This retires any doubt about the engine, the CC push, the cut lunge, or the
+     acceptance -- the remaining problem is purely the SEARCH for a no-hack staging (21b).
   - Also new: `land.walls.cull_walls` (order-preserving exact AABB cull), `fixtures/hyrule_shove_roll6.json`
     (the session-20 live shove capture, promoted from scratchpad -- the engine's gate fixture).
-  - Open next: from-rest planning (this clip seeds at the roll-entry anchor state; a full from-rest
-    one-shot needs the slot-6 walk-up modeled from a rest anchor, cf. the kaze `rest.rest_state`),
-    gameplay-staged (non-teleport) Tetra placement, and the descoped CUT-tail/post-clip recovery.
+  - Open next (see 21b): the WIDE push-aside search (roll timing / Link entry / Tetra initial
+    position / thrust timing / roll angle); then from-rest planning (the slot-6 walk-up modeled from
+    a rest anchor, cf. the kaze `rest.rest_state`); the descoped CUT-tail/post-clip recovery.
 - **Phase T (session 20): un-braced Tetra shove + roll-stab CUT_F entry LIVE-VALIDATED 0-ULP; the
   placement search was BLOCKED on coupled-sim SPEED (now resolved, above).** On slot 6 (Dereck's ideal setup: Link facing/camera
   40842 on-axis, sword DRAWN, ~528u runway) a straight roll into a movable behind-placed Tetra plows +

@@ -6,17 +6,18 @@ coupled sims/sec):
 1. **Coarse region sweep** (``coarse``): placement grid x thrust step x placement step. Session-20
    result reproduced: plow-mediated pushes never thread (large chaotic pushes knock ``old`` off the
    pin) -- 13M+ sims, 0 genuine.
-2. **Polar micro-search** (``polar``, the one that HIT): place Tetra at the LAST pre-cut step so
-   ``old`` stays exactly on the wall pin and exactly ONE overlap check feeds the cut, then sweep her
-   f32 placement on the pre-cut graze circle (angle x depth). The graze push is a fine continuous
-   knob (~0.5 x depth, aimed along the centre line), and the acceptance slivers are dust -- the fine
-   sweep (0.05 deg x 0.002u) finds them. 2026-07-11: 10 genuine coupled clips (3 thrust timings),
-   all bit-confirmed vs the Python engine, and the first LIVE-confirmed one-shot Tetra seam clip
-   (``fixtures/hyrule_tetra_clip_live.json``: old (-1692.3143311, -955.0761108) -> new
-   (-1727.4526367, -990.7470703), proc CUT_F, 0-ULP vs the sim on the placement + clip frames).
+2. **Polar micro-search** (``polar``): place Tetra at the LAST pre-cut step so ``old`` stays exactly
+   on the wall pin and exactly ONE overlap check feeds the cut, then sweep her f32 placement on the
+   pre-cut graze circle (angle x depth). 2026-07-11: 10 genuine coupled clips (3 thrust timings),
+   all bit-confirmed vs the Python engine, one LIVE-reproduced
+   (``fixtures/hyrule_tetra_clip_live.json``, 0-ULP on the placement + clip frames). **VALIDATION
+   ONLY** (Dereck, session 21b): the mid-run placement is a hack -- it proves the engine, the graze
+   push, and the acceptance end-to-end, but the ACCEPTED mechanism is the PUSH-ASIDE (Tetra standing
+   from the start, plowed aside by the roll; ``placed_step=0`` + the ``link_x0/z0`` roll-timing knob).
+   The coarse empty result covered ONE approach line/entry/angle only -- see dead-end #19's scope.
 
 Usage (offline, no Dolphin):
-    python -m harness.rollstab.search_shove polar          # the winning micro-search
+    python -m harness.rollstab.search_shove polar          # the graze micro-search (validation)
     python -m harness.rollstab.search_shove coarse         # the region sweep (slow-ish, ~3 min)
 
 Hits print with FULL float precision (a rounded placement is a different f32 -> a different push ->

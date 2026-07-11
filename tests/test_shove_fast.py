@@ -7,7 +7,9 @@ Layers:
     per-step position) on the fixture placement, a grid, and the WINNING clip placement;
   * the live clip fixture (``hyrule_tetra_clip_live.json``) replays 0-ULP through the CLIP frame
     (both actors from the placement row; Link on every roll row) and its live endpoint is the
-    engine's genuine ``new`` -- the north-star acceptance, locked.
+    engine's genuine ``new``. That capture is the TELEPORT-STAGED validation (a mid-run placement
+    hack, not the accepted push-aside mechanism -- session 21b): it locks the engine + graze push +
+    acceptance chain, while the no-hack staging search stays open.
 
 Anim-data-dependent pieces skip when ``_generated/anim`` is absent; native pieces skip without
 the built ``_shovec`` .pyd.

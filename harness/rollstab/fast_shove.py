@@ -184,11 +184,14 @@ def build_ctx(fix=None, walls=None, inputs=None, margin=100.0):
                     margin=margin), sch
 
 
-def py_reference(fix, walls, inputs, placement, placed_step):
+def py_reference(fix, walls, inputs, placement, placed_step, link_entry=None):
     """The Python coupled engine (the live-validated substrate) run EXACTLY like ShoveCtx._run:
-    seed at roll entry, Tetra parked far, re-place at ``placed_step``, step ``inputs``, stop at the
-    CUT entry. Returns (result_dict, per-step [(lx, lz, tx, tz), ...]). The gate's ground truth."""
+    seed at roll entry (``link_entry`` overrides the entry (x, z) -- the roll-timing/offset search
+    knob), Tetra parked far, (re-)placed at ``placed_step`` (0 == an initial condition), step
+    ``inputs``, stop at the CUT entry. Returns (result_dict, per-step list). The gate's ground truth."""
     link, e, _ = _seed_link(fix, walls)
+    if link_entry is not None:
+        link.pos_x, link.pos_z = f32(link_entry[0]), f32(link_entry[1])
     tetra = _seed_tetra(e)
     tetra.z = f32(FAR_TETRA_Z)
     drv = CcCoupledStepper(link, tetra, walls_tetra=walls, ground_y=fix['ground_y'])

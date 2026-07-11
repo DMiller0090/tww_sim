@@ -172,13 +172,16 @@ the golden push STATICALLY, but that is not the dynamically-reachable push (see 
     is blocked on coupled-sim SPEED (~1.3s/sim, 99% in `acch_crr_pos` over all 765 walls; needs the Phase-W
     wall cull + precomputed roll/cut tables before a timing x placement sweep is feasible).
 
-19. **Plow-mediated Tetra staging never clips at the slot-6 straight-in corner (session 21, exhaustive).**
+19. **A THIN plow-staging slice came up empty (session 21) -- the push-aside itself is NOT ruled out.**
     With the exact >=100k sims/sec engine (`tww_sim/core/_shovec`), 13M+ coupled sims over placement
-    x[-1725,-1600] z[-1000,-860] x thrust steps 13/14/15 x EVERY placement step earlier than the last
-    pre-cut step: 0 genuine. ~98% of un-walled cut endpoints are already BEHIND the seam plane -- the razor
-    is the CrrPos block, and a plow-perturbed `old` never lands on a threading sliver. This closes the
-    session-20 "not proven across timings" gap for this approach line. The staging that DOES clip (and was
-    live-confirmed) is the last-pre-cut-step graze placement: `old` stays on the wall pin, one clean push.
+    x[-1725,-1600] z[-1000,-860] x thrust steps 13/14/15 x placement steps found 0 genuine -- but ALL of
+    it at ONE Link approach line, ONE roll-entry point, ONE roll angle. ~98% of un-walled cut endpoints
+    are already BEHIND the seam plane, so the razor is the CrrPos block, and in THAT slice no
+    plow-perturbed `old` landed on a threading sliver. Dereck's correction (21b): the push-aside is the
+    REQUIRED mechanism (a mid-run Tetra placement is a hack) and manual testing has produced a 50.6u
+    displacement with a bad angle/position (>= the ~49.99 the clip needs) -- so the lesson is scope, not
+    impossibility. Retry WITH the wide knobs: roll timing / Link entry point (`link_x0/z0`), lateral
+    placement, finer + wider Tetra initial positions (`placed_step=0`), thrust timing, roll angle.
 
 20. **Transferring a threading push between different `old`s (session 21).** The session-18 golden push
     (-0.618,-0.427) does NOT thread from the straight-roll wall pin (`pred_genuine(pin, golden)` False):
