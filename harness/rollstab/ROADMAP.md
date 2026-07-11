@@ -152,21 +152,21 @@ razor is threadable (with push fixed, `old` clips over a ~0.86u along-band at ~8
 like); the push is not a free continuous knob -- the coupled sim produces it bit-exactly from Tetra's
 f32 placement, so the solver tests the exact candidate.
 
-**Coupled solver CORE built + staging resolved (session 19).** `harness/rollstab/solver_tetra.py` (the
-Tetra counterpart of `solver.py`) is wired; its offline-exact acceptance core is gated against the live
-golden (`tests/test_tetra_solver.py`, 6 green).
-- **STAGING (the OPEN question above) = BEHIND-LINK, stationary idle Tetra.** Resolved from evidence:
-  the clip needs the push TOWARD the seam (the lunge is ~0.75u short), so Tetra stands behind Link. Her
-  EMERGENT push (the `co_move_pair` output `cc_stepper._cc_check` computes) clips + reproduces the golden
-  `new` BIT-EXACT; a corner-braced Tetra (sessions 15-17) pushes the wrong way (validated ORDERING only,
-  wall-blocked). Within the follow radius (< 230) she stays IDLE (no brace needed); the wall pins Link's
-  feet while his anim Co centre sweeps the overlap, so `kroll` picks the depth.
-- **The placement is a 2D f32 knob** (gated): the push bearing (~235deg) is ~11deg off F (224.53deg), so
-  COLINEAR-BEHIND never clips; with `old` fixed the placement is a razor POINT, so the razor is threaded
-  by the APPROACH knobs (moving `old`, ~0.86u along-band ~8% density), Tetra a coarse push knob -- the
-  Phase-0 shape. `solver.py`'s families now take `F=` (default kaze) so the search reuses them at GT.F.
+**Coupled solver core built, but STAGING REOPENED (session 19).** `harness/rollstab/solver_tetra.py` (the
+Tetra counterpart of `solver.py`) is wired and its offline STATIC-`co_move_pair` acceptance is gated vs
+the live golden (`tests/test_tetra_solver.py`, 6 green) -- but it assumes a staging the DYNAMICS refute.
+- **REFUTED: BEHIND-LINK, stationary idle Tetra.** The needed push (~235deg, ~0.75u) is only ~11deg off
+  the roll line, so the delivering Tetra sits ~15u from the line -- exactly where Link's rolling Co centre
+  travels -- so the roll-in PLOWS her (large chaotic pushes) and flings an un-braced Tetra ~40u away
+  before the cut; the CUT_F fires with zero/wrong push (`scratchpad/proto_dynamics.py`, `confirm_plow.py`;
+  dead-ends #17). Still sound: the corner NEEDS a push toward the seam (bare is wall-blocked at every
+  reachable start), so Tetra must be behind (corner-brace pushes the wrong way); collision-valid start =
+  r=35 cylinder clears both walls. The only controlled push is Link plowing a BRACED Tetra.
+- Acceptance must be the DYNAMIC coupled cut (run the plow through `cc_stepper.CcCoupledStepper`), NOT the
+  static per-position predictor `solver_tetra` uses. `solver.py`'s families' new `F=` param stands.
 
-**Next: run it from rest + deliver live (LIVE-PENDING).** `run_coupled` / `search` need a minted
-flooded-Hyrule (slot 3) rest anchor -- NONE exists (`mint.py` only translates within a room). Mint one
-(+ possibly the Phase-R wait-arm generalization), verify REST BIT-EXACT (`rest.py`), run the from-rest
-approach search, deliver via `deliver.py`'s clean-DTM gate; live 0-ULP clip = Phase 0's bar, coupled.
+**Next: the STAGING STRATEGY (open).** Position Link + Tetra so a controlled seam-ward push lands on the
+cut frame. Candidates (session-19 handoff): (1) brace Tetra on the behind side (hunt DZB geometry for a
+brace); (2) accept the big braced-plow push and search old+aim+placement via the full coupled dynamics.
+Then it feeds the from-rest solver (needs a minted slot-3 rest anchor; none exists -- `mint.py` only
+translates within a room), verify REST BIT-EXACT (`rest.py`), deliver via `deliver.py`; live 0-ULP clip.

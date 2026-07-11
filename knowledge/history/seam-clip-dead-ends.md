@@ -126,26 +126,39 @@ push frames; the morf still owns roll frame 0 only (out of push scope).
 
 ## Tetra push STAGING: corner-brace and colinear-behind are both WRONG (session 19)
 
-Two plausible Tetra stagings for the (-1727,-990) corner clip were ruled out; the ONE that works is a
-BEHIND-LINK, stationary idle Tetra (push toward the seam), which reproduces the live golden endpoint
-bit-exact through the real Co machinery (`co_move_pair` == `cc_stepper._cc_check`).
+THREE Tetra stagings for the (-1727,-990) corner clip are ruled out (#15 corner-brace, #16 colinear-
+behind, #17 stationary behind-Link). The correct staging is STILL OPEN (session-19 handoff): the push
+must point toward the seam (so Tetra behind Link), but a stationary behind-Link Tetra gets plowed, so
+some form of BRACING or timed placement is needed. NOTE `co_move_pair`/`cc_stepper._cc_check` reproduces
+the golden push STATICALLY, but that is not the dynamically-reachable push (see #17).
 
 15. **Corner-BRACED Tetra pushes the WRONG WAY.** The sessions-15..17 captures teleport Tetra INTO the
     corner and roll Link in; her push then points AWAY from the seam (she shoves Link out of the corner),
     so it cannot close a clip that needs ~0.75u ADDED toward the seam. Those captures were wall-BLOCKED
     and only ever validated the CC frame ORDERING (push consume -> m34C2 lunge -> CrrPos), never a
     clip-through. The corner-brace is stable (WallCorrect holds her) but geometrically wrong. The clip
-    needs Tetra BEHIND Link; she needs no brace -- placed within the follow-engage radius (< 230) she
-    stays IDLE, and the wall pins Link's feet while his anim Co centre sweeps the overlap.
+    needs Tetra BEHIND Link (push toward the seam) -- but a *stationary* behind-Link Tetra is itself
+    ruled out, see #17.
 
 16. **Colinear-behind Tetra (push along the roll facing F) does NOT clip -- the STEER matters.** Placing
     Tetra exactly opposite the lunge (along -F) gives a push along +F (224.53deg), but the needed push
     bearing is ~235deg (~11deg off F): the ~0.75u must STEER `new` sideways onto the seam vertex, not
     just extend the lunge. So the Tetra placement is a 2D f32 knob, not a 1D distance
     (`tetra_clip.solve_min_overlap`'s colinear-behind placement fails for the real thrust; [[tetra-push-model]]).
-    With `old` FIXED the clipping placement is a razor POINT (the push is razor-thin as a continuous knob);
-    the razor is threaded by the from-rest APPROACH knobs moving `old` (the kaze-like along-band), with
-    Tetra a COARSE push-supply knob. Gated: `tests/test_tetra_solver.py`.
+
+17. **Stationary behind-Link Tetra CANNOT deliver the push -- she gets PLOWED (session 19).** An earlier
+    draft claimed a stationary idle Tetra behind Link (within the follow radius) would deliver the push as
+    her anim Co centre sweeps the overlap. The DYNAMICS refute it (`scratchpad/proto_dynamics.py`,
+    `confirm_plow.py`): because the needed push is only ~11deg off the roll line (#16), the delivering
+    Tetra sits ~15u from the line -- exactly where Link's rolling Co centre travels -- so the roll-in
+    PLOWS her over ~8 frames with large (3-12u) chaotic pushes and flings an un-braced Tetra ~40u away
+    before the cut frame; the CUT_F then fires with zero/wrong push. Link's FRONT_ROLL Co centre LEADS the
+    feet toward the corner (away from a behind Tetra), and its wall-pinned sweep never gives a clean single
+    ~1.5u graze; a tangential (side) graze gives a ~90deg-wrong (pure-lateral) push. "Forward push" and
+    "off the roll path" are mutually exclusive here. The only dynamically-controlled push is Link plowing a
+    BRACED Tetra -- so the open staging must BRACE her (on the behind side, if geometry allows) or use a
+    timed placement, and acceptance must be the DYNAMIC coupled cut, not the static `co_move_pair`
+    predictor `solver_tetra`/`test_tetra_solver.py` uses.
 
 ## Pointers
 

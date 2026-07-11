@@ -77,39 +77,36 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 
 - **North star: the TETRA seam clip, pure-sim** -- the phased plan (wall collision -> ground ->
   CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Phases W + G + the load-bearing Phase-C
-  items are DONE; **Phase T is OPEN** -- its acceptance FOUNDATION (session 18) and now the coupled
-  solver's exact CORE + staging resolution (session 19, below) are landed. Remaining Phase-C items
-  are the CUT *tail* (Co centre during the cut + the post-cut recovery proc), `GetCCMoveP` from
-  Tetra's own recoil buffer, and the read-lag; the Phase-W full-room cull is speed-only.
-- **Phase T (session 19): STAGING RESOLVED + the coupled solver's exact CORE built + gated offline.**
-  The from-rest coupled solver `harness/rollstab/solver_tetra.py` (the Tetra counterpart of `solver.py`)
-  is wired; its offline-exact acceptance core is regression-gated against the live golden
-  (`tests/test_tetra_solver.py`, 6 green). Two results:
-  - **Staging = BEHIND-LINK, stationary idle Tetra** (NOT the sessions-15..17 corner-brace). Resolved
-    from evidence, not preference: the corner clip needs the push to point TOWARD the seam (the lunge
-    lands ~0.75u short), so Tetra must stand behind Link (away from the corner). A behind-Link Tetra's
-    EMERGENT push -- the SAME `co_move_pair` output `cc_stepper._cc_check` computes each frame -- clips
-    and reproduces the live golden `new` BIT-EXACT (0-ULP); a corner-braced Tetra pushes the wrong way
-    (it only ever validated the CC frame ORDERING, wall-blocked). Placed within the follow-engage radius
-    (< 230) Tetra stays IDLE -- no wall brace needed -- and the wall pins Link's feet at `old` while his
-    ANIM-driven Co centre sweeps the overlap, so the cut frame (`kroll`) selects the depth.
-  - **The Tetra placement is a 2D f32 knob, not a 1D distance** (the [[tetra-push-model]] correction,
-    now GATED): the needed push bearing (~235deg) is ~11deg off the roll facing F (224.53deg), so a
-    Tetra placed COLINEAR-BEHIND (along -F) pushes the wrong bearing and never clips; a wrong-side
-    (in-front) Tetra never clips. With `old` FIXED the clipping placement is a RAZOR POINT, so the razor
-    is threaded by the APPROACH knobs moving `old` (the kaze-like ~0.86u along-band, ~8% f32 density),
-    with Tetra a COARSE push-supply knob -- exactly the Phase-0 solver shape.
-  - Acceptance follows the freeze-planner cheap-exact predictor pattern: `accept(old, tetra, roll_frame)`
-    = emergent push (`co_move_pair`) -> `geometry_tetra.coupled_new` (bit-identical to the real cut) ->
-    `genuine_clip`. `solver.py`'s knob families now take an optional `F=` (backward-compatible; default
-    kaze) so the Tetra search reuses them at GT.F.
-  - **LIVE-PENDING (the next increment):** `run_coupled` / `search` (the from-rest half) need a minted
-    flooded-Hyrule (slot 3) rest anchor -- NONE exists yet (`mint.py` only translates within a room), so
-    the from-rest APPROACH search + the clean-DTM live clip are not yet run. The full per-frame CUT_F
-    ordering they ride is already live-gated bit-exact by `tests/test_cc_rollstab.py`; what remains is
-    minting the anchor (+ possibly the Phase-R wait-arm generalization), verifying REST BIT-EXACT, then
-    running the search + delivering. Phase 0's bar (a solver hit shipped as a clean DTM clips live 0-ULP),
-    now coupled.
+  items are DONE; **Phase T is OPEN** -- its acceptance FOUNDATION landed (session 18). The Phase-T
+  STAGING is the current open question (session 19 REOPENED it, below): how to position Link + Tetra so
+  a controlled, seam-ward push lands on the cut frame. Remaining Phase-C items are the CUT *tail* (Co
+  centre during the cut + the post-cut recovery proc), `GetCCMoveP` from Tetra's own recoil buffer, and
+  the read-lag; the Phase-W full-room cull is speed-only.
+- **Phase T (session 19): STAGING REOPENED -- the behind-Link *stationary* Tetra is REFUTED; the
+  correct staging is now the open question.** An earlier draft of this entry claimed staging was
+  "resolved = behind-Link stationary idle Tetra"; the coupled DYNAMICS refute it. What holds:
+  - **The corner needs a push** (bare roll-stab is wall-blocked at every REACHABLE start; the wall pins
+    Link at `old` ~= the golden and the bare CUT_F is blocked), and **the push must point TOWARD the
+    seam** (bearing ~235deg, ~0.75u), which requires Tetra BEHIND Link (a corner-braced Tetra pushes the
+    wrong way). Collision-valid start = Link's r=35 wall cylinder clears both walls (signed plane dist
+    >= 35). These are sound.
+  - **REFUTED: a stationary behind-Link Tetra cannot deliver a controlled push.** The needed push is
+    only ~11deg off the roll line, so the delivering Tetra sits ~15u from the line -- exactly where
+    Link's rolling Co centre travels -- so the roll-in PLOWS her (large chaotic pushes) and flings an
+    un-braced Tetra ~40u away before the cut frame; the CUT_F then fires with zero/wrong push. The
+    ONLY dynamically-controlled push is Link plowing a BRACED Tetra (sessions 15-17), but braced-in-
+    corner points the wrong way. See dead-ends #17 and the session-19 handoff.
+  - `harness/rollstab/solver_tetra.py` + `tests/test_tetra_solver.py` (6 green) exist and the offline
+    STATIC-`co_move_pair` acceptance core is bit-exact vs the golden, BUT it assumes the refuted
+    stationary-behind mechanism, so DO NOT build the from-rest solver on it as-is. Acceptance must be
+    the DYNAMIC coupled cut (run the plow through `cc_stepper.CcCoupledStepper`), not a static predictor.
+  - `solver.py`'s knob families gained an optional `F=` param (backward-compatible; default kaze) -- that
+    part stands.
+  - **NEXT (open): the staging strategy** -- position Link + Tetra so a controlled seam-ward push lands
+    on the cut frame. Candidates (session-19 handoff): brace Tetra on the behind side; or accept the big
+    braced-plow push and search old+aim+placement via the full coupled dynamics. Then it feeds the
+    from-rest solver (needs a minted slot-3 rest anchor; none exists -- `mint.py` only translates within
+    a room).
 - **Phase T OPENED (session 18): the Tetra-corner seam-clip ACCEPTANCE FOUNDATION, live-anchored.**
   Measure-first (Phase-G discipline), the flooded-Hyrule corner at (-1727,-990) is now in the rollstab
   pipeline's conventions: `fixtures/hyrule_tetra_geo.json` (built offline from the live RAM golden
