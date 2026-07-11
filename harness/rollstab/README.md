@@ -77,8 +77,34 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 
 - **North star: the TETRA seam clip, pure-sim** -- the phased plan (wall collision -> ground ->
   CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **C** (Phase W + Phase G
-  DONE; Phase C's Tetra-counterpart model now DONE, see next; the CC-push stepper integration +
-  three-way ordering remain. The remaining Phase-W full-room block-grid cull is speed-only).
+  DONE; Phase C's Tetra-counterpart model DONE; the CC push is now WIRED into the stepper and
+  live-validated through the frame the push is consumed, session 15 -- see next; closing the push
+  frames needs the FRONT_ROLL morf modelled. The Phase-W full-room block-grid cull is speed-only).
+- **Phase C CC-PUSH STEPPER wired + live-validated to the push frame (session 15).** The Co push is
+  now in the per-frame stepper in the decomp's order: `LandState._cc_move` (set via `set_cc_move`)
+  is consumed in `posMove` AFTER `posMoveFromFootPos` (the speedF/foot move) and BEFORE the m34C2
+  cut root-translate + the CrrPos wall pass (`d_a_player_main.cpp:2556-2610`; the overlap that feeds
+  it is computed in the DRAW phase, `dScnPly_Draw -> dCcS::Move`, from the prior frame's settled
+  positions). `cc_push.co_move_pair` returns BOTH actors' `SetPosCorrect` moves (Link's is bit-
+  identical to the shipped `co_push_link`; same-rank 50/50 -> equal and opposite). The coupled driver
+  `harness/rollstab/cc_stepper.CcCoupledStepper` runs Link (`LandState`) + Tetra (`Zl1FollowState`)
+  together, computing the overlap each frame from Link's animated roll Co centre (`body_cyl.
+  roll_co_center`) and Tetra's cylinder. **LIVE (slot 3, `capture_cc_push.py`):** Tetra teleported
+  into the corner (WallCorrect braces her), Link rolls in from far out and CONVERGES into her while
+  she is wall-braced. The coupled sim reproduces this **0-ULP**: Link's wall-approach roll AND
+  Tetra's teleport-into-corner brace are bit-exact every frame, and Link stays bit-exact right up to
+  the frame the push is first consumed (proving the push is applied at the right point). Offline gate
+  `tests/test_cc_gate.py` (fixture `fixtures/hyrule_cc_push.json`, replayed with no Dolphin via
+  `cc_stepper.couple_replay`); offline math/consumption gates `tests/test_cc_stepper.py`.
+  - **Open (xfail `test_coupled_push_frames_bitexact`): the push FRAMES themselves.** Once the push
+    engages (here at roll frame ~6), Link drifts a few ULP and compounds, because `roll_co_center`
+    carries the FRONT_ROLL oldframe-morf transient and is bit-exact only after roll frame ~11 (its
+    own golden `tests/golden/roll_co_center_live.json`; the push overlap uses that centre). Modelling
+    the roll-entry morf (SESSION_PROMPT future work) closes it; the fixture lets that be iterated
+    OFFLINE. Alternative near-term: stage a capture whose convergence lands at roll frame > 11.
+  - Still open for Phase C: `GetCCMoveP` wired from Tetra's own recoil pending-buffer (the driver
+    feeds `co_move_pair`'s Tetra share into `step(cc_move=)`); the three-way CC -> WallCorrect ->
+    net-overlap ordering on the actual clip frame; the Tetra read-lag (execute order Link-then-Tetra).
 - **Phase C Tetra FOLLOW + attention DONE (session 14): the Tetra counterpart state, LIVE-GATED
   0-ULP.** The type-5 (following) Tetra's per-frame model is decomp-faithful and bit-exact vs live:
   `tww_sim/core/npc_zl1.Zl1FollowState.step(link_pos)` runs the `optn_1`/`optn_2` idle<->move state

@@ -76,14 +76,27 @@ WallCorrect is the **wall-brace** the plan relies on: push Tetra into the corner
 slash, and the wall cancels her CC recoil so she holds as a stable pusher delivering the nudge.
 Mechanic page `knowledge/mechanics/tetra-follow.md`.
 
+**CC push WIRED into the stepper + live-validated to the push frame (session 15).** The Co push now
+runs in the per-frame stepper in the decomp's order: `LandState._cc_move` is consumed in `posMove`
+AFTER `posMoveFromFootPos` and BEFORE the m34C2 cut lunge + `CrrPos` (`d_a_player_main.cpp:2556-2610`;
+the overlap feeding it is computed in the DRAW phase, `dScnPly_Draw -> dCcS::Move`). `cc_push.
+co_move_pair` gives both actors' `SetPosCorrect` moves; `cc_stepper.CcCoupledStepper` couples Link
+(`LandState`) + Tetra (`Zl1FollowState`) each frame via Link's animated roll Co centre. LIVE (slot 3,
+`capture_cc_push.py`): Tetra teleported into the corner (WallCorrect braces her), Link rolls in and
+CONVERGES into her; the coupled sim is **0-ULP** on Link's wall-approach roll AND Tetra's brace, and
+Link stays bit-exact through the frame the push is first consumed. Offline gate `tests/test_cc_gate.py`
+(no Dolphin, fixture `fixtures/hyrule_cc_push.json`) + math/consumption `tests/test_cc_stepper.py`.
+
 Still missing to close Phase C:
-- The per-frame `GetCCMoveP` term at the decomp's exact point in the frame (wire Tetra's `m_cc_move`
-  recoil, which `Zl1FollowState.step` already accepts via `cc_move`, into the CC pass).
-- The three-way ordering CC-push -> WallCorrect -> net overlap (this interaction IS the clip
-  mechanism; order comes from the decomp, not intuition). NOTE the wall-brace: WallCorrect on Tetra
-  cancels her recoil when she is wedged in the corner, so a wedged Tetra pushes like an immovable.
-- Live reticle confirmation of the attention region; the Tetra read-lag (the follow gate used a
-  stationary Link); the `move_jmp` gap hop (unmodelled, no gate needs it yet).
+- **The push FRAMES bit-exact (xfail):** once the push engages, Link drifts a few ULP because the
+  overlap uses `body_cyl.roll_co_center`, which is bit-exact only after roll frame ~11 (the FRONT_ROLL
+  oldframe-morf). Model that morf (SESSION_PROMPT future work) OR converge at roll frame > 11. The
+  fixture makes this iterable OFFLINE.
+- The three-way ordering CC-push -> WallCorrect -> net overlap on the actual clip frame (order from
+  the decomp, not intuition). NOTE the wall-brace: WallCorrect on Tetra cancels her recoil when she
+  is wedged in the corner (confirmed live this session -- she barely moves while bracing Link's push).
+- Live reticle confirmation of the attention region; the Tetra read-lag (execute order Link-then-
+  Tetra in the driver); the `move_jmp` gap hop (unmodelled, no gate needs it yet).
 
 ## Phase R -- residuals (parallel, pick up when they block)
 

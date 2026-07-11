@@ -165,3 +165,44 @@ def co_push_link(link_c, link_r, link_h, other_c, other_r, other_h,
     # degenerate: centers coincident -> push along +x by cross_len*share (SetPosCorrect else-branch)
     mag = cross_len if not is_zero(cross_len) else _f(1.0)
     return fmuls(fsubs(_f(0.0), mag), obj1_weight), _f(0.0), _f(0.0)
+
+
+def co_move_pair(c1, r1, h1, c2, r2, h2, w1=WEIGHT_LINK, w2=WEIGHT_TETRA_V5):
+    """Both actors' ``m_cc_move`` from ONE Co overlap -- the full ``dCcS::SetPosCorrect`` output
+    (``d_cc_s.cpp:180``), for the CC-push STEPPER (Link *and* Tetra recoil each on their next frame).
+
+    ``c1``/``c2`` = (x, y, z) Co cylinder centers, ``r*``/``h*`` = radius/height, ``w*`` = raw weight.
+    Returns ``((dx1,dy1,dz1), (dx2,dy2,dz2))`` -- obj1's and obj2's accumulated moves (``dy = 0``: two
+    cylinders, ``correctY`` false). Both ``(0,0,0)`` on no overlap / deadzone / both-immovable.
+
+    obj1 is moved by ``vec1 = -objsDist * obj2Weight`` and obj2 by ``vec2 = +objsDist * obj1Weight``
+    where ``objsDist = (c2 - c1)`` scaled to ``cross_len`` (decomp lines 234/247): obj1's move factor
+    is ``rank_tbl[GetRank(w1)][GetRank(w2)]/100`` and obj2's is the complement. So obj1's move here is
+    IDENTICAL to :func:`co_push_link` (guarded in tests/test_cc_stepper.py); this adds the obj2 recoil
+    that a stepper must feed back into the partner. For a same-rank pair (Link 5 vs Tetra-v5 5) the
+    two moves are equal-and-opposite (``sum == 0``, live-confirmed)."""
+    hit, cross_len = cyl_cyl_cross_len(c1, r1, h1, c2, r2, h2)
+    zero = (_f(0.0), _f(0.0), _f(0.0))
+    if not hit or is_zero(cross_len):            # cM3d_IsZero(cross_len) skips SetPosCorrect
+        return zero, zero
+    shares = push_shares(w1, w2)                 # None => both immovable
+    if shares is None:
+        return zero, zero
+    # push_shares returns (obj1_move_factor, obj2_move_factor) == (rank*0.01, (100-rank)*0.01).
+    # In SetPosCorrect naming these are (obj2Weight, obj1Weight): vec1 uses the FIRST, vec2 the SECOND.
+    obj2_weight, obj1_weight = shares
+    dx = fsubs(c2[0], c1[0])                     # objsDist = ppos2 - ppos1 (obj2 - obj1)
+    dz = fsubs(c2[2], c1[2])
+    dist = fsqrt(fmadds(dz, dz, fmuls(dx, dx)))
+    if not is_zero(dist):
+        f = fdivs(cross_len, dist)               # pushFactor = cross_len / objDistLen
+        sx = fmuls(dx, f)                         # objsDist.x *= pushFactor (scaled in place)
+        sz = fmuls(dz, f)
+        vec1 = (fmuls(sx, fsubs(_f(0.0), obj2_weight)), _f(0.0),
+                fmuls(sz, fsubs(_f(0.0), obj2_weight)))
+        vec2 = (fmuls(sx, obj1_weight), _f(0.0), fmuls(sz, obj1_weight))
+        return vec1, vec2
+    # degenerate: centers coincident -> along +x (SetPosCorrect else-branch)
+    mag = cross_len if not is_zero(cross_len) else _f(1.0)
+    return ((fmuls(fsubs(_f(0.0), mag), obj2_weight), _f(0.0), _f(0.0)),
+            (fmuls(mag, obj1_weight), _f(0.0), _f(0.0)))

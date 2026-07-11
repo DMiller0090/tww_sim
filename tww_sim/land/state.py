@@ -243,6 +243,9 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         self._cut_entered = False              # cut entry frame: no ctrl advance, nspeed carried, m3700_prev=0
         self._cut_m3700 = (0.0, 0.0, 0.0)      # previous frame's m3700 (anim joint-0 translate); reset 0 at init
         self._cut_add = (0.0, 0.0)             # this frame's rotated root-translate delta, added after the shared bottom
+        # daPy_lk_c CC push (mStts.m_cc_move): consumed in posMove after posMoveFromFootPos, before
+        # the m34C2 cut lunge + CrrPos (2558). None => byte-identical; set each frame via set_cc_move.
+        self._cc_move = None
         self._cut_anim_cache = None            # loaded cutf/cuta anim dict (j3d_eval), lazy
         self.cut_target = None                 # mProcVar2.m34D4: the latched thrust aim (shape snaps here
         #                                        on the 1st cut proc frame). None -> straight (== roll facing).
@@ -366,6 +369,14 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
             self.m34dc = (ang + 0x8000) & 0xFFFF
             self.target = (self.m34dc + self.csangle) & 0xFFFF
 
+    def set_cc_move(self, mv):
+        """Queue the CC push (Tetra ``m_cc_move``) for the NEXT :meth:`step`, consumed in ``posMove``
+        (see the consumption site). ``mv`` = (dx, dy, dz) f32 world push accumulated from the PRIOR
+        frame's Co overlap (``dCcS::SetPosCorrect`` -> ``cc_push.co_move_pair``), or None to clear.
+        The push lands after the foot/roll speedF move and before the cut lunge + the CrrPos wall
+        pass. Requires the Python path (walls= or native=False); raises otherwise (see step)."""
+        self._cc_move = None if mv is None else (f32(mv[0]), f32(mv[1]), f32(mv[2]))
+
     # --- proc dispatch + per-frame step ----------------------------------------------------
     def step(self, sx, sy, buttons=0, triggerL=0, csx=128, csy=128):
         """Advance one frame with a raw main stick (sx, sy) + optional L-target (buttons 0x40 or
@@ -373,6 +384,10 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         csangle is driven per-frame from the shared camera; a centered C-stick (csx=128, the
         free-cam default) holds it frozen at the seed, matching straight superswims."""
         if self._core is not None:               # native LandCore: one C call/frame, then sync
+            if self._cc_move is not None:
+                raise RuntimeError("cc_move (Tetra push) requires the Python path; the native "
+                                   "LandCore has no CC pass. Construct with walls= (native off) or "
+                                   "native=False.")
             d = self._core.step(int(sx), int(sy), int(buttons), int(triggerL), int(csx), int(csy))
             self._sync_from_core()
             return d, _STATE_TAG.get(self.state, "?")
@@ -602,6 +617,12 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         px0, pz0 = self.pos_x, self.pos_z
         self.pos_x = f32(self.pos_x + f32(d * _cM_ssin_s16(self.travel)))
         self.pos_z = f32(self.pos_z + f32(d * S.cM_scos_s16(self.travel)))
+        # CC push (posMove 2558: current.pos += *GetCCMoveP()): after the speedF move above, before
+        # the m34C2 cut lunge below + CrrPos. Cleared each frame (2609). See mechanics/actor-push.md.
+        if self._cc_move is not None:
+            self.pos_x = f32(self.pos_x + self._cc_move[0])
+            self.pos_z = f32(self.pos_z + self._cc_move[2])
+            self._cc_move = None
         # Sword-cut root-translate lunge (posMove m34C2==1) on top of the foot term, zeroed except on a
         # CUT frame; the returned displacement is then the TRUE single-frame move (foot + lunge, ~49.22).
         if self.state in (CUT_F, CUT_A):
