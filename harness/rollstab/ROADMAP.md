@@ -152,10 +152,21 @@ razor is threadable (with push fixed, `old` clips over a ~0.86u along-band at ~8
 like); the push is not a free continuous knob -- the coupled sim produces it bit-exactly from Tetra's
 f32 placement, so the solver tests the exact candidate.
 
-**Next: the from-rest COUPLED solver.** Reuse the Phase-0 solver shape (`solver.py`) on the coupled
-stepper (`cc_stepper.CcCoupledStepper` / `couple_replay`, Phase C): from-rest approach knobs steer
-`old` onto the sliver AND a Tetra f32 placement supplies the push; `geometry_tetra.pred_genuine` is
-the exact acceptance; deliver via `deliver.py`'s clean-DTM gate; live 0-ULP clip. OPEN design question
-raised by the measurement (surface before building): the session-15..17 staging teleports Tetra INTO
-the corner and rolls Link in, but the plan_seam_clip analysis places Tetra BEHIND Link (push toward
-the seam). Confirm which staging gives a push in the clip-ward direction before wiring the search.
+**Coupled solver CORE built + staging resolved (session 19).** `harness/rollstab/solver_tetra.py` (the
+Tetra counterpart of `solver.py`) is wired; its offline-exact acceptance core is gated against the live
+golden (`tests/test_tetra_solver.py`, 6 green).
+- **STAGING (the OPEN question above) = BEHIND-LINK, stationary idle Tetra.** Resolved from evidence:
+  the clip needs the push TOWARD the seam (the lunge is ~0.75u short), so Tetra stands behind Link. Her
+  EMERGENT push (the `co_move_pair` output `cc_stepper._cc_check` computes) clips + reproduces the golden
+  `new` BIT-EXACT; a corner-braced Tetra (sessions 15-17) pushes the wrong way (validated ORDERING only,
+  wall-blocked). Within the follow radius (< 230) she stays IDLE (no brace needed); the wall pins Link's
+  feet while his anim Co centre sweeps the overlap, so `kroll` picks the depth.
+- **The placement is a 2D f32 knob** (gated): the push bearing (~235deg) is ~11deg off F (224.53deg), so
+  COLINEAR-BEHIND never clips; with `old` fixed the placement is a razor POINT, so the razor is threaded
+  by the APPROACH knobs (moving `old`, ~0.86u along-band ~8% density), Tetra a coarse push knob -- the
+  Phase-0 shape. `solver.py`'s families now take `F=` (default kaze) so the search reuses them at GT.F.
+
+**Next: run it from rest + deliver live (LIVE-PENDING).** `run_coupled` / `search` need a minted
+flooded-Hyrule (slot 3) rest anchor -- NONE exists (`mint.py` only translates within a room). Mint one
+(+ possibly the Phase-R wait-arm generalization), verify REST BIT-EXACT (`rest.py`), run the from-rest
+approach search, deliver via `deliver.py`'s clean-DTM gate; live 0-ULP clip = Phase 0's bar, coupled.

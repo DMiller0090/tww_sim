@@ -116,18 +116,20 @@ def run(anchor, moves, A_proj=-506.0, tail=8, start=()):
     return None
 
 
-def start_family(anchor, kmax=START_KMAX):
+def start_family(anchor, kmax=START_KMAX, F=None):
     """The 1D-approach start-crawl lattice: distinct dtm-calibrated sticks at bearing F, full +
     every distinct live-valid partial (msd 0.889..0.52, the movement gate band -- the (0.889,1)
     band is live-divergent, see plan_land._freeze_start_lattice). Combos are k-tuples with the
     NON-FULL stick count kept low (each run is exact; the full x full.. prefix is the baseline).
-    Ordered shallow-first so cheap candidates come first."""
+    Ordered shallow-first so cheap candidates come first. `F` overrides the aim facing (default the
+    kaze `geometry.F`) so the Tetra-corner solver can reuse this at its own clip facing."""
+    F = G.F if F is None else F
     seed = G.load_seed(anchor)
     cs = seed['csangle'] & 0xFFFF
-    full = C.dtm_stick(stick_for_bearing(G.F, cs, 1.0))
+    full = C.dtm_stick(stick_for_bearing(F, cs, 1.0))
     alph, seen = [], {full}
     for j in range(889, 519, -1):
-        stk = C.dtm_stick(stick_for_bearing(G.F, cs, j / 1000.0))
+        stk = C.dtm_stick(stick_for_bearing(F, cs, j / 1000.0))
         if stk not in seen:
             seen.add(stk)
             alph.append(stk)
@@ -147,15 +149,16 @@ def start_family(anchor, kmax=START_KMAX):
     return combos
 
 
-def fine_family(anchor, mstep=0.004, leads=(4, 5, 6, 7, 10)):
+def fine_family(anchor, mstep=0.004, leads=(4, 5, 6, 7, 10), F=None):
+    F = G.F if F is None else F
     out, seen = [], set()
     seed = G.load_seed(anchor)
     cs = seed['csangle'] & 0xFFFF
-    aim = C.dtm_stick(stick_for_bearing(G.F, cs, 1.0))
+    aim = C.dtm_stick(stick_for_bearing(F, cs, 1.0))
     for j in range(-4, 5):
         m = 0.999
         while m >= 0.50:
-            stk = C.dtm_stick(stick_for_bearing((G.F + 16 * j) & 0xFFFF, cs, m))
+            stk = C.dtm_stick(stick_for_bearing((F + 16 * j) & 0xFFFF, cs, m))
             if stk not in seen:
                 seen.add(stk)
                 out.append(stk)
@@ -163,13 +166,14 @@ def fine_family(anchor, mstep=0.004, leads=(4, 5, 6, 7, 10)):
     return [(ld, stk) for stk in out if stk != aim for ld in leads]
 
 
-def arc_family(anchor, bstep=50, durs=(1, 2, 3), leads=(10, 9, 8, 7), min_settle=5):
+def arc_family(anchor, bstep=50, durs=(1, 2, 3), leads=(10, 9, 8, 7), min_settle=5, F=None):
+    F = G.F if F is None else F
     out, seen = [], set()
     seed = G.load_seed(anchor)
     cs = seed['csangle'] & 0xFFFF
-    aim = C.dtm_stick(stick_for_bearing(G.F, cs, 1.0))
+    aim = C.dtm_stick(stick_for_bearing(F, cs, 1.0))
     for d in list(range(-1000, -149, bstep)) + list(range(150, 1001, bstep)):
-        stk = C.dtm_stick(stick_for_bearing((G.F + d) & 0xFFFF, cs, 1.0))
+        stk = C.dtm_stick(stick_for_bearing((F + d) & 0xFFFF, cs, 1.0))
         for dur in durs:
             for ld in leads:
                 if ld - dur < min_settle:

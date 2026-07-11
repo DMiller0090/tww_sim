@@ -124,6 +124,29 @@ it). Lesson: capture the actual per-frame quantity before attributing a residual
 mechanism -- two mechanisms with different timescales were conflated. Do NOT build a morf driver for the
 push frames; the morf still owns roll frame 0 only (out of push scope).
 
+## Tetra push STAGING: corner-brace and colinear-behind are both WRONG (session 19)
+
+Two plausible Tetra stagings for the (-1727,-990) corner clip were ruled out; the ONE that works is a
+BEHIND-LINK, stationary idle Tetra (push toward the seam), which reproduces the live golden endpoint
+bit-exact through the real Co machinery (`co_move_pair` == `cc_stepper._cc_check`).
+
+15. **Corner-BRACED Tetra pushes the WRONG WAY.** The sessions-15..17 captures teleport Tetra INTO the
+    corner and roll Link in; her push then points AWAY from the seam (she shoves Link out of the corner),
+    so it cannot close a clip that needs ~0.75u ADDED toward the seam. Those captures were wall-BLOCKED
+    and only ever validated the CC frame ORDERING (push consume -> m34C2 lunge -> CrrPos), never a
+    clip-through. The corner-brace is stable (WallCorrect holds her) but geometrically wrong. The clip
+    needs Tetra BEHIND Link; she needs no brace -- placed within the follow-engage radius (< 230) she
+    stays IDLE, and the wall pins Link's feet while his anim Co centre sweeps the overlap.
+
+16. **Colinear-behind Tetra (push along the roll facing F) does NOT clip -- the STEER matters.** Placing
+    Tetra exactly opposite the lunge (along -F) gives a push along +F (224.53deg), but the needed push
+    bearing is ~235deg (~11deg off F): the ~0.75u must STEER `new` sideways onto the seam vertex, not
+    just extend the lunge. So the Tetra placement is a 2D f32 knob, not a 1D distance
+    (`tetra_clip.solve_min_overlap`'s colinear-behind placement fails for the real thrust; [[tetra-push-model]]).
+    With `old` FIXED the clipping placement is a razor POINT (the push is razor-thin as a continuous knob);
+    the razor is threaded by the from-rest APPROACH knobs moving `old` (the kaze-like along-band), with
+    Tetra a COARSE push-supply knob. Gated: `tests/test_tetra_solver.py`.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.
