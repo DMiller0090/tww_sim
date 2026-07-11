@@ -97,14 +97,30 @@ at roll entry. Live re-capture (slot 3): **every FRONT_ROLL push frame 0-ULP for
 (`test_cc_gate::test_coupled_push_frames_bitexact`, xfail->pass; scoped to the roll frames). Live land
 14/14 byte-identical.
 
+**CLIP-FRAME ORDERING now bit-exact through the CUT_F entry (session 17).** The clip frame -- Link
+fires a FORWARD `CUT_F` out of the roll into the corner-braced Tetra -- stacks, in the decomp's
+`posMove` order (`d_a_player_main.cpp:2556-2610`), the roll speedF move -> the ~22u CC push consume ->
+the `m34C2` cut lunge (~49u) -> `dBgS_Acch::CrrPos`. Already structural in `step()`; this session
+live-VALIDATED it. `cc_stepper.couple_replay` now replays the capture's per-frame controller inputs +
+seeds `sword_drawn` so the B thrust fires the roll->CUT at the same frame it did live. LIVE (slot 3,
+`capture_cc_push.py draw_at=/thrust_at=`): sword drawn early during the walk-up (drawn-sword walk still
+reaches the speedF-17 cap -> full-26 roll), Link rolls into wall-braced Tetra, a UP+B thrust (a neutral
+B is a side slash -- dead-end #12) fires an in-line `CUT_F` at roll anim-frame >17. **Every frame from
+Tetra's placement through the CUT_F entry is 0-ULP for BOTH actors.** Gate `tests/test_cc_rollstab.py`
+(fixture `fixtures/hyrule_cc_rollstab.json`). Scoped to the entry (the single-frame lunge that decides
+the clip); wall-BLOCKED here, so it validates the ORDERING, not a clip-through (Phase T threads the
+lunge behind the seam).
+
 Still missing to close Phase C:
+- The CUT *tail* (the frames after the CUT_F entry): the sim keeps posing Link's Co centre with the
+  frozen roll anim (`body_cyl.roll_co_center`) rather than the CUT pose, and live enters a post-cut
+  recovery proc (`0x5a`) the sim does not model. Both moot for the clip (decided by the entry lunge;
+  the roll never re-walks), like the descoped roll->MOVE exit gap -- model them to extend the window.
 - The roll's EXIT to MOVE is not bit-exact (the neutral-hold capture's f27+, the separate "mid-run
   stop -> re-walk" gap). Irrelevant to the clip, which fires a CUT out of the roll, not a MOVE exit.
-- The three-way ordering CC-push -> WallCorrect -> net overlap on the actual clip frame (order from
-  the decomp, not intuition). NOTE the wall-brace: WallCorrect on Tetra cancels her recoil when she
-  is wedged in the corner (confirmed live this session -- she barely moves while bracing Link's push).
 - Live reticle confirmation of the attention region; the Tetra read-lag (execute order Link-then-
-  Tetra in the driver); the `move_jmp` gap hop (unmodelled, no gate needs it yet).
+  Tetra in the driver); `GetCCMoveP` from Tetra's own recoil buffer; the `move_jmp` gap hop
+  (unmodelled, no gate needs it yet).
 
 ## Phase R -- residuals (parallel, pick up when they block)
 

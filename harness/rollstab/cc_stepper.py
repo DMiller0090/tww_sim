@@ -127,21 +127,37 @@ def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
 
+def _row_step_args(row):
+    """The step() args (sx, sy, buttons, triggerL, csx, csy) captured for a frame, or neutral-hold.
+    The capture stores the raw controller input as ``row['inp']`` (stickX/stickY/substickX/substickY/
+    buttons/triggerL); a legacy fixture without it replays as a neutral hold."""
+    inp = row.get('inp')
+    if inp is None:
+        return (128, 128, 0, 0, 128, 128)
+    return (int(inp['stickX']), int(inp['stickY']), int(inp.get('buttons', 0)),
+            int(inp.get('triggerL', 0)), int(inp['substickX']), int(inp['substickY']))
+
+
 def couple_replay(rows, tetra_placed_at, tetra_placed_xz, walls, ground_y,
-                  front_roll_proc=30, seed_m3570=False):
+                  front_roll_proc=30, seed_m3570=False, sword_drawn=False):
     """Replay a captured Link-roll + Tetra Co-push OFFLINE (no Dolphin) and diff the coupled sim
     against the logged live positions, frame by frame. Shared by the live capture
     (`capture_cc_push`) and the offline gate (`tests/test_cc_gate`).
 
     ``rows`` = the captured per-frame log (each ``{f, link:{proc,pos,shape_y,angle_y,...},
-    tetra:{pos,shape_y,...}}``); ``tetra_placed_at`` = the ROW index the corner Tetra first appears
-    (she is (re)seeded there at ``tetra_placed_xz`` with speedF 0, matching the live teleport);
-    ``walls`` = the room's ordered wall mesh (both actors' CrrPos); ``ground_y`` = the flat floor.
+    tetra:{pos,shape_y,...}}``, optionally ``inp`` = the frame's raw controller input); ``tetra_placed_at``
+    = the ROW index the corner Tetra first appears (she is (re)seeded there at ``tetra_placed_xz`` with
+    speedF 0, matching the live teleport); ``walls`` = the room's ordered wall mesh (both actors' CrrPos);
+    ``ground_y`` = the flat floor.
 
     Seeds the coupled sim at the live roll-entry frame (first ``front_roll_proc``), FRONT_ROLL with
-    speedF pinned (isolating the roll+push from the walk-up + camera, per spotcheck_rollstab), then
-    steps neutral-hold. Returns a list of per-frame dicts: ``f``, ``proc``, sim/live Link & Tetra
-    positions, and the sim-minus-live ULP diffs ``dlx/dlz/dtx/dtz`` (0 == bit-exact)."""
+    speedF pinned (isolating the roll+push from the walk-up + camera, per spotcheck_rollstab). Replays
+    each frame's CAPTURED controller input (``row['inp']``) so a roll-stab (a B-thrust out of the roll ->
+    CUT_F) fires at the same frame it did live -- the clip frame that stacks the CC push + the m34C2 cut
+    lunge + the CrrPos wall pass; ``sword_drawn`` must be True for that roll->CUT dispatch (the sword is
+    drawn during the walk-up, before roll entry). A legacy fixture (no per-frame ``inp``) replays as a
+    neutral hold. Returns a list of per-frame dicts: ``f``, ``proc``, sim/live Link & Tetra positions, and
+    the sim-minus-live ULP diffs ``dlx/dlz/dtx/dtz`` (0 == bit-exact)."""
     from tww_sim.land.land import LandState
     from tww_sim.core.npc_zl1 import Zl1FollowState, STT_IDLE
     from tww_sim.core.fp import f32
@@ -150,7 +166,7 @@ def couple_replay(rows, tetra_placed_at, tetra_placed_xz, walls, ground_y,
     e = rows[entry]
     link = LandState(pos_x=e['link']['pos'][0], pos_z=e['link']['pos'][2], pos_y=e['link']['pos'][1],
                      facing=e['link']['shape_y'], travel=e['link']['angle_y'], state=front_roll_proc,
-                     nspeed=26.0, speedF=26.0, use_anim=True, native=False, sword_drawn=False,
+                     nspeed=26.0, speedF=26.0, use_anim=True, native=False, sword_drawn=sword_drawn,
                      walls=walls)
     link._roll_m3570 = seed_m3570        # seeded mid-roll: live grinds (no bonk) => m3570 False
     # Seed the turn-lean from the live roll-entry value (part of the seed, not calibration): its
@@ -173,7 +189,7 @@ def couple_replay(rows, tetra_placed_at, tetra_placed_xz, walls, ground_y,
             drv.tetra.stt = STT_IDLE
             drv._tetra_pending = (0.0, 0.0, 0.0)
             drv._link_pending = None
-        drv.step(128, 128)
+        drv.step(*_row_step_args(rows[i]))
         lv = rows[i]
         out.append(dict(
             f=lv['f'], proc=lv['link']['proc'],

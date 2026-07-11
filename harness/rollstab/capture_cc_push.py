@@ -59,7 +59,14 @@ def _dm():
 
 
 def capture(out=None, link_xz=(-1620.0, -850.0), facing=None, walk=6, roll_frames=20,
-            tetra_on=None, tetra_at=None, place_after_roll=1):
+            tetra_on=None, tetra_at=None, place_after_roll=1, draw_at=None, thrust_at=None):
+    """``draw_at`` (walk-frame index) ORs a B into that walk frame to UNSHEATHE the sword early -- a
+    drawn sword is required for the roll->CUT (roll-stab) dispatch, and drawing early (while speed is
+    still low) lets the drawn-sword walk rebuild to the speedF-17 cap for a full-26 roll. ``thrust_at``
+    (hold-frame index after the roll) ORs a B into that hold frame to fire the sword thrust OUT of the
+    roll -- with a neutral stick this is an in-line CUT_F (aim == facing) that stacks the m34C2 lunge
+    onto the CC push + the CrrPos wall pass, THE CLIP FRAME. Time it so the ACTED edge lands at roll
+    anim-frame > 17 (INPUT_DELAY=2 -> press ~2 frames early; kroll~15 per spotcheck_rollstab)."""
     dm, h, mem1 = _dm()
 
     def rf(a): return struct.unpack('>f', dm.read_bytes(h, mem1, a, 4))[0]
@@ -107,10 +114,18 @@ def capture(out=None, link_xz=(-1620.0, -850.0), facing=None, walk=6, roll_frame
     UP = dict(stickX=128, stickY=255, substickX=128, substickY=128, buttons=0, triggerL=0, frames=1)
     A = {**UP, 'buttons': 0x100}
     HOLD = dict(stickX=128, stickY=128, substickX=128, substickY=128, buttons=0, triggerL=0, frames=1)
+    DRAW = {**UP, 'buttons': 0x200}                 # UP + B: unsheathe (first B draws; spotcheck_rollstab)
+    THRUST = {**UP, 'buttons': 0x200}               # UP + B: FORWARD thrust CUT_F (a neutral B is a side
+    #                                                 slash CUT_R/L -- dead-end #12; the forward stick aims it)
     FRONT_ROLL_PROC = 30
-    # walk to build speed, A rolls (Link wall-holds rolling at the corner), then hold neutral; Tetra
-    # is teleported in place_after_roll frames into the roll so the Co cylinders overlap while rolling.
-    seq = [("walk", UP)] * walk + [("roll", A)] + [("hold", HOLD)] * roll_frames
+    # Rollstab (thrust_at) mode holds UP so the pushed stick fires the roll early-turn at anim-frame>17
+    # and the B makes a forward CUT_F (roll PATH is stick-independent until then); plain mode: neutral.
+    hold_base = UP if thrust_at is not None else HOLD
+    walk_seq = [("draw", DRAW) if draw_at is not None and k == draw_at else ("walk", UP)
+                for k in range(walk)]
+    hold_seq = [("thrust", THRUST) if thrust_at is not None and k == thrust_at else ("hold", hold_base)
+                for k in range(roll_frames)]
+    seq = walk_seq + [("roll", A)] + hold_seq
     rows = [dict(f=0, tag="seed", link=link(), tetra=tetra())]
     tetra_placed_at = None            # ROW index that first reflects the placement (advanced after it)
     tetra_placed_xz = None
@@ -131,24 +146,27 @@ def capture(out=None, link_xz=(-1620.0, -850.0), facing=None, walk=6, roll_frame
             tetra_placed_at = i
             tetra_placed_xz = (tx, tz)
         dm.control_pipe_quiet("advancewith", inp)
-        rows.append(dict(f=i, tag=tag, link=link(), tetra=tetra()))
+        # store the raw controller input so the offline replay drives the SAME sequence (incl. the
+        # B thrust that fires the roll->CUT) -- see cc_stepper._row_step_args.
+        rec = {k: inp[k] for k in ('stickX', 'stickY', 'substickX', 'substickY', 'buttons', 'triggerL')}
+        rows.append(dict(f=i, tag=tag, link=link(), tetra=tetra(), inp=rec))
 
     # print the live log
     print("Link seed pos=%.3f,%.3f facing=%d  base=%08X" % (
         rows[0]['link']['pos'][0], rows[0]['link']['pos'][2], rows[0]['link']['shape_y'], base))
-    print(" f  tag   proc   Link(x,z)              spF   face   Tetra(x,z)            tSpF  ov")
+    print(" f  tag   proc   Link(x,z)              spF   face   Tetra(x,z)            tY     tSpF  ov")
     for r in rows:
         lk, tt = r['link'], r['tetra']
         ov = math.hypot(lk['pos'][0] - tt['pos'][0], lk['pos'][2] - tt['pos'][2])
         mark = " <-Tetra" if r['f'] == tetra_placed_at else ""
-        print("%2d  %-5s %4d  (%9.3f,%9.3f) %6.2f %5d  (%9.3f,%9.3f) %5.2f %6.1f%s" % (
+        print("%2d  %-5s %4d  (%9.3f,%9.3f) %6.2f %5d  (%9.3f,%9.3f) %6.3f %5.2f %6.1f%s" % (
             r['f'], r['tag'], lk['proc'], lk['pos'][0], lk['pos'][2], lk['speedF'], lk['shape_y'],
-            tt['pos'][0], tt['pos'][2], tt['speedF'], ov, mark))
+            tt['pos'][0], tt['pos'][2], tt['pos'][1], tt['speedF'], ov, mark))
 
     if out:
         fix = dict(stage='Hyrule', slot=SLOT, ground_y=GROUND_Y, link_base='0x%08x' % base,
                    tetra_base='0x%08x' % TETRA_BASE, tetra_placed_at=tetra_placed_at,
-                   tetra_placed_xz=tetra_placed_xz,
+                   tetra_placed_xz=tetra_placed_xz, sword_drawn=bool(draw_at is not None),
                    seq=[t for t, _ in [("seed", None)] + seq], frames=rows)
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, 'w') as f:
@@ -157,7 +175,7 @@ def capture(out=None, link_xz=(-1620.0, -850.0), facing=None, walk=6, roll_frame
     return dict(rows=rows, tetra_placed_at=tetra_placed_at, tetra_placed_xz=tetra_placed_xz)
 
 
-def replay_and_compare(rows, tetra_placed_at, tetra_placed_xz, ground_y=GROUND_Y):
+def replay_and_compare(rows, tetra_placed_at, tetra_placed_xz, ground_y=GROUND_Y, sword_drawn=False):
     """Replay the capture through the coupled sim OFFLINE and print a per-frame ULP diff table so a
     divergence is localized (pre-push = Phase-W wall-held roll; at/after the push = the CC wiring /
     the roll-frame Co-center morf). Thin wrapper over `cc_stepper.couple_replay` (the shared engine
@@ -166,7 +184,7 @@ def replay_and_compare(rows, tetra_placed_at, tetra_placed_xz, ground_y=GROUND_Y
     from harness.rollstab.cc_stepper import couple_replay
 
     walls = load_ordered_mesh(os.path.join(_rb, 'fixtures', 'hyrule_tetra_walls_ordered.json'))
-    res = couple_replay(rows, tetra_placed_at, tetra_placed_xz, walls, ground_y)
+    res = couple_replay(rows, tetra_placed_at, tetra_placed_xz, walls, ground_y, sword_drawn=sword_drawn)
     print("\nCOUPLED REPLAY:  dLinkX/dLinkZ/dTetX/dTetZ = sim-live ULP")
     print(" live  proc   dLinkX dLinkZ   dTetX dTetZ  note")
     okall = True
@@ -189,6 +207,9 @@ if __name__ == '__main__':
                   walk=int(kw.get('walk', 6)), roll_frames=int(kw.get('roll_frames', 20)),
                   tetra_on=(float(kw['tox']), float(kw['toz'])) if 'tox' in kw else None,
                   tetra_at=(float(kw['tcx']), float(kw['tcz'])) if 'tcx' in kw else None,
-                  place_after_roll=int(kw.get('place_after_roll', 1)))
+                  place_after_roll=int(kw.get('place_after_roll', 1)),
+                  draw_at=int(kw['draw_at']) if 'draw_at' in kw else None,
+                  thrust_at=int(kw['thrust_at']) if 'thrust_at' in kw else None)
     if kw.get('gate') == '1':
-        replay_and_compare(res['rows'], res['tetra_placed_at'], res['tetra_placed_xz'])
+        replay_and_compare(res['rows'], res['tetra_placed_at'], res['tetra_placed_xz'],
+                           sword_drawn='draw_at' in kw)

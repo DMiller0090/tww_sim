@@ -77,9 +77,36 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 
 - **North star: the TETRA seam clip, pure-sim** -- the phased plan (wall collision -> ground ->
   CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **C** (Phase W + Phase G
-  DONE; Phase C's Tetra-counterpart model DONE; the CC push is WIRED into the stepper and the
-  **push FRAMES are now bit-exact through the whole roll**, session 16 -- see below. Remaining Phase-C
-  items are the three-way clip-frame ordering + the read-lag; the Phase-W full-room cull is speed-only).
+  DONE; Phase C's Tetra-counterpart model DONE; the CC push is WIRED into the stepper, the **push
+  FRAMES are bit-exact through the whole roll** (session 16), and **the three-way clip-frame ordering
+  -- CC push x m34C2 cut lunge x CrrPos on the roll-stab CUT_F entry -- is now bit-exact** (session 17,
+  see below). Remaining Phase-C items are the CUT *tail* (Co centre during the cut + the post-cut
+  recovery proc), `GetCCMoveP` from Tetra's own recoil buffer, and the read-lag; the Phase-W full-room
+  cull is speed-only).
+- **Phase C CLIP-FRAME ORDERING now BIT-EXACT (session 17): the roll-stab CUT_F entry, LIVE-GATED
+  0-ULP.** The clip frame is the single frame Link fires a FORWARD `CUT_F` out of the roll into the
+  corner-braced Tetra, so it stacks -- in the decomp's `posMove` order (`d_a_player_main.cpp:2556-2610`)
+  -- `posMoveFromFootPos` (the roll speedF move) -> consume `mStts.m_cc_move` (the ~22u CC push from
+  the prior frame's `dCcS` overlap) -> the `m34C2` cut root-translate lunge (~49u) -> `dBgS_Acch::CrrPos`
+  (the wall pass). This ordering was already structurally in `step()`; this session live-VALIDATED it.
+  The coupled stepper already dispatches the roll->CUT continuation (`roll._roll_exit` -> `_cut_init` on
+  the B rising edge with the sword drawn); `cc_stepper.couple_replay` now replays the capture's per-frame
+  controller inputs (not a neutral hold) and seeds `sword_drawn`, so the B thrust fires the CUT at the
+  same frame it did live. **LIVE (slot 3, `capture_cc_push.py` with `draw_at=`/`thrust_at=`):** sword
+  drawn early during the walk-up (so the drawn-sword walk still rebuilds to the speedF-17 cap for a
+  full-26 roll), Link rolls into wall-braced Tetra, and a UP+B thrust (a *neutral* B is a side slash --
+  dead-end #12) fires an in-line `CUT_F` at roll anim-frame >17. The coupled sim reproduces **every
+  frame from Tetra's placement through the CUT_F entry 0-ULP for BOTH actors** (the roll-into-braced-
+  Tetra approach AND the push x cut-lunge x wall-pass on the clip frame). Gate `tests/test_cc_rollstab.py`
+  (fixture `fixtures/hyrule_cc_rollstab.json`, no Dolphin via `couple_replay`).
+  - Scoped to the CUT_F ENTRY (the single-frame lunge that decides the clip). The CUT *tail* diverges
+    and is NOT asserted (a separate, non-clip gap): the sim keeps posing Link's Co centre with the
+    frozen roll anim (`body_cyl.roll_co_center`) rather than the CUT pose, and live enters a post-cut
+    recovery proc (`0x5a`) the sim does not model. Both are moot for the clip (fully decided by the
+    entry-frame lunge; the roll never re-walks after) -- like the descoped roll->MOVE exit gap.
+  - This capture is wall-BLOCKED (Link rolled straight into the corner, so `CrrPos` eats the lunge's
+    z): it validates the ORDERING, not a clip-through. Threading the lunge behind the seam is the
+    solver's job (Phase T), not this ordering gate.
 - **Phase C CC-PUSH STEPPER wired + live-validated to the push frame (session 15).** The Co push is
   now in the per-frame stepper in the decomp's order: `LandState._cc_move` (set via `set_cc_move`)
   is consumed in `posMove` AFTER `posMoveFromFootPos` (the speedF/foot move) and BEFORE the m34C2
