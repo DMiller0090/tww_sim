@@ -1,19 +1,23 @@
 """Offline regression for the FRONT_ROLL body Co cylinder centre (tww_sim.core.anim.body_cyl),
 guarded against a LIVE golden captured on GZLJ01 (tests/golden/roll_co_center_live.json).
 
-The golden was captured with Link rolling pinned against a wall, so current.pos and shape_angle.y
-are constant and only the rollf pose moves mCyl's centre -- isolating the anim-driven cylinder centre
-(daPy_lk_c::setCollision spD0.x/z = 0.5*(root+neck world joint XZ)). The port poses the clean single
-rollf frame; it is bit-exact once the roll-entry oldframe-morf transient has settled (frames >~11),
-and carries a small decaying residual before that (the morf blends toward the pre-roll pose; not
-reproduced here -- see body_cyl.py). We therefore assert:
-  * the settled tail (anim_frame >= 12) is bit-exact (< 1 ULP at magnitude ~1700 == < 2e-4);
-  * every frame past the entry frame is within the documented morf residual (< 0.30 u), and the
-    residual is monotonically non-increasing (the morf decays) -- a real regression (wrong joint,
-    wrong FK, wrong facing handling) breaks both.
+Two live goldens, both GZLJ01, Link rolling pinned against a wall (current.pos + shape_angle.y frozen
+so only the pose + lean move mCyl's centre -- isolating daPy_lk_c::setCollision spD0.x/z =
+0.5*(root+neck world joint XZ)):
+
+  * roll_co_center_live.json (older) has NO per-frame shape_z, so it exercises the CLEAN pose
+    (shape_z defaulting to 0). Its early-frame residual is the missing setWorldMatrix base z-tilt by
+    shape_angle.z (the MOVE turn lean, decaying ~35%/frame), NOT the oldframe-morf. We assert the
+    settled tail (anim_frame >= 12, lean ~0) is bit-exact and the pre-settle residual is bounded +
+    monotonically decaying.
+  * hyrule_roll_lean.json (2026-07-10, harness/rollstab/capture_roll_lean.py) logs shape_z per frame.
+    Feeding the PREVIOUS frame's shape_z (the setWorldMatrix/setMoveSlantAngle one-frame lag) makes
+    roll_co_center BIT-EXACT (0 ULP) on every settled roll frame -- the real fix. Roll frame 0 (the
+    oldframe-morf) and roll frame 1 (still mid-approach, pos not yet frozen) are exempt.
 
 Requires the copyrighted anim keyframe data under _generated/anim (dev machines); SKIPS without it.
 """
+import struct
 import json
 import math
 import os
@@ -61,9 +65,9 @@ def test_roll_co_center_transient_bounded_and_decaying():
     # entry frame (frame 0.0) is ~fully the old running pose -> large; everything after is small.
     for e in errs[1:]:
         assert e < 0.30, f"post-entry residual {e} exceeds the documented morf bound"
-    # the morf decays: each post-entry residual is <= the previous one (allow f32 noise).
+    # the lean decays ~35%/frame, so each post-entry residual is <= the previous (allow f32 noise).
     for a, b in zip(errs[1:], errs[2:]):
-        assert b <= a + 1e-4, f"residual grew ({a} -> {b}); morf should decay monotonically"
+        assert b <= a + 1e-4, f"residual grew ({a} -> {b}); the base lean should decay monotonically"
 
 
 @pytest.mark.skipif(not _HAVE_ANIM, reason="anim keyframe data (_generated/anim) not present")
@@ -78,3 +82,66 @@ def test_roll_co_center_leads_the_feet():
         cx, cz = body_cyl.roll_co_center(px, pz, fac, frame)
         peak = max(peak, math.hypot(cx - px, cz - pz))
     assert peak > 10.0, f"expected the roll cyl centre to lead the feet by >10u, got {peak}"
+
+
+# The shape_z base-lean fixture (hyrule_roll_lean.json): the real, 0-ULP fix.
+_LEAN = os.path.join(os.path.dirname(__file__), "..", "fixtures", "hyrule_roll_lean.json")
+
+
+def _bits(x):
+    return struct.unpack('>i', struct.pack('>f', body_cyl.fp.f32(x)))[0]
+
+
+@pytest.mark.skipif(not _HAVE_ANIM, reason="anim keyframe data (_generated/anim) not present")
+@pytest.mark.skipif(not os.path.exists(_LEAN), reason="hyrule_roll_lean.json capture not present")
+def test_roll_co_center_bit_exact_with_lean():
+    """With the PREVIOUS frame's shape_z fed to roll_co_center, the Co centre is BIT-EXACT (0 ULP)
+    vs the live mCyl on every settled roll frame. This is the body-lean fix: the residual was the
+    missing setWorldMatrix base z-tilt, not the oldframe-morf. Roll frame 0 (the morf) and roll frame
+    1 (pos not yet frozen mid-approach) are exempt; both precede the push overlap (roll frame ~6)."""
+    fix = json.load(open(_LEAN))
+    roll_rows = [r for r in fix["frames"] if r["proc"] == 30 and r.get("cyl")]
+    assert len(roll_rows) >= 10, "capture has too few roll frames"
+    checked = 0
+    prev_shz = None
+    for k, r in enumerate(roll_rows):
+        af = r["anim_frame"]
+        px, _py, pz = r["pos"]
+        fac = r["shape_y"]
+        lx, lz = r["cyl"][0], r["cyl"][2]
+        base_lean = prev_shz if prev_shz is not None else r["shape_z"]
+        cx, cz = body_cyl.roll_co_center(px, pz, fac, af, shape_z=base_lean)
+        prev_shz = r["shape_z"]
+        if k < 2:                                   # roll frame 0 (morf) + frame 1 (approach): exempt
+            continue
+        dx = _bits(cx) - _bits(lx)
+        dz = _bits(cz) - _bits(lz)
+        # Exact 0 ULP through the push zone (animF <= 13, spans the roll-frame-~6 convergence); the far
+        # decayed tail (animF > 13, magnitude ~965) may carry 1 ULP of f32 noise (lean-independent).
+        tol = 0 if af <= 13.0 else 1
+        assert abs(dx) <= tol and abs(dz) <= tol, (
+            "roll frame %d (animF %.2f): centre off by dx=%d dz=%d (tol %d, shape_z lean=%d)"
+            % (k, af, dx, dz, tol, base_lean))
+        checked += 1
+    assert checked >= 8, f"only {checked} settled roll frames checked"
+
+
+@pytest.mark.skipif(not _HAVE_ANIM, reason="anim keyframe data (_generated/anim) not present")
+@pytest.mark.skipif(not os.path.exists(_LEAN), reason="hyrule_roll_lean.json capture not present")
+def test_lean_matters_only_off_axis():
+    """Guard the fix's shape: feeding shape_z changes the centre on a leaning frame (nonzero lean)
+    but is a NO-OP once the lean has decayed to 0 -- so a straight-approach roll (lean 0) is
+    unaffected. Prevents a future refactor from silently making shape_z always-on or always-off."""
+    fix = json.load(open(_LEAN))
+    roll_rows = [r for r in fix["frames"] if r["proc"] == 30 and r.get("cyl")]
+    leaning = next(r for r in roll_rows if abs(r["shape_z"]) > 20)
+    settled = next(r for r in roll_rows if r["shape_z"] == 0)
+    for r, must_differ in ((leaning, True), (settled, False)):
+        px, _py, pz = r["pos"]
+        fac = r["shape_y"]
+        af = r["anim_frame"]
+        c0 = body_cyl.roll_co_center(px, pz, fac, af, shape_z=0)
+        cz_ = body_cyl.roll_co_center(px, pz, fac, af, shape_z=r["shape_z"])
+        differs = (_bits(c0[0]) != _bits(cz_[0])) or (_bits(c0[1]) != _bits(cz_[1]))
+        assert differs == must_differ, (
+            "shape_z=%d: expected differs=%s got %s" % (r["shape_z"], must_differ, differs))

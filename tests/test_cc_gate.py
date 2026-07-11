@@ -12,11 +12,18 @@ What this locks in as bit-exact (0 ULP), the wiring + coupled physics:
   * the CC push wired at the decomp point in posMove -- Link stays bit-exact right up to the frame the
     push is first consumed, proving the push is applied in the right place and nowhere else.
 
-Open frontier (xfail): once the push fires (here at roll frame ~6), Link's position drifts a few ULP
-and compounds, because `body_cyl.roll_co_center` (the push's overlap geometry) carries the FRONT_ROLL
-oldframe-morf transient and is bit-exact only after roll frame ~11 (see its live golden
-`tests/golden/roll_co_center_live.json` + `knowledge/mechanics/actor-push.md`). Modelling that morf
-(SESSION_PROMPT future work) is what closes the push frames; when it lands, the xfail flips to pass.
+Push frames (2026-07-10): CLOSED. The overlap geometry (`body_cyl.roll_co_center`) is now fed the
+body lean (`shape_z = m351C>>1`, the `setWorldMatrix` base z-tilt); the curved approach carries a
+nonzero turn lean into the roll (seeded at roll entry from the live `m351C`) that shifts the animated
+Co centre until it decays, and the OLD clean-pose centre made Link drift once the push converged. With
+the lean fed in, every FRONT_ROLL push frame is bit-exact -- see `test_coupled_push_frames_bitexact`.
+(The early-frame residual was NOT the oldframe-morf, as previously supposed; the morf touches only
+roll frame 0. See `body_cyl.roll_co_center` + `knowledge/mechanics/actor-push.md`.)
+
+Remaining open (separate gap, not the push): after the roll ENDS the neutral-hold capture decelerates
+in MOVE (proc 6), and the roll->MOVE exit is not bit-exact (the known "mid-run stop -> re-walk" gap,
+README Phase-W). The clip fires a CUT out of the roll, not a MOVE exit, so this does not gate it; the
+push-frame test is scoped to the FRONT_ROLL frames.
 """
 import json
 import os
@@ -30,6 +37,7 @@ _WALLS = os.path.join(_HERE, "..", "fixtures", "hyrule_tetra_walls_ordered.json"
 # The proven bit-exact window (see the fixture / capture): from Tetra's placement (f10) through the
 # last frame before the push perturbs Link (f14). Every frame here is 0 ULP for BOTH actors.
 PREPUSH_LAST = 14
+FRONT_ROLL_PROC = 30            # daPyProc_FRONT_ROLL_e; the push-active roll frames
 
 
 def _load():
@@ -66,13 +74,18 @@ def test_coupled_prepush_and_brace_bitexact():
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="roll_co_center oldframe-morf residual: the push's overlap "
-                   "geometry is bit-exact only after roll frame ~11 (converges here at ~6). Model "
-                   "the morf (SESSION_PROMPT future work) to close the push frames.")
 def test_coupled_push_frames_bitexact():
-    """Link stays bit-exact through the push-active frames too (the full coupled clip physics).
-    Currently RED from the roll-frame Co-center morf; flips to pass when the morf is modelled."""
+    """Link (and Tetra) stay bit-exact through EVERY push-active FRONT_ROLL frame -- the full coupled
+    clip physics while the push is live. Closed 2026-07-10 by feeding the body lean (shape_z) to the
+    Co centre; previously RED from the clean-pose centre drifting once the push converged. Scoped to
+    the roll frames (proc == FRONT_ROLL): after the roll exits to MOVE the neutral-hold capture hits
+    the separate roll->walk-exit gap (see the module docstring), which the clip's roll->CUT never
+    touches."""
     _fix, res = _load()
-    for r in res:
+    roll = [r for r in res if r["proc"] == FRONT_ROLL_PROC]
+    assert len(roll) >= 10, "capture has too few FRONT_ROLL frames to be meaningful"
+    for r in roll:
         assert r["dlx"] == 0 and r["dlz"] == 0, (
-            "Link diverges at f%d: dlx=%d dlz=%d" % (r["f"], r["dlx"], r["dlz"]))
+            "Link diverges at f%d (roll): dlx=%d dlz=%d" % (r["f"], r["dlx"], r["dlz"]))
+        assert r["dtx"] == 0 and r["dtz"] == 0, (
+            "Tetra diverges at f%d (roll): dtx=%d dtz=%d" % (r["f"], r["dtx"], r["dtz"]))

@@ -87,11 +87,19 @@ CONVERGES into her; the coupled sim is **0-ULP** on Link's wall-approach roll AN
 Link stays bit-exact through the frame the push is first consumed. Offline gate `tests/test_cc_gate.py`
 (no Dolphin, fixture `fixtures/hyrule_cc_push.json`) + math/consumption `tests/test_cc_stepper.py`.
 
+**PUSH FRAMES now bit-exact through the whole roll (session 16): the body lean, not the morf.** The
+push overlap uses `body_cyl.roll_co_center`, which drifted on early roll frames -- root-caused (live
+capture `capture_roll_lean.py`) to the missing `setWorldMatrix` base z-tilt by `shape_angle.z` (the
+MOVE turn lean `m351C>>1`), NOT the oldframe-morf (that touches roll frame 0 only). A curved approach
+carries a nonzero turn lean into the roll; `body_cyl.roll_co_center(..., shape_z=)` now feeds the
+previous frame's lean, `LandState` exposes `_draw_lean` + evolves `m351C`, `cc_stepper` seeds `m351C`
+at roll entry. Live re-capture (slot 3): **every FRONT_ROLL push frame 0-ULP for Link AND Tetra**
+(`test_cc_gate::test_coupled_push_frames_bitexact`, xfail->pass; scoped to the roll frames). Live land
+14/14 byte-identical.
+
 Still missing to close Phase C:
-- **The push FRAMES bit-exact (xfail):** once the push engages, Link drifts a few ULP because the
-  overlap uses `body_cyl.roll_co_center`, which is bit-exact only after roll frame ~11 (the FRONT_ROLL
-  oldframe-morf). Model that morf (SESSION_PROMPT future work) OR converge at roll frame > 11. The
-  fixture makes this iterable OFFLINE.
+- The roll's EXIT to MOVE is not bit-exact (the neutral-hold capture's f27+, the separate "mid-run
+  stop -> re-walk" gap). Irrelevant to the clip, which fires a CUT out of the roll, not a MOVE exit.
 - The three-way ordering CC-push -> WallCorrect -> net overlap on the actual clip frame (order from
   the decomp, not intuition). NOTE the wall-brace: WallCorrect on Tetra cancels her recoil when she
   is wedged in the corner (confirmed live this session -- she barely moves while bracing Link's push).

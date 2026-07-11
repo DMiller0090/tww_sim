@@ -49,7 +49,10 @@ def link_co_center(link):
     (``current.pos``), a first-order proxy that only matters if an overlap fires off a roll. y =
     ``current.pos.y`` (FRONT_ROLL cylinder vertical)."""
     if link.state in _ROLL_POSE_STATES and body_cyl.available():
-        cx, cz = body_cyl.roll_co_center(link.pos_x, link.pos_z, link.facing, link.roll_frame)
+        # shape_z = the draw-time body lean (m351C>>1, setWorldMatrix base z-tilt): a curved-approach
+        # roll carries it, shifting the Co centre until it decays. See knowledge/mechanics/actor-push.md.
+        cx, cz = body_cyl.roll_co_center(link.pos_x, link.pos_z, link.facing, link.roll_frame,
+                                         shape_z=getattr(link, "_draw_lean", 0))
         return (cx, link.pos_y, cz)
     return (link.pos_x, link.pos_y, link.pos_z)
 
@@ -150,6 +153,12 @@ def couple_replay(rows, tetra_placed_at, tetra_placed_xz, walls, ground_y,
                      nspeed=26.0, speedF=26.0, use_anim=True, native=False, sword_drawn=False,
                      walls=walls)
     link._roll_m3570 = seed_m3570        # seeded mid-roll: live grinds (no bonk) => m3570 False
+    # Seed the turn-lean from the live roll-entry value (part of the seed, not calibration): its
+    # shape_z tilts the drawn Co centre. Prefer exact m351C; fall back to shape_z<<1 (loses the LSB).
+    if e['link'].get('m351C') is not None:
+        link.m351C = int(e['link']['m351C']) & 0xFFFF
+    elif e['link'].get('shape_z') is not None:
+        link.m351C = (int(e['link']['shape_z']) << 1) & 0xFFFF
     ts = e['tetra']
     tetra = Zl1FollowState(x=ts['pos'][0], y=ts['pos'][1], z=ts['pos'][2], angle_y=ts['shape_y'],
                            speedF=0.0, stt=STT_IDLE)

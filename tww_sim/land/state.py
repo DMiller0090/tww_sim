@@ -217,6 +217,8 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         self.m34de = int(facing) & 0xFFFF      # PREVIOUS frame's shape_angle.y (11287; WAIT idle-anim turn-step)
         self.m351C = 0                         # MOVE turn-lean state (setMoveSlantAngle, 9499);
         #                                        shape_angle.z = m351C >> 1 tilts the setWorldMatrix base
+        self._draw_lean = 0                    # shape_angle.z used at THIS frame's draw (pre-update
+        #                                        m351C>>1): the body Co centre (body_cyl) reads it
         self.state = int(state)                # link_state / mCurProc
         self.nspeed = f32(nspeed)              # mNormalSpeed (potential_speed) -- bit-exact
         self.speedF = f32(speedF)              # position-integrating speed
@@ -645,14 +647,17 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
                 self.ground_hit = True
             else:
                 self.ground_hit = False
-        # Deferred foot draw: base at post-integration pos with LAST frame's lean (setWorldMatrix
-        # runs before setMoveSlantAngle, 11551); then the slant updates for the next frame.
+        # Deferred foot draw at post-integration pos with LAST frame's lean (setWorldMatrix runs before
+        # setMoveSlantAngle, 11551); expose that draw-time lean (body_cyl reads it) + evolve m351C always.
+        self._draw_lean = s16_signed(self.m351C) >> 1
         if self._foot is not None and self._foot.defer_draw:
             self._foot.set_pos(self.pos_x, self.pos_z, facing=self.facing, py=self.pos_y,
-                               lean=s16_signed(self.m351C) >> 1)
+                               lean=self._draw_lean)
             self._foot.finish_draw()
             self._set_move_slant_angle()
             d = math.hypot(self.pos_x - px0, self.pos_z - pz0)
+        else:
+            self._set_move_slant_angle()
         self._cut_add = (0.0, 0.0)
         self.m34de = self.facing                 # m34DE = shape_angle.y (end-of-frame, 11287): last facing
         self.m34ea = self.m34dc                  # m34EA = m34DC (end-of-frame, 11289): last stick want

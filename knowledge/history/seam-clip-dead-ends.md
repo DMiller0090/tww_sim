@@ -108,6 +108,22 @@ dtm_make's 255->254 delivered-byte calibration) and the "lottery" vanished: the 
 shipped clipped live 0-ULP. Lesson: a calibration verified only on a regime that HIDES state is
 not a calibration of that state.
 
+## The FRONT_ROLL Co-centre residual is the BASE LEAN, not the oldframe-morf (session 16)
+
+The session-15 push-frame drift was blamed on `body_cyl.roll_co_center` carrying the FRONT_ROLL
+**oldframe-morf** transient (supposedly bit-exact only after roll frame ~11), with the fix being "model
+the morf". **Ruled out by a live capture** (`harness/rollstab/capture_roll_lean.py`, logging mCyl centre
++ `mBodyAngle` + `m34F2/m34F4` per roll frame): the roll's `i_morf` is `mRoll.field_0x14 = 2.0`, so the
+oldframe-morf blends **roll frame 0 only** -- it cannot be the frames-1..11 residual. That residual is
+the missing `setWorldMatrix` base `ZXYrotM` z-tilt by `shape_angle.z` (the MOVE turn lean `m351C>>1`,
+decaying ~35%/frame): a curved approach carries a nonzero lean into the roll (`mBodyAngle.x=y=0`,
+`m34F2=m34F4=0` throughout; only `mBodyAngle.z==shape_angle.z`), and the clean lean-0 pose is off by it.
+Feeding the previous frame's `shape_z` to the base is 0-ULP on every settled roll frame; the
+`jointBeforeCB` body_chn rotation contributes nothing to the root/neck xz midpoint (adding it breaks
+it). Lesson: capture the actual per-frame quantity before attributing a residual to a plausible
+mechanism -- two mechanisms with different timescales were conflated. Do NOT build a morf driver for the
+push frames; the morf still owns roll frame 0 only (out of push scope).
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

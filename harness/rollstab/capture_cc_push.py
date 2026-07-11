@@ -39,7 +39,9 @@ TETRA_BASE = 0x80ACD20C
 # Link via the player pointer chain P = deref(0x803AD860) (spotcheck_rollstab offsets).
 LINK_PTR = 0x803AD860
 L = dict(pos_x=0x120, pos_y=0x124, pos_z=0x128, shape_y=0x136, angle_y=0x12E, speedF=0x17C,
-         nspeed=0x34E4, curproc=0x3100, csangle=None)
+         nspeed=0x34E4, curproc=0x3100, csangle=None,
+         shape_z=0x138,          # shape_angle.z (class 0x210 - 0xD8): the drawn body lean
+         m351C=0x3444)           # MOVE turn-lean state (class 0x351C - 0xD8); shape_z = m351C>>1
 # Tetra via actor base (capture_tetra_follow offsets).
 T = dict(pos=0x1F8, angle_y=0x206, shape_y=0x20E, speedF=0x254, stt=0x84B, type=0x84F)
 # teleport globals (dolphin_mem cmd_teleport).
@@ -72,11 +74,14 @@ def capture(out=None, link_xz=(-1620.0, -850.0), facing=None, walk=6, roll_frame
     if struct.unpack('>b', dm.read_bytes(h, mem1, TETRA_BASE + T['type'], 1))[0] != 5:
         raise RuntimeError("not the type-5 Tetra; load slot 3 first")
 
+    def rs16(a): return struct.unpack('>h', dm.read_bytes(h, mem1, a, 2))[0]
+
     def link():
         return dict(proc=ri(P + L['curproc']), pos=[rf(P + L['pos_x']), rf(P + L['pos_y']),
                     rf(P + L['pos_z'])], shape_y=ru16(P + L['shape_y']),
                     angle_y=ru16(P + L['angle_y']), speedF=rf(P + L['speedF']),
-                    nspeed=rf(P + L['nspeed']))
+                    nspeed=rf(P + L['nspeed']),
+                    shape_z=rs16(P + L['shape_z']), m351C=rs16(P + L['m351C']))
 
     def tetra():
         return dict(pos=[rf(TETRA_BASE + T['pos']), rf(TETRA_BASE + T['pos'] + 4),

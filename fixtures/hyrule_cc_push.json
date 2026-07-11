@@ -55,7 +55,9 @@
     "shape_y": 36744,
     "angle_y": 36744,
     "speedF": 0.0,
-    "nspeed": 0.0
+    "nspeed": 0.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -82,7 +84,9 @@
     "shape_y": 36744,
     "angle_y": 36744,
     "speedF": 0.0,
-    "nspeed": 0.0
+    "nspeed": 0.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -109,7 +113,9 @@
     "shape_y": 36744,
     "angle_y": 36744,
     "speedF": 0.0,
-    "nspeed": 0.0
+    "nspeed": 0.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -136,7 +142,9 @@
     "shape_y": 37296,
     "angle_y": 37296,
     "speedF": 0.19465376436710358,
-    "nspeed": 3.421870708465576
+    "nspeed": 3.421870708465576,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -163,7 +171,9 @@
     "shape_y": 37738,
     "angle_y": 37738,
     "speedF": 1.783913493156433,
-    "nspeed": 6.872161865234375
+    "nspeed": 6.872161865234375,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -190,7 +200,9 @@
     "shape_y": 38091,
     "angle_y": 38091,
     "speedF": 3.742952585220337,
-    "nspeed": 10.340320587158203
+    "nspeed": 10.340320587158203,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -217,7 +229,9 @@
     "shape_y": 38374,
     "angle_y": 38374,
     "speedF": 9.951258659362793,
-    "nspeed": 13.820161819458008
+    "nspeed": 13.820161819458008,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -244,7 +258,9 @@
     "shape_y": 38600,
     "angle_y": 38600,
     "speedF": 17.0,
-    "nspeed": 17.0
+    "nspeed": 17.0,
+    "shape_z": -50,
+    "m351C": -100
    },
    "tetra": {
     "pos": [
@@ -271,7 +287,9 @@
     "shape_y": 38781,
     "angle_y": 38781,
     "speedF": 17.0,
-    "nspeed": 17.0
+    "nspeed": 17.0,
+    "shape_z": -100,
+    "m351C": -200
    },
    "tetra": {
     "pos": [
@@ -298,7 +316,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -65,
+    "m351C": -130
    },
    "tetra": {
     "pos": [
@@ -325,7 +345,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -43,
+    "m351C": -85
    },
    "tetra": {
     "pos": [
@@ -352,7 +374,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -28,
+    "m351C": -56
    },
    "tetra": {
     "pos": [
@@ -379,7 +403,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -19,
+    "m351C": -37
    },
    "tetra": {
     "pos": [
@@ -406,7 +432,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -13,
+    "m351C": -25
    },
    "tetra": {
     "pos": [
@@ -433,7 +461,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -9,
+    "m351C": -17
    },
    "tetra": {
     "pos": [
@@ -460,7 +490,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -6,
+    "m351C": -12
    },
    "tetra": {
     "pos": [
@@ -487,7 +519,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -4,
+    "m351C": -8
    },
    "tetra": {
     "pos": [
@@ -514,7 +548,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -3,
+    "m351C": -6
    },
    "tetra": {
     "pos": [
@@ -541,7 +577,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -2,
+    "m351C": -4
    },
    "tetra": {
     "pos": [
@@ -568,7 +606,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -2,
+    "m351C": -3
    },
    "tetra": {
     "pos": [
@@ -595,7 +635,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": -1,
+    "m351C": -2
    },
    "tetra": {
     "pos": [
@@ -622,7 +664,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -649,7 +693,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -676,7 +722,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -703,7 +751,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -730,7 +780,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -757,7 +809,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 26.0,
-    "nspeed": 26.0
+    "nspeed": 26.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -784,7 +838,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 21.0,
-    "nspeed": 21.0
+    "nspeed": 21.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -811,7 +867,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 18.5,
-    "nspeed": 18.5
+    "nspeed": 18.5,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
@@ -838,7 +896,9 @@
     "shape_y": 39507,
     "angle_y": 39507,
     "speedF": 14.85659122467041,
-    "nspeed": 16.0
+    "nspeed": 16.0,
+    "shape_z": 0,
+    "m351C": 0
    },
    "tetra": {
     "pos": [
