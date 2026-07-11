@@ -76,13 +76,30 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
 - **North star: the TETRA seam clip, pure-sim** -- the phased plan (wall collision -> ground ->
-  CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Open phase: **C** (Phase W + Phase G
-  DONE; Phase C's Tetra-counterpart model DONE; the CC push is WIRED into the stepper, the **push
-  FRAMES are bit-exact through the whole roll** (session 16), and **the three-way clip-frame ordering
-  -- CC push x m34C2 cut lunge x CrrPos on the roll-stab CUT_F entry -- is now bit-exact** (session 17,
-  see below). Remaining Phase-C items are the CUT *tail* (Co centre during the cut + the post-cut
-  recovery proc), `GetCCMoveP` from Tetra's own recoil buffer, and the read-lag; the Phase-W full-room
-  cull is speed-only).
+  CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Phases W + G + the load-bearing Phase-C
+  items are DONE; **Phase T is now OPEN** and its acceptance FOUNDATION is landed (session 18, below).
+  Remaining Phase-C items are the CUT *tail* (Co centre during the cut + the post-cut recovery proc),
+  `GetCCMoveP` from Tetra's own recoil buffer, and the read-lag; the Phase-W full-room cull is
+  speed-only.
+- **Phase T OPENED (session 18): the Tetra-corner seam-clip ACCEPTANCE FOUNDATION, live-anchored.**
+  Measure-first (Phase-G discipline), the flooded-Hyrule corner at (-1727,-990) is now in the rollstab
+  pipeline's conventions: `fixtures/hyrule_tetra_geo.json` (built offline from the live RAM golden
+  `tests/golden/hyrule_seam_1727_ram.json` by `make_tetra_geo.py`: the two incident wall tris --
+  wallA +X poly 2915, wallB +Z poly 2904, a 90.57-deg corner -- the 4-tri CrrPos barrier, `link_y` =
+  Phase-G's flat 0.16327, seam vertex S, and the authoritative live-confirmed clip target old/new) and
+  the acceptance module `geometry_tetra.py` (the `geometry.py` sibling, PUSH-AWARE: `pred_genuine(old,
+  push)` tests the COUPLED endpoint `new = f32(old + push + lunge)` in the decomp `posMove` order, not
+  the bare kaze `old + LUNGE`). **Established facts (gate `tests/test_tetra_geo.py`, offline, 5 green):**
+  the corner is a NEEDS-PUSH clip -- the 49.2202u lunge (facing F=40874) lands **~0.7507u short** of the
+  seam; a **~0.7506u Link CC push** (the ~1.5u corner-braced-Tetra overlap x the 0.50 rank-table share)
+  steers `new` behind the seam and reproduces the live golden endpoint **BIT-EXACT** (0-ULP). Measured
+  dust structure (informs the coupled solver): with the push fixed, `old` clips over a **~0.86u
+  along-band at ~8% f32 density** (kaze-like -- the approach razor is threadable by the from-rest knobs,
+  not a single lottery point); the push is razor-thin as a continuous knob but that is a NON-issue --
+  it is produced bit-exactly by the coupled sim from Tetra's f32 placement, so the solver places Tetra
+  at f32 coords, lets the exact push fall out, and tests the exact candidate (the seam-clip-solver
+  discipline, extended to placement). NOT yet done: the from-rest COUPLED solver (search a Tetra
+  placement + approach that lands `old` on the sliver) and its clean-DTM live clip -- the next increment.
 - **Phase C CLIP-FRAME ORDERING now BIT-EXACT (session 17): the roll-stab CUT_F entry, LIVE-GATED
   0-ULP.** The clip frame is the single frame Link fires a FORWARD `CUT_F` out of the roll into the
   corner-braced Tetra, so it stacks -- in the decomp's `posMove` order (`d_a_player_main.cpp:2556-2610`)

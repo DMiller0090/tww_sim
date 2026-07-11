@@ -139,3 +139,23 @@ Same solver shape as Phase 0: from-rest exact approach -> steer via push overlap
 acceptance through exact geometry at the Tetra corner -> deliver clean DTM -> live 0-ULP clip.
 No new physics should need discovering by this point; if it does, a phase above was closed
 early.
+
+**Acceptance FOUNDATION DONE (session 18), measure-first.** The Tetra corner (-1727,-990) is now in
+the rollstab conventions: `fixtures/hyrule_tetra_geo.json` (built offline from the live RAM golden
+`tests/golden/hyrule_seam_1727_ram.json` by `make_tetra_geo.py`; wallA +X poly 2915, wallB +Z poly
+2904, 90.57-deg corner, the 4-tri CrrPos barrier, `link_y`=0.16327, seam vertex S, authoritative
+old/new) + the PUSH-AWARE acceptance module `geometry_tetra.py` (`pred_genuine(old, push)` tests the
+coupled `new = f32(old + push + lunge)`). Live-anchored facts (gate `tests/test_tetra_geo.py`, 5
+green): NEEDS-PUSH -- the 49.2202u lunge (F=40874) is ~0.7507u short; a ~0.7506u Link push (~1.5u
+corner-braced-Tetra overlap x 0.50 share) reproduces the live golden endpoint BIT-EXACT. The approach
+razor is threadable (with push fixed, `old` clips over a ~0.86u along-band at ~8% f32 density, kaze-
+like); the push is not a free continuous knob -- the coupled sim produces it bit-exactly from Tetra's
+f32 placement, so the solver tests the exact candidate.
+
+**Next: the from-rest COUPLED solver.** Reuse the Phase-0 solver shape (`solver.py`) on the coupled
+stepper (`cc_stepper.CcCoupledStepper` / `couple_replay`, Phase C): from-rest approach knobs steer
+`old` onto the sliver AND a Tetra f32 placement supplies the push; `geometry_tetra.pred_genuine` is
+the exact acceptance; deliver via `deliver.py`'s clean-DTM gate; live 0-ULP clip. OPEN design question
+raised by the measurement (surface before building): the session-15..17 staging teleports Tetra INTO
+the corner and rolls Link in, but the plan_seam_clip analysis places Tetra BEHIND Link (push toward
+the seam). Confirm which staging gives a push in the clip-ward direction before wiring the search.
