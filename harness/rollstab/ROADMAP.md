@@ -72,8 +72,9 @@ accelerate to `0.04*sqrt(dist^2-130^2)` capped 10, stop <= 130) is **live-gated 
 decomp-exact avoid predicate (`dist_table[0xAB]`: XZ < 300, ±90deg cone). Her **BG collision** is
 modelled too (`mObjAcch.CrrPos` = the same Phase-W `dBgS_Acch::CrrPos`, `dBgS_ObjAcch` subclass, her
 single R=50/half-H=30 AcchCir; `step(walls=)`), LIVE-GATED 0-ULP by a corner-wall eject. This
-WallCorrect is the **wall-brace** the plan relies on: push Tetra into the corner, roll in for the
-slash, and the wall cancels her CC recoil so she holds as a stable pusher delivering the nudge.
+WallCorrect **wall-brace** (wedged Tetra's CC recoil is canceled so she holds) is a validated MECHANIC.
+Whether it helps the clip is OPEN (session-19 correction): a corner-braced Tetra pushes the WRONG way
+and a stationary behind-Link Tetra gets plowed, so the clip STAGING is unsolved (see Phase T).
 Mechanic page `knowledge/mechanics/tetra-follow.md`.
 
 **CC push WIRED into the stepper + live-validated to the push frame (session 15).** The Co push now

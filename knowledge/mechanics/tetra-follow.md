@@ -10,8 +10,9 @@ type-5 Tetra frame-for-frame across engage → turn → accelerate → distance-
 decelerate → stop (`tests/test_tetra_follow.py`, fixture `fixtures/hyrule_tetra_follow.json` from
 `harness/rollstab/capture_tetra_follow.py`, flooded Hyrule savestate slot 3). Her BG collision
 (`mObjAcch.CrrPos` WallCorrect, R=50/half-H=30) is also live-validated 0-ULP (corner-wall eject,
-`fixtures/hyrule_tetra_wallcorrect.json`) - the wall-brace that holds her as a stable pusher when
-the clip shoves her into the corner. The lock-on/talk region (`zl1_attention_active`) is
+`fixtures/hyrule_tetra_wallcorrect.json`) - the wall-brace mechanic (a wedged Tetra's CC recoil is
+canceled so she holds in place); whether corner-bracing helps the clip is OPEN (it pushes the wrong
+way -- see below). The lock-on/talk region (`zl1_attention_active`) is
 decomp-exact; its live reticle confirmation is still open (see Open below). Partial model on purpose
 - event/demo/cutscene, message flow, eye/joint control, and water FX are out of scope.
 **Source:** decomp GZLJ01 `daNpc_Zl1_c` (`optn_1`/`optn_2`/`optn_action1`, `createInit`,
@@ -65,12 +66,13 @@ floor/water she floats with **speed.y == 0 every frame** (live-confirmed), so th
 `speed_y = 0` (at 1-ULP scale `speed_y = -4.5` mis-ejects a wall-corrected XZ by 1 ULP).
 
 The follow's 130 u keep-distance means she never touches a wall in a *normal* chase (the wall pass
-no-ops, live 0-ULP over 119 frames). It becomes load-bearing in the **clip**: the plan pushes Tetra
-**into the corner** (Link shoves her via the Co push), then rolls in for the slash. Wedged in the
-corner, her `CrrPos` WallCorrect **cancels her CC recoil** (she would otherwise recoil away each
-overlap frame, the [[tetra-push-model]] frame-lag caveat), so the wall **braces her as a stable
-pusher** delivering the nudge on the roll-clip frame. Live-validated 0-ULP: overlapping the corner
-`+x` wall (x = −1727, normal +x) she ejects to the exact live XZ (`capture_tetra_wallcorrect.py` →
+no-ops, live 0-ULP over 119 frames). The wall pass is a validated MECHANIC for a wedged Tetra: her
+`CrrPos` WallCorrect **cancels her CC recoil** (she would otherwise recoil away each overlap frame, the
+[[tetra-push-model]] frame-lag caveat), so a wall holds her in place. Whether that helps the **clip** is
+a separate, OPEN question (session-19 correction): a corner-braced Tetra pushes the WRONG way (out of
+the seam) and a stationary behind-Link Tetra gets plowed by Link's roll, so the clip STAGING is unsolved
+(see the rollstab `README.md` ## Status / [[seam-clip-solver]]). Live-validated 0-ULP: overlapping the
+corner `+x` wall (x = −1727, normal +x) she ejects to the exact live XZ (`capture_tetra_wallcorrect.py` →
 `fixtures/hyrule_tetra_wallcorrect.json`, `tests/test_tetra_follow.py`). The `move_jmp` gap hop
 (over a ledge) is still unmodelled (no gate exercises it; the corner floor is flat).
 

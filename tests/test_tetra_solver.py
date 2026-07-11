@@ -1,20 +1,22 @@
-"""Phase-T gate: the from-rest COUPLED solver's acceptance CORE + Tetra-placement axis.
+"""Phase-T gate: the STATIC acceptance geometry of `harness/rollstab/solver_tetra.py`, vs the golden.
 
-Locks in what `harness/rollstab/solver_tetra.py` newly does, against the live golden
-(`fixtures/hyrule_tetra_geo.json`, from the RAM capture `tests/golden/hyrule_seam_1727_ram.json`,
-slot 3). The solver threads the seam with the from-rest APPROACH knobs (moving `old`, live-pending on
-a minted flooded-Hyrule anchor); the piece gated HERE is the NOVEL, offline-exact core it stands on:
+SCOPE (session-19 correction): this gates the STATIC `co_move_pair` acceptance ONLY. It does NOT prove
+the staging works. The stationary behind-Link staging `solver_tetra` assumes is REFUTED by the coupled
+dynamics (Tetra gets plowed before the cut -- README ## Status, dead-ends #17, the session-19 handoff);
+a real reachable clip must be checked with the DYNAMIC coupled cut, not this static predictor.
 
-  * a behind-Link stationary Tetra whose EMERGENT push -- the SAME `co_move_pair` output
-    `cc_stepper._cc_check` computes each frame (the Co overlap of Link's animated FRONT_ROLL centre
-    with Tetra's cylinder) -- steers the coupled endpoint through the seam and reproduces the live
-    golden `new` BIT-EXACT (0-ULP);
+What IS locked in here, against the live golden (`fixtures/hyrule_tetra_geo.json`, from the RAM capture
+`tests/golden/hyrule_seam_1727_ram.json`, slot 3) -- all still-true geometry:
+
+  * for a behind-Link Tetra placement, the EMERGENT push (the SAME `co_move_pair` output
+    `cc_stepper._cc_check` computes: the Co overlap of Link's animated FRONT_ROLL centre with Tetra's
+    cylinder) reproduces the live golden `new` BIT-EXACT (0-ULP) when placed at the golden's overlap;
   * the Tetra placement is a 2D f32 knob, not a 1D distance: a COLINEAR-BEHIND Tetra (push along the
     roll facing F) does NOT clip -- the steer bearing (~235deg, ~11deg off F) decides it
     ([[tetra-push-model]] correction); a wrong-side (in-front) Tetra never clips (direction guard).
 
 Pure-geometry + offline (no Dolphin, fast). The full per-frame CUT_F ordering (push consume -> m34C2
-lunge -> CrrPos) is separately live-gated by `test_cc_rollstab.py`; this gates the solver's predictor.
+lunge -> CrrPos) is separately live-gated by `test_cc_rollstab.py`.
 """
 import struct
 

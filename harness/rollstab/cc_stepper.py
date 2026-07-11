@@ -16,9 +16,12 @@ frame -- the decomp-faithful frame order (all validated against ``d_a_player_mai
     is his animated root/neck midpoint at the drawn pose -- ``body_cyl.roll_co_center``). ``SetPosCorrect``
     (``cc_push.co_move_pair``) then accumulates the equal-and-opposite (same-rank 50/50) moves.
 
-This is the interaction the seam clip rides: push Tetra into the corner, roll Link in; Tetra's own
-recoil is canceled by her corner WallCorrect (the wall-brace, `walls_tetra=`), so she holds and
-delivers a steady nudge that steers Link's roll+thrust past the seam's f32 minimum.
+The WallCorrect wall-brace (`walls_tetra=`) is a real, live-gated MECHANIC: a wedged Tetra's own CC
+recoil is canceled, so she holds instead of recoiling away each overlap frame. WHICH staging actually
+clips is OPEN (session-19 correction): a corner-braced Tetra pushes the WRONG way (out of the seam),
+and a stationary behind-Link Tetra gets PLOWED by Link's roll (README ## Status, dead-ends #15-17).
+This stepper is the SUBSTRATE for testing any candidate staging via the dynamic coupled cut; it does
+not itself assert a working staging.
 
 Pure-sim / no calibration: the driver takes only the two seed states + input sequences; the live
 Dolphin run is a VALIDATION gate (`ccgate.py`), never in a solve loop. Order note: within a frame

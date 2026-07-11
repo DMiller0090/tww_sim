@@ -73,9 +73,10 @@ def test_follow_exercises_full_cycle():
 
 def test_wallcorrect_bitexact_vs_live():
     """Her BG WallCorrect (mObjAcch.CrrPos, R=50/half-H=30) ejects her from a corner-wall overlap
-    to the exact live position. This is the wall-brace that holds her as a stable pusher when the
-    clip shoves her into the corner. Fixture from capture_tetra_wallcorrect.py; on the flat
-    floor/water she floats with speed.y == 0 (live), so the pass runs speed_y = 0."""
+    to the exact live position -- the wall-brace MECHANIC (a wedged Tetra's CC recoil is canceled so
+    she holds in place). Whether corner-bracing helps the clip is a separate, open question (it pushes
+    the wrong way; see the rollstab README ## Status). Fixture from capture_tetra_wallcorrect.py; on
+    the flat floor/water she floats with speed.y == 0 (live), so the pass runs speed_y = 0."""
     wc = json.load(open(WC_FIX))
     walls = load_ordered_mesh(WALLS_FIX)
     pos, info = acch_crr_pos(tuple(wc['old']), tuple(wc['new']), walls,

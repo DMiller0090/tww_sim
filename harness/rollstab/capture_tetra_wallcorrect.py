@@ -1,9 +1,10 @@
 """Capture Tetra's BG WallCorrect at the corner -> a sim gate fixture (ROADMAP Phase C).
 
-The follow keeps a 130 u distance, so Tetra never touches a wall in a normal chase. But the Tetra
-clip pushes her INTO the corner (Link shoves her via the Co push, then rolls in for the slash), so
-she is WALL-BRACED there: her `mObjAcch.CrrPos` WallCorrect against the corner walls cancels her CC
-recoil and holds her as a stable pusher. This capture exercises that WallCorrect in isolation:
+The follow keeps a 130 u distance, so Tetra never touches a wall in a normal chase. A wedged Tetra is
+WALL-BRACED: her `mObjAcch.CrrPos` WallCorrect against the corner walls cancels her CC recoil so she
+holds in place instead of recoiling. This capture validates that WallCorrect MECHANIC in isolation
+(whether corner-bracing helps the clip is a separate, refuted question -- it pushes the wrong way; see
+the rollstab README ## Status). The capture:
 teleport Tetra to OVERLAP the corner's +x wall (x = -1727) and log the frame-1 ejection, so the
 offline gate can confirm `core.collision.acch_crr_pos` with her R=50 / half-H=30 cylinder
 reproduces the corrected position bit-for-bit.

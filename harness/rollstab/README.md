@@ -205,9 +205,10 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
   pass as Phase W (`dBgS_ObjAcch` subclass, no override) with her single R=50/half-H=30 AcchCir;
   `Zl1FollowState.step(walls=)` runs it. She floats with speed.y==0 on the corner (live), so the
   pass uses speed_y=0 (a -4.5 dip is 1 ULP off). Validated by a corner-wall eject
-  (`fixtures/hyrule_tetra_wallcorrect.json`) - this WallCorrect is the wall-brace that cancels her CC
-  recoil so she holds as a stable pusher (the plan: push Tetra into the corner, roll in, she nudges).
-  Mechanic page `knowledge/mechanics/tetra-follow.md`. Open Phase-C items: the `GetCCMoveP` term at
+  (`fixtures/hyrule_tetra_wallcorrect.json`) - this WallCorrect wall-brace (wedged Tetra's CC recoil is
+  canceled so she holds) is a validated MECHANIC; whether it helps the clip is OPEN (a corner-braced
+  Tetra pushes the WRONG way, a stationary behind-Link Tetra gets plowed -- clip staging unsolved, see
+  the Phase-T status entry). Mechanic page `knowledge/mechanics/tetra-follow.md`. Open Phase-C items: the `GetCCMoveP` term at
   the decomp's frame point, the three-way CC-push -> WallCorrect -> net-overlap ordering, the
   attention live reticle confirmation, and the Tetra read-lag (the follow gate used a stationary Link).
 - **Phase G DONE (session 13): the Tetra floor is FLAT -> ground collision is a no-op for this clip.**
