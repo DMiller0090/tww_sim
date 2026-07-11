@@ -59,7 +59,8 @@ def _dm():
 
 
 def capture(out=None, link_xz=(-1620.0, -850.0), facing=None, walk=6, roll_frames=20,
-            tetra_on=None, tetra_at=None, place_after_roll=1, draw_at=None, thrust_at=None):
+            tetra_on=None, tetra_at=None, place_after_roll=1, draw_at=None, thrust_at=None,
+            slot=SLOT):
     """``draw_at`` (walk-frame index) ORs a B into that walk frame to UNSHEATHE the sword early -- a
     drawn sword is required for the roll->CUT (roll-stab) dispatch, and drawing early (while speed is
     still low) lets the drawn-sword walk rebuild to the speedF-17 cap for a full-26 roll. ``thrust_at``
@@ -75,7 +76,7 @@ def capture(out=None, link_xz=(-1620.0, -850.0), facing=None, walk=6, roll_frame
     def wf(a, v): dm.write_bytes(h, mem1, a, struct.pack('>f', v))
 
     dm.control_pipe_quiet("clearinput"); dm.control_pipe_quiet("pause")
-    dm.control_pipe_quiet("savestate", {"action": "load", "slot": SLOT})
+    dm.control_pipe_quiet("savestate", {"action": "load", "slot": slot})
     P = struct.unpack('>I', dm.read_bytes(h, mem1, LINK_PTR, 4))[0]
     base = P - 0xD8
     if struct.unpack('>b', dm.read_bytes(h, mem1, TETRA_BASE + T['type'], 1))[0] != 5:
@@ -164,7 +165,7 @@ def capture(out=None, link_xz=(-1620.0, -850.0), facing=None, walk=6, roll_frame
             tt['pos'][0], tt['pos'][2], tt['pos'][1], tt['speedF'], ov, mark))
 
     if out:
-        fix = dict(stage='Hyrule', slot=SLOT, ground_y=GROUND_Y, link_base='0x%08x' % base,
+        fix = dict(stage='Hyrule', slot=slot, ground_y=GROUND_Y, link_base='0x%08x' % base,
                    tetra_base='0x%08x' % TETRA_BASE, tetra_placed_at=tetra_placed_at,
                    tetra_placed_xz=tetra_placed_xz, sword_drawn=bool(draw_at is not None),
                    seq=[t for t, _ in [("seed", None)] + seq], frames=rows)
@@ -209,7 +210,8 @@ if __name__ == '__main__':
                   tetra_at=(float(kw['tcx']), float(kw['tcz'])) if 'tcx' in kw else None,
                   place_after_roll=int(kw.get('place_after_roll', 1)),
                   draw_at=int(kw['draw_at']) if 'draw_at' in kw else None,
-                  thrust_at=int(kw['thrust_at']) if 'thrust_at' in kw else None)
+                  thrust_at=int(kw['thrust_at']) if 'thrust_at' in kw else None,
+                  slot=int(kw.get('slot', SLOT)))
     if kw.get('gate') == '1':
         replay_and_compare(res['rows'], res['tetra_placed_at'], res['tetra_placed_xz'],
-                           sword_drawn='draw_at' in kw)
+                           sword_drawn=('draw_at' in kw or kw.get('sword_drawn') == '1'))

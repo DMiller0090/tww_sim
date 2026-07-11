@@ -75,6 +75,24 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
+- **Phase T (session 20): un-braced Tetra shove + roll-stab CUT_F entry LIVE-VALIDATED 0-ULP; the
+  placement search is BLOCKED on coupled-sim SPEED.** On slot 6 (Dereck's ideal setup: Link facing/camera
+  40842 on-axis, sword DRAWN, ~528u runway) a straight roll into a movable behind-placed Tetra plows +
+  repositions her and thrusts; the coupled sim (`cc_stepper` via `capture_cc_push`, now `slot=`/`sword_drawn=`
+  aware) matches live BIT-EXACT for BOTH actors through the roll AND the CUT_F entry frame (the CUT tail
+  diverges, descoped as in session 17). So the un-braced shove the staging search leans on is proven. BUT a
+  460-placement offline sweep (thrust-frame 14, via the `couple_replay` engine) found **0 genuine clips**:
+  closest `new` pins at the golden `old` z (~35u short), because a seam-ward push needs Tetra BEHIND, whose
+  plow (a) is razor-chaotic and (b) knocks Link OFF the golden `old` so the lunge is wall-blocked short
+  (seam-ward push and full-lunge-from-golden-old are mutually exclusive here at this timing; strengthens
+  dead-ends #15-17). The FAST-centre predictor is INVALID (the push perturbs Link's feet, so his Co-centre
+  is NOT Tetra-independent). **Blocker for the real search: the coupled sim is ~1.3s/sim** (99% in
+  `acch_crr_pos` iterating all 765 walls/3162 tris every frame; anim secondary). Fix (handed off): cull walls
+  to the corner (the pending Phase-W AABB cull) + precompute the roll Co-centre-offset + CUT `m3700` tables so
+  the per-placement inner loop is pure arithmetic; target >=100k/sec. Then search placement x roll/thrust
+  timing x placement-frame, and if empty, vary Link's roll angle/approach. Immovable Tetra (rank-10, near-
+  guaranteed) is CONFIRMED IMPOSSIBLE here (decomp: escort hardcoded type-5 movable). Details:
+  session-20 handoff; memory `tetra-clip-targeted-oneshot`.
 - **North star: the TETRA seam clip, pure-sim** -- the phased plan (wall collision -> ground ->
   CC Link<->Tetra -> the Tetra clip) lives in `ROADMAP.md`. Phases W + G + the load-bearing Phase-C
   items are DONE; **Phase T is OPEN** -- its acceptance FOUNDATION landed (session 18). The Phase-T

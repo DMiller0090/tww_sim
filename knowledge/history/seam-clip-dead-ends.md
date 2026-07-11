@@ -160,6 +160,18 @@ the golden push STATICALLY, but that is not the dynamically-reachable push (see 
     timed placement, and acceptance must be the DYNAMIC coupled cut, not the static `co_move_pair`
     predictor `solver_tetra`/`test_tetra_solver.py` uses.
 
+18. **Fast bare-centre push predictor is INVALID for the coupled Tetra clip (session 20).** A cheap solver
+    that precomputes Link's roll Co-centre trajectory ONCE (Tetra-free) and then rolls only Tetra's shove per
+    candidate placement (the freeze-solver pattern) does NOT work here: the CC push perturbs Link's FEET
+    substantially (live: his roll z lagged -910 vs the bare -955), so his Co-centre is NOT Tetra-independent.
+    Only the FULL coupled sim (`cc_stepper.CcCoupledStepper`) is faithful. Corollary confirmed live 0-ULP on
+    slot 6: the un-braced shove + roll-stab CUT_F entry are bit-exact, so the substrate is trustworthy -- but
+    a 460-placement sweep at a FIXED roll timing found 0 genuine (closest `new` pins ~35u short of the seam;
+    the seam-ward push and a full lunge from the golden `old` are mutually exclusive under a movable Tetra's
+    plow, restating #15-17 with coupled data). NOT proven across all roll timings / roll angles -- the search
+    is blocked on coupled-sim SPEED (~1.3s/sim, 99% in `acch_crr_pos` over all 765 walls; needs the Phase-W
+    wall cull + precomputed roll/cut tables before a timing x placement sweep is feasible).
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.
