@@ -279,6 +279,24 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
     `m351C` turn-lean) + thrust/roll timing. Tooling: `scratchpad/entry_brace.py`, `wall_range.py`,
     `walla_probe.py` (perp sweep + f32 thread-track + braced-z-line scan + wallA reachability).
 
+## Wall-braced clip on the FOLLOW-enabled turnaround (slot 7): infeasible, Tetra flees (session 27, LIVE)
+
+27. **A wall-braced Tetra clip is INFEASIBLE on slot 7 (follow-enabled turnaround) -- the deep-corner
+    brace spot is not follow-safe.** Ran the full live pipeline: perp-shifted Link's start ~-1.3u so the
+    roll entry reaches the wallB brace locus, measured the live entry (-1515.11,-766.13; the
+    start-perp-shift translates to the entry RIGIDLY, matching the sim-predicted perp entry ~bit-for-bit),
+    solved the braced-genuine placement (Tetra (-1652.293,-940.256), fB=50 ON wallB, bit-confirmed genuine
+    at that entry), placed her, delivered, and per-frame-diffed. **Link's roll was BIT-EXACT (dLink=0), but
+    Tetra DRIFTED off the wall before the roll reached her:** the brace spot sits ~220u from Link, and the
+    speed-building DOWN away-walk pushes him PAST her 230u follow threshold (peak 249u at the walk end), so
+    she ENGAGES follow and flees toward him; the cut wall-pinned short (live new=(-1692.3,-954.9), no clip).
+    Offline-confirmed the bind: full roll (nspeed 26 needs walk>=5 frames) + seam-reach (Link far NE -- the
+    +110 move exists because closer entries wall-pin) + follow-safe (walk peak<230) CANNOT coexist -- every
+    follow-safe entry (backshift>=+24u toward the corner) has ZERO genuine (roll wall-pins). So bracing is
+    incompatible with the FOLLOW-enabled clip *because follow is what breaks it*. Might work with the
+    glitched no-follow Tetra (slot 6 pushaside, she stays put) -- UNTRIED. Tooling:
+    `_notes/scratch-session27/{braced_live,entry_brace,wall_range,walla_probe}.py`.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

@@ -76,11 +76,30 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-12, session 26)
+## Status (2026-07-12, session 27)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+- **WALL-BRACED CLIP TRIED LIVE -> INFEASIBLE on slot 7 (session 27, dead-end #27); NEXT = simulate
+  PUSHING Tetra onto a genuine coord.** Drove the full live braced pipeline (perp-shifted Link start ->
+  measured entry -> solved braced Tetra at (-1652.293,-940.256), fB=50 ON wallB -> deliver -> per-frame
+  diff). Link's roll was BIT-EXACT but Tetra DRIFTED off the wall before it: the deep-corner brace spot is
+  ~220u from Link, so the speed-building away-walk crosses her 230u follow threshold (peak 249u) and she
+  flees; the cut wall-pinned short (no clip). Full roll + seam-reach + follow-safe cannot coexist (#27) --
+  bracing is incompatible with the FOLLOW clip because follow breaks it (might work on slot 6's glitched
+  no-follow Tetra; untried). **The shipped free-floor clip is UNCHANGED / still live bit-exact.**
+  - **Genuine-placement list shipped: `_generated/tetra_placements.tsv`** (288 float-exact Tetra (x,z) at
+    the session-24 working entry, step 0.004, with new/dist_wallB/dist_wallA/on_target/against_wall).
+    Any row clips; none are against the wall (closest 56.98u -- the working entry's thread doesn't reach
+    wallB). Regenerate: `_notes/scratch-session27/gen_placements.py`.
+  - **NEXT (real-TAS positioning): simulate PUSHING/HERDING Tetra onto a genuine coord** -- you can't
+    memory-write her in a TAS. Link's levers (all modelled + live-gated 0-ULP): FOLLOW
+    (`core.npc_zl1.Zl1FollowState`), CC contact push (`cc_push`/`cc_stepper.CcCoupledStepper`), BG
+    WallCorrect. Build a herding driver (Link inputs -> Tetra final f32 (x,z)) + search maneuvers that
+    land her on a genuine spot; genuine test = `turnaround.search`/`ShoveCtx.sweep_par`. Open question:
+    the coords are f32 slivers -- is Tetra's arrival f32-controllable by physics? See the session-27 handoff.
 
 - **TETRA-PLACEMENT PRECISION CHARACTERIZED (session 26, SIM-ONLY): the genuine set is a thin
   CONNECTED THREAD, not a lottery point and not a fat band.** At the FIXED live-measured slot-7 roll
