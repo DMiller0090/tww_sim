@@ -172,7 +172,9 @@ the golden push STATICALLY, but that is not the dynamically-reachable push (see 
     is blocked on coupled-sim SPEED (~1.3s/sim, 99% in `acch_crr_pos` over all 765 walls; needs the Phase-W
     wall cull + precomputed roll/cut tables before a timing x placement sweep is feasible).
 
-19. **A THIN plow-staging slice came up empty (session 21) -- the push-aside itself is NOT ruled out.**
+19. **[RESOLVED session 22 -- the push-aside CLIPS LIVE, bit-exact. Kept only as the record of why the
+    session-21 slice was empty.]** A THIN plow-staging slice came up empty (session 21) -- the push-aside
+    itself was never ruled out.
     With the exact >=100k sims/sec engine (`tww_sim/core/_shovec`), 13M+ coupled sims over placement
     x[-1725,-1600] z[-1000,-860] x thrust steps 13/14/15 x placement steps found 0 genuine -- but ALL of
     it at ONE Link approach line, ONE roll-entry point, ONE roll angle. ~98% of un-walled cut endpoints
@@ -187,6 +189,42 @@ the golden push STATICALLY, but that is not the dynamically-reachable push (see 
     (-0.618,-0.427) does NOT thread from the straight-roll wall pin (`pred_genuine(pin, golden)` False):
     the acceptance slivers are a function of `old`'s exact bits. Search pushes per-old (the polar graze
     sweep over the FULL angular range, 0.05 deg x 0.002u depth); never re-aim a known-good push at a new old.
+
+## The four things that made the push-aside miss LIVE (session 22 -- all fixed; do not relearn)
+
+The push-aside clip is SOLVED and live-confirmed bit-exact (README `## Status`). Getting there burned a
+lot of live runs on four traps, each of which LOOKED like "the sim is wrong" and was not:
+
+21. **A Tetra spot that is not on WALKABLE FLOOR.** The coupled sim clamps Tetra to the flat ground plane
+    everywhere and never models her FALLING, so it will happily "stand" her behind a wall and report a
+    genuine clip. Live she drops OOB, delivers **no push at all**, and the bare cut is wall-blocked. The
+    first live attempt died exactly here (her spot had `fB = -6.8`, behind wall B). **Constrain her start
+    to `in_front` of BOTH seam walls** (and keep her plow path there too). A sim "hit" on non-floor is an
+    artifact, in the same family as dead-ends #3/#4.
+
+22. **Holding UP through the roll in the delivered DTM.** A pushed stick (`msd > 0.05`) force-exits
+    `FRONT_ROLL` the moment `roll_frame > ROLL_EARLY` (`land/procs/roll.py:60`), so the roll ends into
+    MOVE and the B can only ever fire a plain MOVE-slash (proc 90, backward recoil, no lunge) -- the
+    roll-stab CUT_F never happens. The capture fixture holds UP (it was driven by `capture_cc_push`), but
+    the SIM's schedule (`fast_shove.make_inputs`) holds **NEUTRAL** + one UP+B. **Deliver the sim's
+    sticks, not the capture's.** Symptom: proc goes 30 -> 6 (MOVE) instead of 30 -> 66 (CUT_F).
+
+23. **Assuming the sim's B step is the DTM's B step.** The sim buffers B with a 2-step INPUT_DELAY (B at
+    step 14 -> CUT at step 16); the clean DTM delivers it with **1**. So the B goes one step LATER in the
+    DTM (sim-step 15). Off by one either way and you get: too early -> the edge is consumed mid-roll and
+    ignored; too late -> the roll has already exited and you get the MOVE-slash of #22.
+
+24. **Seeding the sim at the CAPTURE's roll entry instead of the DTM's.** `dtm_make` calibrates sticks
+    (255->254), so the delivered walk enters the roll ~0.004u away from the advancewith capture's entry.
+    The acceptance is f32 DUST, so a placement solved at the capture's entry lands `old` on a sliver the
+    real run MISSES -- block, not clip. **Seed `link_x0/z0` at the entry the DTM actually produces**;
+    there the engine is 0-ULP vs live on every frame for both actors. (Generalises README model term #6:
+    *always* sim the DELIVERED bytes, not the authored ones.)
+
+**Method lesson (Dereck, session 22):** when a live delivery disagrees with the sim, do NOT tweak inputs
+by guesswork -- **log the DTM per-frame and diff it against the sim** (both actors), and the divergence
+frame names the bug. Four live runs were wasted guessing the B frame before the per-frame diff instantly
+exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
 
 ## Pointers
 

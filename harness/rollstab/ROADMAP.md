@@ -134,12 +134,26 @@ Still missing to close Phase C:
   per-frame (CameraManual is bit-exact but unexercised by this pipeline).
 - Re-verify the DTM contract (2 alignment rows; 255->254) per new stage via the rest.py gate.
 
-## Phase T -- the Tetra seam clip end-to-end
+## Phase T -- the Tetra seam clip end-to-end (**DONE 2026-07-11, session 22: LIVE, BIT-EXACT**)
 
-Same solver shape as Phase 0: from-rest exact approach -> steer via push overlap -> roll+cut
-acceptance through exact geometry at the Tetra corner -> deliver clean DTM -> live 0-ULP clip.
-No new physics should need discovering by this point; if it does, a phase above was closed
-early.
+**THE NORTH STAR IS HIT.** The Tetra push-aside seam clip is live-confirmed bit-for-bit: Tetra stands
+at her spot from the START (`placed_step=0`, an initial setup var, NO mid-run write), Link's roll PLOWS
+her aside, and her CC push steers the roll-stab `CUT_F` lunge through the seam at (-1727,-990).
+Delivered by a clean DTM (never advancewith). Live: the cut fires at `old=(-1692.3147, -955.0418)` and
+lands at **`new=(-1727.173095703125, -990.4635009765625)`, bit-for-bit the sim's prediction**, then Link
+falls (proc 39) -- through the seam. Setup: Tetra (-1652.2239990234375, -939.447998046875); roll entry
+(-1513.3475341796875, -763.5128784179688); thrust sim-step 15, cut step 16. Fixture
+`fixtures/hyrule_pushaside_clip_live.json`, gate `tests/test_pushaside_clip.py`. Details + the four
+delivery truths (walkable Tetra floor; NEUTRAL roll stick; B one step later in the DTM; seed at the
+DTM's real entry) are in README `## Status` and dead-ends #21-24.
+
+Remaining (pure-sim polish, not the clip): the walk-up is still the CAPTURED slot-6 walk, so the roll
+entry comes from a live trace rather than a model. Closing it = a from-rest slot-6 anchor (cf. kaze's
+`rest.rest_state`) simulated on the DELIVERED bytes (254, not 255).
+
+Original plan (for the record): same solver shape as Phase 0 -- from-rest exact approach -> steer via
+push overlap -> roll+cut acceptance through exact geometry at the Tetra corner -> deliver clean DTM ->
+live 0-ULP clip. No new physics needed discovering; none did.
 
 **Acceptance FOUNDATION DONE (session 18), measure-first.** The Tetra corner (-1727,-990) is now in
 the rollstab conventions: `fixtures/hyrule_tetra_geo.json` (built offline from the live RAM golden

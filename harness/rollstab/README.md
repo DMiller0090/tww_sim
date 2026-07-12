@@ -69,11 +69,43 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
    sliver z-margin robustness check), then the clean DTM with a 120-frame watch-tail, per-frame
    live confirmation. NEVER advancewith.
 
-## Status (2026-07-11, session 21)
+## Status (2026-07-11, session 22)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+- **PHASE T / NORTH STAR ACHIEVED (session 22): the TETRA PUSH-ASIDE SEAM CLIP IS LIVE, BIT-EXACT.**
+  Tetra stands at her spot from the START (`placed_step=0` -- an initial setup var, **no mid-run
+  write**); Link's roll PLOWS her aside; her CC push steers the roll-stab `CUT_F` lunge through the
+  seam at the (-1727,-990) corner. Delivered by a **clean DTM** (never advancewith). LIVE:
+  the cut fires at `old=(-1692.314697265625, -955.0418090820312)` and lands at
+  **`new=(-1727.173095703125, -990.4635009765625)` -- BIT-FOR-BIT the sim's prediction** -- then Link
+  drops to proc 39 (falling), i.e. he is THROUGH the seam behind the corner. Winning setup: Tetra
+  start **(-1652.2239990234375, -939.447998046875)**, roll entry (-1513.3475341796875,
+  -763.5128784179688), thrust at sim-step 15, cut at step 16. Fixture
+  `fixtures/hyrule_pushaside_clip_live.json`; gate `tests/test_pushaside_clip.py` (6 green, offline).
+  This retires dead-end #19: the push-aside was always viable, the earlier "empty" was SCOPE.
+  - **Four delivery truths this cost, all now permanent (do not relearn them):**
+    1. **Tetra's START must be on WALKABLE floor** (`in_front` of BOTH seam walls). The sim clamps her
+       to flat ground everywhere and NEVER models her falling, so it happily "stands" her behind a
+       wall; live she falls OOB and there is **no push at all** (this is exactly how the first live
+       attempt failed: her spot had `fB = -6.8`). The search now hard-constrains this.
+    2. **The roll phase must hold a NEUTRAL stick, not UP.** A pushed stick (`msd > 0.05`) force-exits
+       `FRONT_ROLL` the instant `roll_frame > ROLL_EARLY` (`land/procs/roll.py:60`), so the CUT can
+       never fire OUT of the roll -- the B degrades to a plain MOVE-slash (proc 90 recoil, no lunge).
+       The sim's own schedule (`fast_shove.make_inputs`) is NEUTRAL + one UP+B; **the DTM must deliver
+       THAT**, not the capture fixture's UP-held sticks.
+    3. **The B goes one step LATER in the DTM than in the sim**: the sim buffers B with a 2-step
+       INPUT_DELAY (B at step 14 -> CUT at step 16), the DTM delivers it with 1 (B at sim-step 15).
+    4. **Seed the sim at the DTM's ACTUAL roll entry**, not the capture fixture's. The DTM's
+       calibrated walk (`dtm_make` 255->254) enters the roll ~0.004u away from the advancewith
+       capture; on f32 dust that is block-vs-clip. Seeded at the real entry the engine is **0-ULP vs
+       live on every frame for BOTH actors, including the cut**.
+  - Open (the remaining pure-sim gap): the walk-up is still the CAPTURED slot-6 walk, so the roll
+    entry is taken from a live trace rather than modelled. Closing it = a from-rest slot-6 anchor
+    (cf. kaze's `rest.rest_state`) simulated on the DELIVERED bytes (254, not 255). The clip itself
+    needs no live round-trip once the entry is known.
 
 - **Phase T (session 21b, Dereck's correction): the ACCEPTED mechanism is the PUSH-ASIDE -- Tetra
   stands in place from the start (an initial setup var) and Link's roll PLOWS her aside into the
