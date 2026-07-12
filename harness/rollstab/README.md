@@ -76,25 +76,37 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-12, session 25)
+## Status (2026-07-12, session 26)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-- **NEXT SESSION = SIM-ONLY (no Dolphin): characterize how PRECISE Tetra's position must be.** For
-  the real TAS we need to know whether the genuine Tetra placement is a single f32 point or a
-  targetable RANGE/band. This is a long (multi-hour, overnight) OFFLINE sweep of the genuine Tetra
-  acceptance region at a FIXED roll entry, reported as its structure (band width, f32-column
-  striping, density) -- the [[seam-clip-solver]] "f32 dust" question, answered quantitatively for
-  Tetra placement. Tooling: `turnaround.search(entry, facing, m351C, link_y, gx=, gz=, step=)` and
-  the native `ShoveCtx.sweep_par` under it already do the bit-confirmed genuine test per placement;
-  the sweep just needs to run WIDE + FINE and log the region shape. **The entry is FIXED and known**
-  (measured live, ENTRY_JSON: `(-1516.116455078125, -765.1473999023438)` facing 40835 m351C 0),
-  so no live round-trip is needed. GOTCHA for the wide sweep: `search()` builds the grid as a Python
-  list, so `points = ((gx1-gx0)/step)*((gz1-gz0)/step)` -- a wide box at `step=0.008` is ~1e8 points
-  and OOMs. Sweep in bounded chunks / a tighter box per pass (as `solve()`'s `(-1656,-1642)x(-936,-912)`
-  does), or add a streaming/chunked grid before going wide. See the session-25 handoff for the run plan.
+- **TETRA-PLACEMENT PRECISION CHARACTERIZED (session 26, SIM-ONLY): the genuine set is a thin
+  CONNECTED THREAD, not a lottery point and not a fat band.** At the FIXED live-measured slot-7 roll
+  entry `(-1516.116455078125, -765.1473999023438)` facing 40835 m351C 0, an offline f32 sweep
+  (`ShoveCtx.sweep_par`, region located via the smooth behindA/behindB pre-CrrPos ridge then
+  column-chunked f32 scans -- streaming to dodge the wide-grid OOM; ~66k sims/s) maps the genuine
+  Tetra START placements to a **~46u thread** along a ~59deg-from-+X diagonal (slope dz/dx~1.67,
+  x[-1651.7,-1628.1] z[-933.3,-893.2]), **meandering +-~2u** (RMS 1.14u off a straight fit -- follow
+  the thread, never fit a line). Perpendicular it is **~8 f32-ULP thick (median ~4.9e-4u, range
+  1-16 ULP)**; ~**84%** of consecutive f32 x-columns carry a genuine sliver and adjacent slivers
+  overlap/touch (a CONNECTED thread, unlike kaze's disjoint per-column stripes). The landing `new`
+  drifts ~0.001u along the thread (12 f32 values); the shipped target `new` is bit-exact only on a
+  ~1-2u sub-segment, but ANY thread point clips (Link falls). **Verdict for the TAS:** ~46u of
+  along-slack, but ~f32-precise (~5e-4u) perpendicular -- a targetable line, not a point.
+  Full numbers + method on the KB page [[seam-clip-solver]] ("Tetra-corner placement" section).
+  - **Dereck's wall-brace question, answered: braceable on wallB EXISTS but only PARTIALLY helps.**
+    At the shipped entry the thread is 57-100u from any floor wall. But shifting the ROLL ENTRY moves
+    the thread: a **perp- shift (~-1.3u)** walks its corner-ward tip **exactly onto the wallB brace
+    locus** (fB=TET_R=50, z=-940.25562 -- verified: deeper placements CrrPos-eject to that z, so fB=50
+    IS the wall), and braced-genuine placements exist there (`new` bit-exact on target). HOWEVER the
+    thread crosses the horizontal wallB line STEEPLY (~59deg thread vs 0deg wall), so the along-wall
+    genuine window is only **1-3 f32-ULP per entry** -- bracing pins the perpendicular (z) for free but
+    the along-wall (x) still needs f32 precision (2D-f32 -> 1D-f32, not a fat range). A real slide
+    RANGE would need a SHALLOW crossing (brace on wallA, ~31deg off the thread) but wallA is ~25u
+    further corner-ward (large entry relocation, may break the clip) -- **untested, the open lead.**
+    Numbers + method on KB [[seam-clip-solver]] "Wall-brace"; session-26 handoff has the tooling.
 
 - **THE CLIP IS UNCHANGED AND STILL LIVE + BIT-EXACT (session 24, below).** Session 25 attempted the
   optional pure-sim polish (compute the roll entry from the slot-7 rest seed instead of measuring it)

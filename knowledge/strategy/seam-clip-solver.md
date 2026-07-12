@@ -29,6 +29,58 @@ along-band. Consequences:
 - The roll carries the full 49.2202 lunge only from a capped walk: speedF == 17.0 at the A press
   is a hard gate (a sub-cap walk shrinks the lunge below the seam's displacement floor).
 
+## Tetra-corner placement: a thin thread, ~f32-precise perpendicular (2026-07-12)
+
+For the Tetra push-aside / turnaround clip the free knob is not `old` but Tetra's f32 START
+placement `(x, z)` (`placed_step=0`): her plow feeds the CC push that steers the lunge. The TAS
+question -- must we hit her position float-perfect, or is there a targetable range? -- was answered
+by an offline sweep at the FIXED, live-measured slot-7 roll entry
+`(-1516.116455078125, -765.1473999023438)`, facing 40835, m351C 0 (native `ShoveCtx.sweep_par`, the
+bit-confirmed genuine test; ~66k sims/s; region located via the smooth pre-CrrPos behindA/behindB
+ridge then column-chunked f32 sweeps to dodge the wide-grid OOM).
+
+The genuine placement set is a **thin connected THREAD**, not a point and not a fat band:
+- It runs ~**46u** along a ~**59deg**-from-+X diagonal in `(x,z)` (slope dz/dx ~ 1.67), over roughly
+  x[-1651.7, -1628.1], z[-933.3, -893.2]. It **meanders +-~2u** off a straight fit (RMS resid 1.14u),
+  so you FOLLOW the thread; a linear fit is useless (dead-end #8 restated for placement).
+- **Perpendicular thickness = ~f32 dust**: at a fixed x-column the genuine z is one sliver, median
+  **~8 f32-ULP (~4.9e-4u)**, range 1-16 ULP (~6e-5..1e-3u). This is the precision a TAS must hit
+  perpendicular to the thread.
+- **Continuity**: ~**84%** of consecutive f32 x-columns carry a genuine sliver (short 1-few-column
+  gaps; runs up to ~35 columns), and adjacent columns' slivers OVERLAP/touch. So unlike the kaze
+  linear-approach dust (disjoint per-f32-column stripes), the Tetra-placement set is a CONNECTED
+  thread -- targetable as a curve with ~46u of along-freedom.
+- The clip **landing `new` drifts** monotonically ~0.001u along the thread (12 distinct f32 values);
+  the shipped target `new=(-1727.1728515625, -990.4632568359375)` is reproduced bit-exact only on a
+  ~1-2u sub-segment. **Any** thread point clips (Link falls, proc 39) -- the target-`new` pin matters
+  only to reproduce the exact shipped landing, not to clip.
+
+**Verdict:** a valid Tetra placement is a **line, not a lottery point** -- ~46u of along-slack -- but
+perpendicular you must be f32-precise (~5e-4u). At the shipped entry the thread sits **57-100u from the
+nearest floor wall** (the seam walls themselves; all other nearby polys are overhead terrain at
+Y~500 that a floor actor never touches).
+
+### Wall-brace: relocating the thread onto wallB (entry-variation)
+
+Bracing Tetra against a wall would pin the hard perpendicular coordinate for free (WallCorrect ejects
+her to a fixed distance; the TAS just walks her into the wall). Shifting the ROLL ENTRY moves the
+whole thread: a **perp- entry shift** (perpendicular to the roll facing) walks the thread toward
+wallB (+Z, z=-990.256), and at entry ~**perp -1.3u** from the shipped entry the thread's corner-ward
+tip reaches **exactly the wallB brace locus** (fB = TET_R = 50, i.e. z = -940.25562 -- verified: any
+deeper placement is CrrPos-ejected to that z, so fB=50 IS the wall). Braced-genuine placements
+(genuine AND at z=-940.25562) exist across a band of entries; `new` stays bit-exact on the shipped
+target throughout.
+
+**But the win is only PARTIAL.** The thread runs ~59deg while wallB is horizontal (0deg), so it
+crosses the brace line STEEPLY -- the along-wall genuine window is just **1-3 f32-ULP per entry**
+(~1-3e-4u in x). So bracing reduces the placement problem from 2D-f32 to **1D-f32**: the
+perpendicular (z) is free (hold toward the wall), but the along-wall (x) coordinate still needs f32
+precision. The genuine x shifts ~1:1 with the entry shift (trade Link's roll-entry for Tetra's x).
+A genuinely WIDE slide range would need a SHALLOW crossing -- brace on **wallA** (+X, vertical, only
+~31deg off the thread) instead -- but wallA-brace (fA=50, x~-1677) is ~25u corner-ward of the
+thread's current tip, needing a much larger entry relocation that may break the clip. **Untested; the
+open lead if a real placement RANGE is wanted.**
+
 ## The sim is bit-exact FROM REST -- plan sequences need no live calibration
 
 The from-rest model (`harness/rollstab/rest.rest_state`) matches live 0-ULP from row 0
