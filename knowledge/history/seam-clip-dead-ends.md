@@ -241,6 +241,24 @@ by guesswork -- **log the DTM per-frame and diff it against the sim** (both acto
 frame names the bug. Four live runs were wasted guessing the B frame before the per-frame diff instantly
 exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
 
+## The from-rest slot-7 walk residual is a FOOT-POSE precision gap, not a seeding gap (session 25)
+
+25. **"Seed the slot-7 DOWN-walk via `seed_rest_blend` + REST_NOOPS=2 + deferred-draw" (the session-24
+    handoff's guess for computing the roll entry): WRONG lever.** Diagnosed by per-frame diff of the seeded
+    sim vs a rich live walk trace. `noops=2` (kaze's value) FREEZES the WAIT/WALK blend advance and
+    mis-aligns the walk start (residual worsens to ~4.2u); the slot-7 idle genuinely runs procWait every
+    WAIT frame (blend advances d 17.80->18.20->18.60), so the right value is **`noops=0`**. At `noops=0`
+    the proc/frame alignment is PERFECT (WAIT f0-2 / MOVE f3-8 / roll f9), the WAIT<->WALK blend `m3598`
+    matches live BIT-EXACT (0,0,0,1.0,1.0,0.7647,0.3529,0,0), and `nspeed` ramps cleanly (+3.5/frame to
+    cap) -- yet the entry is still ~**2.54u** off. The ENTIRE residual is the foot toe-stream `f312`
+    (`posMoveFromFootPos` / `_py_foot_compose`) on the 3 walk-entry frames where `m3598>0` (f3-f5:
+    speedF `nspeed*(1-m3598)+f312*m3598`, sim f312 low -- 0.068 vs live 0.105, 1.42 vs 2.15, 2.42 vs 4.62);
+    it FREEZES at 2.54u once m3598 hits 0 (speedF==nspeed thereafter) and never grows. So this is the
+    **same foot-FK-precision class as the Phase-R late-roll-pose drift** (jointBeforeCB MOMI body-lean /
+    the walk-entry oldframe-morf toe stream), NOT a proc/blend/seed bug. Retry a computed entry only WITH
+    a walk-entry foot-pose model, not more seeding knobs. The clip does not need it (measured entry is
+    0-ULP live). Live trace: `_generated/turnaround_walk_trace.json`.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

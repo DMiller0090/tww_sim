@@ -76,11 +76,52 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-12, session 24)
+## Status (2026-07-12, session 25)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+- **NEXT SESSION = SIM-ONLY (no Dolphin): characterize how PRECISE Tetra's position must be.** For
+  the real TAS we need to know whether the genuine Tetra placement is a single f32 point or a
+  targetable RANGE/band. This is a long (multi-hour, overnight) OFFLINE sweep of the genuine Tetra
+  acceptance region at a FIXED roll entry, reported as its structure (band width, f32-column
+  striping, density) -- the [[seam-clip-solver]] "f32 dust" question, answered quantitatively for
+  Tetra placement. Tooling: `turnaround.search(entry, facing, m351C, link_y, gx=, gz=, step=)` and
+  the native `ShoveCtx.sweep_par` under it already do the bit-confirmed genuine test per placement;
+  the sweep just needs to run WIDE + FINE and log the region shape. **The entry is FIXED and known**
+  (measured live, ENTRY_JSON: `(-1516.116455078125, -765.1473999023438)` facing 40835 m351C 0),
+  so no live round-trip is needed. GOTCHA for the wide sweep: `search()` builds the grid as a Python
+  list, so `points = ((gx1-gx0)/step)*((gz1-gz0)/step)` -- a wide box at `step=0.008` is ~1e8 points
+  and OOMs. Sweep in bounded chunks / a tighter box per pass (as `solve()`'s `(-1656,-1642)x(-936,-912)`
+  does), or add a streaming/chunked grid before going wide. See the session-25 handoff for the run plan.
+
+- **THE CLIP IS UNCHANGED AND STILL LIVE + BIT-EXACT (session 24, below).** Session 25 attempted the
+  optional pure-sim polish (compute the roll entry from the slot-7 rest seed instead of measuring it)
+  and ROOT-CAUSED the residual but did not close it -- the clip's shipped status is untouched (it still
+  seeds at the MEASURED live entry, exactly as the pushaside clip does).
+  - **From-rest slot-7 DOWN-walk residual ROOT-CAUSED (session 25), left open by choice.** The
+    computed-from-rest entry lands ~**2.54u** NE of the live entry. Diagnosed by per-frame diff of the
+    seeded sim vs a rich live walk trace (`_generated/turnaround_walk_trace.json`), and it is NOT what
+    the session-24 handoff guessed ("seed_rest_blend + deferred-draw class"):
+    - **Proc/frame alignment is PERFECT with `noops=0`** (NOT the kaze `REST_NOOPS=2`): WAIT f0-f2 (no
+      move), MOVE f3-f8, roll entry f9 -- bit-identical frame numbering to live. The slot-7 idle
+      genuinely RUNS procWait each WAIT frame (the WAIT/WALK blend advances d 17.80->18.20->18.60,
+      w +0.674/frame); it is NOT the "game hasn't run yet" alignment-noop regime kaze modelled.
+    - **The WAIT<->WALK blend `m3598` matches live BIT-EXACT** (0,0,0,1.0,1.0,0.7647,0.3529,0,0) and
+      **`nspeed` ramps cleanly** (+3.5/frame to the 17 cap). So the accel integrator and the blend
+      weight are already right.
+    - **The entire error is in the foot toe-stream `f312`** (`posMoveFromFootPos`, `_py_foot_compose`)
+      on the THREE walk-entry frames where `m3598 > 0` (f3-f5): there `speedF = nspeed*(1-m3598) +
+      f312*m3598`, and the sim's `f312` is low (f3 0.068 vs live 0.105; f4 1.42 vs 2.15; f5 2.42 vs
+      4.62). Once `m3598` hits 0 (f7+) `speedF == nspeed` and the two agree exactly, so the 2.54u
+      freezes and never grows. Live's RAM `m359C` column IS this `f312` (0.105, 2.146, 4.618, ...).
+    - This is the **same foot-FK-precision residual class as the Phase-R late-roll-pose drift**
+      (jointBeforeCB MOMI body-lean / the walk-entry oldframe-morf toe stream), NOT a proc or blend
+      bug. Closing it means modelling the walk-entry foot poses to f32, not re-seeding. Deferred: the
+      clip does not need it (measured entry is 0-ULP live), and it is orthogonal to the Tetra-precision
+      question the next session answers. Regression captured as the live trace fixture above; no RED
+      test added (the finding is recorded here + in the handoff instead).
 
 - **KILL-THE-GLITCHED-TETRA DONE (session 24): the FOLLOW-ENABLED turnaround-roll seam clip is LIVE,
   BIT-EXACT, with a NORMAL following Tetra.** The whole `turnaround.py` live pipeline is wired
