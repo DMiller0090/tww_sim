@@ -76,11 +76,39 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-11, session 22)
+## Status (2026-07-11, session 23)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+- **KILL-THE-GLITCHED-TETRA (session 23): the FOLLOW-ENABLED turnaround-roll clip is VIABLE in the
+  sim; the solver is built (`turnaround.py`); live delivery is the open next step.** The session-22
+  clip needed a GLITCHED no-follow Tetra; this is the successor with a NORMAL following Tetra. Dereck's
+  **slot 7**: type-5 following-enabled Tetra idle in the corner, Link behind her facing away, sword OUT.
+  The mechanic (all sim-validated): hold **DOWN** ~6 frames (speedF caps at 17 by ~frame 5; Tetra stays
+  in her 130/230 follow band so she never engages) -> one frame **A + a DIAGONAL stick** = the
+  turnaround roll ([[turnaround-roll-tech]]) entering FRONT_ROLL at nspeed 26 (full ~49u lunge; the roll
+  SPEED comes from the walk cap, NOT the stick magnitude, so the entry stick is free to AIM) -> NEUTRAL
+  roll -> **UP+B** CUT_F.
+  - **PROVEN feasibility:** at a turnaround entry, facing in the seam-gap window (~40842, 224.35 deg)
+    yields ~14-35 genuine Tetra placements landing EXACTLY on the shipped target `new=(-1727.173,
+    -990.464)`. The lunge must aim THROUGH the fixed corner gap: outside the window `new` stays
+    wall-pinned ~49u short and NO push helps. The octagon stick VERTEX only reaches 40758/40913 (miss);
+    a **DIAGONAL stick (108,204) -> 40835** (or (108,203) -> 40849) hits the window under the slot-7
+    camera (csangle 39981), NO camera change. The walk is ~6 frames, follow-safe (peak ~224u < 230),
+    no initial Co overlap. Solver machinery gated: `turnaround.extract_schedule_at` is BIT-EXACT vs
+    `fast_shove.extract_schedule` at the fixture entry/facing.
+  - **Delivery = the session-22 recipe** (`pushaside.py` truths; [[tetra-clip-solved-live]] #4): the
+    genuine Tetra spot is f32-DUST sensitive to the roll ENTRY (a ~0.2u entry shift relocates the whole
+    genuine region out of a 20u box) and the from-rest walk is not yet bit-exact, so **seed the
+    placement search at the DTM's MEASURED real roll entry**, fine-scan Tetra there, place her, deliver +
+    per-frame diff (never guess inputs). `turnaround.py` has the offline solver (`search`) + stick
+    builder (`build_sticks`) ready; the live plumbing (`entry`/`deliver`/`diff`, reusing `pushaside.play`
+    with SLOT=7 sharing Tetra base 0x80ACD20C) is the next increment. See the session-23 handoff.
+  - Ruled out this session: the octagon-VERTEX turnaround aim (40758/40913) never threads (wall-pinned
+    49u short) -- the diagonal-stick aim is REQUIRED; a coarse (integer n_walk / discrete stick / integer
+    thrust) sweep finds 0 genuine (the acceptance is f32 dust -- fine Tetra-placement is the only knob).
 
 - **PHASE T / NORTH STAR ACHIEVED (session 22): the TETRA PUSH-ASIDE SEAM CLIP IS LIVE, BIT-EXACT.**
   Tetra stands at her spot from the START (`placed_step=0` -- an initial setup var, **no mid-run
