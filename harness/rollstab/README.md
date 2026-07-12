@@ -96,16 +96,18 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
   ~1-2u sub-segment, but ANY thread point clips (Link falls). **Verdict for the TAS:** ~46u of
   along-slack, but ~f32-precise (~5e-4u) perpendicular -- a targetable line, not a point.
   Full numbers + method on the KB page [[seam-clip-solver]] ("Tetra-corner placement" section).
-  - **Dereck's wall-brace question, answered: braceable on wallB EXISTS but only PARTIALLY helps.**
-    At the shipped entry the thread is 57-100u from any floor wall. But shifting the ROLL ENTRY moves
-    the thread: a **perp- shift (~-1.3u)** walks its corner-ward tip **exactly onto the wallB brace
-    locus** (fB=TET_R=50, z=-940.25562 -- verified: deeper placements CrrPos-eject to that z, so fB=50
-    IS the wall), and braced-genuine placements exist there (`new` bit-exact on target). HOWEVER the
-    thread crosses the horizontal wallB line STEEPLY (~59deg thread vs 0deg wall), so the along-wall
-    genuine window is only **1-3 f32-ULP per entry** -- bracing pins the perpendicular (z) for free but
-    the along-wall (x) still needs f32 precision (2D-f32 -> 1D-f32, not a fat range). A real slide
-    RANGE would need a SHALLOW crossing (brace on wallA, ~31deg off the thread) but wallA is ~25u
-    further corner-ward (large entry relocation, may break the clip) -- **untested, the open lead.**
+  - **Dereck's wall-brace question, FULLY answered: Tetra can be braced on wallB but there is NO slide
+    RANGE -- bracing only removes ONE coordinate, and this is fundamental.** Shifting the ROLL ENTRY
+    (perp- ~-1.3u) walks the thread's corner-ward tip exactly onto the wallB brace locus (fB=TET_R=50,
+    z=-940.25562 -- verified: deeper placements CrrPos-eject there, so fB=50 IS the wall), and
+    braced-genuine placements exist (`new` bit-exact). BUT the along-wall window = thread-thickness
+    (~5e-4u) / sin(crossing angle), and: **wallB is crossed near-PERPENDICULARLY** (local thread angle
+    75-82deg at the brace point; swept facing 40805-40880, never rotates parallel) -> window only
+    **2-3 f32-ULP (~0.0002u)** -- a point, so x still needs f32 precision (2D-f32 -> 1D-f32). **wallA
+    (near-PARALLEL, the wall that could give a range) is UNREACHABLE** -- the thread's tip pins at
+    x~-1650 (fA~76) at every entry tried (9 directions), ~25u short of the wallA brace (fA=50), an
+    acceptance-geometry limit. So no Link knob (position, facing) opens a range. Untried long-shots:
+    curved walk-up (`m351C` lean) + thrust timing (tip pin looks geometric -> low expectations).
     Numbers + method on KB [[seam-clip-solver]] "Wall-brace"; session-26 handoff has the tooling.
 
 - **THE CLIP IS UNCHANGED AND STILL LIVE + BIT-EXACT (session 24, below).** Session 25 attempted the

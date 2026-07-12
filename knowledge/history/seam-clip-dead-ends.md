@@ -259,6 +259,26 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
     a walk-entry foot-pose model, not more seeding knobs. The clip does not need it (measured entry is
     0-ULP live). Live trace: `_generated/turnaround_walk_trace.json`.
 
+## Wall-brace for a Tetra-placement RANGE: no usable slide range exists (session 26)
+
+26. **Bracing Tetra on a wall to get a targetable placement RANGE: RULED OUT (does not yield a range;
+    bracing removes only one coordinate).** The genuine Tetra-placement set is a ~5e-4u-thin THREAD (KB
+    [[strategy/seam-clip-solver]] "Tetra-corner placement"), so the along-wall braced window = thickness
+    / sin(crossing angle) -- a useful range (~0.1u) needs the thread within ~0.3deg of PARALLEL to the
+    wall at the brace distance. It never is. **wallB** (+Z) IS reachable -- a perp- roll-entry shift
+    (~-1.3u) walks the thread's tip exactly onto the fB=TET_R=50 brace locus (z=-940.25562; verified the
+    engine CrrPos-ejects deeper placements there, so fB=50 is the wall) -- but the thread crosses it
+    near-PERPENDICULARLY (local angle 75-82deg; swept facing 40805-40880, never rotates toward 0), so the
+    braced-genuine window is only 2-3 f32-ULP (~0.0002u): a POINT, x still f32-precise. **wallA** (+X) is
+    the near-PARALLEL wall (thread local angle ~78-82deg ~ wallA's 90deg) that COULD give a range, but it
+    is UNREACHABLE: the thread's corner-ward tip pins at x~-1650 (fA~76) at every Link entry tried (9
+    directions, +-1.5-3u perp/roll/axis), ~25u short of the wallA brace (fA=50, x~-1677.66) -- an
+    acceptance-geometry limit, not an unturned knob. Net: Tetra CAN be placed against wallB (z pinned
+    free) but the along-wall x still needs f32 precision, and no Link position/facing knob opens a slide
+    range. Untried long-shots (low expectations, the pin looks geometric): curved walk-up (nonzero
+    `m351C` turn-lean) + thrust/roll timing. Tooling: `scratchpad/entry_brace.py`, `wall_range.py`,
+    `walla_probe.py` (perp sweep + f32 thread-track + braced-z-line scan + wallA reachability).
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

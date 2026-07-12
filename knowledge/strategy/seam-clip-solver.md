@@ -71,15 +71,27 @@ deeper placement is CrrPos-ejected to that z, so fB=50 IS the wall). Braced-genu
 (genuine AND at z=-940.25562) exist across a band of entries; `new` stays bit-exact on the shipped
 target throughout.
 
-**But the win is only PARTIAL.** The thread runs ~59deg while wallB is horizontal (0deg), so it
-crosses the brace line STEEPLY -- the along-wall genuine window is just **1-3 f32-ULP per entry**
-(~1-3e-4u in x). So bracing reduces the placement problem from 2D-f32 to **1D-f32**: the
-perpendicular (z) is free (hold toward the wall), but the along-wall (x) coordinate still needs f32
-precision. The genuine x shifts ~1:1 with the entry shift (trade Link's roll-entry for Tetra's x).
-A genuinely WIDE slide range would need a SHALLOW crossing -- brace on **wallA** (+X, vertical, only
-~31deg off the thread) instead -- but wallA-brace (fA=50, x~-1677) is ~25u corner-ward of the
-thread's current tip, needing a much larger entry relocation that may break the clip. **Untested; the
-open lead if a real placement RANGE is wanted.**
+**But there is NO usable slide RANGE -- bracing only removes one coordinate, and this is fundamental.**
+The along-wall window = (thread thickness ~5e-4u) / sin(crossing angle), so a range wide enough to be
+useful (~0.1u) needs the thread within ~0.3deg of PARALLEL to the wall at the brace distance. It never
+is:
+- **wallB (reachable): near-PERPENDICULAR crossing.** Near the brace point the thread's LOCAL angle is
+  **75-82deg** vs wallB's 0deg (it meanders; 59deg was the global mean). So the braced-genuine window
+  is just **2-3 f32-ULP (~0.0001-0.0002u in x) at ALL in-window facings** (swept 40805-40880; the angle
+  never rotates toward 0). The genuine x shifts ~1:1 with the entry shift -- trade Link's roll-entry
+  for Tetra's x, but each is a point. Bracing on wallB pins the perpendicular (z) coordinate for free
+  yet the along-wall (x) still needs f32 precision: **2D-f32 -> 1D-f32, not a range.**
+- **wallA (near-PARALLEL, ~78-82deg -> the wall that COULD give a range): UNREACHABLE.** The genuine
+  thread's corner-ward tip is pinned at x~-1650 (fA~76) at EVERY Link entry tried (9 directions:
+  perp/roll/axis shifts +-1.5-3u) -- closest approach fA=75.7, still ~25u short of the wallA brace
+  (fA=50, x~-1677.66). The tip pin is an acceptance-geometry limit (where Tetra must sit to steer the
+  lunge), not a knob not-yet-turned.
+
+**Bottom line for the TAS:** Tetra can be placed AGAINST wallB (z pinned by the wall) but the along-wall
+x is still an f32 point; no Link knob (entry position, facing across the seam-gap window) opens a slide
+range. Untried knobs that MIGHT move the tip toward wallA (unproven, likely small): a curved walk-up
+(nonzero `m351C` turn-lean at roll entry) and the thrust/roll timing -- both change the push/roll
+geometry, but the tip pin looks geometric, so expectations are low.
 
 ## The sim is bit-exact FROM REST -- plan sequences need no live calibration
 
