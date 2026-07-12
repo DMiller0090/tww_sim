@@ -86,11 +86,14 @@ live bit-exact): its whole mint/author/deliver/diff pipeline is `harness/rollsta
 read that module's docstring BEFORE any Tetra-clip delivery work; it encodes the four delivery truths
 (walkable Tetra floor / NEUTRAL roll stick / B one step later in the DTM / seed the sim at the DTM's
 REAL roll entry) that cost session 22 and are NOT re-derivable from the sim alone.
-**Savestate slot 7 = the FOLLOW-ENABLED turnaround-roll setup** (session 23, "kill the glitched Tetra"):
-a NORMAL following (type-5) Tetra idle in the corner, Link behind her facing away, sword OUT. The
-turnaround-clip solver + delivery module is `harness/rollstab/turnaround.py` (read its docstring); the
-mechanic is sim-proven viable and live delivery is the open next step (see the newest handoff + README
-## Status).
+**Savestate slot 7 = the FOLLOW-ENABLED turnaround-roll clip** (session 23-24, "kill the glitched
+Tetra"): a NORMAL following (type-5) Tetra idle in the corner, Link behind her facing away, sword OUT.
+The turnaround-clip solver + full live pipeline is `harness/rollstab/turnaround.py` (read its docstring):
+`entry` (measure the live roll entry) -> `solve` (fine-scan genuine Tetra placements there) -> `deliver`
+/`diff`. **The clip is LIVE + BIT-EXACT as of session 24** (gate `tests/test_turnaround_clip.py`); Link
+is moved +110u NE, Tetra placed genuine, `b_step=16`. The remaining pure-sim polish (model the from-rest
+slot-7 walk so the roll entry is computed, not measured) is optional -- see the newest handoff + README
+## Status.
 
 **When a live delivery disagrees with the sim, do NOT tweak inputs by guesswork.** Run
 `python -m harness.rollstab.pushaside diff` (per-frame, BOTH actors) -- the divergence frame names the

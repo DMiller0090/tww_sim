@@ -41,6 +41,7 @@ import math
 import os
 import struct
 import sys
+import time
 
 # >>> repo bootstrap
 _rb = os.path.dirname(os.path.abspath(__file__))
@@ -63,6 +64,7 @@ from harness.rollstab.cc_stepper import (CcCoupledStepper, LINK_CO_R, LINK_CO_H,
                                          TETRA_CO_R, TETRA_CO_H)
 from harness.rollstab import fast_shove as FS
 from harness.rollstab import geometry_tetra as GT
+from harness.rollstab import pushaside as PA   # reuse play/report + the (shared) live addresses
 
 # --- slot-7 live setup (Dereck, session 23; read live via probe -- re-read before trusting) ---------
 SLOT = 7
@@ -80,9 +82,14 @@ NEU = (128, 128, 0, 0, 128, 128)
 TURN = (108, 204, 0x100, 0, 128, 128)       # A + diagonal stick -> facing ~40835 (in the seam-gap window)
 UPB = (128, 255, 0x200, 0, 128, 128)        # forward CUT_F thrust out of the roll
 N_WALK = 6                                  # DOWN frames (speedF caps at ~5; 6 keeps a follow-safe entry)
-THRUST = 14                                 # sim schedule thrust step (its CUT lands +2)
+THRUST = 14                                 # sim schedule thrust step (its CUT lands +2 -> sim step 16)
+B_STEP = 16                                 # DTM UP+B roll-index, live-calibrated: fires the CUT on the
+#   sim-step-16 frame (b_step=15 fires it a frame early -> no lunge). +2 vs sim thrust; see README Status.
 FAR = (-1670.0, -3000.0)                    # Tetra parking spot for the entry sim
 _ROLL_POSE = (FRONT_ROLL, CUT_F, CUT_A)
+
+ANCHOR = os.path.join(_rb, '_generated', 'turnaround_roll7.sav')
+ENTRY_JSON = os.path.join(_rb, '_generated', 'turnaround_entry.json')   # entry mode -> search/deliver
 
 _full = load_ordered_mesh(FS.WALLS_FIX)
 WALLS = cull_walls(_full, -1770.0, -1020.0, -1500.0, -760.0, margin=250.0)
@@ -240,10 +247,10 @@ def search(entry, facing, m351C, link_y, link0=LINK_START, walk_traj=None,
 
 def build_sticks(n_walk=N_WALK, turn=TURN, thrust=THRUST, b_step=None, roll_hold=20, tail=20):
     """Raw controller stream: DOWN*n_walk (walk away) + turnaround (A+diagonal) + NEUTRAL roll +
-    UP+B thrust + neutral tail. `b_step` = the UP+B index counted from the turnaround frame; None ->
-    THRUST+1 (the DTM delivers B one step LATER than the sim -- pushaside truth #3). Tune live via `diff`."""
+    UP+B thrust + neutral tail. `b_step` = the UP+B index into the roll (from the turnaround frame);
+    None -> B_STEP (16), the live-calibrated value that fires the CUT on the sim-step-16 frame."""
     if b_step is None:
-        b_step = thrust + 1
+        b_step = B_STEP
     sticks = [dict(stickX=DOWN[0], stickY=DOWN[1], substickX=128, substickY=128, buttons=0)
               for _ in range(n_walk)]
     sticks.append(dict(stickX=turn[0], stickY=turn[1], substickX=128, substickY=128, buttons=0x100))
@@ -254,31 +261,214 @@ def build_sticks(n_walk=N_WALK, turn=TURN, thrust=THRUST, b_step=None, roll_hold
     return sticks
 
 
+# --- live plumbing (slot 7; reuses pushaside.play/report; the Tetra base is shared with slot 6) -----
+
+# Move Link +D NE along his facing so the roll entry lands in the known-good genuine region (~-1514,
+# -763); the as-is slot-7 entry is ~110u short = wall-pinned. Dereck OK'd moving Link (README Status).
+LINK_MOVE_D = 110.0
+_POS_OFFS = (0x10C, 0x120)                   # both player class-pos triples (clean zero-length sweep)
+_DBG_XYZ = (0x803D78FC, 0x803D7900, 0x803D7904)
+
+
+def moved_start(link0=LINK_START, facing=LINK_FACING, d=LINK_MOVE_D):
+    """Link's start shifted +d along his facing (the away-from-Tetra heading), full f32."""
+    s = ML.cM_ssin_s16(facing)
+    c = ML.cM_scos_s16(facing)
+    return (f32(link0[0] + f32(d * s)), link0[1], f32(link0[2] + f32(d * c)))
+
+
+def sim_at(tetra_xz, entry, facing, m351C, link_y, thrust=THRUST):
+    """Coupled-engine prediction (placed_step=0), seeded at an EXPLICIT roll entry+facing+m351C.
+    Returns (result_dict, per-step [(link_x,link_z,tet_x,tet_z)], schedule)."""
+    ctx, sch = build_ctx_at(entry, facing, m351C, link_y, thrust)
+    res, steps = ctx.run_trace(tetra_xz[0], tetra_xz[1], 0, link_x0=entry[0], link_z0=entry[1])
+    return res, steps, sch
+
+
+def mint(tetra_xz=None, slot=SLOT, out=ANCHOR, park=False, move_link=True):
+    """Load slot 7, (optionally) move Link +LINK_MOVE_D NE, place Tetra (or park her FAR for entry
+    measurement), and save the DTM anchor. NO frame is advanced between load and save.
+
+    Link is placed with the CLEAN-PLACEMENT trick (write BOTH class-pos triples +0x10c/+0x120 so the
+    first DTM frame's CrrPos is a zero-length sweep -> no collision snap; cf. dolphin_mem teleport).
+    Tetra's START must be walkable (pushaside truth #1: off it she falls OOB and delivers NO push)."""
+    import dolphin_mem as dm
+    tx, tz = (FAR[0], FAR[1]) if park else (tetra_xz[0], tetra_xz[1])
+    if not park and not is_walkable(tx, tz):
+        p = GT.p32(tx, tz)
+        raise SystemExit("Tetra start (%r,%r) NOT walkable (fA=%.2f fB=%.2f) -> falls OOB, no push "
+                         "(pushaside truth #1)." % (tx, tz, GT.wA.pla.func(p), GT.wB.pla.func(p)))
+    h, mem1 = dm.attach()
+
+    def wf(a, v):
+        dm.write_bytes(h, mem1, a, struct.pack('>f', v))
+
+    def rf(a):
+        return struct.unpack('>f', dm.read_bytes(h, mem1, a, 4))[0]
+
+    dm.control_pipe_quiet("clearinput")
+    dm.control_pipe_quiet("pause")
+    dm.control_pipe_quiet("savestate", {"action": "load", "slot": slot})
+    time.sleep(0.3)
+    typ = struct.unpack('>b', dm.read_bytes(h, mem1, PA.TETRA_BASE + PA.T_TYPE, 1))[0]
+    if typ != 5:
+        raise SystemExit("not the type-5 Tetra at 0x%08X (got %d) -- wrong slot?" % (PA.TETRA_BASE, typ))
+    base = struct.unpack('>I', dm.read_bytes(h, mem1, PA.LINK_PTR, 4))[0]
+    if move_link:
+        ms = moved_start()
+        for off in _POS_OFFS:
+            for k in range(3):
+                wf(base + off + 4 * k, ms[k])
+        for k, a in enumerate(_DBG_XYZ):
+            wf(a, ms[k])
+    wf(PA.TETRA_BASE + PA.T_POS, tx)
+    wf(PA.TETRA_BASE + PA.T_POS + 4, GROUND_Y)
+    wf(PA.TETRA_BASE + PA.T_POS + 8, tz)
+    wf(PA.TETRA_BASE + PA.T_SPEEDF, 0.0)
+    if not park:                                              # placed spot must land on the exact f32
+        ax, az = rf(PA.TETRA_BASE + PA.T_POS), rf(PA.TETRA_BASE + PA.T_POS + 8)
+        if struct.pack('>f', ax) != struct.pack('>f', tx) or struct.pack('>f', az) != struct.pack('>f', tz):
+            raise SystemExit("Tetra placement did not land on the exact f32 (%r,%r != %r,%r)"
+                             % (ax, az, tx, tz))
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    dm.control_pipe_quiet("savestate", {"action": "save", "path": out})
+    time.sleep(0.3)
+    lx, lz = rf(base + 0x120), rf(base + 0x128)
+    print("Link @ (%r,%r) [moved=%s]; Tetra @ (%r,%r) [%s]; anchor -> %s"
+          % (lx, lz, move_link, tx, tz, "parked" if park else "walkable", out))
+    return out
+
+
+# --- entry: deliver the walk+turnaround, MEASURE the real live roll entry --------------------------
+
+def entry(nlog=40, move_link=True):
+    """Deliver DOWN*n_walk + turnaround (Tetra parked FAR), log Link, read the FIRST FRONT_ROLL frame.
+    Writes ENTRY_JSON (x,z,facing,m351C,link_y) for `solve`/`deliver`. m351C = shape_angle.z<<1."""
+    mint(park=True, move_link=move_link)
+    rows = PA.play(anchor=ANCHOR, sticks=build_sticks())
+    e = next((r for r in rows if r['proc'] == FRONT_ROLL), None)
+    if e is None:
+        raise SystemExit("no FRONT_ROLL in the delivered walk+turnaround (n_walk/thrust wrong?). "
+                         "Procs seen: %s" % [r['proc'] for r in rows[:20]])
+    meas = dict(x=e['lx'], z=e['lz'], facing=e['lfac'], m351C=(e['lsz'] << 1) & 0xFFFF,
+                link_y=GROUND_Y, frame=e['f'])
+    os.makedirs(os.path.dirname(ENTRY_JSON), exist_ok=True)
+    json.dump(meas, open(ENTRY_JSON, 'w'), indent=1)
+    se = entry_from_walk(link0=moved_start() if move_link else LINK_START)
+    print("\nLIVE roll entry: f%d  pos=(%r,%r) facing=%d (%.3f deg) m351C=%d speedF=%.4f"
+          % (e['f'], e['lx'], e['lz'], e['lfac'], e['lfac'] * 360 / 65536, meas['m351C'], e['spF']))
+    if se is not None:
+        print("SIM  roll entry:     pos=(%r,%r) facing=%d m351C=%d  (dpos=%.4fu, dfac=%d)"
+              % (se['x'], se['z'], se['facing'], se['m351C'],
+                 math.hypot(e['lx'] - se['x'], e['lz'] - se['z']), e['lfac'] - se['facing']))
+    print("wrote %s -- now `solve` at this entry, then `deliver`." % ENTRY_JSON)
+    return meas
+
+
+def _load_entry():
+    if not os.path.exists(ENTRY_JSON):
+        raise SystemExit("no %s -- run `entry` first to measure the live roll entry." % ENTRY_JSON)
+    return json.load(open(ENTRY_JSON))
+
+
+# --- solve: fine-scan Tetra placements at the MEASURED live entry -----------------------------------
+
+def solve(gx=(-1656, -1642), gz=(-936, -912), step=0.008):
+    """Bit-confirmed genuine Tetra placements at the MEASURED live entry (ENTRY_JSON). The region is
+    f32-dust sensitive to the entry, so this MUST be re-run whenever the entry moves; if 0 hits,
+    widen/shift the FINE grid (coarse scanning is useless -- no gradient)."""
+    m = _load_entry()
+    ms = moved_start()
+    e = entry_from_walk(link0=ms)              # sim walk trajectory = follow-safety proxy
+    hits = search((m['x'], m['z']), m['facing'], m['m351C'], m['link_y'], link0=ms,
+                  walk_traj=(e['traj'] if e else None), gx=gx, gz=gz, step=step, verbose=True)
+    if not hits:
+        print("0 hits -- widen/shift the FINE grid (the region shifted with the entry).")
+    return hits
+
+
+# --- deliver / diff: place the chosen Tetra spot, run the full clip --------------------------------
+
+def _chosen_tetra(tetra_xz):
+    if tetra_xz is not None:
+        return tetra_xz
+    hits_path = os.path.join(_rb, '_generated', 'turnaround_hits.json')
+    if not os.path.exists(hits_path):
+        raise SystemExit("no tetra_xz given and no %s -- run `solve` first." % hits_path)
+    hits = json.load(open(hits_path))
+    if not hits:
+        raise SystemExit("turnaround_hits.json is empty -- `solve` found no genuine placement.")
+    return tuple(hits[0]['tetra'])
+
+
+def deliver(tetra_xz=None, b_step=None, thrust=THRUST, move_link=True):
+    """Place the chosen genuine Tetra spot, deliver the full clip DTM, print the clip verdict."""
+    m = _load_entry()
+    tetra_xz = _chosen_tetra(tetra_xz)
+    res, _, _ = sim_at(tetra_xz, (m['x'], m['z']), m['facing'], m['m351C'], m['link_y'], thrust)
+    print("sim: genuine=%s old=%r new=%r push=%r" % (res['genuine'], res['old'], res['new'],
+                                                      res.get('push')))
+    mint(tetra_xz, move_link=move_link)
+    rows = PA.play(anchor=ANCHOR, sticks=build_sticks(thrust=thrust, b_step=b_step))
+    return PA.report(rows, res)
+
+
+def diff(tetra_xz=None, b_step=None, thrust=THRUST, nlog=40, move_link=True):
+    """Per-frame DTM-vs-SIM diff for BOTH actors (the tool that cracks delivery -- NEVER guess inputs).
+    The divergence frame names the bug; the alignment is sim step k == live frame (roll_entry+1+k)."""
+    m = _load_entry()
+    tetra_xz = _chosen_tetra(tetra_xz)
+    res, steps, _ = sim_at(tetra_xz, (m['x'], m['z']), m['facing'], m['m351C'], m['link_y'], thrust)
+    mint(tetra_xz, move_link=move_link)
+    rows = PA.play(anchor=ANCHOR, sticks=build_sticks(thrust=thrust, b_step=b_step), nlog=nlog)
+    e = next((r['f'] for r in rows if r['proc'] == FRONT_ROLL), None)
+    print("\nsim genuine=%s old=%r new=%r" % (res['genuine'], res['old'], res['new']))
+    print("live roll entry frame: %s   (alignment: sim step k == live frame entry+1+k)\n" % e)
+    print(" f  proc  LINK live (x,z)             TETRA live (x,z)          |  k   dLink    dTetra")
+    for r in rows:
+        k = (r['f'] - e - 1) if e is not None else None
+        s = steps[k] if (k is not None and 0 <= k < len(steps)) else None
+        if s:
+            dl = math.hypot(r['lx'] - s[0], r['lz'] - s[1])
+            dt = math.hypot(r['tx'] - s[2], r['tz'] - s[3])
+            print("%2d  %3d  (%11.4f,%11.4f) (%11.4f,%11.4f) | k%-2d %8.5f %8.5f %s"
+                  % (r['f'], r['proc'], r['lx'], r['lz'], r['tx'], r['tz'], k, dl, dt,
+                     "<== DIVERGE" if (dl > 1e-4 or dt > 1e-4) else ""))
+        else:
+            print("%2d  %3d  (%11.4f,%11.4f) (%11.4f,%11.4f) |"
+                  % (r['f'], r['proc'], r['lx'], r['lz'], r['tx'], r['tz']))
+    PA.report(rows, res)
+    return rows, res
+
+
 # --- CLI ------------------------------------------------------------------------------------------
 
 def _offline_search():
-    e = entry_from_walk()
+    """Offline PREVIEW at the moved SIM entry (the live entry will differ; use `entry`+`solve` for
+    the real thing). Tight box near the known genuine region, within the 2-minute budget."""
+    ms = moved_start()
+    e = entry_from_walk(link0=ms)
     if e is None:
         raise SystemExit("no roll entry from the walk (n_walk too small?)")
-    print("SIM roll entry (from-rest walk+turnaround): (%r, %r) facing=%d (%.3f deg) m351C=%d nspeed=%.2f"
+    print("SIM roll entry (moved-start walk+turnaround): (%r, %r) facing=%d (%.3f deg) m351C=%d nspeed=%.2f"
           % (e['x'], e['z'], e['facing'], e['facing'] * 360 / 65536, e['m351C'], e['nspeed']))
-    print("NOTE: the LIVE entry will differ (from-rest walk not bit-exact); re-run `search` seeded at "
-          "the `entry` mode's MEASURED live entry before trusting a placement.")
-    # broad-ish region around the corner; refine once the live entry is known.
-    return search((e['x'], e['z']), e['facing'], e['m351C'], e['y'], walk_traj=e['traj'],
-                  gx=(-1690, -1620), gz=(-985, -915), step=0.02)
+    print("NOTE: the LIVE entry will differ (from-rest walk not bit-exact); use `entry`+`solve`.")
+    return search((e['x'], e['z']), e['facing'], e['m351C'], e['y'], link0=ms, walk_traj=e['traj'],
+                  gx=(-1660, -1644), gz=(-948, -932), step=0.008)
 
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else 'search'
     if mode == 'search':
         _offline_search()
-    elif mode in ('entry', 'deliver', 'diff'):
-        raise SystemExit(
-            "Live mode '%s' is not wired into this module yet -- see the session-23 handoff for the "
-            "step-by-step live-delivery procedure (reuse pushaside.play/report; SLOT=7 shares Tetra "
-            "base 0x80ACD20C). The offline solver (`search`) + stick builder (`build_sticks`) are "
-            "ready; the live plumbing is the next increment." % mode)
+    elif mode == 'entry':
+        entry()
+    elif mode == 'solve':
+        solve()
+    elif mode == 'deliver':
+        deliver()
+    elif mode == 'diff':
+        diff()
     else:
         print(__doc__)
 

@@ -76,16 +76,49 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-11, session 23)
+## Status (2026-07-12, session 24)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
+- **KILL-THE-GLITCHED-TETRA DONE (session 24): the FOLLOW-ENABLED turnaround-roll seam clip is LIVE,
+  BIT-EXACT, with a NORMAL following Tetra.** The whole `turnaround.py` live pipeline is wired
+  (`entry`/`solve`/`deliver`/`diff`) and delivered the clip on slot 7. LIVE: DOWN-walk + A+diagonal
+  turnaround roll plows the type-5 Tetra aside; her CC push steers the roll-stab `CUT_F` lunge through
+  the seam; the cut fires at `old=(-1692.314697265625, -955.0416870117188)` and lands at
+  **`new=(-1727.1728515625, -990.4632568359375)` -- BIT-FOR-BIT the sim's prediction** -- then Link
+  drops to proc 39 (falling), THROUGH the seam. **Every frame entry->cut is 0-ULP for BOTH actors**
+  (the plow AND the push-steered lunge). Delivered by a clean DTM (never advancewith). This retires
+  the session-22 GLITCH dependency: same corner, same target `new`, but a normal following Tetra.
+  - **Winning setup (slot 7):** Link MOVED +110u NE along his facing to start
+    (-1531.94677734375, -787.6950073242188) -- Dereck OK'd moving Link; the as-is start's roll entry
+    lands ~110u short (wall-pinned). Tetra placed at **(-1645.696044921875, -919.3839721679688)**
+    (walkable, bit-confirmed genuine). Stream: DOWN x6 -> A+diagonal (108,204) turnaround -> NEUTRAL
+    roll -> UP+B at roll-index **b_step=16**. Measured live roll entry
+    (-1516.116455078125, -765.1473999023438) facing 40835 m351C 0 speedF 26.
+  - **Two delivery calibrations this cost** (on top of the four pushaside truths, which all carried over):
+    1. **The from-rest walk is NOT yet bit-exact** -- the live roll entry is ~2.6u from the sim's
+       from-rest entry, and the genuine Tetra region is f32-DUST sensitive to the entry, so the
+       placement is solved AT the MEASURED live entry (pushaside truth #4, generalized). facing (40835)
+       and speedF (26) ARE exact -- only the walk DISTANCE differs.
+    2. **`b_step=16`, not the sim thrust+1=15** (pushaside was +1). At 15 the CUT fires ONE FRAME
+       EARLY -> no lunge -> proc 90 recoil; at 16 it fires on the sim-step-16 frame and lunges through.
+       The turnaround PRESS consumes an input, shifting the buffer by one vs the pushaside walk.
+  - **Method that cracked it (do not guess inputs):** `turnaround.diff` per-frame BOTH-actor DTM-vs-sim
+    diff showed the roll bit-exact (k0-k14 dLink=dTetra=0.00000) with the cut one frame early -> the
+    b_step fix was named by the divergence frame, not guessed. The genuine region was LOCATED cheaply
+    via the engine's unclamped-endpoint plane distances (`sweep_par` out[8]/[9] = behindA/behindB, a
+    smooth ridge) instead of a blind fine-scan of the whole corridor.
+  - Fixture `fixtures/hyrule_turnaround_clip_live.json`; gate `tests/test_turnaround_clip.py` (6 green,
+    offline). Open (pure-sim polish, not the clip): model the from-rest slot-7 walk so the roll entry
+    is computed, not measured (then it is a true one-shot; today `entry` measures it via one DTM run).
+
 - **KILL-THE-GLITCHED-TETRA (session 23): the FOLLOW-ENABLED turnaround-roll clip is VIABLE in the
-  sim; the solver is built (`turnaround.py`); live delivery is the open next step.** The session-22
-  clip needed a GLITCHED no-follow Tetra; this is the successor with a NORMAL following Tetra. Dereck's
-  **slot 7**: type-5 following-enabled Tetra idle in the corner, Link behind her facing away, sword OUT.
+  sim; the solver is built (`turnaround.py`); live delivery was the open next step (DONE session 24,
+  above).** The session-22 clip needed a GLITCHED no-follow Tetra; this is the successor with a NORMAL
+  following Tetra. Dereck's **slot 7**: type-5 following-enabled Tetra idle in the corner, Link behind
+  her facing away, sword OUT.
   The mechanic (all sim-validated): hold **DOWN** ~6 frames (speedF caps at 17 by ~frame 5; Tetra stays
   in her 130/230 follow band so she never engages) -> one frame **A + a DIAGONAL stick** = the
   turnaround roll ([[turnaround-roll-tech]]) entering FRONT_ROLL at nspeed 26 (full ~49u lunge; the roll

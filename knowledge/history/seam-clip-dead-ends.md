@@ -71,6 +71,21 @@ contradicted. Read alongside the "Dead ends" list in the README (this is the ful
    there. Pick a FRESH arbitrary `dz` per anchor (each is an independent lottery draw of the reachable
    manifold against the dust); do not try to aim it.
 
+10. **Turnaround-clip coarse knobs (integer n_walk / discrete stick aim / integer thrust, Tetra
+    fixed): 0 genuine even at the shipped Tetra spot (session 23-24).** The acceptance is f32 dust; the
+    ONLY fine knob is Tetra's f32 placement, solved at the exact roll entry. Also **octagon-VERTEX
+    turnaround aim** (stickY=255) reaches only facing 40758/40913 -- outside the ~40842 seam-gap window,
+    so `new` is wall-pinned ~49u short at EVERY placement; a **DIAGONAL** stick (108,204)->40835 is
+    REQUIRED to thread the corner gap (retry a vertex aim only if the camera csangle changes).
+
+11. **Coarse-locate the genuine Tetra region via min(new-to-seam): FAILS -- no gradient (session 24).**
+    The clamped `new` is ~49u (blocked) or ~0.5u (clipped) with nothing between, so there is no ridge to
+    descend. BUT the engine's UNCLAMPED-endpoint plane distances DO give a smooth ridge: `sweep_par`
+    out[8]/[9] = `behindA`/`behindB` (signed dist of the pre-CrrPos predicted endpoint behind each seam
+    wall). Coarse-scan those to bound the behind-both region, then fine-scan (step ~0.008) only there --
+    a blind fine-scan of the whole approach corridor blows the 2-minute budget. This is how the
+    session-24 live clip's placement was located at the measured entry.
+
 ## D. Calibration / anim-state dead ends (relevant to killing the live calibration)
 
 10. **Per-move-set bias correction: not transferable.** The anim-phase bias is arc-dependent (0.09u on

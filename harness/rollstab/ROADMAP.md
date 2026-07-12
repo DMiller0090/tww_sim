@@ -136,6 +136,18 @@ Still missing to close Phase C:
 
 ## Phase T -- the Tetra seam clip end-to-end (**DONE 2026-07-11, session 22: LIVE, BIT-EXACT**)
 
+**SUCCESSOR DONE (session 24): the FOLLOW-ENABLED turnaround-roll clip, LIVE + BIT-EXACT.** The
+session-22 clip needed a GLITCHED no-follow Tetra; session 24 delivered the same corner clip with a
+NORMAL following (type-5) Tetra via the A+diagonal-stick TURNAROUND roll ([[turnaround-roll-tech]]) on
+slot 7: Link (moved +110u NE) DOWN-walks then turnaround-rolls to plow her aside, her CC push steers
+the `CUT_F` lunge through the seam, landing `new=(-1727.1728515625, -990.4632568359375)` bit-for-bit
+and Link falls (proc 39). Every frame entry->cut is 0-ULP for BOTH actors. Module `turnaround.py`
+(full live pipeline `entry`/`solve`/`deliver`/`diff`); fixture `fixtures/hyrule_turnaround_clip_live.json`;
+gate `tests/test_turnaround_clip.py`. Two delivery calibrations beyond the four pushaside truths: the
+from-rest walk is not yet bit-exact so the placement is solved at the MEASURED live roll entry (facing +
+speedF ARE exact, only the walk distance differs); and `b_step=16` (turnaround press shifts the buffer
+one vs pushaside's +1). See README `## Status` (session 24).
+
 **THE NORTH STAR IS HIT.** The Tetra push-aside seam clip is live-confirmed bit-for-bit: Tetra stands
 at her spot from the START (`placed_step=0`, an initial setup var, NO mid-run write), Link's roll PLOWS
 her aside, and her CC push steers the roll-stab `CUT_F` lunge through the seam at (-1727,-990).

@@ -72,6 +72,7 @@ TETRA_BASE = 0x80ACD20C
 T_POS, T_SPEEDF, T_TYPE = 0x1F8, 0x254, 0x84F
 LINK_PTR = 0x803AD860
 L_POS_X, L_POS_Z, L_SPEEDF, L_CURPROC = 0x120, 0x128, 0x17C, 0x3100
+L_SHAPE_Y, L_SHAPE_Z = 0x136, 0x138        # shape_angle.y (facing), shape_angle.z (=m351C>>1)
 
 CUT_F_PROC, FALL_PROC = 66, 39
 SUM_R = LINK_CO_R + TETRA_CO_R
@@ -241,7 +242,9 @@ def play(anchor=ANCHOR, sticks=None, nlog=40, relaunch_dolphin=True):
         P = struct.unpack('>I', D.read_bytes(h, mem1, LINK_PTR, 4))[0]
         rows.append(dict(f=i, proc=ri(P + L_CURPROC), lx=rf(P + L_POS_X), lz=rf(P + L_POS_Z),
                          spF=rf(P + L_SPEEDF), tx=rf(TETRA_BASE + T_POS),
-                         tz=rf(TETRA_BASE + T_POS + 8)))
+                         tz=rf(TETRA_BASE + T_POS + 8),
+                         lfac=struct.unpack('>H', D.read_bytes(h, mem1, P + L_SHAPE_Y, 2))[0],
+                         lsz=struct.unpack('>h', D.read_bytes(h, mem1, P + L_SHAPE_Z, 2))[0]))
         D.control_pipe_quiet("advance", {"frames": 1})
     return rows
 
