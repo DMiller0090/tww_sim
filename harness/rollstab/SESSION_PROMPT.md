@@ -81,7 +81,15 @@ STALL RULE: if you get stuck, or are about to spend real effort outside the hand
 plan, surface it before continuing.
 
 Savestate slot 5 = kaze flat room for roll clips. Savestate slot 3 = flooded-Hyrule Tetra corner
-(-1727,-990) for the north-star Tetra clip (Phase C+).
+(-1727,-990) (Phase C captures). **Savestate slot 6 = the SHIPPED Tetra push-aside clip** (Phase T,
+live bit-exact): its whole mint/author/deliver/diff pipeline is `harness/rollstab/pushaside.py` --
+read that module's docstring BEFORE any Tetra-clip delivery work; it encodes the four delivery truths
+(walkable Tetra floor / NEUTRAL roll stick / B one step later in the DTM / seed the sim at the DTM's
+REAL roll entry) that cost session 22 and are NOT re-derivable from the sim alone.
+
+**When a live delivery disagrees with the sim, do NOT tweak inputs by guesswork.** Run
+`python -m harness.rollstab.pushaside diff` (per-frame, BOTH actors) -- the divergence frame names the
+bug. Four live runs were burned guessing before this rule was learned.
 
 When you hit a Dolphin / lookup gotcha with no existing doc, document it (whichever
 fits: ../tools/DOLPHIN_CONTROL.md, KB, or memory) before moving on.

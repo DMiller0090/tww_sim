@@ -69,6 +69,13 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
    sliver z-margin robustness check), then the clean DTM with a 120-frame watch-tail, per-frame
    live confirmation. NEVER advancewith.
 
+**The Tetra push-aside clip has its own shipped pipeline: `pushaside.py`** (`mint` / `deliver` / `diff`
+/ `search`). Read its docstring before ANY Tetra-clip delivery work -- it encodes the four delivery
+truths (walkable Tetra floor; NEUTRAL roll stick; B one step later in the DTM than in the sim; seed the
+sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone and which each cost a
+live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
+-- never guess inputs.
+
 ## Status (2026-07-11, session 22)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
