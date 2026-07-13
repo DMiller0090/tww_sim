@@ -98,12 +98,29 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > `walkstab.deliver` is now sword-aware (B at N-1 sword-OUT vs N-5 sheathed; backward-compatible with
 > the shipped golden). The Tetra-push / roll-stab threads remain PAUSED.
 >
-> **NEXT (deferred by Dereck to a dedicated LIVE session): sword-OUT walk-stab live validation.** The
-> B-frame code is in (`deliver` derives N-1 vs N-5 from the anchor equip); what remains is minting a
-> sword-OUT anchor at a walk-clippable seam (an equip change at capture -- `mint.py` only translates
-> within a room) and delivering + confirming the sword-OUT walk stab clips live, same rigor as the
-> sheathed one. Also optional: generalize the two solvers off their hardcoded kaze seam (the scanner
-> dispatches by seam match today; a new-seam solve needs the settled facing + crawl count parameterized).
+> **NEXT (deferred by Dereck to dedicated LIVE sessions):**
+> 1. **MODEL the mid-walk sword pull-out (Dereck's directive 2026-07-13, session 33).** For a
+>    NOT-DRAWN anchor the sword must be pulled out mid-walk, and the sim can't represent it: the foot
+>    anim set (`_walk`/`_dash` -> WALK/DASH vs WALKS/DASHS) is frozen once at `FootSpeedF` construction
+>    (`anim_state.py:170-171`), a STATIC flag. The current walk-stab escapes this only by construction
+>    (B at N-5 times the draw to complete AT the cut, so no walk frame is posed in the sword set --
+>    decomp `d_a_player_main.cpp:3975-3976` flips `mEquipItem` -> sword at the equip-anime completion
+>    frame, and `getAnmData` keys the leg set off `mEquipItem`). It BREAKS for the ROLL path from a
+>    sheathed anchor: the roll->cut trigger REQUIRES `sword_drawn` (`land/procs/roll.py:79`), so Link
+>    must draw BEFORE the A-press then rebuild to cap in the SWORD set (DASHS != DASH, session 31), and
+>    those frames drift. Model = make the foot anim set SWITCHABLE at a draw-completion frame `f_draw`
+>    (from the B-press + equip duration: item put-away `field_0x20`/`0x30` then take-sword at 7.0; an
+>    on-back sword is just the take at 7.0). OPEN, needs a live breakpoint: does the `mEquipItem` swap
+>    trigger an oldframe-morf, or is it an instantaneous leg-pose jump (DASH/DASHS share frameMax 32 ->
+>    rates match, so likely instantaneous -- VERIFY, don't assume). Then live-capture a mid-walk draw
+>    (sheathed -> draw -> keep walking), per-frame diff to pin `f_draw` + confirm 0-ULP after, add a
+>    live regression. This BLOCKS the scanner's ROLL dispatch for any not-drawn anchor.
+> 2. **sword-OUT walk-stab live validation.** The B-frame code is in (`deliver` derives N-1 vs N-5 from
+>    the anchor equip); what remains is minting a sword-OUT anchor at a walk-clippable seam (an equip
+>    change at capture -- `mint.py` only translates within a room) and delivering + confirming live,
+>    same rigor as the sheathed one.
+> 3. **(optional) generalize the two solvers off their hardcoded kaze seam** (the scanner dispatches by
+>    seam match today; a new-seam solve needs the settled facing + crawl count parameterized).
 >
 > **PRIOR THREAD (2026-07-13, session 32): the pure-sim WALK-STAB seam clip is DELIVERED LIVE, 0-ULP,
 > no calibration -- the objective is MET for the walk stab.** A `solve_focused` hit found ENTIRELY in the
