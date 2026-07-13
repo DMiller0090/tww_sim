@@ -297,6 +297,45 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
     glitched no-follow Tetra (slot 6 pushaside, she stays put) -- UNTRIED. Tooling:
     `_notes/scratch-session27/{braced_live,entry_brace,wall_range,walla_probe}.py`.
 
+## The pure-sim WALK-stab one-shot is blocked by the walk-entry foot residual (session 30, LIVE)
+
+28. **A found walk-stab clip clips OFFLINE (0-ULP) but the clean-DTM live delivery does NOT -- the
+    walk-entry foot toe-stream residual eats the razor.** The kaze r11 slot-3 walk-stab seam
+    (S=(9030.955,1385.858), poly 803x802, interior 168.97deg) clips genuinely in the sim:
+    `harness/rollstab/walkstab.solve()` finds it 0-ULP in < 2 min (the acceptance is f32 DUST, so it
+    ENUMERATES distinct C-down walk streams -- beta spiral / start-crawl / bearing arc / per-byte fine
+    nudge / N -- and tests the exact `genuine_clip`; the dust is SPARSE, ~ONE reachable `old` in the
+    ~2e-4u perp sliver). Delivered as a clean DTM (C-down every frame, never advancewith), the walk is
+    FACING-bit-exact every frame, but the CUT does NOT clip (`old_live` -> `genuine_clip` blocked;
+    nearest clip ~1.2e-4u further in perp).
+    - **Root cause:** to thread the perp razor the walk must TURN (aim the crawl+arc so the cut ray
+      hits S); the turn overlaps the speedF-BLEND walk-entry frame (f6 here), which freezes a foot
+      toe-stream (`m359C`/`f312`) position error of ~0.00037u. That error is a speedF-magnitude error
+      (ALONG travel), but because the walk was TURNING when it froze, its component perpendicular to
+      the FINAL cut facing is ~**1.9e-4u** (live-measured) -- and the clip's perp margin is only
+      ~**1e-4u**. So `old_live` falls off the razor.
+    - **This CORRECTS the session-29 feasibility read.** Session 29 measured the residual on a
+      STRAIGHT walk (facing constant) and got perp ~3.7e-5u ("16x inside the razor, harmless"). But a
+      real clip walk CANNOT be straight -- the 17u/frame along-granularity forces a start-crawl + arc
+      (a turn) to place `old` in-window AND thread rho -- and the turning walk's perp residual is ~5x
+      worse and comparable to the whole clip window (~2e-4u). No reliable margin exists. (The crawl
+      entry actually SHRANK the residual, 0.00037u vs the straight walk's 0.0024u, and delayed it to
+      the ramp frame -- but not enough.)
+    - **Objective-compliant fix = MODEL the walk-entry foot toe-stream** (the Phase-R / session-25
+      gap: `posMoveFromFootPos` / `_py_foot_compose` f312 is low on the m3598>0 blend frames;
+      jointBeforeCB MOMI body-lean / oldframe-morf). NOT calibrate: choosing a window-EDGE hit so
+      `old_sim + measured_residual` lands inside the sliver is position feedback (forbidden), and the
+      residual is walk-dependent so it doesn't transfer. Once the toe-stream is bit-exact from rest,
+      any centered hit delivers.
+    - **B-timing (live-diffed, do not guess):** a B edge at DTM frame N-5 fires CUT_F at frame N (the
+      4-frame item put-away delay + 1-frame DTM buffering); the lower body walks through the delay so
+      `old` = the position after N walk steps. Symptom of +1: the CUT fires one frame late, `old`
+      ~17u further along.
+    - Tooling: `harness/rollstab/walkstab.py` (`solve`/`deliver`/`perp_margin`); live golden
+      `tests/golden/walkstab_deliver.json`; regression `tests/test_walkstab_clip.py` (offline clip
+      GREEN, live-clips xfail). Never re-ship a dust hit for delivery without the residual modelled
+      (or a fat-band, residual-robust acceptance -- which this near-flat seam does not offer).
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.
