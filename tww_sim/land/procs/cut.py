@@ -10,22 +10,32 @@ from ...core import mathlib as S
 from ...core.mathlib import f32, cLib_addCalc
 from ..constants import WAIT, CUT_F, _cM_ssin_s16, cLib_addCalcAngleS, _dist_angle_s
 
+# Module-level cache of the parsed cut anims (immutable dev data): loaded once per process, so a fresh
+# search clone's first enter_cut never re-walks the tree for pyproject.toml nor re-reads the JSON.
+_ANIM_CACHE = None
+
+
+def _load_cut_anims():
+    global _ANIM_CACHE
+    if _ANIM_CACHE is None:
+        from ...core.anim import j3d_eval as _J
+        import os as _os
+        rb = _os.path.dirname(_os.path.abspath(__file__))
+        while rb != _os.path.dirname(rb) and not _os.path.exists(_os.path.join(rb, 'pyproject.toml')):
+            rb = _os.path.dirname(rb)
+        path = _os.path.join(rb, '_generated', 'anim', 'link_anim_cuts.json')
+        _ANIM_CACHE = _J.load_anim(path)
+    return _ANIM_CACHE
+
 
 class _CutMixin:
     # --- sword-thrust cut procs (CUT_F 0x42 forward thrust / CUT_A 0x41 vertical slash) --------
     def _cut_anim(self, cut_type):
-        """The parsed cutf/cuta BCK (core.anim.j3d_eval). Lazy + cached on the instance. The joint-0
-        translate track is the CUT's root-motion lunge (m3700). Dev-supplied keyframe data (gitignored
-        _generated/anim/link_anim_cuts.json); regenerate with harness/anim/parse_bck.py (cutf,cuta)."""
+        """The parsed cutf/cuta BCK (core.anim.j3d_eval). Module-cached (see _load_cut_anims). The
+        joint-0 translate track is the CUT's root-motion lunge (m3700). Dev-supplied keyframe data
+        (gitignored _generated/anim/link_anim_cuts.json); regenerate harness/anim/parse_bck.py."""
         if self._cut_anim_cache is None:
-            from ...core.anim import j3d_eval as _J
-            import os as _os
-            here = _os.path.dirname(_os.path.abspath(__file__))
-            rb = here
-            while rb != _os.path.dirname(rb) and not _os.path.exists(_os.path.join(rb, 'pyproject.toml')):
-                rb = _os.path.dirname(rb)
-            path = _os.path.join(rb, '_generated', 'anim', 'link_anim_cuts.json')
-            self._cut_anim_cache = _J.load_anim(path)
+            self._cut_anim_cache = _load_cut_anims()
         return self._cut_anim_cache[self.CUT_ANIM[cut_type]]
 
     def _cut_m3700_at(self, cut_type, frame):

@@ -3,12 +3,12 @@
 **Answers:** What is the walk stab, and how does it differ from the [roll stab](roll-stab.md)? How far
 does its lunge reach, and which seams can it clip without a roll? Why is the thrust delayed several
 frames when Link is holding an item? How does the one-frame L-target speed it up?
-**Status:** decomp-grounded + live-observed (kaze r11, savestate anchor `kaze_r11_walkstab@twwgz.sav`,
-2026-07-13). The min-clip geometry is computed, the equip-change delay is live-measured, and the
-from-rest sim is now **BIT-EXACT (0 ULP) in position AND facing** from the anchor seed (the session-30
-"walk-entry foot residual" was the wrong anim set, not a foot-FK gap -- see Simulation + dead-end #28).
-A deliverable hit must be re-found in the corrected sim (the session-30 hit relied on the buggy
-trajectory), then delivered as a clean DTM.
+**Status:** decomp-grounded + **live-delivered 0-ULP** (kaze r11, savestate anchor
+`kaze_r11_walkstab@twwgz.sav`, 2026-07-13). The min-clip geometry is computed, the equip-change delay is
+live-measured, the from-rest sim is **BIT-EXACT (0 ULP) in position AND facing**, and a pure-sim solver
+hit (found entirely offline, no calibration) was delivered as a clean DTM and **clipped the seam live**:
+the CUT_F fired at N=13 with `old`/`new` bit-for-bit the sim's prediction and Link went OOB through the
+seam. See Simulation. Regression: `tests/test_walkstab_clip.py` + golden `tests/golden/walkstab_deliver.json`.
 **Source:** decomp `d_a_player_main.cpp:4087` (`checkNextActionFromButton`), `:3946`/`:3959`
 (equip-anime completion), `:3436`/`:3499` (the take/rest anime setup), `d_a_player_sword.inc:404`
 (`changeCutProc`); HIO `daPy_HIO_item` (`d_a_player_HIO_data.inc:293`); live captures + the
@@ -108,19 +108,27 @@ the AIM window is wide (**+-40 deg**, bisector ~3537) and the displacement windo
 the razor is only the perpendicular offset. The walk-up bearing (~to S) differs from the bisector, so
 walk and cut decouple by a turn.
 
-**The DUST is SPARSE, so the search enumerates.** `solve()` enumerates distinct C-down walk streams
-(beta spiral | start-crawl msds (along variance -- the 1D-plan quantum) | bearing arc (gross perp) |
-per-byte fine nudge (fine f32-lottery) | N) and tests the exact acceptance. The genuine set near the
-walk-reachable band is a ~2.2e-4u-wide sliver (confirmed pure-geometry at old=(9011.117,1352.468)),
-flanked by CrrPos-blocked; landing it is a lottery the crawl+fine variance fills. Facing is bit-exact
-from rest under the C-down camera pin (`substickY=0`; a centered stick lets the auto-cam swing and
-drift facing).
+**The razor is a GAP in the reachable-`old` byte lattice -- the search needs a K=3 crawl.** The
+reachable `old` set (from octagon-clamped, byte-quantized deliverable sticks) is a coarse lattice; a
+single-frame or K=2 crawl floors the perpendicular resolution at `min|perp|` **~1.3e-3u -- ~13x the
+razor half-width**, so the razor falls between lattice points (dead-end #6 class) and a K<=2 enumerate-
+and-test finds nothing. Each START-CRAWL frame (a partial-magnitude stick, octagon INTERIOR) densifies
+the perp lattice ~20x (K=1 ~0.03u -> K=2 ~1.3e-3u -> **K=3 ~2e-5u**, below the razor), because an
+interior byte is not clamped (every byte is a distinct decoded direction, unlike a FULL-mag arc/cruise
+stick, which clamps and collapses). So the along variance is the crawl magnitudes and the fine perp
+fill is the 3rd crawl frame's BYTE nudge. `solve_focused` (the freeze-solver pattern): bracket
+`|perp_ray|` coarsely (cheap, no CrrPos), drill the byte-nudged 3rd crawl frame + test the EXACT
+`genuine_clip`, then re-sim WITH walls and keep only `wall_hit==False` cuts (`old` is then the true
+pre-brake position, speedF still 17). It finds wall-faithful genuine hits in < 2 min. Facing is
+bit-exact from rest under the C-down camera pin (`substickY=0`; a centered stick lets the auto-cam
+swing and drift facing).
 
-**Delivery: now that the sim is 0-ULP from rest, any genuine offline clip is a true one-shot (no
-residual to eat the razor).** The session-30 shipped hit no longer clips in the corrected sim (fixing
-the ~0.0024u trajectory error shifts `old` ~2-3 f32 x-columns off its sliver, and the dust is striped
-per column), so a deliverable hit is re-found in the corrected sim then delivered as a clean DTM (C-down
-every frame; B at frame N-5; never advancewith). Regression `tests/test_walkstab_clip.py`.
+**Delivery is LIVE, 0-ULP (no calibration).** Because the from-rest sim is bit-exact, a genuine offline
+clip is a true one-shot -- the live `old` lands exactly on the sim's, on the razor. `deliver()` shipped
+the top hit as a clean DTM (C-down every frame; B at frame N-5 = the 4-frame item put-away + 1-frame DTM
+buffering, firing CUT_F at frame N; never advancewith): CUT_F fired at N=13, `old`/`new` were bit-for-bit
+the sim's prediction, the clip is genuine, and Link went OOB through the seam (proc 0x24, `pos_y` below
+the floor). Regression `tests/test_walkstab_clip.py`; live golden `tests/golden/walkstab_deliver.json`.
 
 ## See also
 

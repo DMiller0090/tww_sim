@@ -205,6 +205,7 @@ def _read_frame(h, m):
     Pp = struct.unpack('>I', D.read_bytes(h, m, _PLAYER_PTR, 4))[0]
     return {
         "pos_x": D.read_named(h, m, "link_x"), "pos_z": D.read_named(h, m, "link_z"),
+        "pos_y": D.read_named(h, m, "link_y"),      # fall/OOB detector (drops below the floor Y)
         "facing": D.read_named(h, m, "facing") & 0xFFFF,
         "state": D.read_named(h, m, "link_state"),
         "proc": struct.unpack('>i', D.read_bytes(h, m, Pp + 0x3100, 4))[0],

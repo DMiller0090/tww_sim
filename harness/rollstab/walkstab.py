@@ -6,42 +6,43 @@ mechanics/walk-stab.md), so a capped walk (speedF 17) reaches disp 40.22. The ka
 S=(9030.955,1385.858) (poly 803 x 802, interior 168.97 deg) clips from disp >= 35.02 (min speedF
 ~11.8), so no roll is needed.
 
-WHAT IS PROVEN (session 29, live-gated):
+WHAT IS PROVEN (live-gated):
   * ACCEPTANCE STRUCTURE (harness.collision.gap_search.characterize on this seam): a perp RAZOR --
-    the offset window is ~6e-4u (sub-ULP at coord 9031) -- with a WIDE aim window (+-40 deg) and a
-    wide displacement window (disp 35.5-40 all clip). So the razor is the perpendicular offset `rho`
-    (the cut ray's distance to S); aim and disp are forgiving.
-  * FROM-REST FEASIBILITY, with the C-DOWN camera pin: `rest.rest_state(ANCHOR)` stepped with a
-    C-down C-stick (substickY=0) is BIT-EXACT in FACING every frame (the auto-cam would otherwise
-    swing csangle and drift facing -- session 28's camera issue). The only from-rest residual is the
-    walk-entry foot toe-stream (m359C / f312, the known Phase-R / session-25 gap): a CONSTANT
-    ~0.0024u error established on the last m3598>0 blend frame, then FROZEN. Crucially it is a speedF
-    (magnitude) error, so it lies ALONG the travel direction: its PERPENDICULAR component is ~3.7e-5u
-    -- 16x inside the 6e-4u razor. So `rho` is bit-exact to ~3.7e-5u and the along error is absorbed
-    by the wide disp window + B-timing. => a pure-sim walk-stab one-shot IS feasible; it does NOT need
-    the foot-FK residual closed (unlike a naive read). Delivery MUST hold C-down to pin the camera.
-    Live regression: tests/test_walkstab_rest.py (fixture _generated/walkstab_rest_trace.json).
+    the offset window is ~2e-4u -- with a WIDE aim window (+-40 deg) and a wide displacement window
+    (disp 35.5-40 all clip). So the razor is the perpendicular offset `rho` (the cut ray's distance
+    to S); aim and disp are forgiving.
+  * FROM-REST is BIT-EXACT 0-ULP (position + facing) under the C-DOWN camera pin (`substickY=0`; the
+    auto-cam would otherwise swing csangle and drift facing -- session 28). The session-29/30 "walk-
+    entry foot toe-stream residual" was NOT a foot-FK gap -- it was `rest.rest_state` picking the wrong
+    ANIM SET (sword-drawn WALKS/DASHS for a Wind-Waker anchor; fixed session 31, seeds `sword_drawn`
+    from the anchor equip). So any genuine OFFLINE clip is a TRUE one-shot -- no residual to eat the
+    razor. Live regression: tests/test_walkstab_rest.py.
+  * THE CLIP IS DELIVERED LIVE, 0-ULP (session 32): tests/golden/walkstab_deliver.json.
 
 DRIVER: walk N frames from the rest seed (C-down held), then enter_cut(CUT_F). The item put-away
 delay is 4 frames of continued walking (the equip anime is upper-body; KB walk-stab.md), so the sim
-is just walk-N-then-cut and the B-press is delivered at frame N-4. The B-timing sets where `old`
-lands; time it to fire at the target `old` before any wall decel.
+is just walk-N-then-cut and the B-press is delivered at frame N-5 (4-frame put-away + 1-frame DTM
+buffering -> CUT_F at frame N). The B-timing sets where `old` lands; time it to fire at the target
+`old` before any wall decel (the search's wall-faithful gate enforces speedF still 17 at the cut).
 
-SOLVER (`solve()`, session 30): a from-rest dust search (pure sim, no calibration). The acceptance
-is f32 dust, so it ENUMERATES distinct C-down walk streams -- beta spiral around bearing-to-S | start-
-crawl msds (along) | bearing ARC (gross perp) | per-byte FINE nudge at an arc frame (the fine f32-
-lottery; bearing->stick octagon-clamping makes `off` coarse) | N (cut frame) -- and tests the EXACT
-`genuine_clip`. It finds a genuine 0-ULP clip in < 2 min. The dust is SPARSE: essentially ONE reachable
-`old` lands in the ~2e-4u perp sliver.
+SOLVER (`solve_focused()`, session 32): the objective-compliant one-shot -- the freeze-solver pattern
+(cheap monotone predictor + bracket + exact bit-confirm), pure sim, no calibration. The acceptance perp
+razor (~2e-4u) is a GAP in the reachable-old byte lattice at K<=2 crawls (min|perp| floors ~1.3e-3u,
+~13x the razor -- which is why the old `solve()`, CRAWLS K<=2 + a collapsing arc/fine nudge, finds 0).
+The fix: a K=3 START CRAWL densifies the perp lattice ~20x per frame (K=1 ~0.03u -> K=2 ~1.3e-3u ->
+K=3 ~2e-5u), reaching the razor. Phase A brackets |perp_ray| coarsely (no CrrPos); Phase B drills a
+byte-NUDGED 3rd crawl frame (octagon INTERIOR = the fine perp fill; the full-mag arc/cruise octagon-
+CLAMP and collapse -- that collapse is why the old knobs failed); Phase C re-sims WITH walls and
+accepts only wall_hit==False cuts (rejecting the dead-end #28 wall-overshoot artifacts). It finds
+wall-faithful genuine hits in < 2 min. (`solve()` is kept as `solve_legacy` for the record.)
 
-DELIVERY IS BLOCKED (session 30, dead-end #28) -- corrects the session-29 feasibility read. A found
-hit is a genuine OFFLINE clip, but the clean-DTM live run (`deliver()`) does NOT clip: to thread the
-perp razor the walk must TURN, and the turn overlaps the speedF-blend walk-entry frame, freezing a foot
-toe-stream (m359C/f312) error whose PERPENDICULAR component (~1.9e-4u for the clipping arc walk, live-
-measured) EXCEEDS the ~1e-4u perp margin -- so `old_live` falls off the razor (blocked). The session-29
-"perp residual ~3.7e-5u, harmless" was measured on a STRAIGHT walk; a real (turning) clip walk is 5x
-worse. The objective-compliant fix is to MODEL the walk-entry foot residual (Phase-R / session-25 gap),
-NOT to calibrate. Live golden: tests/golden/walkstab_deliver.json; regression tests/test_walkstab_clip.py.
+DELIVERY IS LIVE + 0-ULP (session 32) -- retires dead-end #28's "the walk-entry foot residual eats the
+razor" premise (that was the sword/equip anim-set bug, fixed session 31; the from-rest walk is now
+0-ULP, so any genuine offline clip is a true one-shot). `deliver()` shipped the top `solve_focused` hit
+as a clean DTM (C-down every frame, B at frame N-5, NEVER advancewith): the CUT_F fired at N=13 with
+`old`/`new` BIT-FOR-BIT the sim's from-rest prediction, the clip is genuine, and Link went OOB (proc
+0x24, pos_y below the floor) THROUGH the seam. Live golden: tests/golden/walkstab_deliver.json;
+regression tests/test_walkstab_clip.py.
 """
 import os, sys, json, math, time
 _rb = os.path.dirname(os.path.abspath(__file__))
@@ -52,6 +53,8 @@ if _rb not in sys.path:
 
 from tww_sim.land.land import CUT_F
 from tww_sim.land.plan_land import stick_for_bearing
+from tww_sim.land.constants import _cM_ssin_s16
+from tww_sim.core import mathlib as S
 from tww_sim.core.collision import Tri, Plane, crr_pos_walls
 from tww_sim.core.fp import f32 as _f
 from harness.rollstab import rest as C
@@ -153,6 +156,36 @@ def snapshot_walk(sticks, nmax=18):
     return snaps
 
 
+_CUT_L0 = None
+
+
+def cut_lunge_const():
+    """The CUT_F entry lunge is the joint-0 root translate at frame CUT_START (4.0), which is a
+    CONSTANT (m3700_prev==0 in _cut_init, m34C2==1). Cached once; the whole entry `new` is then a
+    pure function of (old, facing, nspeed) with no J3D eval per cut -- see fast_cut."""
+    global _CUT_L0
+    if _CUT_L0 is None:
+        s = seed()
+        _CUT_L0 = s._cut_m3700_at(CUT_F, s.CUT_START)
+    return _CUT_L0
+
+
+def fast_cut(old_x, old_z, facing, nspeed):
+    """The CUT_F entry lunge, computed with the CONSTANT root translate -- BIT-IDENTICAL to
+    enter_cut(CUT_F, aim=None) but ~20x cheaper (no clone, no J3D keyframe eval). Mirrors
+    _CutMixin.enter_cut's entry-frame pos block exactly: travel==facing (aim None), speedF snaps
+    |nspeed|<0.05 to 0, add = rotate(L0) by facing. Returns (new_x, new_z)."""
+    L0 = cut_lunge_const()
+    speedF = 0.0 if abs(nspeed) < 0.05 else nspeed
+    s = _cM_ssin_s16(facing)
+    c = S.cM_scos_s16(facing)
+    add_x = _f(_f(L0[2] * s) + _f(L0[0] * c))
+    add_z = _f(_f(L0[2] * c) - _f(L0[0] * s))
+    nx = _f(_f(old_x + _f(speedF * s)) + add_x)
+    nz = _f(_f(old_z + _f(speedF * c)) + add_z)
+    return nx, nz
+
+
 def cut_at(snap, aim=None):
     c = snap.clone()
     old = (c.pos_x, c.pos_z); fac, spF = c.facing, c.speedF
@@ -179,11 +212,10 @@ def perp_ray(old, new):
 
 def perp_margin(old, new):
     """Delivery-robustness metric: the contiguous perp half-window at `old` (fresh in-line lunge), in
-    +-2e-5u steps -- how far `old` can shift PERPENDICULAR and still clip. This is what the walk-entry
-    foot residual eats: the residual is ALONG travel, but a TURNING walk (needed to thread the razor)
-    freezes a blend-frame toe-stream error whose PERP component (~1-2e-4u, walk-dependent) is the
-    threat. A hit delivers only if this margin exceeds that perp residual (see the module docstring /
-    dead-end #28: for the clipping arc walk the residual EXCEEDS the ~1e-4u margin -> blocked)."""
+    +-2e-5u steps -- how far `old` can shift PERPENDICULAR and still clip. Ranks hits: a bigger margin
+    is a wider f32 sliver (more forgiving). The from-rest sim is 0-ULP (session 31 sword fix), so the
+    live `old` lands exactly on the sim's, and any positive-margin hit delivers (session 32 shipped a
+    margin-5 hit); the margin just picks the safest column."""
     a = math.atan2(new[0] - old[0], new[1] - old[1])
     pdx, pdz = -math.cos(a), math.sin(a)
     lunge = (_f(new[0] - old[0]), _f(new[1] - old[1]))
@@ -228,6 +260,31 @@ def _dtm(stk):
     return C.dtm_stick(stk)
 
 
+# stick_for_bearing runs a per-call bisection (~650 main_stick_decode calls); it is a PURE function of
+# (bearing, cs, mag) requested millions of times, so memoizing it is the dominant search speedup.
+_SFB_CACHE = {}
+_SFBD_CACHE = {}
+
+
+def _sfb(bearing, cs, mag):
+    k = (bearing & 0xFFFF, cs, mag)
+    v = _SFB_CACHE.get(k)
+    if v is None:
+        v = stick_for_bearing(bearing & 0xFFFF, cs, mag)
+        _SFB_CACHE[k] = v
+    return v
+
+
+def _sfbd(bearing, cs, mag):
+    """Delivered (calibrated) stick for a bearing -- _dtm(_sfb(...)), memoized."""
+    k = (bearing & 0xFFFF, cs, mag)
+    v = _SFBD_CACHE.get(k)
+    if v is None:
+        v = _dtm(_sfb(bearing, cs, mag))
+        _SFBD_CACHE[k] = v
+    return v
+
+
 def build_stream(beta, crawl_msds, off, lead, dur, fframe=None, fdx=0, fdz=0):
     """Walk stream (DELIVERY-FAITHFUL): [start-crawl msds] + full-mag cruise at `beta`, a bearing ARC
     (off-aim `off` for `dur` frames at `lead`, the gross perp knob), and an optional per-byte FINE
@@ -238,8 +295,8 @@ def build_stream(beta, crawl_msds, off, lead, dur, fframe=None, fdx=0, fdz=0):
     term #6). Nudging a post-calibration byte instead can overflow the [0,255] range and desync
     sim-vs-delivered on the 0/255 edges."""
     cs = seed().csangle
-    raw = [stick_for_bearing(beta, cs, m) for m in crawl_msds] + [stick_for_bearing(beta, cs, 1.0)] * 30
-    araw = stick_for_bearing((beta + off) & 0xFFFF, cs, 1.0)
+    raw = [_sfb(beta, cs, m) for m in crawl_msds] + [_sfb(beta, cs, 1.0)] * 30
+    araw = _sfb((beta + off) & 0xFFFF, cs, 1.0)
     for d in range(dur):
         raw[lead + d] = araw
     if fframe is not None and (fdx or fdz):
@@ -249,23 +306,30 @@ def build_stream(beta, crawl_msds, off, lead, dur, fframe=None, fdx=0, fdz=0):
 
 
 def _cut_all(sticks, base, base_k):
-    """Continue the C-down walk from `base` (already `base_k` frames in) to NMAX, cutting in-window."""
+    """Continue the C-down walk from `base` (already `base_k` frames in) to NMAX, cutting in-window.
+    FAST PATH: skip the cruise foot pose (bit-exact for walk-then-cut) and cut via the cached-lunge
+    `fast_cut` (no clone, no J3D eval) -- both are 0-ULP vs the full engine (see fast_cut / the
+    skip_cruise_pose flag). Reads (old, facing, nspeed) straight off the walking state per frame."""
     s = base.clone()
+    s._foot.skip_cruise_pose = True
     snaps = []
     for k in range(base_k, NMAX + 1):
-        snaps.append((k, s.clone()))
+        snaps.append((k, s.pos_x, s.pos_z, s.facing, s.nspeed))
         if k < NMAX:
             s.step(sticks[k][0], sticks[k][1], csx=128, csy=CDOWN)
     out = []
-    for (k, snap) in snaps:
+    for (k, ox, oz, fac, nsp) in snaps:
         if k < 10:
             continue
-        r = cut_at(snap)
-        if r is None:
+        dd = math.hypot(SEAM[0] - ox, SEAM[1] - oz)
+        if not (WIN_LO <= dd <= WIN_HI):
             continue
-        dd = math.hypot(SEAM[0] - r['old'][0], SEAM[1] - r['old'][1])
-        if WIN_LO <= dd <= WIN_HI:
-            out.append((k, dd, r))
+        old = (ox, oz)
+        nx, nz = fast_cut(ox, oz, fac, nsp)
+        new = (nx, nz)
+        ok, why = genuine_clip(old, new)
+        out.append((k, dd, dict(old=old, new=new, facing=fac,
+                                disp=math.hypot(nx - ox, nz - oz), ok=ok, why=why)))
     return out
 
 
@@ -279,15 +343,12 @@ def _beta_spiral(center, half, step):
 
 
 def solve(budget=110.0, want=20, verbose=True):
-    """One-shot dust search from the anchor seed (pure sim, no calibration). Enumerates distinct C-down
-    walk streams (beta spiral around bearing-to-S | crawl | arc | per-byte fine nudge | N) and tests
-    the EXACT genuine_clip -- the acceptance is f32 dust, so this is enumerate-and-test, not threading.
-    Collects unique clips, ranks by perp_margin, writes HITS_PATH. Returns the ranked hits.
-
-    NOTE (dead-end #28): a found hit is a GENUINE offline clip (0-ULP), but LIVE delivery is currently
-    BLOCKED by the walk-entry foot residual -- the clipping walk must TURN to thread the razor, which
-    freezes a blend-frame toe-stream error whose perp component (~1-2e-4u) exceeds the ~1e-4u perp
-    margin. The objective-compliant fix is to MODEL that residual (Phase-R), not to calibrate."""
+    """LEGACY K<=2 dust search (kept as `solve_legacy` for the record). Enumerates C-down walk streams
+    (beta spiral | crawl | arc | per-byte fine nudge at an arc frame | N) and tests the EXACT
+    genuine_clip. SUPERSEDED by `solve_focused`: its CRAWLS are K<=2 and its fine knobs (arc `off`,
+    the arc-frame byte nudge) are FULL-MAG and octagon-CLAMP, so the reachable perp lattice floors
+    ~1.3e-3u (~13x the razor) and it finds 0 in the corrected sim. `solve_focused` uses a K=3 crawl
+    with an octagon-INTERIOR byte-nudged 3rd frame (the fine perp fill) + a wall-faithful gate."""
     t0 = time.time()
     c = bear_to_S()
     if verbose:
@@ -297,9 +358,9 @@ def solve(budget=110.0, want=20, verbose=True):
         if time.time() - t0 > budget or len(clips) >= want:
             break
         cs = seed().csangle
-        cruise = _dtm(stick_for_bearing(beta, cs, 1.0))
+        cruise = _sfbd(beta, cs, 1.0)
         for crawl in CRAWLS:
-            crawl_sticks = [_dtm(stick_for_bearing(beta, cs, m)) for m in crawl]
+            crawl_sticks = [_sfbd(beta, cs, m) for m in crawl]
             for (lead, dur) in LEADS_DURS:
                 base = seed()
                 pre = crawl_sticks + [cruise] * 30
@@ -344,6 +405,144 @@ def solve(budget=110.0, want=20, verbose=True):
     return clips
 
 
+# --- the FOCUSED K=3 search (session 32): the objective-compliant one-shot ---
+# Why K=3 + an octagon-interior byte nudge beats solve()'s K<=2: see solve_focused's docstring + KB walk-stab.
+_BASE_WALLED = None
+CRUISE_BETA = 5556                    # cruise aim -> facing settles to 5625 (the threading facing)
+PERP_GATE_F = 0.006                   # keep only near-razor cuts for the exact test (razor ~2e-4u)
+NLO_F, NHI_F = 10, 15
+
+
+def seed_walled():
+    """Rest seed WITH the local seam walls in the stepper (Phase W CrrPos), so the walk BRAKES exactly
+    as live does. Used to reject wall artifacts: a cut whose walk touched a wall (`wall_hit`) has an
+    `old` the wall-less sim overshot (dead-end #28); only a wall_hit==False walk is faithful (its old
+    is bit-identical to the wall-less walk, so the fast wall-less search is exact for accepted hits)."""
+    global _BASE_WALLED
+    if _BASE_WALLED is None:
+        _BASE_WALLED = C.rest_state(ANCHOR, walls=TRIS)
+    return _BASE_WALLED.clone()
+
+
+def _walk_fast(sticks, nmax):
+    """Wall-less C-down walk from rest with the cruise pose skipped (bit-exact for walk-then-cut).
+    Yields (N, old_x, old_z, facing, nspeed) at each frame 1..nmax."""
+    s = seed(); s._foot.skip_cruise_pose = True
+    for k in range(nmax):
+        stk = sticks[k] if k < len(sticks) else sticks[-1]
+        s.step(stk[0], stk[1], csx=128, csy=CDOWN)
+        yield (k + 1, s.pos_x, s.pos_z, s.facing, s.nspeed)
+
+
+def _wall_faithful(sticks, N):
+    """Re-sim the walk WITH walls; return the walled (old, new, facing, speedF) iff no wall was hit
+    through frame N (so `old` is the true pre-brake position). None if a wall braked the walk (the
+    wall-less `old` is an overshoot -> a delivery would MISS: dead-end #28)."""
+    s = seed_walled()
+    for k in range(N):
+        stk = sticks[k] if k < len(sticks) else sticks[-1]
+        s.step(stk[0], stk[1], csx=128, csy=CDOWN)
+        if getattr(s, 'wall_hit', False):
+            return None
+    nx, nz = fast_cut(s.pos_x, s.pos_z, s.facing, s.nspeed)
+    return (s.pos_x, s.pos_z), (nx, nz), s.facing, s.speedF
+
+
+def _stream_k3(cs, c1, c2, c3d, cruise):
+    return [c1, c2, c3d] + [cruise] * 30
+
+
+def solve_focused(budget=110.0, want=30, cruise_beta=CRUISE_BETA, verbose=True):
+    """One-shot walk-stab dust search (pure sim, no calibration), the freeze-solver pattern:
+    cheap monotone predictor (perp_ray, no CrrPos) + bracket + exact bit-confirm + wall-faithful gate.
+
+    Phase A (coarse, wall-less): sweep K=2 crawl (a1,m1,a2,m2) x N, rank frames by |perp_ray| to
+      bracket where the cut ray passes near S (the razor). No genuine test yet -- perp is the cheap
+      predictor. Keeps the top brackets.
+    Phase B (fine, wall-less): for each bracket, add a byte-NUDGED 3rd crawl frame (octagon interior,
+      the fine perp fill), walk, and where |perp| < PERP_GATE_F test the EXACT genuine_clip.
+    Phase C (walled confirm): re-sim each genuine hit with walls; accept only wall_hit==False (old is
+      the true pre-brake position; speedF still 17). Rank by perp_margin (delivery robustness).
+
+    Writes ranked hits (each carries the explicit delivered `sticks` + N for deliver()) to HITS_PATH."""
+    t0 = time.time()
+    cs = seed().csangle
+    cruise = _sfbd(cruise_beta, cs, 1.0)
+    c3base = _sfb(cruise_beta, cs, 0.66)
+    c3base_d = _dtm(c3base)
+    # --- Phase A: coarse perp brackets ---
+    brackets = []
+    for a1 in range(cruise_beta - 1800, cruise_beta + 1800, 160):
+        for m1 in (0.6, 0.66, 0.72):
+            c1 = _sfbd(a1, cs, m1)
+            for a2 in range(cruise_beta - 1800, cruise_beta + 1800, 160):
+                for m2 in (0.6, 0.72):
+                    c2 = _sfbd(a2, cs, m2)
+                    sticks = _stream_k3(cs, c1, c2, c3base_d, cruise)
+                    for (N, ox, oz, fac, nsp) in _walk_fast(sticks, NHI_F):
+                        if not (NLO_F <= N <= NHI_F):
+                            continue
+                        d2S = math.hypot(SEAM[0] - ox, SEAM[1] - oz)
+                        if not (34.0 <= d2S <= 40.5):
+                            continue
+                        nx, nz = fast_cut(ox, oz, fac, nsp)
+                        pr = abs(perp_ray((ox, oz), (nx, nz)))
+                        brackets.append((pr, a1, m1, a2, m2, N))
+    brackets.sort(key=lambda b: b[0])
+    brackets = brackets[:60]
+    if verbose:
+        print('Phase A: %d brackets, best |perp|=%.6f (%.1fs)' % (len(brackets), brackets[0][0],
+              time.time() - t0), flush=True)
+    # --- Phase B + C: fine c3-nudge drill on each bracket, exact test, walled confirm ---
+    clips, seen = [], set()
+    for (pr0, a1, m1, a2, m2, N) in brackets:
+        if time.time() - t0 > budget or len(clips) >= want:
+            break
+        c1 = _sfbd(a1, cs, m1)
+        c2 = _sfbd(a2, cs, m2)
+        for dx in range(-13, 14):
+            for dz in range(-13, 14):
+                c3d = _dtm((min(254, max(1, c3base[0] + dx)), min(254, max(1, c3base[1] + dz))))
+                sticks = _stream_k3(cs, c1, c2, c3d, cruise)
+                ox = oz = fac = nsp = None
+                for (kN, x, z, f, n) in _walk_fast(sticks, N):
+                    if kN == N:
+                        ox, oz, fac, nsp = x, z, f, n
+                nx, nz = fast_cut(ox, oz, fac, nsp)
+                if abs(perp_ray((ox, oz), (nx, nz))) >= PERP_GATE_F:
+                    continue
+                if not genuine_clip((ox, oz), (nx, nz))[0]:
+                    continue
+                wf = _wall_faithful(sticks, N)                  # Phase C: reject wall artifacts
+                if wf is None:
+                    continue
+                (wox, woz), (wnx, wnz), wfac, wsp = wf
+                if not genuine_clip((wox, woz), (wnx, wnz))[0]:
+                    continue
+                key = (round(wox, 5), round(woz, 5))
+                if key in seen:
+                    continue
+                seen.add(key)
+                margin = perp_margin((wox, woz), (wnx, wnz))
+                clips.append(dict(sticks=[list(sk) for sk in sticks[:18]], N=N,
+                                  a1=a1, m1=m1, a2=a2, m2=m2, c3dx=dx, c3dz=dz,
+                                  cruise_beta=cruise_beta, old=[wox, woz], new=[wnx, wnz],
+                                  facing=wfac, speedF=wsp, margin=margin,
+                                  d2S=math.hypot(SEAM[0] - wox, SEAM[1] - woz),
+                                  perp=perp_ray((wox, woz), (wnx, wnz))))
+    clips.sort(key=lambda h: -h['margin'])
+    os.makedirs(os.path.dirname(HITS_PATH), exist_ok=True)
+    json.dump(clips, open(HITS_PATH, 'w'), indent=1)
+    if verbose:
+        print('%d wall-faithful clips in %.1fs -> %s. top by perp margin:'
+              % (len(clips), time.time() - t0, HITS_PATH), flush=True)
+        for h in clips[:8]:
+            print('  margin=%d N=%d a1=%d/%.2f a2=%d/%.2f c3=(%+d,%+d) d2S=%.2f perp=%+.6f old=(%.6f,%.6f)'
+                  % (h['margin'], h['N'], h['a1'], h['m1'], h['a2'], h['m2'], h['c3dx'], h['c3dz'],
+                     h['d2S'], h['perp'], h['old'][0], h['old'][1]))
+    return clips
+
+
 def reachability(beta=5730, mag=1.0, nmax=15):
     """Print the C-down walk's per-frame (facing, speedF, old_d2S, rho) at aim `beta` -- the map the
     solver threads. facing settles at the stick-decode-quantized aim; `rho` at the along-correct
@@ -360,22 +559,32 @@ def reachability(beta=5730, mag=1.0, nmax=15):
               % (N, r['facing'], r['spF'], d2S, r['rho'], r['disp'], r['why']))
 
 
-def deliver(hit=None, b_frame=7, log_n=22, norelaunch=False, verbose=True):
-    """LIVE clean-DTM delivery of a solver hit (C-down every frame; NEVER advancewith). Authors the
-    hit's walk stream + a B edge at `b_frame` (the ~4-frame item put-away delay + DTM buffering fires
-    CUT_F ~5 frames later), logs per frame, and diffs vs the from-rest sim. Reports the walk residual,
-    where CUT_F fires, and whether `old_live` clips (Link falls, proc 39). Per-frame diff -> never
-    guess the B frame; read the divergence.
+GOLDEN_PATH = os.path.join(_rb, 'tests', 'golden', 'walkstab_deliver.json')
 
-    Returns 0 (clip confirmed) / 2 (blocked -- currently the case: the walk-entry foot residual, see
-    dead-end #28) / 1 (no CUT fired). Reads the top hit from HITS_PATH if `hit` is None."""
+
+def deliver(hit=None, b_frame=None, log_n=40, norelaunch=False, verbose=True, save_golden=True):
+    """LIVE clean-DTM delivery of a solver hit (C-down every frame; NEVER advancewith). Authors the
+    hit's walk stream + a B edge at `b_frame` (the 4-frame item put-away delay + 1-frame DTM buffering
+    fires CUT_F at frame N), logs per frame, and diffs vs the from-rest sim. Reports the walk residual,
+    where CUT_F fires, whether `old_live` clips genuine (bit-exact from rest), and whether Link goes
+    OOB (`pos_y` drops below the floor -- the definitive clip signal; a post-cut proc that is neither
+    an idle nor the recoil also flags it). Per-frame diff -> never guess the B frame; read the divergence.
+
+    Returns 0 (clip confirmed live) / 2 (cut fired but no clip) / 1 (no CUT fired). Reads the top hit
+    from HITS_PATH if `hit` is None; saves the live golden on a confirmed clip."""
     from harness.dtm.run_dtm import run_dtm, land_ready
     B_BTN = 0x200
     if hit is None:
         hit = json.load(open(HITS_PATH))[0]
-    sticks = build_stream(hit['beta'], tuple(hit['crawl']), hit['off'], hit['lead'], hit['dur'],
-                          hit['fframe'], hit['fdx'], hit['fdz'])
+    # New (solve_focused) hits carry the explicit delivered `sticks`; legacy hits carry build_stream params.
+    if 'sticks' in hit:
+        sticks = [tuple(sk) for sk in hit['sticks']]
+    else:
+        sticks = build_stream(hit['beta'], tuple(hit['crawl']), hit['off'], hit['lead'], hit['dur'],
+                              hit['fframe'], hit['fdx'], hit['fdz'])
     N = hit['N']
+    if b_frame is None:
+        b_frame = N - 5          # 4-frame item put-away delay + 1-frame DTM buffering (KB walk-stab)
     s = C.rest_state(ANCHOR)
     rows = []
     for k in range(N):
@@ -401,13 +610,42 @@ def deliver(hit=None, b_frame=7, log_n=22, norelaunch=False, verbose=True):
     lold = (live[cut_i - 1]['pos_x'], live[cut_i - 1]['pos_z'])
     lnew = (live[cut_i]['pos_x'], live[cut_i]['pos_z'])
     gen, why = genuine_clip(lold, lnew)
-    fell = any(f['proc'] in (0x27, 39) for f in live[cut_i:])
+    tail = live[cut_i:]
+    # OOB clip signal: Link's world Y drops below the floor (LINK_Y) as he falls through the seam.
+    oob = any(f.get('pos_y', LINK_Y) < LINK_Y - 2.0 for f in tail)
     if verbose:
-        print('LIVE CUT_F@f%d: old=(%.7f,%.7f) new=(%.7f,%.7f) genuine=%s(%s) fell=%s'
-              % (cut_i, lold[0], lold[1], lnew[0], lnew[1], gen, why, fell))
-        print('  %s' % ('*** CLIP CONFIRMED LIVE ***' if (gen and fell) else
-                        'BLOCKED -- walk-entry foot residual (dead-end #28)'))
-    return 0 if (gen and fell) else 2
+        print('LIVE CUT_F@f%d: old=(%.7f,%.7f) new=(%.7f,%.7f) genuine=%s(%s) OOB=%s'
+              % (cut_i, lold[0], lold[1], lnew[0], lnew[1], gen, why, oob))
+        for i, f in enumerate(tail[:16]):
+            print('   +%-2d proc=0x%02x state=%d pos=(%.2f,%.2f) y=%.2f' %
+                  (i, f['proc'] & 0xFF, f['state'], f['pos_x'], f['pos_z'], f.get('pos_y', 0.0)))
+        print('  %s' % ('*** WALK-STAB CLIP CONFIRMED LIVE (OOB) ***' if (gen and oob) else
+                        ('cut fired, genuine=%s oob=%s -- inspect the tail' % (gen, oob))))
+    ok = gen and oob
+    if ok and save_golden:
+        import copy
+        gold = dict(anchor=ANCHOR, hit=copy.deepcopy(hit), b_frame=b_frame,
+                    sim_old=list(sold), sim_new=list(snew),
+                    live_cut_frame=cut_i, live_old=list(lold), live_new=list(lnew),
+                    genuine=bool(gen), oob=bool(oob),
+                    live_tail=[dict(proc=f['proc'] & 0xFF, state=f['state'], pos_x=f['pos_x'],
+                                    pos_z=f['pos_z'], pos_y=f.get('pos_y', 0.0)) for f in tail[:20]])
+        os.makedirs(os.path.dirname(GOLDEN_PATH), exist_ok=True)
+        json.dump(gold, open(GOLDEN_PATH, 'w'), indent=1)
+        # Mark the delivered hit in HITS_PATH so the regression gate flips xfail->PASS.
+        try:
+            allh = json.load(open(HITS_PATH))
+            for h in allh:
+                if round(h.get('old', [0, 0])[0], 4) == round(hit['old'][0], 4):
+                    h['delivered'] = True
+                    h['live_old'] = list(lold)
+                    h['live_new'] = list(lnew)
+            json.dump(allh, open(HITS_PATH, 'w'), indent=1)
+        except Exception:
+            pass
+        if verbose:
+            print('  live golden -> %s' % GOLDEN_PATH)
+    return 0 if ok else 2
 
 
 if __name__ == '__main__':
@@ -415,7 +653,9 @@ if __name__ == '__main__':
     if cmd == 'reach':
         reachability()
     elif cmd == 'solve':
+        solve_focused()
+    elif cmd == 'solve_legacy':
         solve()
     elif cmd == 'deliver':
-        bf = next((int(a.split('=')[1]) for a in sys.argv if a.startswith('b=')), 7)
+        bf = next((int(a.split('=')[1]) for a in sys.argv if a.startswith('b=')), None)
         sys.exit(deliver(b_frame=bf, norelaunch=('norelaunch' in sys.argv)))

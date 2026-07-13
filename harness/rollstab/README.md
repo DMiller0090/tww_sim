@@ -76,49 +76,52 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-13, session 31)
+## Status (2026-07-13, session 32)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-13, session 31): the session-30 "walk-entry foot residual" that blocked
-> WALK-STAB delivery was ROOT-CAUSED to a sword/equip ANIM-SET bug, not a foot-FK/lean/IK gap. The
-> from-rest sim is now BIT-EXACT 0-ULP (position + facing) -- dead-end #28's premise is retired.** The
-> roll-stab / Tetra-push state below is PAUSED (same solver shape). Anchor
-> `tests/dolphin/anchors/kaze_r11_walkstab@twwgz.sav` (+ its `.seed.json`, now carrying the equip state).
-> Mechanism + disp-floor in KB `knowledge/mechanics/walk-stab.md`.
+> **CURRENT THREAD (2026-07-13, session 32): the pure-sim WALK-STAB seam clip is DELIVERED LIVE, 0-ULP,
+> no calibration -- the objective is MET for the walk stab.** A `solve_focused` hit found ENTIRELY in the
+> sim shipped as a clean DTM and clipped the kaze r11 slot-3 seam (S=(9030.955,1385.858), poly 803x802,
+> interior 168.97deg): the CUT_F fired at N=13 with `old=(9011.2773438,1352.7379150)` and
+> `new=(9031.8212891,1387.3160400)` -- **BIT-FOR-BIT the sim's from-rest prediction** -- the clip is
+> genuine, and Link went OOB (proc 0x24, `pos_y` below the floor) THROUGH the seam (Dereck confirmed OOB
+> on screen). Anchor `tests/dolphin/anchors/kaze_r11_walkstab@twwgz.sav`; live golden
+> `tests/golden/walkstab_deliver.json`; gate `tests/test_walkstab_clip.py` (xfail flipped -> PASS).
+> Mechanism + disp-floor in KB `knowledge/mechanics/walk-stab.md`. The roll-stab / Tetra-push state below
+> is PAUSED (same solver shape).
 >
-> **SESSION-31 FINDINGS (the load-bearing ones):**
-> - **Root cause = the WRONG ANIM SET (session 31, corrects session 30 + dead-end #28).** `rest.rest_state`
->   hardcoded `sword_drawn=True`, but this anchor holds the Wind Waker (`mEquipItem` 0x22, read live at
->   `P+0x3488`; NOT `daPyItem_SWORD_e` 0x103), so `getAnmData` (`d_a_player_main.cpp:12950`) selects the
->   base WALK/DASH legs, not the sword-drawn WALKS/DASHS. WALK and WALKS share leg keyframes (a WAITS<->WALK
->   entry is bit-identical either way, so frames 0-3 matched), but DASH and DASHS differ, so the sword-drawn
->   assumption drifted the plant toe ~0.0024u the instant DASH blends in (regime 2, the m3598<1 frame) --
->   exactly the "residual." Live `mFootData` capture proved EVERY `jointBeforeCB`/`jointCB1` lean+foot-plant
->   IK term is ZERO on this flat ground (waist tilt `m34E0`, CLOTCH `field_0x030`, leg bends
->   `field_0x008/00A/002`; the SESSION_PROMPT "MOMI thigh lean" suspect was wrong twice -- MOMI 0x10/0x11
->   are FACE joints not in the foot chain, and the lean is wind-driven). Fix: `rest.rest_state` seeds
->   `sword_drawn` from the anchor's captured equip (`seed.json` `sword_drawn`/`equip_item`; default True for
->   the sword-drawn roll-stab idle anchors). **From-rest walk now 0-ULP** (`tests/test_walkstab_rest.py`,
->   full-position gate flipped xfail->PASS).
-> - **`build_stream` made DELIVERY-FAITHFUL.** The per-byte FINE nudge is now applied to the RAW authored
->   stick byte, clamped to [0,255], THEN run through dtm_make's calibration (`_dtm`) -- so the sim sims
->   exactly the bytes a clean DTM delivers. The old code nudged a post-`_dtm` byte, which could overflow
->   255 (a stick a DTM cannot deliver); the session-30 "hit" and any overflow-byte hit are NOT deliverable.
-> - **Delivery: a deliverable hit must be RE-FOUND in the corrected sim.** With the sim 0-ULP from rest,
->   any genuine OFFLINE clip is a true one-shot (no residual to eat the razor). The session-30 hit no
->   longer clips (fixing the ~0.0024u along error shifts `old` ~2-3 f32 x-columns off its sliver; the dust
->   is striped per column). Re-solve enumerates C-down streams (beta spiral | K<=3 start-crawl (the along
->   variance -- Dereck's 1D-plan quantum) | bearing arc | deliverable fine nudge | N) and tests the exact
->   `genuine_clip`. The genuine sliver is confirmed present pure-geometry (~2.2e-4u wide at
->   old=(9011.117,1352.468), flanked by CrrPos-blocked); landing it with DELIVERABLE sticks is the sparse
->   lottery the crawl+fine variance fills (~1 per ~42k streams; the Python-foot search rate makes this a
->   compute-bound sweep). **STATUS: re-search in progress -- the live clip is not yet re-delivered.**
-> - **Shipped this session:** the `rest.rest_state` equip fix + `build_stream` delivery-faithfulness in
->   `harness/rollstab/{rest,walkstab}.py`; the walkstab `seed.json` equip fields; `tests/test_walkstab_rest.py`
->   full-position 0-ULP gate (xfail removed). The roll-stab entries below are unchanged.
+> **SESSION-32 FINDINGS (the load-bearing ones):**
+> - **The blocker was NEVER throughput -- it was distinct-old DENSITY near the razor perp.** The
+>   acceptance perp razor (~2e-4u) is a GAP in the reachable-`old` byte lattice at K<=2 crawls: an offline
+>   sweep floored `min|perp|` at **~1.3e-3u (~13x the razor)**. So the legacy `solve()` (CRAWLS K<=2 +
+>   collapsing knobs) finds **0 hits even given the full 110s budget** -- speeding it up cannot help. The
+>   fine knobs it leaned on (bearing arc `off`, the arc-frame byte nudge) are FULL-MAG sticks that
+>   octagon-CLAMP, so they collapse (52k streams -> ~14 distinct near-razor `old`).
+> - **The fix = a K=3 START CRAWL.** Each crawl frame densifies the perp lattice ~20x (K=1 ~0.03u -> K=2
+>   ~1.3e-3u -> **K=3 ~2e-5u**, reaching the razor). The fine perp knob is the 3rd crawl frame's BYTE
+>   nudge -- a PARTIAL-mag stick sits in the octagon INTERIOR, so every byte is distinct (unlike the
+>   clamped full-mag arc). `solve_focused` (session 32): Phase A brackets `|perp_ray|` coarsely (cheap, no
+>   CrrPos), Phase B drills the byte-nudged 3rd frame + tests EXACT `genuine_clip`, Phase C re-sims WITH
+>   walls and accepts only `wall_hit==False` (rejecting the dead-end #28 wall-overshoot artifacts). It
+>   found **3 wall-faithful genuine hits in 67s** (< 2 min); the top clipped live 0-ULP.
+> - **Dead-end #28 RETIRED at the premise.** "The walk-entry foot residual eats the razor" was the
+>   session-31 sword/anim-set bug (already fixed); with the from-rest sim 0-ULP, any genuine offline clip
+>   is a TRUE one-shot and the search's `old` IS the live `old` bit-for-bit. The margin-5 hit delivered
+>   cleanly (0-ULP leaves no residual for the margin to absorb).
+> - **The search speedups (all bit-exact-validated, committed):** module-cached cut anim (killed a
+>   per-clone pyproject root-walk; `enter_cut` ~8.5x), `fast_cut` (cached constant CUT_F lunge, ~20x vs
+>   `enter_cut`, 0-ULP over 378 snapshots), `FootSpeedF.skip_cruise_pose` opt-in flag (skip the cruise
+>   foot pose -- 0-ULP for walk-then-cut over 1944 streams), and **memoized `stick_for_bearing`** (the
+>   dominant win: 20M redundant `main_stick_decode` calls eliminated). Search 105 -> ~1340 streams/sec;
+>   `run_dtm` now logs `pos_y` (the OOB/fall detector).
+> - **Shipped this session:** `solve_focused` + `fast_cut` + memoized sticks in `harness/rollstab/walkstab.py`
+>   (legacy `solve` kept as `solve_legacy`); `deliver` rewritten (explicit-sticks replay, OOB detection,
+>   golden save); `cut.py` module anim cache; `foot_speedf.py` `skip_cruise_pose`; `run_dtm.py` `pos_y`;
+>   `tests/golden/walkstab_deliver.json` (NEW live golden); `tests/test_walkstab_clip.py` (gate PASS +
+>   a from-rest re-sim guard).
 
 - **WALL-BRACED CLIP TRIED LIVE -> INFEASIBLE on slot 7 (session 27, dead-end #27); NEXT = simulate
   PUSHING Tetra onto a genuine coord.** Drove the full live braced pipeline (perp-shifted Link start ->

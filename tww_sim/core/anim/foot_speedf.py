@@ -145,6 +145,9 @@ class FootSpeedF:
         # finish_draw docstring). Off by default: legacy pre-integration draw, byte-identical.
         self.defer_draw = False
         self._pending_draw = None
+        # Opt-in fast path (default OFF -- would break stop-then-rewalk): at m3598==0 (cruise) speedF
+        # ==nspeed and the pose only feeds the next frame, so a walk-THEN-cut never consumes it. See finish_draw.
+        self.skip_cruise_pose = False
         # Seed the FootFK old pose + delayed toe stream (t1=draw_{N-1}, t2=draw_{N-2}) with the
         # idle rest pose. Pre-walk seeds only feed m3598==0 frames (speedF==0), so they're immaterial.
         self.ff.seed(idle_anim, self.idle_frame)
@@ -192,6 +195,7 @@ class FootSpeedF:
         c._rest_noops = self._rest_noops
         c.defer_draw = self.defer_draw
         c._pending_draw = self._pending_draw
+        c.skip_cruise_pose = self.skip_cruise_pose
         c.st = self.st.clone()
         c.ff = self.ff.clone()
         c._core = c.ff._engine                 # fused engine lives on the cloned FootFK (None in Py mode)
@@ -518,6 +522,10 @@ class FootSpeedF:
             return
         state, morf, f312, msd = self._pending_draw
         self._pending_draw = None
+        if self.skip_cruise_pose and state['m3598'] == 0.0:
+            # Cruise frame: speedF was already nspeed (m3598==0), and this pose only feeds the next
+            # frame's compose -- also cruise, so it is never consumed. Skip the FK (the search hot path).
+            return
         self._apply_base()
         cur = self.ff.step_feet(state['move0'], state['move1'], state['f0'], state['f1'],
                                 state['ratio'], i_morf=morf)

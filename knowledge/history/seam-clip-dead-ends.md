@@ -354,6 +354,29 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
       the corrected sim. **Lesson: verify the anim SET (equip state) before attributing a foot-pose
       residual to FK precision -- and capture the actual per-frame RAM quantity (mFootData, mEquipItem)
       before believing a plausible mechanism (cf. the session-16 morf-vs-lean lesson).**
+    - **RESOLVED (session 32): the WALK-STAB clip is DELIVERED LIVE, 0-ULP, pure sim -- #28's premise
+      is fully retired.** With the sim 0-ULP from rest (the session-31 sword fix), the live `old` lands
+      exactly on the sim's; the only remaining problem was FINDING a deliverable hit, and that was
+      NEVER throughput (see #29) -- it was distinct-`old` DENSITY near the razor perp. A K=3 crawl
+      search (`solve_focused`) found wall-faithful genuine hits in 67s and the top clipped the seam live
+      (CUT_F@N=13, `old`/`new` bit-for-bit the sim, Link OOB proc 0x24). Golden
+      `tests/golden/walkstab_deliver.json`.
+
+29. **The reachable-`old` byte lattice is a GAP over the perp razor at K<=2 crawls; the fine knobs the
+    legacy `solve()` leaned on COLLAPSE under octagon clamping (session 32).** The acceptance perp razor
+    is ~2e-4u; an offline sweep floored the reachable `min|perp|` at **~1.3e-3u (~13x)** with K<=2
+    crawls, so `solve()` finds 0 even given the full 2-min budget -- MORE SPEED CANNOT HELP (the extra
+    streams are octagon-clamped DUPLICATES: 52k streams -> ~14 distinct near-razor `old`). Root cause:
+    the bearing arc `off` and the arc-frame per-byte fine nudge are FULL-magnitude sticks (octagon
+    VERTEX), and PADClamp clamps them to the same delivered byte, so they do not move `old`. **The fine
+    perp knob must be a PARTIAL-magnitude (octagon INTERIOR) stick, where every byte is a distinct
+    decoded direction.** The fix (`solve_focused`): a K=3 START CRAWL -- each partial-mag crawl frame
+    densifies the perp lattice ~20x (K=1 ~0.03u -> K=2 ~1.3e-3u -> K=3 ~2e-5u, below the razor), with
+    the 3rd frame's BYTE nudge as the fine fill; bracket `|perp_ray|` cheap (no CrrPos), exact-test near
+    the razor, and gate on a WITH-walls re-sim (`wall_hit==False`) to drop the #3/#28 wall-overshoot
+    artifacts (an N=13 cut whose walk touched the seam wall has an `old` the wall-less sim overshot).
+    **Lesson: when a byte-quantized reachable set won't hit an f32 razor, the lever is lattice DENSITY
+    (more interior-stick DOF), not search speed -- measure `distinct near-razor old`, not `streams/sec`.**
 
 ## Pointers
 

@@ -8,15 +8,14 @@ WHAT THIS LOCKS:
   * GREEN -- the acceptance geometry: the genuine seam-clip sliver confirmed pure-geometry near
     old=(9011.117,1352.468) IS classified genuine, and stepping ~2.2e-4u off it perpendicular is
     blocked (the f32 razor). This is the target the walk must land `old` on.
-  * RED (xfail) -- the LIVE clip is not yet re-delivered. The session-30 "walk-entry foot residual"
-    was root-caused (session 31) to the wrong anim set (sword-drawn WALKS/DASHS vs the item-holding
-    base WALK/DASH) and FIXED -- the from-rest walk is now 0-ULP (tests/test_walkstab_rest.py), and a
-    turning walk is 0-ULP live through the pre-wall frames. So any genuine OFFLINE clip is now a true
-    one-shot. The remaining work is purely SEARCH: the session-30 hit no longer clips (the fix shifts
-    `old` ~2-3 f32 columns off its sliver), and a deliverable N<=12 hit must be re-found with a fast
-    search (see the session-31 handoff). Flips to PASS when a committed hit is delivered live.
+  * GREEN (session 32) -- the LIVE clip IS delivered, pure-sim, 0-ULP. `solve_focused` (K=3 crawls +
+    perp pre-filter + wall-faithful gate) found a deliverable hit in-budget; a clean DTM delivered it
+    and Link CLIPPED THROUGH the seam OOB (proc 0x24, pos_y below the floor), with `old`/`new`
+    bit-for-bit the sim's prediction. Locked by the tracked golden tests/golden/walkstab_deliver.json.
 """
+import json
 import math
+import os
 import struct
 
 import pytest
@@ -77,19 +76,46 @@ def test_walkstab_sim_reproduces_sliver_is_geometry_only():
     assert _bits(recon[0]) == _bits(SLIVER_NEW[0]) and _bits(recon[1]) == _bits(SLIVER_NEW[1])
 
 
-@pytest.mark.xfail(reason="live clip not yet re-delivered: the from-rest sim is 0-ULP (sword fix, "
-                          "session 31) so any genuine offline clip is a true one-shot, but a "
-                          "DELIVERABLE N<=12 hit must be re-found via a fast search (the session-30 "
-                          "hit no longer clips). Flips to PASS when a committed hit lands live.",
-                   strict=True)
+GOLDEN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                      'tests', 'golden', 'walkstab_deliver.json')
+
+
 def test_walkstab_live_delivery_clips():
-    """Placeholder for the delivered clip: assert a committed deliverable hit clips 0-ULP live.
-    XFAIL until the fast search finds one and it is delivered + captured as a golden."""
-    import os
-    import json
-    hits = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        '_generated', 'walkstab_hits.json')
-    assert os.path.exists(hits), "no committed deliverable walk-stab hit yet"
-    hit = json.load(open(hits))[0]
-    # a real (committed) hit would be validated against its live golden here.
-    assert hit.get('delivered') is True, "hit not yet live-delivered"
+    """The delivered walk-stab clip (session 32), locked by the tracked live golden: the CUT_F fired
+    at N=13, `old`/`new` were bit-for-bit the sim's from-rest prediction (0-ULP delivery), the clip is
+    genuine, and Link went OOB (proc 0x24, pos_y dropping below the floor). Pure-sim, no calibration."""
+    assert os.path.exists(GOLDEN), "no committed walk-stab delivery golden"
+    g = json.load(open(GOLDEN))
+    assert g['genuine'] is True and g['oob'] is True
+    # 0-ULP delivery: live old/new == the sim's from-rest prediction, bit-for-bit.
+    assert _bits(g['live_old'][0]) == _bits(g['sim_old'][0])
+    assert _bits(g['live_old'][1]) == _bits(g['sim_old'][1])
+    assert _bits(g['live_new'][0]) == _bits(g['sim_new'][0])
+    assert _bits(g['live_new'][1]) == _bits(g['sim_new'][1])
+    # the delivered `old` is a genuine seam clip (the acceptance the search enforced).
+    assert W.genuine_clip(tuple(g['live_old']), tuple(g['live_new']))[0]
+    # OOB signature: the CUT frame is proc 0x42, then Link leaves for proc 0x24 with pos_y < floor.
+    tail = g['live_tail']
+    assert tail[0]['proc'] == 0x42
+    assert any(f['proc'] == 0x24 and f['pos_y'] < W.LINK_Y - 2.0 for f in tail)
+
+
+@pytest.mark.skipif(not _HAVE, reason="anim data unavailable")
+def test_walkstab_committed_hit_resims_from_rest():
+    """Guard the SIM against the golden: re-sim the committed hit's exact delivered sticks FROM REST
+    (pure sim, no calibration) and confirm it reproduces the golden's sim_old bit-for-bit and clips.
+    This is what makes the delivery a true one-shot -- the search's offline `old` IS the live `old`."""
+    g = json.load(open(GOLDEN))
+    hit = g['hit']
+    sticks = [tuple(sk) for sk in hit['sticks']]
+    s = W.seed()
+    s._foot.skip_cruise_pose = True
+    for k in range(hit['N']):
+        stk = sticks[k] if k < len(sticks) else sticks[-1]
+        s.step(stk[0], stk[1], csx=128, csy=W.CDOWN)
+    old = (s.pos_x, s.pos_z)
+    nx, nz = W.fast_cut(old[0], old[1], s.facing, s.nspeed)
+    assert _bits(old[0]) == _bits(g['sim_old'][0]) and _bits(old[1]) == _bits(g['sim_old'][1])
+    assert _bits(nx) == _bits(g['sim_new'][0]) and _bits(nz) == _bits(g['sim_new'][1])
+    assert W.genuine_clip(old, (nx, nz))[0]
+    assert s.speedF == 17.0
