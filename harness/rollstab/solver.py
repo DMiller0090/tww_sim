@@ -202,11 +202,16 @@ def _record(hits, r, moves, A_proj, start, anchor):
     json.dump(hits, open(HITS_PATH, 'w'))
 
 
-def search(anchor, nhits=4, do_drill=False, K=60, levels=2):
+def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None):
     """Arc/fine singles, then the start-crawl sweep (dense along-track fill), then (optionally)
-    an iterative-deepening drill combining the nearest configs. Every accept is the exact run."""
+    an iterative-deepening drill combining the nearest configs. Every accept is the exact run.
+
+    `draw_at` (session 35, sheathed roll path): forwarded to every `run` -- the approach row on
+    which to feed the mid-walk sword draw's single B rising edge. For a sheathed anchor
+    (`rest_state` model_draw ON) the draw completes before the A press so the roll routes to a
+    CUT; None (a drawn anchor) is byte-identical to the pre-session-35 behaviour."""
     t0 = time.time()
-    r0 = run(anchor, [])
+    r0 = run(anchor, [], draw_at=draw_at)
     print('baseline old=(%.7f,%.7f) z=%.4f rho=%+0.6f' % (
           r0['old'][0], r0['old'][1], r0['z'], r0['rho']), flush=True)
     hits, samples, n = [], [], 0
@@ -214,7 +219,7 @@ def search(anchor, nhits=4, do_drill=False, K=60, levels=2):
     def check(moves, A_proj, start=()):
         nonlocal n
         n += 1
-        r = run(anchor, moves, A_proj, start=start)
+        r = run(anchor, moves, A_proj, start=start, draw_at=draw_at)
         if (r is None or not r.get('fired') or r['facing'] != G.F or r['spF_at_A'] != 17.0):
             return None
         samples.append((r['old'][0], r['old'][1], [list(m) for m in moves], A_proj,

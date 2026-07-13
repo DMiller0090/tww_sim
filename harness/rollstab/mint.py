@@ -82,6 +82,51 @@ def capture_rest(src):
     return rest
 
 
+def capture_full_seed(h, m):
+    """Read the COMPLETE seed json (base state + rest_* fields) from the currently loaded paused
+    anchor. Unlike `mint` (translate + inherit the base seed), this reads EVERY field from RAM, so
+    it can mint an anchor whose equip/idle/facing differs from any existing base (e.g. a SHEATHED
+    roll anchor -- session 36). Assumes the desired paused state is already live + saved to `dst`."""
+    Pp = _player(h, m)
+    seed = dict(link_x=D.read_named(h, m, 'link_x'), link_z=D.read_named(h, m, 'link_z'),
+                link_y=_f32_at(h, m, Pp + 0x124),
+                facing=D.read_named(h, m, 'facing') & 0xFFFF,
+                shape_angle_y=D.read_named(h, m, 'shape_angle_y') & 0xFFFF,
+                travel_angle=D.read_named(h, m, 'travel_angle') & 0xFFFF,
+                csangle=D.read_named(h, m, 'csangle') & 0xFFFF,
+                link_state=D.read_named(h, m, 'link_state'),
+                anim_frame=_f32_at(h, m, Pp + 0x2F64),
+                mEquipItem=struct.unpack('>H', D.read_bytes(h, m, Pp + 0x3488, 2))[0])
+    seed['sword_drawn'] = (seed['mEquipItem'] == 0x103)
+    seed['equip_item'] = seed['mEquipItem']
+    return seed
+
+
+def mint_current(name):
+    """Mint the anchor from whatever Link is doing RIGHT NOW (the live, paused state) -- full-seed
+    capture, no base inheritance. Set Link up live first (load + press A to sheathe, settle the
+    idle, etc.), then call this. Saves the savestate, captures the complete seed json (incl. the
+    rest_* fields via capture_rest), and leaves the anchor re-loaded."""
+    dst = os.path.join(ANCHOR_DIR, name + '.sav')
+    D.control_pipe_quiet('pause')
+    time.sleep(0.4)
+    D.control_pipe_quiet('savestate', {'action': 'save', 'path': dst.replace('\\', '/')})
+    time.sleep(0.8)
+    rest = capture_rest(dst)          # loads dst, reads rest_*, t1-advance, reloads dst (paused)
+    h, m = D.attach()
+    seed = capture_full_seed(h, m)
+    seed.update(rest)
+    json.dump(seed, open(os.path.join(ANCHOR_DIR, name + '.seed.json'), 'w'), indent=1)
+    print('minted %s' % dst)
+    print('  pos=(%.6f,%.6f,%.6f) facing=%d csangle=%d state=%d equip=0x%X anim=%.5f' % (
+          seed['link_x'], seed['link_y'], seed['link_z'], seed['shape_angle_y'], seed['csangle'],
+          seed['link_state'], seed['mEquipItem'], seed['anim_frame']))
+    print('  rest d=%.6f w=%.6f d_rate=%.4f w_rate=%.4f m359C=%.6g' % (
+          rest['rest_d_frame'], rest['rest_w_frame'], rest['rest_d_rate'], rest['rest_w_rate'],
+          rest['rest_m359C']))
+    return seed
+
+
 def mint(base, name, dx, dz):
     ENV.ensure_running()
     src = os.path.join(ANCHOR_DIR, base + '.sav')
@@ -107,4 +152,8 @@ def mint(base, name, dx, dz):
 
 if __name__ == '__main__':
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
-    mint(o['base'], o['name'], float(o.get('dx', 0.0)), float(o.get('dz', 0.0)))
+    if 'current' in o:                    # mint the live paused state as a fresh full-seed anchor
+        ENV.ensure_running()
+        mint_current(o['current'])
+    else:
+        mint(o['base'], o['name'], float(o.get('dx', 0.0)), float(o.get('dz', 0.0)))

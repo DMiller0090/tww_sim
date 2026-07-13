@@ -378,6 +378,36 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
     **Lesson: when a byte-quantized reachable set won't hit an f32 razor, the lever is lattice DENSITY
     (more interior-stick DOF), not search speed -- measure `distinct near-razor old`, not `streams/sec`.**
 
+## The SHEATHED roll anchor is not REST BIT-EXACT: an extra walk-entry idle frame (session 36)
+
+30. **Equip-only sheathed mint off idle13 + default `rest_state`: NOT REST BIT-EXACT (a genuine
+    walk-entry transition gap, not a fixable knob).** For the sheathed-roll milestone (session 35) a
+    sheathed anchor was minted at idle13's spot (`kaze_r11_rollstab_sheathed@twwgz`; press A while idle
+    to sheathe -> `mEquipItem` 0x100; pos/facing/csangle/state + blend rates all match idle13). The
+    sword-DRAWN idle13 verifies `REST BIT-EXACT`, but the sheathed one does NOT, and the following were
+    RULED OUT as the cause:
+    - **NOT the code / `model_draw` / `sword_drawn`.** `model_draw`'s only effect without a B edge is
+      forcing `native/foot_native=False` (already the case) -- all three of `model_draw` None/False/True
+      give an identical sim walk. Forcing `sword_drawn` True vs False changes the entry ramp by ~0.003u
+      (the base-vs-sword leg set is NOT the divergence). idle13 (drawn, same code path) is bit-exact.
+    - **NOT a single `REST_NOOPS` / prepended-idle shift.** The real divergence: the sheathed idle takes
+      **3 idle rows before the WAIT->MOVE transition** (live proc 4 at k=0..2, proc 6 at k=3) vs idle13's
+      **2** -- the sim's walk starts one frame early and every downstream row is off by ~one 16.98u walk
+      step (both reach the same cap). `REST_NOOPS` holds the idle-anim `d_frame` AND position TOGETHER,
+      but live advances `d_frame` at k=2 while position stays at rest until k=3 -- so no dead-no-op count
+      (0..4 swept) and no prepended blend/neutral step makes it bit-exact. The extra frame is a
+      WAIT->MOVE / stick-delivery latency the drawn idle does not have.
+    - **`run_dtm`'s row-0 alignment is JITTERY +-1 idle frame** (the `_log_playback` fast-poll lands "a
+      couple frames in"): one sheathed verify showed row0 `d` = seed+1.1, another (same savestate) showed
+      row0 `d` = seed. So diff the STABLE structure (idle-row count before MOVE), NOT row-0 `d`; a single
+      run's +1 pre-advance is a red herring.
+    Likely cause (untested, the session-35 Phase-R warning): the **sheathed idle rests in a non-`waits`
+    anim arm** (`rest.rest_state` hardcodes `idle_anim='waits'`) whose WAIT->MOVE transition differs by a
+    frame -- VERIFY the live idle anim ID before modelling. Or mint a clean-provenance sheathed savestate
+    (the current one was made via `advancewith` frame-stepping; a real-time `resume`/`setinput` sheathe
+    needs the idle A-press as a clean EDGE, which held-A / post-`clearinput` timing missed). RED test:
+    `tests/test_sheathed_roll_rest.py` (strict xfail); live calib `fixtures/sheathed_rest_calib.json`.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

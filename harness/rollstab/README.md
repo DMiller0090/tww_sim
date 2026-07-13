@@ -76,13 +76,54 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-13, session 35)
+## Status (2026-07-13, session 36)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-13, session 35): the SHEATHED ROLL PATH is WIRED offline + gated; the
+> **CURRENT THREAD (2026-07-13, session 36): started the LIVE sheathed-roll increment -- the
+> `draw_at` solver plumbing + a full-seed mint tool + a minted sheathed anchor are DONE, but the
+> anchor is NOT YET `REST BIT-EXACT` (BLOCKED on a walk-entry alignment; root-caused, RED test
+> added).** This is session-35 NEXT #1. Done this session:
+> - **`solver.search`/`check` now thread `draw_at`** into every `run` call (was the trivial-but-missing
+>   plumbing session 35 flagged; additive, default None = byte-identical). `run` already accepted it.
+> - **`mint.py` gained `mint_current(name)` + `capture_full_seed`** -- mint the CURRENT live paused
+>   state as a fresh FULL-seed anchor (every field read from RAM, no base-seed inheritance), so an
+>   equip change is mintable (`mint.py`'s translate path only shifts pos within a room). CLI:
+>   `python -m harness.rollstab.mint current=<name>`.
+> - **Minted `kaze_r11_rollstab_sheathed@twwgz`** at idle13's spot (equip-only change: load idle13,
+>   press A while idle to put the sword away -> `mEquipItem` 0x100, settle, mint). Pos/facing (33328)/
+>   csangle (29883)/state (4) identical to idle13; blend rates match (`d_rate` 1.1, `w_rate` 0.5867 --
+>   the same WAIT/WALK arm). `rest.rest_state` auto-enables `model_draw` for it (sheathed => not
+>   sword_drawn).
+> - **RED regression `tests/test_sheathed_roll_rest.py`** (strict xfail) + live calib fixture
+>   `fixtures/sheathed_rest_calib.json`. Full suite **340 passed** (unchanged), now **2 xfailed**.
+>
+> **THE BLOCKER (root-caused, do NOT re-derive):** the sheathed from-rest walk is NOT bit-exact. The
+> sword-DRAWN idle13 IS (its gates are green), so it is NOT the code, NOT `sword_drawn`, NOT
+> `model_draw` (forcing either changes the ramp by ~0.003u -- ruled out offline). **The sheathed idle
+> takes ONE EXTRA idle frame before the WAIT->MOVE walk transition** (live: 3 idle rows k=0..2, MOVE at
+> k=3; idle13: 2 idle rows, MOVE at k=2), so the sim's walk starts one frame early and every downstream
+> row is off by ~one walk step (both still hit the same 16.98 cap). A single `REST_NOOPS` shift CANNOT
+> fix it: that constant holds the idle-anim `d_frame` and the position TOGETHER, but live advances
+> `d_frame` at k=2 while position stays at rest until k=3 -- a WAIT->MOVE / stick-delivery latency the
+> drawn idle lacks. Two things to chase (see the session-36 handoff): (a) **the sheathed idle likely
+> rests in a non-`waits` anim arm** (`rest_state` hardcodes `idle_anim='waits'`; the Phase-R risk the
+> session-35 handoff flagged) whose transition differs by a frame -- verify the live idle anim ID; OR
+> (b) **mint a clean-provenance sheathed savestate** (the current one was made via `advancewith`
+> frame-stepping; a real-time `resume`/`setinput` sheathe was attempted but the idle A-press needs an
+> EDGE that held-A / post-`clearinput` timing missed -- get the clean sheathe working, then re-check).
+> NOTE the live DTM row-0 alignment is also jittery +-1 idle frame (`run_dtm` fast-poll), which muddies
+> single-run diffs -- diff the STABLE structure (idle-row count before MOVE), not row-0 `d`.
+>
+> **NEXT (unchanged goal): make the sheathed anchor `REST BIT-EXACT`, then solve + deliver live.** Fix
+> the walk-entry alignment (a or b above) so `rest.py` prints `REST BIT-EXACT`; then thread `draw_at`
+> through `solver.search` (done) to solve offline (<2 min); then `deliver.py` clean DTM + live-gate
+> 0-ULP, flipping `test_sheathed_roll_rest.py` green and replacing the synthetic-seed wiring test with
+> a live golden. Everything else (walk-stab clip, Tetra push-aside/turnaround, thrust scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-13, session 35): the SHEATHED ROLL PATH is WIRED offline + gated; the
 > live mint/deliver is the remaining increment (deliberate checkpoint).** This is session-34 NEXT #1
 > -- routing a NOT-DRAWN (sheathed) anchor's ROLL verdict to a roll-stab clip. Decision (Dereck):
 > REUSE the kaze roll seam (S=(9069.904,259.199), F=33295) with a sheathed anchor, so NO geometry
