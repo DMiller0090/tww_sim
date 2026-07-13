@@ -584,7 +584,11 @@ def deliver(hit=None, b_frame=None, log_n=40, norelaunch=False, verbose=True, sa
                               hit['fframe'], hit['fdx'], hit['fdz'])
     N = hit['N']
     if b_frame is None:
-        b_frame = N - 5          # 4-frame item put-away delay + 1-frame DTM buffering (KB walk-stab)
+        # Sword-aware B-frame (KB walk-stab.md): sword OUT has no equip delay -> B at N-1; sheathed /
+        # an item held runs the 4-frame put-away (lower body keeps walking) -> B at N-5. CUT_F at N.
+        seed = C.G.load_seed(ANCHOR)
+        sword_out = bool(seed.get('sword_drawn', seed.get('equip_item', 0x103) == 0x103))
+        b_frame = (N - 1) if sword_out else (N - 5)
     s = C.rest_state(ANCHOR)
     rows = []
     for k in range(N):

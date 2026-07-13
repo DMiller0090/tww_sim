@@ -76,13 +76,36 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-13, session 32)
+## Status (2026-07-13, session 33)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-13, session 32): the pure-sim WALK-STAB seam clip is DELIVERED LIVE, 0-ULP,
+> **CURRENT THREAD (2026-07-13, session 33): the CENTRALIZED THRUST-CLIP SCANNER is built (offline
+> decision layer + dispatch), gated, and validated end-to-end.** `harness/rollstab/thrust_scan.py` is
+> the front-end that, given an anchor seed + a target seam, DECIDES WALK vs ROLL vs INFEASIBLE and
+> dispatches the matching existing solver (it does NOT rewrite them). The decision: the displacement
+> floor `35/sin(interior/2)` sets the geometric tier (WALK <= 40.22, ROLL <= 49.22, else PUSH = actor
+> push, out of scope), then a RUN-UP-SPACE feasibility gate simulates the straight approach from the
+> anchor (`rest.rest_state`, C-down pin, per-frame re-aim at S) and requires the needed speedF (WALK:
+> `floor-23.220`; ROLL: the 17 cap) to be built while `old` is still `>= floor` from the tip. FEWEST
+> FRAMES wins -> prefer WALK when it fits the space, else ROLL, else INFEASIBLE(`push`|`space`). Gate
+> `tests/test_thrust_scan.py` (9 green, OFFLINE): the four handoff cases (kaze walk seam -> WALK; kaze
+> roll seam -> ROLL; a synthetic 90-deg seam -> INFEASIBLE/push; a close-start anchor -> INFEASIBLE/
+> space) + tier boundaries + fewest-frames + dispatch. End-to-end validated: `scan(solve=True)` routes
+> the walk seam to `walkstab.solve_focused` and reproduces the shipped clip's `old` (offline, 72.6s).
+> `walkstab.deliver` is now sword-aware (B at N-1 sword-OUT vs N-5 sheathed; backward-compatible with
+> the shipped golden). The Tetra-push / roll-stab threads remain PAUSED.
+>
+> **NEXT (deferred by Dereck to a dedicated LIVE session): sword-OUT walk-stab live validation.** The
+> B-frame code is in (`deliver` derives N-1 vs N-5 from the anchor equip); what remains is minting a
+> sword-OUT anchor at a walk-clippable seam (an equip change at capture -- `mint.py` only translates
+> within a room) and delivering + confirming the sword-OUT walk stab clips live, same rigor as the
+> sheathed one. Also optional: generalize the two solvers off their hardcoded kaze seam (the scanner
+> dispatches by seam match today; a new-seam solve needs the settled facing + crawl count parameterized).
+>
+> **PRIOR THREAD (2026-07-13, session 32): the pure-sim WALK-STAB seam clip is DELIVERED LIVE, 0-ULP,
 > no calibration -- the objective is MET for the walk stab.** A `solve_focused` hit found ENTIRELY in the
 > sim shipped as a clean DTM and clipped the kaze r11 slot-3 seam (S=(9030.955,1385.858), poly 803x802,
 > interior 168.97deg): the CUT_F fired at N=13 with `old=(9011.2773438,1352.7379150)` and
@@ -93,11 +116,8 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > Mechanism + disp-floor in KB `knowledge/mechanics/walk-stab.md`. The roll-stab / Tetra-push state below
 > is PAUSED (same solver shape).
 >
-> **NEXT PHASE (not started): a CENTRALIZED THRUST-CLIP SCANNER** -- given a state + seam, decide WALK
-> vs ROLL vs infeasible (floor tier + run-up-space feasibility, fewest-frames wins) and dispatch the
-> right solver; the walk must support sword OUT and SHEATHED. Full spec + Dereck's design decisions are
-> in the newest handoff's `## Next step` (`_notes/seam-clip-live-validation-handoff-2026-07-13-session32.md`).
-> The walk-stab objective being MET does NOT mean the thread is finished.
+> (Session 32's "NEXT PHASE = a centralized thrust-clip scanner" is DONE -- see the session-33 thread
+> at the top of this Status.)
 >
 > **SESSION-32 FINDINGS (the load-bearing ones):**
 > - **The blocker was NEVER throughput -- it was distinct-old DENSITY near the razor perp.** The

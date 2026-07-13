@@ -50,6 +50,14 @@ needs the roll; a near-flat seam is walk-clippable. This is a NECESSARY floor (t
 the f32 acceptance dust and the `old` band, so a real seam can want a hair more), but it is the governing
 lever for "roll or not."
 
+**The centralized scanner** (`harness/rollstab/thrust_scan.py`) turns this table into a decision: given
+an anchor + a seam it computes the floor, picks the technique tier, then FEASIBILITY-gates on run-up
+space -- it simulates the straight approach from the anchor (`rest.rest_state`, C-down pin, per-frame
+re-aim at S) and checks the required speedF (WALK: `floor - 23.220`; ROLL: the 17 cap) is built while
+`old` is still `>= floor` from the tip. Fewest frames wins, so it prefers WALK when it fits the space,
+else ROLL, else reports INFEASIBLE (`push` = floor too steep, or `space` = no run-up), then dispatches
+the matching solver. Gate `tests/test_thrust_scan.py`.
+
 **Worked case (kaze r11, the walkstab anchor).** The wall chain Link faces has a convex seam at
 `S=(9030.955, 1385.858)` (poly 803 x 802, interior **168.97 deg**, near-flat). Exact minimum clip
 displacement = **35.02 u** (f32-lattice `gap_search.min_f32_clip`, at Link's facing and the bisector
@@ -73,6 +81,12 @@ frames). Crucially the equip anime is UPPER-body only, so **the lower body keeps
 delay** (proc stays MOVE, speedF holds/builds). So the B-press TIMING sets where `old` lands: the cut
 fires 4 walk-frames later at the then-current speedF. If Link reaches the wall before the cut, CrrPos
 bleeds his speed, so the press must be timed to fire the cut at the target `old` before wall decel.
+
+**Sword OUT vs sheathed (the DTM B-frame).** The put-away delay applies only when an item (or sheathed
+sword) must be swapped to the drawn sword first. With the **sword already OUT** there is no equip anime,
+so the cut fires with just the 1-frame DTM buffering: the DTM presses B at frame **N-1** (CUT_F at N).
+Item held / sword sheathed: B at **N-5** (4-frame put-away + 1-frame buffer). `walkstab.deliver` derives
+this from the anchor's captured equip state (`sword_drawn`), so both walk methods are supported.
 
 ## The one-frame L-target (faster accel) and the camera
 
