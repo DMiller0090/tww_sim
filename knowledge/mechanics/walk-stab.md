@@ -4,8 +4,9 @@
 does its lunge reach, and which seams can it clip without a roll? Why is the thrust delayed several
 frames when Link is holding an item? How does the one-frame L-target speed it up?
 **Status:** decomp-grounded + live-observed (kaze r11, savestate anchor `kaze_r11_walkstab@twwgz.sav`,
-2026-07-12). The min-clip geometry is computed and the equip-change delay is live-measured; the
-bit-exact sim model + DTM-validated one-shot clip are PENDING (see Simulation).
+2026-07-13). The min-clip geometry is computed, the equip-change delay is live-measured, and the
+from-rest sim is bit-exact in FACING (the razor-critical quantity) under a C-down camera pin (see
+Simulation). The one-shot dust-solver + DTM-validated clip are PENDING.
 **Source:** decomp `d_a_player_main.cpp:4087` (`checkNextActionFromButton`), `:3946`/`:3959`
 (equip-anime completion), `:3436`/`:3499` (the take/rest anime setup), `d_a_player_sword.inc:404`
 (`changeCutProc`); HIO `daPy_HIO_item` (`d_a_player_HIO_data.inc:293`); live captures + the
@@ -82,11 +83,29 @@ Link's facing, observed ~33 u16/frame while walking; free-cam pins it).
 
 ## Simulation
 
-Not yet modeled. The pieces exist: the walk is bit-exact in [`tww_sim.land`](../../tww_sim/land/land.py)
-(MOVE), and `LandState.enter_cut(CUT_F)` runs the lunge. What is left is a walk-stab driver (walk N frames
--> hold the 4-frame equip delay -> `enter_cut` at the walk speedF), a from-rest seed for the walkstab
-anchor (cf. the roll-stab `harness/rollstab/rest.rest_state`), and a one-shot solver (L f1 + walk +
-B-timing) that lands `old` on the seam's f32 acceptance, DTM-validated. See the session-28 handoff.
+**Driver + from-rest seed done; the razor is perpendicular; the dust-solver + DTM are pending**
+(`harness/rollstab/walkstab.py`). The driver is just walk-N-frames-then-`enter_cut(CUT_F)` from the
+from-rest seed (`rest.rest_state`): the 4-frame equip delay is **delivery-only** (the lower body keeps
+walking, so the sim walks then cuts and the DTM presses B at frame N-4).
+
+**The acceptance is a perpendicular RAZOR, not a forgiving band.** `harness/collision/gap_search`
+gives, for this seam: perp offset window (`rho`, the cut ray's distance to `S`) **~6e-4u** (sub-ULP at
+coord 9031, so f32-striped dust like the [roll stab](../strategy/seam-clip-solver.md)), but a WIDE aim
+window (**+-40 deg**) and displacement window (**35.5-40**). So the razor is only the perpendicular
+offset; the thrust direction and speed are forgiving. Optimal thrust facing is the corner bisector
+(~3537); the walk-up to reach `old` is a different bearing, so walk and cut decouple (a turn).
+
+**A pure-sim one-shot is feasible, but delivery MUST pin the camera with C-down.** Stepped with C-down
+(`substickY=0`), the from-rest sim is **bit-exact in facing every frame** (a centered stick lets the
+auto-cam swing and drift facing -- the camera issue above). The only residual is the walk-entry foot
+toe-stream (`m359C`/`f312`, the open Phase-R gap): a constant ~0.0024u error, but a *speedF-magnitude*
+error, so it lies ALONG the travel -- its perpendicular component is ~3.7e-5u, 16x inside the razor. So
+`rho` is preserved and the along error is absorbed by the wide disp window + B-timing; the foot residual
+does NOT need closing for the clip. Live-gated: `tests/test_walkstab_rest.py`.
+
+Open: port the [roll-stab dust solver](../strategy/seam-clip-solver.md)'s knobs (a 1-frame arc threads
+`rho`; start-crawl densifies the along placement) to land a genuine clip in < 2 min, then DTM-validate
+(clean DTM, C-down held, never advancewith).
 
 ## See also
 

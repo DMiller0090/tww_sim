@@ -82,15 +82,44 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-13, session 28): PIVOTED to the WALK-STAB seam clip (no roll).** The
-> roll-stab / Tetra-push state below is PAUSED but reusable (same solver shape). The ACTIVE work is the
-> newest handoff `_notes/seam-clip-live-validation-handoff-2026-07-13-session28.md`: one-shot WALK-stab
-> inputs (walk up + thrust, no roll) into a target seam. New anchor
-> `tests/dolphin/anchors/kaze_r11_walkstab@twwgz.sav` (kaze r11, slot 3 reused). The seam clips at min
-> speedF ~11.8 (< the 17 walk cap; lunge = speedF + 23.22, so a capped walk reaches 40.22). Mechanism +
-> the item put-away 4-frame delay + the disp-floor rule are in KB `knowledge/mechanics/walk-stab.md`.
-> OPEN: the sim driver (walk + 4-frame delay + enter_cut), a from-rest seed, the one-shot solver, and the
-> DTM. The roll-stab entries below stay as-is for when that thread resumes.
+> **CURRENT THREAD (2026-07-13, session 29): WALK-STAB is PURE-SIM FEASIBLE; driver + seed + feasibility
+> shipped, the dust-solver + DTM are the open build.** The roll-stab / Tetra-push state below is PAUSED
+> (same solver shape). Active work = the newest handoff
+> `_notes/seam-clip-live-validation-handoff-2026-07-13-session29.md`: one-shot WALK-stab inputs into the
+> kaze r11 slot-3 seam. Anchor `tests/dolphin/anchors/kaze_r11_walkstab@twwgz.sav`; **the from-rest seed
+> is now minted** (`.seed.json`, `link_state=4`, facing 4530, csangle 4522; the WAITS/WALK blend rates
+> match idle13 -- the item is an upper-body overlay). Mechanism + the 4-frame item put-away delay + the
+> disp-floor rule are in KB `knowledge/mechanics/walk-stab.md`.
+>
+> **SESSION-29 FINDINGS (the load-bearing ones):**
+> - **The acceptance is a PERP RAZOR, not "forgiving" (corrects the session-28 read).**
+>   `gap_search.characterize` on this seam: the perpendicular offset window (`rho`, the cut ray's
+>   distance to S) is **~6e-4u -- sub-ULP at coord 9031** -- so on the f32 lattice it is striped dust
+>   (kaze-like). BUT the AIM window is **+-40 deg** and the DISPLACEMENT window **35.5-40** (both wide):
+>   the razor is ONLY the perp offset; aim and disp are forgiving. The optimal thrust facing is the
+>   corner bisector (~3537); the walk-up to reach `old` is a DIFFERENT bearing (~6244), so walk and cut
+>   decouple (a turn), exactly like the roll-stab.
+> - **PURE-SIM IS FEASIBLE with the C-DOWN camera pin.** `rest.rest_state(ANCHOR)` stepped with C-down
+>   (substickY=0) is **BIT-EXACT in FACING every frame** (a centered/auto C-stick lets the auto-cam
+>   swing csangle and drift facing -- session 28's camera issue; C-down pins free-cam). The only
+>   from-rest residual is the walk-entry foot toe-stream (`m359C`/`f312`, the known Phase-R/session-25
+>   gap): a CONSTANT **~0.0024u** error, FROZEN after the last `m3598>0` blend frame, and it is a speedF
+>   (magnitude) error so it lies **ALONG the travel direction** -- its PERP component is **~3.7e-5u, 16x
+>   inside the 6e-4u razor**. So `rho` (the razor quantity) is bit-exact and the along error is absorbed
+>   by the wide disp window + B-timing. **The pure-sim one-shot does NOT need the foot-FK residual
+>   closed** (my initial "blocked" read was wrong -- the growing error was camera drift, not the foot).
+>   **Delivery MUST hold C-down.** Live regression `tests/test_walkstab_rest.py` (facing 0-ULP + perp
+>   residual < razor GREEN; full-position bit-exactness xfail = the along foot residual), golden
+>   `tests/golden/walkstab_rest.json`.
+> - **DRIVER shipped: `harness/rollstab/walkstab.py`** (`walk_then_cut`, the walkstab-seam `genuine_clip`
+>   acceptance, `seed()` = rest_state, `reachability`, `search_arc`). The driver is just walk-N-then-cut
+>   (the 4-frame equip delay is delivery-only: press B at frame N-4, the lower body keeps walking).
+> - **OPEN (the next build): the dust-solver + DTM.** The razor `rho` threads to the window with a
+>   1-frame ARC (proven offline: `rho` -> 5.6e-4, inside the razor) but the ALONG placement needs
+>   START-CRAWL densification -- at full mag `old` steps ~17u/frame and skips the ~0.5u clipping band
+>   for disp 40.22 (`reachability` shows N=11 old_d2S 41.3 -> N=12 24.3). So port `solver.py`'s knob
+>   families (start-crawl + arc + fixpoint placement) for the walk-stab, land a genuine clip in < 2 min,
+>   then DTM-verify (clean DTM, C-DOWN held, never advancewith). The roll-stab entries below stay as-is.
 
 - **WALL-BRACED CLIP TRIED LIVE -> INFEASIBLE on slot 7 (session 27, dead-end #27); NEXT = simulate
   PUSHING Tetra onto a genuine coord.** Drove the full live braced pipeline (perp-shifted Link start ->
