@@ -93,6 +93,12 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > Mechanism + disp-floor in KB `knowledge/mechanics/walk-stab.md`. The roll-stab / Tetra-push state below
 > is PAUSED (same solver shape).
 >
+> **NEXT PHASE (not started): a CENTRALIZED THRUST-CLIP SCANNER** -- given a state + seam, decide WALK
+> vs ROLL vs infeasible (floor tier + run-up-space feasibility, fewest-frames wins) and dispatch the
+> right solver; the walk must support sword OUT and SHEATHED. Full spec + Dereck's design decisions are
+> in the newest handoff's `## Next step` (`_notes/seam-clip-live-validation-handoff-2026-07-13-session32.md`).
+> The walk-stab objective being MET does NOT mean the thread is finished.
+>
 > **SESSION-32 FINDINGS (the load-bearing ones):**
 > - **The blocker was NEVER throughput -- it was distinct-old DENSITY near the razor perp.** The
 >   acceptance perp razor (~2e-4u) is a GAP in the reachable-`old` byte lattice at K<=2 crawls: an offline
