@@ -82,6 +82,16 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
+> **CURRENT THREAD (2026-07-13, session 28): PIVOTED to the WALK-STAB seam clip (no roll).** The
+> roll-stab / Tetra-push state below is PAUSED but reusable (same solver shape). The ACTIVE work is the
+> newest handoff `_notes/seam-clip-live-validation-handoff-2026-07-13-session28.md`: one-shot WALK-stab
+> inputs (walk up + thrust, no roll) into a target seam. New anchor
+> `tests/dolphin/anchors/kaze_r11_walkstab@twwgz.sav` (kaze r11, slot 3 reused). The seam clips at min
+> speedF ~11.8 (< the 17 walk cap; lunge = speedF + 23.22, so a capped walk reaches 40.22). Mechanism +
+> the item put-away 4-frame delay + the disp-floor rule are in KB `knowledge/mechanics/walk-stab.md`.
+> OPEN: the sim driver (walk + 4-frame delay + enter_cut), a from-rest seed, the one-shot solver, and the
+> DTM. The roll-stab entries below stay as-is for when that thread resumes.
+
 - **WALL-BRACED CLIP TRIED LIVE -> INFEASIBLE on slot 7 (session 27, dead-end #27); NEXT = simulate
   PUSHING Tetra onto a genuine coord.** Drove the full live braced pipeline (perp-shifted Link start ->
   measured entry -> solved braced Tetra at (-1652.293,-940.256), fB=50 ON wallB -> deliver -> per-frame

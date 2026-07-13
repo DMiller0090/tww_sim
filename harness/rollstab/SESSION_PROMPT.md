@@ -80,8 +80,9 @@ knowledge/history/seam-clip-dead-ends.md. That is what keeps the ledger alive.
 STALL RULE: if you get stuck, or are about to spend real effort outside the handoff's
 plan, surface it before continuing.
 
-Savestate slot 5 = kaze flat room for roll clips. Savestate slot 3 = flooded-Hyrule Tetra corner
-(-1727,-990) (Phase C captures). **Savestate slot 6 = the SHIPPED Tetra push-aside clip** (Phase T,
+Savestate slot 5 = kaze flat room for roll clips. Savestate slot 3 = the WALK-STAB kaze r11 seam
+(session-28 pivot; durable anchor `tests/dolphin/anchors/kaze_r11_walkstab@twwgz.sav`, was the
+flooded-Hyrule Tetra corner (-1727,-990) for Phase C, slot reused). **Savestate slot 6 = the SHIPPED Tetra push-aside clip** (Phase T,
 live bit-exact): its whole mint/author/deliver/diff pipeline is `harness/rollstab/pushaside.py` --
 read that module's docstring BEFORE any Tetra-clip delivery work; it encodes the four delivery truths
 (walkable Tetra floor / NEUTRAL roll stick / B one step later in the DTM / seed the sim at the DTM's

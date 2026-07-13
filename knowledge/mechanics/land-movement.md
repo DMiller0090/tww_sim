@@ -1,8 +1,8 @@
-# Land movement — overview & index
+# Land movement - overview & index
 
 **Answers:** Where do I find each land-movement tech? What's the shared model (the two angles, the
 proc state machine, the bit-exact status)?
-**Status:** validated live — the flat-ground walk, the ATN_MOVE tier (brakeslide/EBS), the forward
+**Status:** validated live - the flat-ground walk, the ATN_MOVE tier (brakeslide/EBS), the forward
 roll + roll-stab, the ground-turn procs (WAIT_TURN/MOVE_TURN/SLIP), the ballistic hops, and the C-up
 freeze are all simulated in `tww_sim.land`; facing/travel/speed and position are **bit-exact** vs live
 (**14 locked cases: 13 sim-vs-live + the `wiggle_ebs_roll` DTM-playback lock**). Anchor
@@ -13,8 +13,8 @@ freeze are all simulated in `tww_sim.land`; facing/travel/speed and position are
 
 ---
 
-Land is the next target after superswim. Unlike swim, it separates **two headings** — travel
-(`current.angle.y`, velocity) and facing (`shape_angle.y`, body) — and a signed `potential_speed`;
+Land is the next target after superswim. Unlike swim, it separates **two headings** - travel
+(`current.angle.y`, velocity) and facing (`shape_angle.y`, body) - and a signed `potential_speed`;
 every ground tech lives in how those three diverge. The proc state machine dispatches by `link_state`
 (4 WAIT · 5 FREE_WAIT · 6 MOVE · 7 ATN_MOVE · 23 WAIT_TURN · 24 MOVE_TURN · 25 SLIP · 30 FRONT_ROLL ·
 CUT_F/CUT_A · SUBJECTIVITY). Each tech has its own single-topic page:
@@ -25,6 +25,7 @@ CUT_F/CUT_A · SUBJECTIVITY). Each tech has its own single-topic page:
 | Brakeslide / EBS | [brakeslide-ebs.md](brakeslide-ebs.md) | L-held brake, the extended (camera-relative) preservation, facing/travel decouple, the wiggle EBS + L+Up cancel |
 | Forward roll | [roll.md](roll.md) | FRONT_ROLL (26-cap), the frame-perfect roll-EBS, chained/intermediate rolls, the anim reset that makes the freeze analytic |
 | Roll stab | [roll-stab.md](roll-stab.md) | the CUT_F/CUT_A 49.22 single-frame lunge (the seam-clip reach) |
+| Walk stab | [walk-stab.md](walk-stab.md) | the no-roll thrust (40.22 lunge from a capped walk), the item put-away delay, which corners clip without a roll |
 | Ballistic hops | [ballistic-hops.md](ballistic-hops.md) | sidehop / backflip (the A=roll vs L+A=hop mapping) + the ESS+C-down aim-turn |
 | Ground turns | [ground-turns.md](ground-turns.md) | WAIT_TURN pivot / MOVE_TURN turn-around / SLIP skid on a hard reversal |
 | Precise stop | [precise-stop.md](precise-stop.md) | the C-up SUBJECTIVITY freeze, live-valid sticks, L-target, B-cancel, the input-driven `step()` gesture |
@@ -41,8 +42,8 @@ the FP contract: [model/fp-faithfulness.md](../model/fp-faithfulness.md). The ta
 
 ## See also
 
-- [ESS](ess.md) — the `(128,110)`-class stick position land reuses · [Camera](camera.md) — `csangle`,
+- [ESS](ess.md) - the `(128,110)`-class stick position land reuses · [Camera](camera.md) - `csangle`,
   a live per-frame movement input.
-- [seam-clip](seam-clip.md) / [actor-push](actor-push.md) — where the roll-stab lunge + a Tetra push
+- [seam-clip](seam-clip.md) / [actor-push](actor-push.md) - where the roll-stab lunge + a Tetra push
   produce a wall-corner clip.
-- `_notes/tww-sim-architecture-design.md` §5/§5b — how land folds into the generalized proc-machine sim.
+- `_notes/tww-sim-architecture-design.md` §5/§5b - how land folds into the generalized proc-machine sim.
