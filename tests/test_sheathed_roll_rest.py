@@ -1,4 +1,4 @@
-"""From-rest regression for the SHEATHED roll-stab anchor (kaze r11, session 36, 2026-07-13).
+"""From-rest regression for the SHEATHED roll-stab anchor (kaze r11, session 36; re-root-caused s37).
 
 The sheathed-roll milestone (session 35 wired the mid-walk draw into the ROLL solver) needs a
 SHEATHED anchor at the kaze roll seam that is REST BIT-EXACT so a solved from-rest clip delivers
@@ -7,16 +7,19 @@ an idle A-press, `mEquipItem` 0x100) and captured its live verification calib
 (`fixtures/sheathed_rest_calib.json`, the same [straight]*NPREF + [aim]*NCRUISE walk `rest.py`
 plays).
 
-STATUS: the from-rest sim is NOT yet bit-exact for this anchor -- the sword-DRAWN idle13 IS (its
-`test_walkstab_rest`/`rest.py` gates are green), but the sheathed idle takes ONE EXTRA idle frame
-before the WAIT->MOVE walk transition (live: 3 idle rows k=0..2, MOVE at k=3; idle13: 2 idle rows,
-MOVE at k=2), so the sim's walk starts one frame early and every downstream row is off by ~one walk
-step. It is NOT `sword_drawn`/`model_draw` (forcing either changes the ramp by ~0.003u -- ruled out
-offline) and NOT a single `REST_NOOPS` shift (that constant holds the idle anim `d_frame` and the
-position TOGETHER, but live advances `d_frame` at k=2 while position stays at rest until k=3 -- the
-extra frame is a WAIT->MOVE / stick-delivery latency the drawn anchor does not have). Likely the
-sheathed idle rests in a non-`waits` arm (the Phase-R risk flagged in the handoff) whose transition
-differs by a frame; NOTE the live DTM row-0 alignment is also jittery +-1 idle frame (fast-poll).
+STATUS (root cause CORRECTED session 37 -- see dead-end #30 + the s37 handoff): the from-rest sim
+is NOT yet bit-exact for this anchor. The session-36 story ("sheathed proc-transitions to MOVE one
+frame LATER than idle13") was a `run_dtm` row-0 POLL-JITTER artifact -- a jitter-proof measurement
+(emulator-frame-aligned, `harness.rollstab.capture_walkentry`) shows BOTH anchors reach proc-MOVE at
+the SAME game-frame (gf6) and the big walk step at gf8. The REAL divergence is the walk-entry foot
+TOE-STREAM (`posMoveFromFootPos`/`f312`): at the sheathed idle phase (d~52.8) the sim's first-move
+toe delta is ~0.034 while live is ~0.060, and the decomp-faithful 0.05 speedF clamp
+(`_py_foot_compose`) then zeros the sim but keeps live -- opposite sides of the razor -- accumulating
+~0.8u over the m3598>0 blend frames. It is PHASE-driven, NOT equip: forcing `sword_drawn`/`model_draw`
+moves it ~0.003u; idle13 (d~30.8, drawn) is bit-exact. This is the walk-entry foot-FK frontier
+(dead-end #25/#28). GROUND TRUTH for the fix: jitter-proof, foot-pose-rich goldens
+`fixtures/sheathed_walkentry_golden.json` (RED) + `fixtures/idle13_walkentry_golden.json` (the
+bit-exact reference), aligned by game_frame with raw mFootData toe/heel + plant per frame.
 
 This test flags RED (strict xfail) until the sheathed walk-entry is modelled from rest. Flip it to a
 plain assert when it goes bit-exact. Live golden -- NEVER edit the fixture to make the sim pass.
@@ -60,8 +63,9 @@ def _replay():
         yield k, s, calib['frames'][k]
 
 
-@pytest.mark.xfail(strict=True, reason="sheathed walk-entry not yet modelled from rest: 1 extra "
-                   "idle frame before WAIT->MOVE vs the drawn idle (session 36 root-cause)")
+@pytest.mark.xfail(strict=True, reason="sheathed walk-entry not yet modelled from rest: the toe-stream "
+                   "f312 is ~0.034 vs live ~0.060 at the first walk frame -> the 0.05 speedF clamp flips "
+                   "(walk-entry foot-FK residual, phase-driven; session 37 root-cause, dead-end #30)")
 def test_sheathed_full_position_bitexact():
     """The sheathed from-rest walk must be BIT-EXACT (0 ULP) every row before its solver hits are
     trusted (the acceptance is f32 dust; dead-end #28). Currently RED -- see the module docstring."""

@@ -407,6 +407,33 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
     (the current one was made via `advancewith` frame-stepping; a real-time `resume`/`setinput` sheathe
     needs the idle A-press as a clean EDGE, which held-A / post-`clearinput` timing missed). RED test:
     `tests/test_sheathed_roll_rest.py` (strict xfail); live calib `fixtures/sheathed_rest_calib.json`.
+    - **CORRECTED (session 37): the "one extra idle frame before WAIT->MOVE" was a `run_dtm` row-0
+      POLL-JITTER artifact, and the "non-`waits` arm" lead is REFUTED.** Two run-free RAM reads + a
+      jitter-proof measurement settled it:
+      - **Idle arm is IDENTICAL** -- `m_anm_heap_under[0].mIdx` (loaded lower-body bck) reads `BCK_WAITS`
+        (0x126) at BOTH the drawn idle13 and the sheathed anchor; only `heap[1]` differs (WALKS 0x135 vs
+        WALK 0x12E = the already-modelled `sword_drawn` walk arm). So `idle_anim='waits'` is correct for
+        the sheathed anchor. Both seeds are faithful (seed.json == live RAM). (Decomp: `getAnmData`
+        d_a_player_main.cpp:12951 remaps the anim resource by `mEquipItem`; sheathed 0x100 -> base table,
+        but `mAnmDataTable[ANM_WAITS]`'s under-bck IS WAITS 0x126, confirmed by the read.)
+      - **Both anchors reach proc-MOVE at the SAME game-frame.** Tagging every live row with the
+        deterministic emulator frame counter (game_frame = emu - F0; F0 = the savestate's stored frame,
+        read by loading it paused) and aligning by that, BOTH transition proc 4->6 at gf6 and take the big
+        walk step at gf8. The session-36 "3 idle rows vs 2" was the fast-poll catching the two captures at
+        different start frames. `harness.rollstab.capture_walkentry` is the jitter-proof capture (plays the
+        clean-DTM verification stream, tags emu, logs raw mFootData toe/heel + plant + m3598 + m359C).
+      - **The REAL residual = the walk-entry foot TOE-STREAM (`posMoveFromFootPos`/`f312`), amplified by
+        the 0.05 speedF clamp.** At the sheathed idle phase (d~52.8) the sim's first-walk-frame toe delta
+        is ~0.034; live's is ~0.060 (`m359C`). The decomp-faithful `_py_foot_compose` clamp
+        (`speedF = 0 if |spz| < 0.05`) then zeros the sim's step while live keeps it -- opposite sides of
+        the razor -- and the error accumulates to ~0.8u over the m3598>0 blend frames (freezing once
+        m3598 hits 0, same class as #25's 2.54u freeze). It is PHASE-driven, NOT equip (forcing
+        `sword_drawn`/`model_draw` moves it ~0.003u; re-seeding at idle13's phase d=30.8 moves gf6 from
+        0.0->0.056). `plant` also differs at entry (idle13 stays 1; sheathed flips 0->1 at gf6). So this
+        is the **walk-entry foot-FK frontier of #25/#28**, exposed at a phase idle13 does not hit -- NOT a
+        proc-timing, idle-arm, `REST_NOOPS` (swept 0..4, s36), or equip bug. Fix = model the walk-entry
+        foot poses to f32 (session 37 handoff). Ground truth: `fixtures/sheathed_walkentry_golden.json`
+        (RED) + `fixtures/idle13_walkentry_golden.json` (bit-exact reference), game_frame-aligned.
 
 ## Pointers
 

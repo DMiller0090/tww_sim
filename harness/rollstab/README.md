@@ -76,13 +76,46 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-13, session 36)
+## Status (2026-07-13, session 37)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-13, session 36): started the LIVE sheathed-roll increment -- the
+> **CURRENT THREAD (2026-07-13, session 37): the sheathed anchor's `REST`-not-bit-exact blocker is
+> RE-ROOT-CAUSED -- the session-36 diagnosis was a POLL-JITTER artifact; the real cause is the
+> walk-entry foot toe-stream FK residual (dead-end #25/#28). No solver behavior changed; the fix
+> (model the walk-entry foot poses to f32) is HANDED OFF to a dedicated session (Dereck's call).**
+> Done this session (2 live runs, otherwise offline):
+> - **Refuted session-36 lead (a) + dead-end #30's "extra idle frame" story.** Two run-free RAM reads:
+>   the loaded idle bck `m_anm_heap_under[0].mIdx` is `BCK_WAITS` (0x126) at BOTH idle13 (drawn) and the
+>   sheathed anchor -- the idle ARM is identical (only `heap[1]` differs, WALKS vs WALK = the modelled
+>   `sword_drawn` walk arm), and both seed.jsons match live RAM. So `idle_anim='waits'` is correct.
+> - **Jitter-proof measurement (`harness/rollstab/capture_walkentry.py`, NEW):** tag every live row with
+>   the deterministic emulator frame (game_frame = emu - F0). BOTH anchors reach proc-MOVE at the SAME
+>   game-frame (gf6) and the big walk step at gf8 -- the session-36 "3 idle rows vs 2" was `run_dtm`'s
+>   row-0 fast-poll catching the two captures at different start frames.
+> - **Real root cause = the walk-entry toe-stream `f312`, amplified by the 0.05 speedF clamp.** At the
+>   sheathed idle phase (d~52.8) the sim's first-walk-frame toe delta is ~0.034 vs live ~0.060; the
+>   decomp-faithful `_py_foot_compose` clamp (`speedF=0 if |spz|<0.05`) zeros the sim but keeps live ->
+>   opposite sides of the razor -> ~0.8u accumulated over the m3598>0 blend frames (freezes when m3598
+>   hits 0, same class as #25). PHASE-driven, NOT equip (forcing `sword_drawn`/`model_draw` -> ~0.003u).
+> - **Ground-truth artifacts for the fix:** `fixtures/sheathed_walkentry_golden.json` (RED) +
+>   `fixtures/idle13_walkentry_golden.json` (bit-exact reference) -- game_frame-aligned, raw mFootData
+>   toe/heel + plant per frame. RED test `tests/test_sheathed_roll_rest.py` reason corrected (still xfail).
+>   dead-end #30 corrected. Full suite unchanged (340 passed, 2 xfailed).
+>
+> **NEXT (Dereck's decision -- the objective-compliant frontier fix, its own session): MODEL the
+> walk-entry foot poses to f32** so `posMoveFromFootPos`/`f312` is bit-exact from rest at ANY idle
+> phase (fixes the sheathed anchor AND the session-25 slot-7 residual). Diff the sim against
+> `sheathed_walkentry_golden.json` on the raw foot poses (aligned by game_frame), find where the pose
+> delta drifts on the m3598>0 blend frames (the `plant` foot flips 0->1 at gf6 for sheathed but stays 1
+> for idle13 -- likely a lead), and model it. THEN the sheathed anchor goes `REST BIT-EXACT` ->
+> `solver.search(anchor, draw_at=~3)` (draw_at plumbing DONE session 36) -> `deliver.py` clean DTM +
+> live 0-ULP -> flip `test_sheathed_roll_rest.py` green. Cheap first check: try a clean-provenance
+> re-mint (lead b) before the FK model -- low odds but fast. Everything else UNCHANGED.
+
+> **PRIOR THREAD (2026-07-13, session 36): started the LIVE sheathed-roll increment -- the
 > `draw_at` solver plumbing + a full-seed mint tool + a minted sheathed anchor are DONE, but the
 > anchor is NOT YET `REST BIT-EXACT` (BLOCKED on a walk-entry alignment; root-caused, RED test
 > added).** This is session-35 NEXT #1. Done this session:
