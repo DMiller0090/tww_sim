@@ -76,11 +76,45 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-13, session 34)
+## Status (2026-07-13, session 35)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+> **CURRENT THREAD (2026-07-13, session 35): the SHEATHED ROLL PATH is WIRED offline + gated; the
+> live mint/deliver is the remaining increment (deliberate checkpoint).** This is session-34 NEXT #1
+> -- routing a NOT-DRAWN (sheathed) anchor's ROLL verdict to a roll-stab clip. Decision (Dereck):
+> REUSE the kaze roll seam (S=(9069.904,259.199), F=33295) with a sheathed anchor, so NO geometry
+> generalization is needed for this milestone -- only the draw wiring is new. **Done this session
+> (OFFLINE, no live runs):**
+> - `rest.rest_state(anchor, model_draw=None)`: defaults to `not sword_drawn`, so a SHEATHED anchor
+>   auto-enables `LandState(model_draw=True)` (a drawn anchor stays OFF = byte-identical).
+> - `solver.run(anchor, ..., draw_at=None)`: feeds a single B rising edge on approach row `draw_at`
+>   (the mid-walk sword pull-out). With model_draw ON the draw completes before the A press, so the
+>   roll routes to a CUT (`land/procs/roll.py:79` needs `sword_drawn`).
+> - **Offline-proven end to end** (synthetic sheathed seed = drawn idle13 + equip forced sheathed):
+>   draw-B@row3 -> `sword_drawn` flips at row8 (5 frames after the raw feed, matching the live-pinned
+>   `f_draw`) -> foot set base->sword (`walk`->`walks`) -> speedF holds the 17 cap across the
+>   phase-preserved swap -> A@row19 -> FRONT_ROLL -> **CUT_F fires**. The draw is LOAD-BEARING:
+>   `draw_at=None` leaves the roll->CUT gate unsatisfied and NO cut fires.
+> - Gate `tests/test_sheathed_roll_wiring.py` (4 green, OFFLINE); full suite **340 passed** (was 336),
+>   1 skipped, 1 xfailed. Additive/backward-compatible: the existing drawn-anchor solvers are
+>   byte-identical (both new params default to the old behavior).
+>
+> **NEXT (the remaining LIVE increment for this milestone -- checkpointed, not started):**
+> 1. **Mint a sheathed roll-clippable anchor at the kaze roll seam.** Every existing roll anchor
+>    (`idle13`, `mEquipItem=0x103`) is sword-DRAWN, and `mint.py` only translates within a room (no
+>    equip change), so this needs a fresh live capture: place Link with enough run-up (draw + build to
+>    cap + roll before the seam), sheathe the sword (`mEquipItem` 0x100), let the idle settle, save +
+>    auto-capture the `rest_*` seed. A sheathed idle may rest in a different arm than `waits`
+>    (`rest_state` models the `waits` arm; Phase R residual) -- verify `REST BIT-EXACT` (`rest.py`).
+> 2. **Solve** offline (`solver.search` with `draw_at` threaded through; <2 min) -> a from-rest sheathed
+>    roll-stab hit.
+> 3. **Deliver** as a clean DTM + live-gate 0-ULP; replace the synthetic-seed offline test with a live
+>    golden. "Done" = the scanner routes a not-drawn anchor's ROLL verdict end-to-end to a live clip.
+> NOTE: `solver.search` does not yet thread `draw_at` into its `run` calls -- that plumbing is part of
+> step 2 (trivial: pass `draw_at` through `run`/`check`; the offline path already accepts it).
 
 > **CURRENT THREAD (2026-07-13, session 34): the MID-WALK SWORD PULL-OUT is MODELLED + live-gated
 > 0-ULP.** This was the session-33 NEXT #1 (Dereck's directive) and it UNBLOCKS the scanner's ROLL

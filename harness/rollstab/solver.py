@@ -47,12 +47,17 @@ def base(anchor):
     return _BASE[anchor].clone()
 
 
-def run(anchor, moves, A_proj=-506.0, tail=8, start=()):
+def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None):
     """One exact run from REST. `start` = sticks for stream rows 0..len-1 (the acceleration
     micro-crawl; the entry acts them with the 2-frame delay). `moves` = [(lead, stick[, dur]),
     ...] placed lead frames before the A press (fixpoint placement: the press frame is
-    threshold-derived, so placement iterates to a fixed point). Returns an info dict
-    (old/new/rho/z/genuine/clear/spF_at_A/stream) or None."""
+    threshold-derived, so placement iterates to a fixed point). `draw_at` (session 35, sheathed
+    roll path): the approach row index to feed a single B rising edge (the mid-walk sword
+    pull-out). With `rest_state`'s model_draw ON (auto for a sheathed anchor), the sword draw
+    completes DRAW_DELAY acted-frames later and sets `sword_drawn` before the A press, so the
+    roll routes to a CUT. draw_at MUST land before the A press with margin (the draw + rebuild to
+    cap in the sword set). Returns an info dict (old/new/rho/z/genuine/clear/spF_at_A/stream) or
+    None."""
     _, straight, aim = C.sticks_of(anchor)
     start = tuple(start)
     placed = None
@@ -68,8 +73,9 @@ def run(anchor, moves, A_proj=-506.0, tail=8, start=()):
             stk = start[ci] if ci < len(start) else aim
             if placed is not None and ci in placed:
                 stk = placed[ci]
-            s.step(stk[0], stk[1])
-            suffix.append((stk[0], stk[1], 0))
+            btn = G.B_BTN if (draw_at is not None and ci == draw_at) else 0
+            s.step(stk[0], stk[1], buttons=btn)
+            suffix.append((stk[0], stk[1], btn))
             ci += 1
         if cross is None:
             return None
