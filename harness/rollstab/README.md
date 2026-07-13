@@ -107,6 +107,13 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   CrrPos), Phase B drills the byte-nudged 3rd frame + tests EXACT `genuine_clip`, Phase C re-sims WITH
 >   walls and accepts only `wall_hit==False` (rejecting the dead-end #28 wall-overshoot artifacts). It
 >   found **3 wall-faithful genuine hits in 67s** (< 2 min); the top clipped live 0-ULP.
+> - **RIGOROUS MULTI-POSITION VALIDATION (Dereck's ask): 3/3 distinct `old` positions clip live 0-ULP.**
+>   Delivered three different positions around the seam (d2S 37.80 / 38.52 / 38.91; `old_x`
+>   9011.08..9011.65), each `old`/`new` bit-for-bit its sim prediction, each genuine + OOB (proc 0x24,
+>   `pos_y` below the floor). The DELIVERABLE window is a narrow **~1u band at d2S~38**: closer to S the
+>   walk brakes on the seam wall pre-cut (the wall-faithful gate bounds it), farther the lunge cannot
+>   reach. Within it the pipeline is reliable. Fixture `tests/golden/walkstab_positions.json`, gate
+>   `tests/test_walkstab_clip.py::test_walkstab_multiple_positions_clip`.
 > - **Dead-end #28 RETIRED at the premise.** "The walk-entry foot residual eats the razor" was the
 >   session-31 sword/anim-set bug (already fixed); with the from-rest sim 0-ULP, any genuine offline clip
 >   is a TRUE one-shot and the search's `old` IS the live `old` bit-for-bit. The margin-5 hit delivered
@@ -120,8 +127,9 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > - **Shipped this session:** `solve_focused` + `fast_cut` + memoized sticks in `harness/rollstab/walkstab.py`
 >   (legacy `solve` kept as `solve_legacy`); `deliver` rewritten (explicit-sticks replay, OOB detection,
 >   golden save); `cut.py` module anim cache; `foot_speedf.py` `skip_cruise_pose`; `run_dtm.py` `pos_y`;
->   `tests/golden/walkstab_deliver.json` (NEW live golden); `tests/test_walkstab_clip.py` (gate PASS +
->   a from-rest re-sim guard).
+>   `tests/golden/walkstab_deliver.json` (NEW live golden); `tests/golden/walkstab_positions.json` (the
+>   3 live-confirmed positions); `tests/test_walkstab_clip.py` (gate PASS + from-rest re-sim + the
+>   3-position guard).
 
 - **WALL-BRACED CLIP TRIED LIVE -> INFEASIBLE on slot 7 (session 27, dead-end #27); NEXT = simulate
   PUSHING Tetra onto a genuine coord.** Drove the full live braced pipeline (perp-shifted Link start ->

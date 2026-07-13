@@ -100,6 +100,40 @@ def test_walkstab_live_delivery_clips():
     assert any(f['proc'] == 0x24 and f['pos_y'] < W.LINK_Y - 2.0 for f in tail)
 
 
+POSITIONS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         'tests', 'golden', 'walkstab_positions.json')
+
+
+@pytest.mark.skipif(not _HAVE, reason="anim data unavailable")
+def test_walkstab_multiple_positions_clip():
+    """Rigorous multi-position check (session 32): THREE distinct `old` positions around the seam were
+    each delivered live and clipped 0-ULP (genuine + OOB). This guards that the solver+delivery is
+    reliable across the seam's wall-faithful window, not a one-off. For each committed position, re-sim
+    its exact delivered sticks FROM REST (pure sim) and confirm `old`/`new` reproduce the recorded
+    sim bit-for-bit, the clip is genuine, speedF is 17, and the recorded live `old` == the sim `old`."""
+    g = json.load(open(POSITIONS))
+    assert g['n_positions'] >= 3
+    olds = set()
+    for i, p in enumerate(g['positions']):
+        h = p['hit']
+        sticks = [tuple(sk) for sk in h['sticks']]
+        s = W.seed()
+        s._foot.skip_cruise_pose = True
+        for k in range(h['N']):
+            stk = sticks[k] if k < len(sticks) else sticks[-1]
+            s.step(stk[0], stk[1], csx=128, csy=W.CDOWN)
+        old = (s.pos_x, s.pos_z)
+        nx, nz = W.fast_cut(old[0], old[1], s.facing, s.nspeed)
+        assert _bits(old[0]) == _bits(p['sim_old'][0]) and _bits(old[1]) == _bits(p['sim_old'][1]), i
+        assert _bits(nx) == _bits(p['sim_new'][0]) and _bits(nz) == _bits(p['sim_new'][1]), i
+        assert W.genuine_clip(old, (nx, nz))[0], i
+        assert s.speedF == 17.0, i
+        assert _bits(p['live_old'][0]) == _bits(p['sim_old'][0]), i   # 0-ULP delivery
+        assert _bits(p['live_old'][1]) == _bits(p['sim_old'][1]), i
+        olds.add((_bits(old[0]), _bits(old[1])))
+    assert len(olds) == len(g['positions']), "positions must be DISTINCT olds"
+
+
 @pytest.mark.skipif(not _HAVE, reason="anim data unavailable")
 def test_walkstab_committed_hit_resims_from_rest():
     """Guard the SIM against the golden: re-sim the committed hit's exact delivered sticks FROM REST
