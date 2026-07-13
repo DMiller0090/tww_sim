@@ -113,11 +113,11 @@ END OF SESSION:
 
 FUTURE-WORK NOTES (not this session's scope; here so architecture leaves room. Do NOT
 build these until asked):
-- Mid-walk sword unsheathe/draw as a transient (its own anim + per-frame displacement),
-  not the current static drawn/sheathed flag. **REQUESTED by Dereck (2026-07-13, session 33)
-  as the next dedicated LIVE task** -- see the README ## Status "NEXT" list for the grounded
-  plan (flip the foot anim set at the draw-completion frame; it blocks the scanner's ROLL
-  dispatch for any not-drawn anchor). No longer "do not build".
+- Mid-walk sword unsheathe/draw as a transient. **DONE (session 34): the foot anim set is switchable
+  at the draw-completion frame** (`FootSpeedF.draw_sword`; `LandState(model_draw=True)` auto-triggers
+  it `DRAW_DELAY` frames after a B rising edge). Live-gated 0-ULP (`tests/test_draw_switch.py`); the
+  swap is instantaneous no-morf per the decomp. What remains is WIRING it into the scanner's ROLL
+  dispatch (needs the roll-path solver) -- see the README ## Status "NEXT" list.
 - Body-lean physics: daPy_lk_c::jointBeforeCB per-joint leans + jointCB1 foot-plant IK (leg-angle
   Z-bends, CLOTCH translate) + waist ground-tilt. NOTE (session 31): these are ALL ZERO on flat
   ground and the MOMI joints (0x10/0x11) are FACE joints, NOT in the foot chain -- so this is NOT

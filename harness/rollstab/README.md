@@ -76,11 +76,45 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-13, session 33)
+## Status (2026-07-13, session 34)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+> **CURRENT THREAD (2026-07-13, session 34): the MID-WALK SWORD PULL-OUT is MODELLED + live-gated
+> 0-ULP.** This was the session-33 NEXT #1 (Dereck's directive) and it UNBLOCKS the scanner's ROLL
+> dispatch for a not-drawn anchor. The sim froze the foot anim set (base WALK/DASH vs sword
+> WALKS/DASHS) at `FootSpeedF` construction, so it couldn't represent a draw. **Decomp settled the
+> OPEN question (no live breakpoint needed -- priority A):** the anim-set swap is an INSTANTANEOUS,
+> phase-preserved pose jump with NO oldframe-morf -- `getAnmData` reselects the sword table the instant
+> `mEquipItem` flips at the equip-anime completion (`d_a_player_main.cpp:3976`), `setMoveAnime`
+> re-fetches it every frame (12734), and `procMove`'s steady `setBlendMoveAnime(-1.0f)` (6229) passes
+> `i_morf < 0`; WALK/WALKS + DASH/DASHS share `frameMax` so the preserved phase `f31` leaves the frame
+> value unchanged, only the legs swap. **Model:** `FootSpeedF.draw_sword()` flips `_walk`/`_dash`
+> base->sword; `LandState(model_draw=True)` (opt-in; forces the pure-Python foot path -- native `_anmc`
+> has no DASHS; default OFF = byte-identical) auto-triggers it `DRAW_DELAY=3` acted-frames after a B
+> rising edge while walking sheathed. **`f_draw` = 5 frames after the raw B feed** (= 3 after the
+> `INPUT_DELAY`-acted swordTrigger edge), live-pinned. **Live-gated 0-ULP:** capture
+> `harness/rollstab/capture_draw.py` (`land_flatwalk`, sheathed `mEquipItem 0x100`; straight UP walk
+> drawn at start via UP+B, then decelerated through the WALK<->DASH blend so the DASHS legs show on
+> VISIBLE `m3598>0` frames); offline replay `harness/rollstab/validate_draw.py`; fixture
+> `fixtures/walk_draw.json`; gate `tests/test_draw_switch.py` (5 green). The from-rest walk with the
+> switch is 0-ULP vs live, and BOTH naive baselines DRIFT (never-draw stays DASH -> 1028 ULP off on the
+> post-draw decel frames; always-drawn poses DASHS pre-draw -> 57 ULP), so the switch TIMING is
+> load-bearing for the roll `old`. Full suite 336 passed (was 331; +5 `test_draw_switch.py`). The scanner /
+> roll-stab / Tetra threads are otherwise UNCHANGED; the roll solver is not wired to `model_draw=True`
+> yet (deferred with the roll-path solve).
+>
+> **NEXT (deferred to dedicated sessions):**
+> 1. **Wire the scanner's ROLL dispatch to use `model_draw=True`** so a sheathed anchor draws mid-walk,
+>    rebuilds to cap in the sword set, then A-presses to roll (roll->cut requires `sword_drawn`, which
+>    `draw_sword` now sets on completion). Needs the roll-path solver (generalize `walkstab`/`solver` off
+>    the hardcoded kaze seam -- see below), then a from-rest sheathed roll-stab delivered + live-gated.
+> 2. **sword-OUT walk-stab live validation** (unchanged from s33): mint a sword-OUT anchor at a
+>    walk-clippable seam + deliver/confirm live (`deliver` b_frame is already sword-aware, N-1 vs N-5).
+> 3. **(optional) generalize the two solvers off their hardcoded kaze seam** (parameterize the settled
+>    facing + crawl count from the seam bearing) so `thrust_scan.scan` can dispatch any enumerated seam.
 
 > **CURRENT THREAD (2026-07-13, session 33): the CENTRALIZED THRUST-CLIP SCANNER is built (offline
 > decision layer + dispatch), gated, and validated end-to-end.** `harness/rollstab/thrust_scan.py` is

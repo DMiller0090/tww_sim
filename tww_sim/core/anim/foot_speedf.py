@@ -530,3 +530,19 @@ class FootSpeedF:
         cur = self.ff.step_feet(state['move0'], state['move1'], state['f0'], state['f1'],
                                 state['ratio'], i_morf=morf)
         self._shift(cur, f312, msd)
+
+    def draw_sword(self):
+        """Mid-walk sword pull-out: flip the foot anim set base -> sword (WALK/DASH -> WALKS/DASHS) at
+        the draw-completion frame. When mEquipItem flips to daPyItem_SWORD_e, getAnmData re-selects the
+        sword table (decomp d_a_player_main.cpp:12951), setMoveAnime re-fetches it EVERY frame (12734),
+        and procMove's steady setBlendMoveAnime(-1.0f) passes i_morf < 0 (6229) -> NO oldframe-morf. So
+        the swap is an INSTANTANEOUS, phase-preserved pose jump: setMoveAnime preserves f31 =
+        frame/frameMax (12732) and WALK/WALKS + DASH/DASHS share frameMax (32), so the frame value is
+        literally unchanged; only the leg keyframes change (WALK==WALKS legs, so DASH->DASHS is the one
+        that moves the toe -- session 31). Idempotent. Python foot path only (the native _anmc has no
+        DASHS in its anim array), so a FootSpeedF that may draw mid-walk must be built native=False."""
+        if self._core is not None:
+            raise NotImplementedError("mid-walk draw needs the pure-Python foot path (native=False)")
+        self.sword = True
+        self.st._walk = 'walks'
+        self.st._dash = 'dashs'

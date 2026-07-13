@@ -114,6 +114,25 @@ The native `_anmc` engine can't select `dashs` (its 15-anim array is hardcoded t
 `FootSpeedF` forces the pure-Python foot path whenever `sword=True` - correctness over the native
 speedup, until the engine learns DASHS.
 
+#### Mid-walk draw: the anim-set switch is instantaneous (no morf)
+
+The set is not fixed for a run - a **mid-walk sword pull-out** flips it base→sword partway through a
+walk (the roll-stab ROLL path from a sheathed anchor draws, rebuilds to cap, then A-presses). The
+swap is an **instantaneous, phase-preserved pose jump** with NO oldframe-morf: `getAnmData` reselects
+the sword table the instant `mEquipItem` flips to `daPyItem_SWORD_e` at the equip-anime completion
+(`d_a_player_main.cpp:3976`), `setMoveAnime` re-fetches it every frame (12734), and `procMove`'s
+steady `setBlendMoveAnime(-1.0f)` (6229) passes `i_morf < 0` - so no morf fires; `setMoveAnime`
+preserves the phase `f31 = frame/frameMax` (12732) and WALK/WALKS + DASH/DASHS share `frameMax`, so
+the frame value is literally unchanged, only the leg keyframes swap. Model: `FootSpeedF.draw_sword()`
+flips `_walk`/`_dash`; `LandState(model_draw=True)` auto-triggers it `DRAW_DELAY` acted-frames after a
+B rising edge while walking sheathed. **`f_draw` = 5 frames after the raw B feed** (= 3 after the
+`INPUT_DELAY`-acted swordTrigger edge), live-pinned on `land_flatwalk` for the on-back take. Because
+the from-rest walk is 0-ULP with the switch but drifts both ways without it (never-draw stays DASH and
+misses the post-draw partial-mag frames; always-drawn poses DASHS on the pre-draw accel frame), the
+switch TIMING is load-bearing for where the roll `old` lands. Regression:
+`tests/test_draw_switch.py` (live fixture `fixtures/walk_draw.json`, capture
+`harness/rollstab/capture_draw.py`).
+
 ## Foot FK runs in WORLD space
 
 `posMoveFromFootPos` computes the stored toe `spB0 = m37B4 · anmMtx(FOOT) · l_toe_pos`, where

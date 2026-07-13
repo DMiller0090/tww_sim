@@ -181,11 +181,14 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
     CRASH_ANIM_END = f32(24.0)     # mRoll.field_0x2:  ANM_ROLLFMIS end (rate<0.01 exit)
     CRASH_ANIM_RATE = f32(0.7)     # mRoll.field_0x24: rate set at the landing
     CRASH_EARLY = f32(20.0)        # mRoll.field_0x30: getFrame()> -> checkNextMode(1) exit
+    # Mid-walk sword pull-out: acted-frame delay from the B rising edge to the foot anim-set flip
+    # (=5 after the raw B feed, live-pinned). See FootSpeedF.draw_sword + knowledge/model/anim-engine.md.
+    DRAW_DELAY = 3
 
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
                  use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True, foot_native=True,
-                 sword_drawn=False, idle_anim=None, walls=None):
+                 sword_drawn=False, idle_anim=None, walls=None, model_draw=False):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
         # Phase W: `walls` = WALL tris in game traversal order -> the per-frame CrrPos wall
@@ -238,6 +241,13 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         # Sword-thrust cut (CUT_F / CUT_A) state -- the "roll stab". sword_drawn gates the roll->cut
         # trigger (a cut only fires out of a roll if the sword is out; a bare roll routes to MOVE).
         self.sword_drawn = bool(sword_drawn)   # gates the roll->cut trigger; see land-movement.md (roll stab)
+        # Mid-walk sword pull-out (opt-in; FootSpeedF.draw_sword). OFF by default => byte-identical;
+        # requires the pure-Python foot path (native _anmc has no DASHS), forced below.
+        self._model_draw = bool(model_draw)
+        self._draw_cd = None                   # countdown to the anim-set flip once the draw starts (None = idle)
+        if self._model_draw:
+            native = False
+            foot_native = False
         self._b_held = False                   # swordButton() (B mItemButton, HELD) this frame
         self._b_trig = False                   # swordTrigger() (B mItemTrigger, RISING EDGE) this frame -- the
         #                                        actual roll->cut trigger (a HELD B never re-fires the edge)
@@ -409,6 +419,19 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         ab_edge = ((abtn & ~self._abtn_prev) & 0x300) != 0
         self._b_trig = ((abtn & ~self._abtn_prev) & 0x200) != 0
         self._abtn_prev = abtn
+
+        # --- mid-walk sword pull-out (opt-in): B rising edge -> DRAW_DELAY frames later the anim set
+        # flips base->sword BEFORE the proc dispatch (this frame's foot pose). See FootSpeedF.draw_sword.
+        if self._model_draw and self._foot is not None:
+            if self._draw_cd is None:
+                if self._b_trig and not self.sword_drawn and self.state in (MOVE, WAIT, FREE_WAIT):
+                    self._draw_cd = self.DRAW_DELAY
+            else:
+                self._draw_cd -= 1
+                if self._draw_cd <= 0:
+                    self._foot.draw_sword()
+                    self.sword_drawn = True
+                    self._draw_cd = None
 
         moving = self.msd > 0.05
         # --- SUBJECTIVITY freeze (C-up cancel), fully input-driven (no enter_freeze/hold/resume API).
