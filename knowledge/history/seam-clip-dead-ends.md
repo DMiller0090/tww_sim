@@ -335,6 +335,25 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
       `tests/golden/walkstab_deliver.json`; regression `tests/test_walkstab_clip.py` (offline clip
       GREEN, live-clips xfail). Never re-ship a dust hit for delivery without the residual modelled
       (or a fat-band, residual-robust acceptance -- which this near-flat seam does not offer).
+    - **CORRECTED (session 31): the "walk-entry foot residual" was the WRONG ANIM SET, not a
+      foot-FK/lean/IK gap. `rest.rest_state` hardcoded `sword_drawn=True`, but this anchor holds the
+      Wind Waker (`mEquipItem` 0x22, not `daPyItem_SWORD_e` 0x103), so `getAnmData` selects the base
+      WALK/DASH legs, not the sword-drawn WALKS/DASHS.** WALK and WALKS share leg keyframes (a
+      WAITS<->WALK entry is bit-identical either way, which is why f0-f3 matched), but DASH and DASHS
+      differ, so the sword-drawn assumption drifted the plant toe ~0.0024u the instant DASH blends in
+      (regime 2). Live-captured `mFootData` proved EVERY `jointBeforeCB`/`jointCB1` lean + foot-plant
+      IK term is ZERO on this flat ground (waist tilt `m34E0`, CLOTCH `field_0x030`, leg bends
+      `field_0x008/00A/002`; the SESSION_PROMPT note's "MOMI thigh lean from lateral accel" was wrong
+      twice over -- MOMI 0x10/0x11 are FACE joints, not in the foot chain, and the lean is wind-driven).
+      Fix: `rest.rest_state` seeds `sword_drawn` from the anchor's captured equip (`seed.json`
+      `sword_drawn`/`equip_item`; default True for the sword-drawn roll-stab idle anchors). The
+      from-rest walk is now BIT-EXACT 0-ULP in position + facing (`tests/test_walkstab_rest.py`), so
+      any genuine OFFLINE clip is a true one-shot -- there is no residual to eat the razor. The
+      session-30 hit no longer clips (fixing the ~0.0024u along-track error shifts `old` ~2-3 f32
+      x-columns off its sliver; the dust is striped per column), so a deliverable hit is re-found in
+      the corrected sim. **Lesson: verify the anim SET (equip state) before attributing a foot-pose
+      residual to FK precision -- and capture the actual per-frame RAM quantity (mFootData, mEquipItem)
+      before believing a plausible mechanism (cf. the session-16 morf-vs-lean lesson).**
 
 ## Pointers
 

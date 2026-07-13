@@ -11,6 +11,8 @@
  "target_angle": 20906,
  "msd": 0.0,
  "link_state": 4,
+ "equip_item": 34,
+ "sword_drawn": false,
  "anim_frame": 12.344209671020508,
  "max_normal_speed": 17.0,
  "stick_angle_raw": 16384,

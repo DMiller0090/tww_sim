@@ -73,11 +73,14 @@ def rest_state(anchor, walls=None):
     solver runs. foot_native=False: the rest blend/lean/deferred draw live on the Python foot.
     `walls` (Phase W): wall tris for the in-stepper CrrPos response (wallgate.py gates)."""
     seed, straight, aim = sticks_of(anchor)
+    # Sword state picks the walk/dash anim SET (WALKS/DASHS vs base WALK/DASH -- different legs; see
+    # KB mechanics/walk-stab.md). From the anchor's captured equip; default True (roll-stab idle anchors).
+    sword_drawn = bool(seed.get('sword_drawn', seed.get('equip_item', 0x103) == 0x103))
     s = LandState(pos_x=seed['link_x'], pos_z=seed['link_z'], pos_y=seed.get('link_y', 0.0),
                   facing=seed['shape_angle_y'] & 0xFFFF, travel=seed['travel_angle'] & 0xFFFF,
                   csangle=seed['csangle'] & 0xFFFF, state=seed['link_state'], nspeed=0.0,
                   speedF=0.0, idle_frame=seed['anim_frame'], use_anim=True, native=False,
-                  foot_native=False, sword_drawn=True, idle_anim='waits', walls=walls)
+                  foot_native=False, sword_drawn=sword_drawn, idle_anim='waits', walls=walls)
     # NO _pending_morf arming (the walk-entry frame triggers the oldframe-morf itself; arming it
     # too made the sim morf AGAIN one frame later -- caught by verify_rest row 4).
     s._foot.seed_rest_blend(d_frame=seed['rest_d_frame'], w_frame=seed['rest_w_frame'],

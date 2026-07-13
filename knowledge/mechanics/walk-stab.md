@@ -4,10 +4,11 @@
 does its lunge reach, and which seams can it clip without a roll? Why is the thrust delayed several
 frames when Link is holding an item? How does the one-frame L-target speed it up?
 **Status:** decomp-grounded + live-observed (kaze r11, savestate anchor `kaze_r11_walkstab@twwgz.sav`,
-2026-07-13). The min-clip geometry is computed, the equip-change delay is live-measured, the from-rest
-sim is bit-exact in FACING under a C-down camera pin, and the dust-solver finds a genuine 0-ULP clip
-< 2 min. But the clean-DTM LIVE delivery is BLOCKED by the walk-entry foot residual (see Simulation) --
-the one-shot needs that residual MODELLED first.
+2026-07-13). The min-clip geometry is computed, the equip-change delay is live-measured, and the
+from-rest sim is now **BIT-EXACT (0 ULP) in position AND facing** from the anchor seed (the session-30
+"walk-entry foot residual" was the wrong anim set, not a foot-FK gap -- see Simulation + dead-end #28).
+A deliverable hit must be re-found in the corrected sim (the session-30 hit relied on the buggy
+trajectory), then delivered as a clean DTM.
 **Source:** decomp `d_a_player_main.cpp:4087` (`checkNextActionFromButton`), `:3946`/`:3959`
 (equip-anime completion), `:3436`/`:3499` (the take/rest anime setup), `d_a_player_sword.inc:404`
 (`changeCutProc`); HIO `daPy_HIO_item` (`d_a_player_HIO_data.inc:293`); live captures + the
@@ -84,10 +85,21 @@ Link's facing, observed ~33 u16/frame while walking; free-cam pins it).
 
 ## Simulation
 
-**Solver done (genuine 0-ULP clip < 2 min); live delivery BLOCKED by the walk-entry foot residual.**
-`harness/rollstab/walkstab.py`: the driver is walk-N-frames-then-`enter_cut(CUT_F)` from the from-rest
-seed (`rest.rest_state`); the 4-frame equip delay is **delivery-only** (the lower body keeps walking, so
-the DTM presses B at frame N-5 -- 4-frame item put-away + 1-frame DTM buffering).
+**The from-rest sim is BIT-EXACT (0 ULP) in position + facing** (`rest.rest_state`, gated by
+`tests/test_walkstab_rest.py`). The driver is walk-N-frames-then-`enter_cut(CUT_F)` from the seed; the
+4-frame equip delay is **delivery-only** (the lower body keeps walking, so the DTM presses B at frame
+N-5 -- 4-frame item put-away + 1-frame DTM buffering).
+
+**Root cause of the (former) "walk-entry foot residual" -- the WRONG ANIM SET, not a foot-FK gap
+(session 31, corrects session 30/dead-end #28).** The under-body walk/dash anim set is chosen by the
+held item: `getAnmData` (`d_a_player_main.cpp:12950`) returns the sword table (WALKS/DASHS) only when
+`mEquipItem == daPyItem_SWORD_e` (0x103). This anchor holds the Wind Waker (`mEquipItem` 0x22), so the
+base WALK/DASH legs apply. WALK and WALKS share leg keyframes (a WAITS<->WALK entry is bit-identical
+either way), but DASH and DASHS differ, so a sword-drawn assumption drifted the plant toe ~0.0024u the
+instant DASH blends in (regime 2, the m3598<1 frame) -- exactly the session-30 "residual." Every
+`jointBeforeCB`/`jointCB1` lean + foot-plant IK term (waist tilt `m34E0`, CLOTCH `field_0x030`, leg
+bends `field_0x008/00A/002`, the MOMI face-joint sway) is **zero on this flat ground** (live-captured),
+ruling them out. `rest.rest_state` now seeds `sword_drawn` from the anchor's captured equip state.
 
 **The acceptance is a perpendicular RAZOR.** `harness/collision/gap_search`: the perp offset window
 (`rho`, the cut ray's distance to `S`) is ~6e-4u at the corner bisector (sub-ULP at coord 9031, so
@@ -96,21 +108,19 @@ the AIM window is wide (**+-40 deg**, bisector ~3537) and the displacement windo
 the razor is only the perpendicular offset. The walk-up bearing (~to S) differs from the bisector, so
 walk and cut decouple by a turn.
 
-**`solve()` finds the clip but the DUST is SPARSE.** It enumerates distinct C-down walk streams (beta
-spiral | start-crawl msds (along) | bearing arc (gross perp) | per-byte fine nudge (fine f32-lottery) |
-N) and tests the exact acceptance -- essentially ONE reachable `old` lands in the ~2e-4u perp sliver.
-Facing is bit-exact from rest under the C-down camera pin (`substickY=0`; a centered stick lets the
-auto-cam swing and drift facing).
+**The DUST is SPARSE, so the search enumerates.** `solve()` enumerates distinct C-down walk streams
+(beta spiral | start-crawl msds (along variance -- the 1D-plan quantum) | bearing arc (gross perp) |
+per-byte fine nudge (fine f32-lottery) | N) and tests the exact acceptance. The genuine set near the
+walk-reachable band is a ~2.2e-4u-wide sliver (confirmed pure-geometry at old=(9011.117,1352.468)),
+flanked by CrrPos-blocked; landing it is a lottery the crawl+fine variance fills. Facing is bit-exact
+from rest under the C-down camera pin (`substickY=0`; a centered stick lets the auto-cam swing and
+drift facing).
 
-**Why live delivery is BLOCKED (dead-end #28, live-measured).** To thread the perp razor the walk must
-TURN (aim the crawl/arc); the turn overlaps the speedF-blend walk-entry frame, freezing a foot toe-stream
-(`m359C`/`f312`) error of ~0.00037u whose PERPENDICULAR component (~1.9e-4u) EXCEEDS the ~1e-4u perp
-margin -- so `old_live` falls off the razor. Session-29's "perp residual ~3.7e-5u, harmless" was measured
-on a STRAIGHT walk; a real (turning) clip walk is ~5x worse, the same order as the whole clip window.
-**The one-shot needs the walk-entry foot toe-stream MODELLED** (the Phase-R / session-25 gap:
-`posMoveFromFootPos` f312 is low on the m3598>0 blend frames; jointBeforeCB / oldframe-morf) -- NOT
-calibrated (that is forbidden position feedback). Live golden `tests/golden/walkstab_deliver.json`;
-regression `tests/test_walkstab_clip.py` (offline clip genuine GREEN; live-clips xfail = this blocker).
+**Delivery: now that the sim is 0-ULP from rest, any genuine offline clip is a true one-shot (no
+residual to eat the razor).** The session-30 shipped hit no longer clips in the corrected sim (fixing
+the ~0.0024u trajectory error shifts `old` ~2-3 f32 x-columns off its sliver, and the dust is striped
+per column), so a deliverable hit is re-found in the corrected sim then delivered as a clean DTM (C-down
+every frame; B at frame N-5; never advancewith). Regression `tests/test_walkstab_clip.py`.
 
 ## See also
 

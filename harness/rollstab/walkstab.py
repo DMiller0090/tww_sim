@@ -229,19 +229,23 @@ def _dtm(stk):
 
 
 def build_stream(beta, crawl_msds, off, lead, dur, fframe=None, fdx=0, fdz=0):
-    """Walk stream: [start-crawl msds] + full-mag cruise at `beta`, a bearing ARC (off-aim `off` for
-    `dur` frames at `lead`, the gross perp knob), and an optional per-byte FINE nudge (fdx,fdz) at
-    `fframe` -- THE fine f32-lottery (bearing->stick octagon-clamping makes `off` coarse)."""
+    """Walk stream (DELIVERY-FAITHFUL): [start-crawl msds] + full-mag cruise at `beta`, a bearing ARC
+    (off-aim `off` for `dur` frames at `lead`, the gross perp knob), and an optional per-byte FINE
+    nudge (fdx,fdz) at `fframe` -- THE fine f32-lottery (bearing->stick octagon-clamping makes `off`
+    coarse). The nudge is applied to the AUTHORED (raw) stick byte, clamped to [0,255] (a DTM cannot
+    deliver out-of-range), THEN the whole stream is run through dtm_make's delivery calibration
+    (`_dtm`: 255->254, 0->1) -- so the sim sims exactly the bytes the clean DTM delivers (README model
+    term #6). Nudging a post-calibration byte instead can overflow the [0,255] range and desync
+    sim-vs-delivered on the 0/255 edges."""
     cs = seed().csangle
-    cruise = _dtm(stick_for_bearing(beta, cs, 1.0))
-    sticks = [_dtm(stick_for_bearing(beta, cs, m)) for m in crawl_msds] + [cruise] * 30
-    astk = _dtm(stick_for_bearing((beta + off) & 0xFFFF, cs, 1.0))
+    raw = [stick_for_bearing(beta, cs, m) for m in crawl_msds] + [stick_for_bearing(beta, cs, 1.0)] * 30
+    araw = stick_for_bearing((beta + off) & 0xFFFF, cs, 1.0)
     for d in range(dur):
-        sticks[lead + d] = astk
+        raw[lead + d] = araw
     if fframe is not None and (fdx or fdz):
-        b = sticks[fframe]
-        sticks[fframe] = (b[0] + fdx, b[1] + fdz)
-    return sticks
+        b = raw[fframe]
+        raw[fframe] = (min(255, max(0, b[0] + fdx)), min(255, max(0, b[1] + fdz)))
+    return [_dtm(r) for r in raw]
 
 
 def _cut_all(sticks, base, base_k):
