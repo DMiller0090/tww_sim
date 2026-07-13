@@ -115,7 +115,9 @@ FUTURE-WORK NOTES (not this session's scope; here so architecture leaves room. D
 build these until asked):
 - Mid-walk sword unsheathe/draw as a transient (its own anim + per-frame displacement),
   not the current static drawn/sheathed flag.
-- Body-lean physics: daPy_lk_c::jointBeforeCB body-lean on the MOMI (thigh) joints
-  (local_38 = (0, m3516/m3518, m351A) via mDoMtx_QuatConcat) + waist ground-tilt + a
-  CLOTCH foot-plant translate; lean angles from velocity-change/turn (~ -8192 * lateral
-  accel * factor), clamped +-0x1000 (~22.5 deg).
+- Body-lean physics: daPy_lk_c::jointBeforeCB per-joint leans + jointCB1 foot-plant IK (leg-angle
+  Z-bends, CLOTCH translate) + waist ground-tilt. NOTE (session 31): these are ALL ZERO on flat
+  ground and the MOMI joints (0x10/0x11) are FACE joints, NOT in the foot chain -- so this is NOT
+  the walk-stab "foot residual" (that was a sword/equip anim-set bug, dead-end #28). The MOMI lean
+  (m3516/m3518/m351A, d_a_player_main.cpp:9487) is WIND-driven, not accel. Only matters on sloped
+  ground / a non-zero-lean approach; verify live before modelling.
