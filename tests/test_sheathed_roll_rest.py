@@ -114,11 +114,14 @@ def test_sheathed_rest_bitexact_seed0():
 
 
 def test_s39_hit_not_genuine_under_seed0():
-    """Session 43 (a load-bearing negative result): the session-39 hit was solved on the seed=1 model
-    and is NOT genuine under the (measured-correct) seed-0 model -- its `old` shifts ~+0.588u in z off
-    the f32 razor. So delivering the s39 hit via seed=0 will NOT clip; a fresh seed-0 solve is REQUIRED
-    (the handoff's hope that 'the s39 hit should clip' under seed=0 is disproven). Guards against a
-    regression that would re-assert the old hit is deliverable."""
+    """Session 43 (a load-bearing negative result): the session-39 hit's seed=1-composed stream BYTES
+    (no absorber) are NOT genuine when DELIVERED via seed=0 -- its `old` shifts ~+0.588u in z off the
+    f32 razor, because the seed-0 layout's extra leading no-op eats the crawl's `start[0]`. This guards
+    the distinction the session-44 fix rests on: you cannot ship the raw seed=1 bytes via seed=0; you
+    must RE-COMPOSE the recipe under `dtm_seed=0` (which prepends the compensating absorber -- see
+    solver.run + test_sheathed_roll_clip::test_seed0_crawl_frame_acts). Re-composing IS genuine and
+    ships (test_sheathed_ship_delivery); replaying the old bytes is not. Note this run uses the DEFAULT
+    seed=1 compose (no dtm_seed) ON PURPOSE -- it is exactly the raw-bytes case that must stay off-razor."""
     from harness.rollstab import solver as SV
     from tww_sim.land.land import CUT_F, CUT_A
     MOVES = ((9, (73, 254), 2), (10, (99, 183)), (4, (96, 192)), (6, (98, 188)))

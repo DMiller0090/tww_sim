@@ -1,44 +1,32 @@
-"""Sheathed roll-stab CLIP regression (kaze r11; sessions 39-41).
+"""Sheathed roll-stab CLIP regression (kaze r11; sessions 39-44).
 
-Milestone: route a NOT-DRAWN (sheathed) anchor's ROLL verdict to a from-rest roll-stab clip at the
-kaze roll seam. Session 38 made `kaze_r11_rollstab_sheathed@twwgz` REST BIT-EXACT; session 39 SOLVED
-a from-rest genuine clip (found in the sim, warm-started from the same-seam idle13 recipe) and it
-passes the OFFLINE ship gate 0-ULP -- but the LIVE delivery does NOT clip.
+Milestone (DONE, session 44): route a NOT-DRAWN (sheathed) anchor's ROLL verdict to a from-rest
+roll-stab clip at the kaze roll seam, DELIVERED LIVE 0-ULP. Session 38 made
+`kaze_r11_rollstab_sheathed@twwgz` REST BIT-EXACT; session 39 SOLVED a from-rest genuine clip (found
+in the sim, warm-started from the same-seam idle13 recipe). The recipe (pure sim, from the anchor seed
+only -- no calibration): A_proj=-500, draw_at=3, a K=2 crawl + arc + 2 fines.
 
-Recipe (pure sim, from the anchor seed only -- no calibration): A_proj=-500, draw_at=3, a K=2 crawl
-+ arc + 2 fines. The offline gate is bit-exact and genuine; see `harness/rollstab/deliver.py`.
+DELIVERY ROOT CAUSE (session 42, RAM-CONFIRMED) + FIX (session 44):
+  * The live miss was a make_dtm DELIVERY DROP, NOT a physics/decode gap. Reading
+    `g_mDoCPd_cpadInfo[0].mMainStickValue` per game frame proved the decomp physics + decode are
+    faithful and the ship's row-18 band fine was simply never RECEIVED: the pipeline default
+    `make_dtm(polls=4, seed=1)` prepends one leading NEUTRAL POLL whose sub-frame phase drops a
+    1-frame partial fine that is clustered after other partials (dead-end #34). `seed=0` (no leading
+    neutral poll) delivers every fine at the SAME timing.
+  * seed=0 shifts the leading-poll layout, so the from-rest sim needs one MORE leading no-op
+    (`noops = rest_noops + (1 - dtm_seed)`, measured live session 43 -> REST bit-exact at noops=2,
+    test_sheathed_roll_rest::test_sheathed_rest_bitexact_seed0). That extra leading no-op was silently
+    EATING the crawl's first frame `start[0]` -- a GENERAL seed-0 crawl-composition bug (dead-end #35).
+  * FIX (session 44, GENERAL -- no tuned constants): `solver.run` prepends `(1 - dtm_seed)` neutral
+    ABSORBER frames so `start[0]` always lands on the first LIVE frame; the absorber is a full frame
+    (a polls multiple) so seed-0's correct poll phase is preserved. With this, the SAME session-39
+    recipe re-composed under `dtm_seed=0` reproduces the genuine clip bit-for-bit AND delivers live.
 
-ROOT CAUSE (session 42, RAM-CONFIRMED -- this overturns session 41's "band walk-speed" story, which
-was itself a correction of #31/#32): the live miss is a make_dtm DELIVERY DROP, NOT a Link-physics or
-stick-decode gap. Reading `g_mDoCPd_cpadInfo[0].mMainStickValue` (@JP 0x80398310 -- the RAW SI-delivered
-pad the game actually polls, BEFORE setStickData latches it) directly, per game frame, proved:
-  * The decomp physics + decode are FAITHFUL. Every function in the row-18 path (setStickData 10569,
-    setNormalSpeedF 2301, setSpeedAndAngleNormal 2751, setBlendMoveAnime m3598, the 0.3/0.7 toe
-    recursion 2399-2484) matches the sim line-for-line; PADRead->PADClamp->CStick::update is stateless.
-  * The stick decode is faithful even for Y>=192 when ISOLATED: a 1-frame (96,192) after plain cruise
-    delivers cpad_val=0.9605 (== the sim) and dips. So there is NO band-walk-speed gap to model.
-  * But in the SHIP, the band fine at fed-index 16 (acted row 18) is NEVER RECEIVED: the game polls its
-    FULL neighbour (cpad_val=1.0, px=-0.32) instead. This is make_dtm's poll-cadence: the pipeline
-    default `make_dtm(polls=4, seed=1)` drops a 1-frame partial fine that is CLUSTERED after other
-    partials (the arc + earlier fines induce a sub-frame phase slip). A distinctive px=0 marker at
-    fed-16 ALSO drops (positional, not value-specific); an all-full ramp delivers every frame cleanly.
-  * That single dropped dip is the ENTIRE 1.9125u miss (offline: forcing the row-18 stick to full
-    shifts along-track by exactly -1.91248u -> live old_z 306.116 == sim 308.028 minus that).
-
-THE FIX (session 42, characterized live -- not yet shipped): `make_dtm(seed=0)` DELIVERS the dropped
-band at the SAME timing (roll row unchanged); `polls=8` delivers but at 2x timing (breaks the plan's
-discrete B/A). seed=0 alone still leaves a ~0.6u residual because it shifts the leading-poll layout the
-from-rest prefix (rest_noops, session 38) was calibrated to -- so the clean fix is `seed=0` PLUS
-re-deriving rest_noops for the seed-0 layout, then re-verify REST BIT-EXACT and the session-39 hit
-should clip. Diagnostic tool: `harness.rollstab.capture_decode.delivery_sweep` (`... capture_decode
-sweep`) -- reports which fines the game receives per (polls,seed) + roll-row + OOB clip. The
-`fine_family` band-exclusion (solver.py, session 41) is NOT the fix (it removes usable density); it
-should be REMOVED once make_dtm delivers band fines faithfully.
-
-The live golden is IMMUTABLE (`fixtures/sheathed_roll_ship_jitterproof.json`, game_frame-tagged so
-run_dtm poll jitter cannot misalign it) -- never edit it to make the sim pass. It records the BUGGY
-seed=1 delivery (band dropped); the sim (which acts every authored frame) correctly does NOT match it
-until make_dtm delivers every frame.
+The live golden `fixtures/sheathed_roll_ship_seed0_golden.json` (game_frame-tagged, IMMUTABLE) is the
+successful seed=0 ship -- the sim reproduces it bit-for-bit through the CUT_F entry (the post-cut OOB
+fall proc 0x24 is the known-unmodeled CUT tail, ROADMAP Phase C, moot for the clip). The seed=1 golden
+`fixtures/sheathed_roll_ship_jitterproof.json` (also immutable) records the BUGGY seed=1 delivery (band
+dropped); the strict-xfail test below keeps that bug gated. NEVER edit either golden to make a test pass.
 """
 import json
 import os
@@ -48,21 +36,24 @@ import pytest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _FX = os.path.join(os.path.dirname(_HERE), 'fixtures', 'sheathed_roll_ship_jitterproof.json')
+_FX0 = os.path.join(os.path.dirname(_HERE), 'fixtures', 'sheathed_roll_ship_seed0_golden.json')
 
 try:
     from harness.rollstab import solver as SV
     from harness.rollstab import geometry as G
     from harness.rollstab import rest as C
+    from tww_sim.land.land import CUT_F, CUT_A
     from tww_sim.core.fp import f32 as _f
-    _HAVE = os.path.exists(_FX)
+    _HAVE = os.path.exists(_FX) and os.path.exists(_FX0)
 except Exception:
     _HAVE = False
 
-pytestmark = pytest.mark.skipif(not _HAVE, reason="rollstab harness / sheathed jitterproof golden unavailable")
+pytestmark = pytest.mark.skipif(not _HAVE, reason="rollstab harness / sheathed goldens unavailable")
 
 ANCHOR = 'kaze_r11_rollstab_sheathed@twwgz'
 A_PROJ = -500.0
 DRAW_AT = 3
+DTM_SEED = 0        # the SHIPPED delivery seed (the make_dtm fix, sessions 42-44)
 MOVES = ((9, (73, 254), 2), (10, (99, 183)), (4, (96, 192)), (6, (98, 188)))
 START = ((77, 249), (98, 191))
 MARGIN_Z = 0.0002
@@ -72,14 +63,14 @@ def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
 
-def _run():
-    return SV.run(ANCHOR, MOVES, A_proj=A_PROJ, start=START, draw_at=DRAW_AT)
+def _run(dtm_seed=DTM_SEED):
+    return SV.run(ANCHOR, MOVES, A_proj=A_PROJ, start=START, draw_at=DRAW_AT, dtm_seed=dtm_seed)
 
 
 def test_sheathed_offline_clip_bitexact():
-    """The SOLVE is real: the from-rest sheathed run fires a genuine, wall-clear roll-stab CUT at the
-    17-cap (full 49.22 lunge) toward the seam facing, and the exact `old` is sliver-robust. Pure sim,
-    from the anchor seed only (session 39)."""
+    """The SOLVE is real: the from-rest sheathed run (composed for the shipped seed=0 delivery) fires a
+    genuine, wall-clear roll-stab CUT at the 17-cap (full 49.22 lunge) toward the seam facing, and the
+    exact `old` is sliver-robust. Pure sim, from the anchor seed only (session 39; seed-0 compose s44)."""
     r = _run()
     assert r is not None and r.get('fired'), "sheathed roll-stab CUT did not fire from rest"
     assert r['facing'] == G.F
@@ -91,30 +82,85 @@ def test_sheathed_offline_clip_bitexact():
     assert G.pred_genuine((r['old'][0], _f(r['old'][1] - MARGIN_Z)))
 
 
-@pytest.mark.xfail(strict=True, reason="make_dtm DELIVERY DROP (RAM-confirmed, session 42) + a re-solve "
-                                       "requirement (session 43): the pipeline default make_dtm(polls=4, "
-                                       "seed=1) drops the clustered row-18 band fine (dead-end #34). The "
-                                       "delivery fix is seed=0, and session 43 MEASURED its from-rest "
-                                       "model live (REST bit-exact at noops=2, test_sheathed_roll_rest) -- "
-                                       "BUT the session-39 hit was solved on the seed=1 model and is NOT "
-                                       "genuine under seed=0 (its old shifts +0.588u off the razor, "
-                                       "test_s39_hit_not_genuine_under_seed0). So a fresh seed-0 solve is "
-                                       "required; it hits the sessions-39/40 f32-dust density wall "
-                                       "(~0.0035u, 0 genuine so far). Flips GREEN when a seed-0 solve "
-                                       "clips live. (This test still compares the seed=1 delivery, which "
-                                       "correctly diverges.)")
+def test_seed0_crawl_frame_acts():
+    """The GENERAL seed-0 crawl-composition fix (session 44, dead-end #35): under `dtm_seed=0` the game
+    delivers one FEWER leading neutral poll, so rest_state burns one MORE leading no-op -- which, without
+    compensation, silently EATS the crawl's first frame `start[0]`. `run` prepends `(1 - dtm_seed)`
+    neutral ABSORBER frames to fix it GENERALLY. Locks two invariants:
+      1. the seed-0 stream carries exactly one extra LEADING neutral frame (the absorber) vs seed=1;
+      2. the crawl composes seed-INVARIANTLY -- `old` is bit-identical under seed=0 and seed=1 (the
+         absorber only offsets the dead leading-poll layout; the crawl physics is unchanged). If the
+         absorber were missing, `start[0]` would be dropped under seed=0 and `old` would shift."""
+    r1 = _run(dtm_seed=1)
+    r0 = _run(dtm_seed=0)
+    s1 = [tuple(x) for x in r1['stream']]
+    s0 = [tuple(x) for x in r0['stream']]
+    assert len(s0) == len(s1) + 1, "seed-0 stream must carry exactly one absorber frame"
+    assert s0[0] == (128, 128, 0), "the absorber must be a leading NEUTRAL frame"
+    assert s0[1:] == s1, "past the absorber the seed-0 and seed-1 streams are identical"
+    assert _bits(r0['old'][0]) == _bits(r1['old'][0]) and _bits(r0['old'][1]) == _bits(r1['old'][1]), \
+        "crawl composed one frame short under seed=0 (start[0] dropped) -> old shifted"
+    assert r0['genuine'] and r0['clear']
+
+
 def test_sheathed_ship_delivery():
-    """RED (the make_dtm delivery bug, session 42): replay the sheathed hit's stream from rest and
-    compare the along-track z to the jitter-immune live golden, game_frame-aligned (sim row i <-> live
-    gf = liveMOVE + 2*(i - simMOVE); the emulator counter ticks twice per game frame). z is robust to
-    a ±1 misalignment (that would show as a ~17u step, not the 1.9u we see). Bit-exact through row 17,
-    then at row 18 the sim dips speedF (it acts the band fine make_dtm authored) while the console held
-    17 (that fine was DROPPED in delivery -- polls=4/seed=1 phase slip). This test flips GREEN when
-    make_dtm delivers every authored frame (seed=0 + rest_noops re-derived) so live == the sim, which
-    is the objective (pure-sim -> DTM that reproduces it). NOT a sim/physics change (RAM-confirmed)."""
+    """GREEN (session 44): the sheathed roll-stab clip DELIVERS live 0-ULP via the make_dtm seed=0 fix +
+    the general seed-0 crawl absorber. Replay the seed-0 hit's stream from rest (`rest_state(dtm_seed=0)`)
+    and diff bit-for-bit vs the IMMUTABLE game_frame-tagged golden captured from the successful ship
+    (`sheathed_roll_ship_seed0_golden.json`). Alignment: sim row i <-> live gf = liveMOVE + 2*(i-simMOVE)
+    (the emulator counter ticks twice per game frame; jitter-immune). Bit-exact on EVERY game_frame-
+    aligned row THROUGH the CUT_F entry (the decisive old->new); the post-cut OOB fall (proc 0x24) is the
+    known-unmodeled CUT tail (ROADMAP Phase C), moot for the clip, so rows past the CUT are not compared.
+    This is the objective met: a pure-sim, from-rest, no-calibration clip reproduced live 0-ULP."""
+    g = json.load(open(_FX0))
+    assert g['anchor'] == ANCHOR and g.get('seed') == 0
+    live = {r['game_frame']: r for r in g['rows']}
+    r = _run(dtm_seed=0)
+    assert r['genuine'] and r['clear'], "the shipped seed-0 recipe must be a genuine, wall-clear clip"
+    stream = [tuple(x) for x in r['stream']]
+    s = C.rest_state(ANCHOR, dtm_seed=0)
+    sim = []
+    for sx, sy, b in stream:
+        s.step(sx, sy, buttons=b)
+        sim.append((s.state & 0xFF, s.pos_x, s.pos_z))
+    sim_move = next(i for i, x in enumerate(sim) if x[0] == 6)              # first MOVE proc
+    live_move = next(rr['game_frame'] for rr in g['rows'] if rr['proc'] == 6)
+    sim_cut = next(i for i, x in enumerate(sim) if x[0] in (CUT_F, CUT_A))  # the decisive CUT frame
+    matched, bad = 0, []
+    for i, (st, px, pz) in enumerate(sim):
+        if i > sim_cut:                          # post-cut OOB fall = unmodeled CUT tail, moot for the clip
+            break
+        gf = live_move + 2 * (i - sim_move)
+        lv = live.get(gf)
+        if lv is None:
+            continue
+        matched += 1
+        if not (_bits(pz) == _bits(lv['pos_z']) and _bits(px) == _bits(lv['pos_x'])):
+            bad.append((i, gf, round(pz - lv['pos_z'], 5)))
+    assert matched >= 20, "too few game_frame-aligned rows through the CUT (%d)" % matched
+    assert not bad, "seed-0 delivery diverged from live at %s" % bad
+    # the decisive CUT lands bit-for-bit and Link goes OOB (proc 0x24) right after -> the clip threaded
+    assert _bits(sim[sim_cut][1]) == _bits(g['hit_new'][0]) and _bits(sim[sim_cut][2]) == _bits(g['hit_new'][1])
+    cut_gf = live_move + 2 * (sim_cut - sim_move)
+    assert live[cut_gf]['proc'] == CUT_F and live[cut_gf + 2]['proc'] == 0x24
+
+
+@pytest.mark.xfail(strict=True, reason="Documents the make_dtm seed=1 DELIVERY DROP (dead-end #34): the "
+                                       "pipeline OLD default make_dtm(polls=4, seed=1) prepends a leading "
+                                       "neutral poll whose sub-frame phase drops the clustered row-18 band "
+                                       "fine, so the sim (which acts every authored frame) correctly does "
+                                       "NOT match the seed=1 live golden -- it diverges ~1.9u along-track "
+                                       "at row 18. The clip now ships via seed=0 (test_sheathed_ship_"
+                                       "delivery, GREEN); this xfail keeps the seed=1 bug gated so a "
+                                       "regression to the seed=1 default would be caught.")
+def test_seed1_delivery_drops_band():
+    """The seed=1 delivery drop, kept as a gated negative. Replay the seed=1-composed stream from rest
+    (`rest_state()` default seed=1) and compare along-track z to the jitter-immune seed=1 live golden
+    (game_frame-aligned). Bit-exact through row 17, then at row 18 the sim acts the band fine make_dtm
+    authored while the console held 17 (that fine was DROPPED -- polls=4/seed=1 phase slip)."""
     g = json.load(open(_FX))
     live = {r['gf']: r for r in g['rows']}
-    r = _run()
+    r = _run(dtm_seed=1)
     stream = [tuple(x) for x in r['stream']]
     s = C.rest_state(ANCHOR)
     sim = []
@@ -131,4 +177,4 @@ def test_sheathed_ship_delivery():
             continue
         if not (_bits(pz) == _bits(lv['z']) and _bits(px) == _bits(lv['x'])):
             bad.append((i, gf, round(pz - lv['z'], 4)))
-    assert not bad, "sim along-track diverged from live (band walk-speed not modeled) at %s" % bad
+    assert not bad, "sim along-track diverged from live (seed=1 band drop) at %s" % bad

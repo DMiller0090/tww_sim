@@ -702,6 +702,21 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
       1 = byte-identical); a hit records its `dtm_seed`; `deliver` ships with it; `fine_family` band-
       exclusion removed. **NEXT-SESSION TASK: the general seed-0 crawl-composition fix, then run the
       existing derived search under seed=0.**
+    - **RESOLVED (session 44): the general seed-0 crawl-composition fix WORKED and the clip DELIVERED
+      LIVE 0-ULP.** The "density wall" was a symptom, not the disease: under `dtm_seed=0` the extra
+      leading no-op silently absorbed the start-crawl's FIRST frame `start[0]`, so every crawl composed
+      one frame short (that is why the s43 seed-0 sweeps under-performed -- not the constants). Fix
+      (`solver.run`, no tuned constants): prepend `(1 - dtm_seed)` neutral ABSORBER frames so `start[0]`
+      always lands on the first LIVE frame; the absorber is a FULL frame (a `polls` multiple) so seed-0's
+      correct sub-frame poll phase is preserved. With it, the SAME session-39 recipe RE-COMPOSED under
+      `dtm_seed=0` reproduces the genuine clip bit-for-bit and DELIVERS live (proc 0x42 CUT -> 0x24 OOB,
+      old/new drift 0-ULP; golden `fixtures/sheathed_roll_ship_seed0_golden.json`, gate
+      `tests/test_sheathed_roll_clip.py::test_sheathed_ship_delivery` GREEN). NOTE the distinction the
+      fix rests on (`test_s39_hit_not_genuine_under_seed0` still PASSES): replaying the s39 BYTES via
+      seed=0 stays off-razor (#35 above) -- you must RE-COMPOSE the recipe (which prepends the absorber),
+      not byte-replay. STILL OPEN (non-blocking): the GENERIC `solver.search`/drill under seed=0 remains
+      over-budget and does not reach the dust unaided (the recipe came from a session-39 focused
+      warm-start); a reproducible <2-min focused solve is optional polish, the CLIP is done.
 
 ## Pointers
 

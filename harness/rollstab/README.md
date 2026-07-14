@@ -76,13 +76,58 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-14, session 43)
+## Status (2026-07-14, session 44)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-14, session 43): the make_dtm seed=0 delivery fix is PLUMBED end-to-end and
+> **CURRENT THREAD (2026-07-14, session 44): the SHEATHED ROLL-STAB CLIP IS DELIVERED LIVE, 0-ULP,
+> pure-sim, no calibration.** The session-43 blocker (the session-39 hit "doesn't survive seed=0") was
+> NOT a density wall to grind past -- it was a GENERAL seed-0 crawl-composition bug, fixed structurally
+> (no tuned constants). Done this session (offline + 2 live clean-DTM runs -- 1 ship + 1 golden capture,
+> never advancewith):
+> - **ROOT CAUSE nailed + fixed GENERALLY (dead-end #35's "NEXT" step 1).** Under `dtm_seed=0` the game
+>   delivers one FEWER leading neutral poll, so `rest_state` burns one MORE leading no-op
+>   (`noops = rest_noops + (1 - dtm_seed)`, measured live s43). That extra no-op was silently EATING the
+>   start-crawl's first frame `start[0]` (a dead no-op absorbs it), so every crawl-based search composed
+>   one frame short under seed=0 -- exactly why the s43 re-solve "hit a density wall". The fix
+>   (`solver.run`): prepend `(1 - dtm_seed)` neutral ABSORBER frames so `start[0]` always lands on the
+>   first LIVE frame. The absorber is a FULL frame (a `polls` multiple), so seed-0's correct sub-frame
+>   poll phase is PRESERVED (unlike a seed neutral = 1 poll). seed=1 => 0 absorbers => byte-identical.
+> - **The session-39 recipe, RE-COMPOSED under `dtm_seed=0`, is genuine bit-for-bit AND ships.** This is
+>   NOT the ruled-out "deliver the s39 BYTES via seed=0" (#35: replaying the seed=1 bytes with no
+>   absorber lands +0.588u off-razor). Re-composing produces DIFFERENT bytes (absorber prepended) that
+>   compose correctly for seed=0 delivery: `run(..., dtm_seed=0)` reproduces
+>   `old=(9072.2089844,308.0280762) -> new=(9069.8886719,258.8625793)`, disp 49.2202, CUT_F, spF@A=17,
+>   genuine+clear+sliver-robust -- bit-identical to the seed=1 sim. The general fix, applied to the
+>   existing derived recipe, delivered it; no bespoke/tuned solver.
+> - **LIVE CLIP CONFIRMED 0-ULP.** `deliver ship` (auto seed=0 from the hit's `dtm_seed`) played a clean
+>   DTM: live `old`/`new` bit-for-bit == the sim (drift d(old)=(0,0)), proc 0x42 (CUT_F) at the cut then
+>   proc 0x24 (OOB) -- threads=True, behindA=True, behindB=True. The scanner now routes a NOT-DRAWN
+>   (sheathed) anchor's ROLL verdict end-to-end to a live clip (the milestone's "done").
+> - **Locked live-data-backed:** immutable game_frame-tagged golden
+>   `fixtures/sheathed_roll_ship_seed0_golden.json` (captured from the successful ship). Gate
+>   `tests/test_sheathed_roll_clip.py`: `test_sheathed_ship_delivery` RED-xfail -> **GREEN** (sim bit-exact
+>   vs the seed-0 golden on every game_frame-aligned row THROUGH the CUT_F entry; the post-cut OOB fall
+>   proc 0x24 is the known-unmodeled CUT tail, moot for the clip); NEW `test_seed0_crawl_frame_acts`
+>   locks the general fix (seed-0 stream carries one absorber, crawl composes seed-invariantly);
+>   `test_seed1_delivery_drops_band` keeps the #34 seed=1 drop gated (xfail). `test_s39_hit_not_genuine_
+>   under_seed0` (s43) still PASSES -- the raw seed=1 bytes are correctly still not seed-0-deliverable
+>   (re-composing, not byte-replay, is the fix). Suite **346 passed, 1 skipped, 2 xfailed**. Only
+>   `harness/rollstab/solver.py` behavior changed (the absorber; seed=1 byte-identical) -- NO
+>   `sim.py`/`land.py` change, so the live sim-vs-Dolphin regression is unaffected.
+>
+> **NEXT (the clip is DONE; remaining is polish, not blocking):** (1) OPTIONAL -- fold the seed-0 solve
+> into the harness as a reproducible <2-min search: the generic `solver.search`/drill under seed=0 is
+> still over-budget and does NOT reach the f32 dust on its own (a real property of the seam -- the derived
+> recipe came from session 39's focused warm-start, now made deliverable by the general fix). A reproducible
+> focused solve (warm-started, no tuned constants) would close the objective's "found by the search"
+> clause; the CLIP itself is delivered. (2) The generalize-off-hardcoded-kaze-seam work (thrust_scan
+> dispatch to any enumerated seam) stands. Every other thread (walk-stab clip, Tetra push-aside/turnaround,
+> thrust scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-14, session 43): the make_dtm seed=0 delivery fix is PLUMBED end-to-end and
 > its from-rest model is MEASURED LIVE + bit-exact -- but shipping is BLOCKED on a RE-SOLVE: the
 > session-39 hit does NOT survive seed=0, and re-solving hits the sessions-39/40 f32-dust density wall.
 > No sim/physics behavior changed; all `seed`/`dtm_seed` plumbing is byte-identical at the seed=1

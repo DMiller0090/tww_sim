@@ -64,10 +64,16 @@ def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None, dtm_seed=1
     None."""
     _, straight, aim = C.sticks_of(anchor)
     start = tuple(start)
+    # Prepend (1-dtm_seed) neutral ABSORBER frames so the seed-0 layout's extra leading no-op does not
+    # silently eat start[0] (dead-end #35; a full frame preserves seed-0's poll phase). seed=1 => 0.
+    n_absorb = max(0, 1 - int(dtm_seed))
     placed = None
     for _ in range(4):
         s = base(anchor, dtm_seed=dtm_seed)
         suffix = []
+        for _ in range(n_absorb):
+            s.step(128, 128)
+            suffix.append((128, 128, 0))
         ci = 0
         cross = None
         for _ in range(90):
