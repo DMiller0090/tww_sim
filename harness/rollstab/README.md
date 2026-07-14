@@ -76,11 +76,54 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-13, session 39)
+## Status (2026-07-14, session 40)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+> **CURRENT THREAD (2026-07-14, session 40): the session-39 live blocker is RE-ROOT-CAUSED
+> (jitter-immune) and it OVERTURNS dead-end #31. No sim code changed. The tried approaches did not
+> deliver; the frontier is open.** Path 1 (the session-39 handoff's "try first") was run, then the
+> blocker was re-measured jitter-immune. Done this session (offline + 3 live jitter-immune DTM captures,
+> never advancewith):
+> - **Path 1 (re-search for a deliverable pure-sim hit) did NOT find one in the structures tried.** A
+>   pure LIVE-VALID search (every stick msd<=0.889 or ==1.0, avoiding the (0.889,1.0) band) reached
+>   **~0.0013u from the f32 dust with 0 genuine hits over ~60k runs** (dense 2-knob vernier: arc + clean
+>   fine + K3-crawl-3rd byte). The genuine dust is single f32 columns (~0.001u spaced, most z empty); the
+>   live-valid lattices tried did not align onto one. This bounds the recipe SHAPES tried, not the clip.
+>   (The `clean_settle` speedF-dip filter I prototyped is the WRONG filter -- a dip on a fine-ACTED frame
+>   is live-faithful; reverted.)
+> - **The row-18 blocker RE-ROOT-CAUSED, jitter-immune -> dead-end #31 was WRONG.** Using deterministic
+>   game_frame tags (`fixtures/sheathed_roll_ship_jitterproof.json`) instead of run_dtm's jittery poll:
+>   the stick DECODE is bit-exact live (held 8 frames, `(96,192)`->0.9605 == sim). But a **1-FRAME
+>   TRANSIENT band stick** `(96,192)` (msd 0.9605, in the (0.889,1.0) band) decodes live to ~aim
+>   (33295, msd 1.0 -- it holds the prior value) and does NOT turn; the sim decodes it raw (33367,
+>   0.9605) and turns -> the row-18 divergence. Non-band 1-frame fines register correctly. The
+>   two-angle chase is FAITHFUL; it is a TRANSIENT input-layer effect ("input-layer != /54", the freeze
+>   planner already excludes the band). The session-39 "shape overshoot / MOVE-turn settle" reads were
+>   run_dtm poll-jitter (live-row-19 poll caught the neighboring aim frame). dead-end #32 (corrects #31).
+> - **The session-39 winning offline hit relies on the sim's transient-band mis-model, so THAT hit does
+>   not reproduce live.** Its genuine landing depends on the sim treating the transient band stick as a
+>   ~0.9605/33367 perp nudge, which live reads as ~aim. So a FAITHFUL transient-band model is needed to
+>   make the sim predictive here; it removes that artifact rather than delivering THIS hit -- a new,
+>   band-faithful solve is what delivers.
+> - **Artifacts:** jitter-immune golden `fixtures/sheathed_roll_ship_jitterproof.json` (game_frame-
+>   tagged, IMMUTABLE). Gate `tests/test_sheathed_roll_clip.py`: offline clip test GREEN (the solve is
+>   real, in the sim), `test_sheathed_ship_matches_live` strict-xfail RED with the CORRECTED reason
+>   (transient-band decode, not MOVE-turn). Suite still **342 passed, 1 skipped, 2 xfailed**. NO
+>   `harness/rollstab/*.py` behavior changed (the exploratory `clean_settle` field was reverted).
+>
+> **NEXT (open approaches -- the clip is not solved yet; keep pushing):** (1) **model the transient-band
+> input-layer behavior to f32** (characterize it with a live band-transient sweep -- is a 1-frame band
+> stick == the prior frame's value? a 2-frame slew? -- then make `main_stick_decode`/the input buffer
+> reproduce it), so the sim is FAITHFUL and the solver searches over what live ACTUALLY does; then solve
+> band-faithfully and deliver. (2) **expand the search** far beyond the shapes tried -- more knobs, longer
+> crawls, other draw/arc placements, other A_proj phases, a warm-start off the walk-stab solver -- to
+> close the last ~0.0013u to the f32 dust; the 0.0013u floor is a property of the LATTICES tried, so a
+> richer input alphabet is the lever. (3) reconsider the delivery mechanics themselves (draw timing, B
+> timing, the roll-entry frame) for degrees of freedom not yet exploited. Every other thread (walk-stab
+> clip, Tetra push-aside/turnaround, thrust scanner) UNCHANGED.
 
 > **CURRENT THREAD (2026-07-13, session 39): the sheathed roll-stab clip is SOLVED offline
 > (pure-sim, from-rest, 0-ULP ship-gate PASS) but LIVE delivery is BLOCKED by a newly root-caused

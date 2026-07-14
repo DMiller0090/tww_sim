@@ -466,7 +466,11 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
 
 ## The sheathed roll-stab clip: SOLVED offline, LIVE-blocked by a sim MOVE-turn facing overshoot (session 39, LIVE)
 
-31. **The row-18 facing overshoot is a two-angle/MOVE-turn SETTLE residual, NOT input buffering, and it
+31. **[CORRECTED session 40 -> #32: the "two-angle/MOVE-turn SETTLE residual" diagnosis below is WRONG.
+    A jitter-immune measurement proved the row-18 divergence is a TRANSIENT (0.889,1.0)-BAND STICK
+    input-layer decode divergence; the two-angle chase is faithful. The session-39 "shape overshoot"
+    reads were run_dtm poll-jitter. Read #32.]**
+    **The row-18 facing overshoot is a two-angle/MOVE-turn SETTLE residual, NOT input buffering, and it
     blocks the live roll-stab clip for BOTH the sheathed and drawn anchors.** Session 39 SOLVED a
     from-rest sheathed roll-stab clip (pure sim, seed-only; `old=(9072.209,308.028)`, offline `deliver
     gate` PASS 0-ULP genuine, sliver-robust) but the LIVE ship did not clip. Per-frame sim-vs-live diff
@@ -492,6 +496,48 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
       1-f32-col-per-z genuine set (step 0.001 >> f32) and mis-guides the drill. The 91s find used a
       focused warm-start from the same-seam idle13 recipe (objective-compliant: seed-only). Fold that
       into a reproducible <2-min sheathed solve; do NOT trust the generic drill for the roll-stab.
+
+## The sheathed roll-stab clip: row-18 blocker RE-ROOT-CAUSED as a transient band-stick decode divergence (session 40, LIVE, jitter-immune)
+
+32. **The row-18 blocker is a TRANSIENT (0.889,1.0)-magnitude-band stick input-layer decode divergence
+    -- NOT the two-angle/MOVE-turn settle of #31.** Session 40, all measured jitter-immune (deterministic
+    game_frame tags, `fixtures/sheathed_roll_ship_jitterproof.json`), the run_dtm poll-jitter that misled
+    #31 designed out:
+    - **The stick DECODE is bit-exact live.** Holding each band stick CONSTANT for 8 frames, live
+      `mStickDistance`/`m34DC` == the sim's closed-form `main_stick_decode` exactly (`(96,192)`->0.9605,
+      `(98,191)`->0.9313, ...). So there is nothing wrong with the decode formula, and the two-angle
+      chase is faithful (it follows `target`, which is correct for held sticks).
+    - **But a 1-FRAME TRANSIENT band stick decodes DIFFERENTLY live.** At ship row 18 the acted stick is
+      the fine `(96,192)` (msd 0.9605, in the band). The sim decodes it raw (target 33367, msd 0.9605)
+      and turns; LIVE decodes the 1-frame transient to ~aim (target 33295, msd 1.0 -- it HOLDS the prior
+      value) and does not turn. Non-band 1-frame fines (`(98,188)` 0.878, `(99,183)` 0.785) register
+      correctly. So the band divergence is a TRANSIENT/input-layer effect (input smoothing/latency near
+      the magnitude cap), the same "input-layer != /54" family precise-stop.md/land-planner.md warn about
+      and the freeze planner already excludes from its crawl.
+    - **This means the session-39 winning hit is not predictive live (it depends on the sim's mis-model),
+      and the SEARCH SHAPES tried this session did not find a band-faithful hit.** The winning hit's
+      genuine landing depends on the sim treating that transient band stick as a real ~0.9605/33367 perp
+      nudge, which live reads as ~aim -- so the sim must be made band-FAITHFUL before its hits are
+      trustworthy. And the pure LIVE-VALID lattices tried (every stick msd<=0.889 or ==1.0, avoiding the
+      band; dense 2-knob vernier arc + clean fine + K3-crawl-3rd-byte) reached only ~0.0013u from the f32
+      dust with 0 genuine over ~60k runs. The dust is single f32 columns (~0.001u spaced); those
+      lattices did not align onto one. NOTE: 0.0013u bounds the recipe SHAPES tried, NOT the clip -- a
+      richer input alphabet / faithful band model is the untried lever.
+    - **RULED OUT this session (approaches, not the clip):** (a) path-1 "clean-settle" re-search -- a
+      speedF dip on a fine-ACTED frame is live-faithful (live turns there too), so a clean_settle filter
+      wrongly rejects real dips; only transient BAND sticks are sim-only. (b) "fix the decode as a
+      closed-form" -- the held decode is already bit-exact; only the 1-frame transient diverges (needs an
+      input-layer/buffer model, not a decode-formula change). (c) the #31 "two-angle settle" story --
+      refuted (chase faithful).
+    - **Open approaches to PURSUE (the clip is not solved -- keep pushing):** (1) MODEL the transient-band
+      input-layer behavior to f32 -- characterize it with a live band-transient sweep (is a 1-frame band
+      stick == prior-frame value? a 2-frame slew?) and make `main_stick_decode`/the input buffer
+      reproduce it, so the solver searches over what live ACTUALLY does, then solve band-faithfully; (2)
+      EXPAND the search well beyond the shapes tried (more knobs, longer crawls, other draw/arc/A_proj
+      placements, a walk-stab-solver warm-start) to close the last ~0.0013u -- the 0.0013u floor is a
+      property of the tried lattices, so a richer alphabet is the lever; (3) exploit delivery-mechanics
+      DOF not yet used (draw timing, B timing, roll-entry frame). Ground truth:
+      `fixtures/sheathed_roll_ship_jitterproof.json`.
 
 ## Pointers
 

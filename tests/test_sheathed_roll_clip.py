@@ -8,18 +8,28 @@ passes the OFFLINE ship gate 0-ULP -- but the LIVE delivery is BLOCKED by a sim 
 Recipe (pure sim, from the anchor seed only -- no calibration): A_proj=-500, draw_at=3, a K=2 crawl
 + arc + 2 fines. The offline gate is bit-exact and genuine; see `harness/rollstab/deliver.py`.
 
-THE LIVE BLOCKER (session 39, root-caused by per-frame sim-vs-live diff, fixture
-`fixtures/sheathed_roll_ship_live.json`): rows 0-17 of the ship stream (crawl, draw B-edge, arc,
-fines) deliver BIT-EXACT live -- so delivery alignment / rest_noops are correct. At ROW 18 (an aim
-frame after the row-16 fine settles) the SIM's shape_angle OVERSHOOTS to 33367 while live holds 33295;
-that phantom one-frame turn dips speedF to 15.05 vs live's 17.0 cap -> a ~1.9u along-track lag that
-freezes for the rest of the roll -> `old` lands off the f32 razor -> no live clip. Discriminator ruled
-it a two-angle/MOVE-turn SETTLE residual, NOT an input-delay/buffering shift (live does not lead the
-sim by a frame). It afflicts the drawn idle13 hit identically. This is the Phase-R MOVE-turn frontier.
+THE LIVE BLOCKER (session 40 RE-ROOT-CAUSED, jitter-immune, overturns the session-39 "MOVE-turn
+settle" story -- fixture `fixtures/sheathed_roll_ship_jitterproof.json`, game_frame-tagged so run_dtm
+poll jitter cannot misalign it): rows 0-17 deliver bit-exact live. At ROW 18 the acted stick is the
+fine (96,192), whose decoded msd is 0.9605 -- IN the (0.889,1.0) PADClamp band the freeze planner
+already excludes (see precise-stop.md). The sim decodes that 1-frame stick to its raw value
+(target 33367, msd 0.9605) and turns; but LIVE decodes a 1-FRAME TRANSIENT band stick to ~aim
+(target 33295, msd 1.0 -- it holds the prior value) so live does NOT turn. (HELD 8 frames, (96,192)
+decodes live to its true 0.9605 -- so it is a transient/input-layer effect, not the closed-form
+decode, which is bit-exact live.) The two-angle chase is FAITHFUL (it follows target; target diverges
+because the transient-band decode diverges). Non-band 1-frame fines ((98,188), (99,183)) register
+correctly live. NOT the two-angle/MOVE-turn settle residual (dead-end #31 corrected).
 
-The live golden is IMMUTABLE -- never edit the fixture to make the sim pass; the fault is the sim
-turn model. `test_sheathed_offline_clip_bitexact` (GREEN) guards the solve; the xfail RED test flips
-GREEN when the sim reproduces the row-18 facing settle live.
+CONSEQUENCE (for THIS hit, not the clip): the session-39 winning hit's genuine landing depends on the
+sim treating that transient band stick as a real perp nudge, which live reads as ~aim -- so the sim
+must be made band-FAITHFUL before its hits are trustworthy, and a new band-faithful solve is what
+delivers. The pure live-valid lattices tried reached ~0.0013u from the f32 dust (0 genuine over ~60k
+runs) -- that bounds the SHAPES tried, not the clip; a richer alphabet / faithful band model is the
+untried lever. See README ## Status (session 40) + dead-end #32 for the open approaches.
+
+The live golden is IMMUTABLE -- never edit the fixture to make the sim pass. `test_sheathed_offline_
+clip_bitexact` (GREEN) guards the solve; the xfail RED test flips GREEN once the sim models the
+transient-band input-layer decode to f32 (and a band-faithful hit is re-solved).
 """
 import json
 import os
@@ -71,12 +81,14 @@ def test_sheathed_offline_clip_bitexact():
     assert G.pred_genuine((r['old'][0], _f(r['old'][1] - MARGIN_Z)))
 
 
-@pytest.mark.xfail(strict=True, reason="sim MOVE-turn facing overshoot at ship row 18 (Phase-R); "
-                                       "blocks the live sheathed roll-stab clip -- session 39")
+@pytest.mark.xfail(strict=True, reason="transient (0.889,1.0)-band stick (96,192) at ship row 18 "
+                                       "decodes live to ~aim, not its raw msd; sim decodes it raw -> "
+                                       "row-18 divergence (session 40, jitter-immune; dead-end #31)")
 def test_sheathed_ship_matches_live():
     """Live-golden regression: the sim's from-rest replay of the ship stream must match the live
-    trace BIT-EXACT on every row (pos + shape + travel). It currently diverges at row 18 (the sim
-    facing overshoot); this flips GREEN when the sim turn model reproduces the row-18 settle live."""
+    trace BIT-EXACT on every row (pos + shape + travel). It diverges at row 18 -- the acted stick
+    there is the band fine (96,192), which the sim decodes raw but live (1-frame transient) reads as
+    ~aim. Flips GREEN only if the sim models the transient-band input-layer decode to f32."""
     fx = json.load(open(_FX))
     assert fx['anchor'] == ANCHOR
     r = _run()
