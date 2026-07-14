@@ -678,13 +678,30 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
       (msd 0.889-1.0), now deliverable under seed=0, are an ALONG knob (the speedF dip), NOT perp, and
       near-cap ones clamp -- so re-enabling them did not add perp density. The generic `solver.search`
       drill is over-budget (>2 min) and under-samples the 1-f32-col-per-z dust.
-    - **OPEN levers (none tried broke it):** (1) a *focused* roll solver (adapt walkstab.solve_focused's
-      Phase-A/B/C bracket->drill->exact -- session 39's 91s focused warm-start was ad-hoc/uncommitted);
-      (2) a denser interior perp vernier that FILLS the rho=0 dead-band (a K=4 all-partial low-speed crawl,
-      or a 2-byte 3rd+4th-frame lattice); (3) delivery DOF not yet used (draw/B/roll-entry timing); (4)
-      a search budget > 2 min for this seam. Infrastructure now in place: `dtm_seed` threaded through
-      rest/solver/deliver/capture_walkentry (default 1 = byte-identical); a hit records its `dtm_seed`;
-      `deliver` ships with it.
+    - **DEEPER ROOT CAUSE (session 43, later): a general seed-0 CRAWL bug, not a constant-tuning problem.**
+      Under `dtm_seed=0` the leading no-op count is 2 (measured), so `rest_state`'s seed step eats noop #1
+      and **the FIRST start-crawl frame (`start[0]`) is eaten as a dead no-op** -- any crawl-based search
+      under seed=0 SILENTLY LOSES its first crawl frame. This is almost certainly why the existing derived
+      search (`solver.search` via `start_family`) under-performed under seed=0: its crawls compose one frame
+      short, NOT because its (already-derived, non-magic) constants are wrong. The objective-compliant fix
+      is GENERAL -- handle the seed-0 leading-dead-frame at `run()`/crawl-composition (e.g. prepend one
+      absorber frame) so every derived family (`start_family`/`arc_family`/`fine_family`) composes correctly
+      under seed=0 -- then run the EXISTING search. Do NOT hand-tune a bespoke per-seam solver.
+    - **KNOB ROLES VERIFIED (Dereck's hint; the along fill works once the frame ACTS):** the ACTED crawl
+      MAGNITUDE is the fine along/z fill (sweeping an acted crawl frame's magnitude walks `old` z across
+      298.5..308.5 in fine ~0.02-0.5u steps); partial-INTERIOR crawl BEARINGS give continuous perp
+      (|rho| -> 0.0007, no dead-band -- the full-mag arc's dead-band gap was because a clamped edge stick
+      is discrete). `A_proj` is COARSE: the fixpoint crossing pins `old`'s along-position, so A_proj only
+      SELECTS the ~16u walk-step (z jumps {272,293,307.9,324,343}; one in-band step); the sub-step z fill
+      is the acted-crawl magnitude, NOT A_proj.
+    - **LESSON (Dereck flagged mid-session): do NOT overtune constants to one anchor/seam.** A prototype
+      `solve_focused` with hand-picked bearing ranges / magnitude sets / magic A_proj values / nbrackets was
+      built and then DISCARDED -- it is calibration-flavored drift, not a pure-sim solver. Keep the derived
+      families; fix the general seed-0 crawl composition; let the existing search run. Infrastructure in
+      place (committed 15cf4d3): `dtm_seed` threaded through rest/solver/deliver/capture_walkentry (default
+      1 = byte-identical); a hit records its `dtm_seed`; `deliver` ships with it; `fine_family` band-
+      exclusion removed. **NEXT-SESSION TASK: the general seed-0 crawl-composition fix, then run the
+      existing derived search under seed=0.**
 
 ## Pointers
 

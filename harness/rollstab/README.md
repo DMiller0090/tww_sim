@@ -117,17 +117,29 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   don't align onto a genuine column. This is the SAME frontier that consumed sessions 39-40; the
 >   generic `solver.search` drill is over-budget (>2min) and under-samples.
 >
-> **NEXT (Dereck to steer the re-solve strategy -- the delivery fix + its live-measured model are DONE
-> and locked; only the seed-0 solve remains): find a seed-0 genuine hit, then `deliver ship` (auto
-> seed=0 from the hit's dtm_seed) -> confirm live OOB clip -> flip `test_sheathed_ship_delivery` GREEN.**
-> Candidate levers (none broke the wall this session): (1) resurrect session-39's *focused* solve method
-> (an uncommitted ad-hoc warm-start; adapt walkstab.solve_focused's Phase-A/B/C bracket->drill->exact to
-> the roll path under seed=0); (2) a denser interior-byte perp vernier that FILLS the dead-band gap over
-> rho=0 (a K=4 all-partial crawl at genuinely low speed, or a 2-byte 3rd+4th-frame lattice); (3) exploit
-> delivery DOF not yet used (draw timing, B timing, the roll-entry frame -- session-40 list item 3);
-> (4) accept a longer search budget than <2min for this seam. Validate any hit with
-> `capture_decode.delivery_sweep` (every fine received + roll-row unchanged + OOB). Every other thread
-> (walk-stab clip, Tetra push-aside/turnaround, thrust scanner) UNCHANGED.
+> **DEEPER ROOT CAUSE + anti-overtuning course-correction (session 43, later in the session):** the
+> re-solve difficulty is NOT a constant-tuning problem -- it is a GENERAL seed-0 CRAWL bug. Under
+> `dtm_seed=0` the leading no-op count is 2, so `rest_state`'s seed step eats noop #1 and **the FIRST
+> start-crawl frame (`start[0]`) is eaten as a dead no-op** -- so any crawl-based search under seed=0
+> silently loses its first crawl frame (this is almost certainly why the existing derived search
+> under-performed under seed=0, NOT its constants). Verified knob roles (Dereck's hint): the ACTED crawl
+> MAGNITUDE is the fine along/z fill (an acted crawl frame's magnitude walks `old` z across ~298.5..308.5
+> in fine steps); partial-INTERIOR crawl BEARINGS give continuous perp (|rho|->0.0007); `A_proj` is COARSE
+> (the fixpoint crossing pins the along-position -> A_proj only selects the ~16u walk-step, NOT the
+> sub-step fill). A prototype `solve_focused` with hand-tuned bearing/magnitude/A_proj grids was built and
+> DISCARDED as calibration-flavored drift (Dereck flagged the overtuning). dead-end #35 (expanded).
+>
+> **NEXT (the principled, least-tuning path -- delivery fix + live-measured model are DONE and locked;
+> only the seed-0 solve remains):** (1) fix the seed-0 leading-dead-frame GENERALLY at
+> `run()`/crawl-composition (so `start[0]` is not silently dropped) -> every DERIVED family
+> (`start_family`/`arc_family`/`fine_family`, already parameterized off csangle + the movement-gate band,
+> no magic constants) composes correctly under seed=0; (2) run the EXISTING `solver.search`/catalog under
+> `dtm_seed=0` (do NOT hand-tune a bespoke per-seam solver); (3) if it still can't reach the f32 dust in
+> <2 min, that is a real finding about the seam, not something to paper over with tuned constants. Then
+> `deliver ship` (auto seed=0 from the hit's dtm_seed) -> live OOB clip -> flip `test_sheathed_ship_
+> delivery` GREEN. Validate any hit with `capture_decode.delivery_sweep` (every fine received + roll-row
+> unchanged + OOB). Every other thread (walk-stab clip, Tetra push-aside/turnaround, thrust scanner)
+> UNCHANGED.
 
 > **PRIOR THREAD (2026-07-14, session 42): the sheathed-clip row-18 blocker is RAM-CONFIRMED as a
 > `make_dtm` DELIVERY DROP -- NOT a physics/decode gap, and NOT the "band walk-speed" of #33 (overturned).
