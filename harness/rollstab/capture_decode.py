@@ -31,6 +31,8 @@ truth) and a transient sweep (build on `capture`) to characterize it.
 
     python -m harness.rollstab.capture_decode ship [hit=0]        # play a solver hit's stream, diff vs sim
     python -m harness.rollstab.capture_decode hold                # jitter-immune held-stick decode test
+    python -m harness.rollstab.capture_decode probe               # DETERMINISTIC stopped-pos probe (1-frame safe)
+    python -m harness.rollstab.capture_decode bandsweep           # per-frame band sweep (z-trajectory only)
 
 Live-only (Dolphin). Relaunches Dolphin like rest.py / capture_walkentry.py.
 """
@@ -138,19 +140,69 @@ def hold_decode(anchor, test_sticks, hold=8):
     return out
 
 
+def transient_probe(anchor, tests=None, holds=(1,), cruise=10, stop=16):
+    """DETERMINISTIC, jitter-immune measurement of a partial-magnitude stick's effect. For each test
+    stick T and hold length h, deliver `[straight]*4 + [aim]*cruise (walk to cap) + [T]*h + [neut]*stop
+    (decel to a DEAD STOP)` and read the STOPPED end position -- constant, so run_dtm's +-1 log offset
+    CANNOT corrupt it (unlike a per-frame read; see the module docstring + [[run-dtm-1frame-jitter]]).
+    Compares live to the SIM's replay of the same stream (the model under test): a bit-for-bit match
+    means the sim is faithful for T; a delta is the modelling gap. This is how session 41 proved the
+    band DECODE is faithful (overturning #32) and it is the tool for MODELLING the console's band
+    WALK-SPEED (dead-end #33): sweep holds=(1,2,3,4) on a band stick at cap and the incremental stopped
+    distance per added T-frame is the console's per-frame speed for that band magnitude.
+
+    Returns per (T, h): live stopped pos, sim stopped pos, delta (0 => sim faithful)."""
+    from tww_sim.core.mathlib import main_stick_decode
+    from harness.rollstab import rest as C
+    from harness.dtm.run_dtm import run_dtm, land_ready
+    _, straight, aim = C.sticks_of(anchor)
+    NEUT = (128, 128)
+    if tests is None:
+        tests = [(96, 192)]                                # the sheathed hit's culprit band fine
+    out = []
+    first = True
+    for T in tests:
+        Tc = C.dtm_stick(tuple(T))
+        _, m = main_stick_decode(*Tc)
+        for h in holds:
+            pre = [straight + (0,)] * 4 + [aim + (0,)] * cruise
+            stream = pre + [Tc + (0,)] * h + [NEUT + (0,)] * stop
+            s = C.rest_state(anchor)                       # sim replay of the delivered stream
+            for sx, sy, b in stream:
+                s.step(sx, sy, buttons=b)
+            sim = (s.pos_x, s.pos_z)
+            end = run_dtm([dict(stickX=sx, stickY=sy, substickX=128, substickY=128, buttons=b)
+                           for (sx, sy, b) in stream],
+                          anchor=anchor, ready=land_ready, relaunch_dolphin=first, verbose=False)
+            first = False
+            live = (end['pos_x'], end['pos_z'])
+            dz = live[1] - sim[1]
+            faithful = _bits(live[0]) == _bits(sim[0]) and _bits(live[1]) == _bits(sim[1])
+            out.append(dict(stick=list(Tc), msd=round(m, 4), h=h, live=list(live), sim=list(sim),
+                            dz=round(dz, 6), faithful=faithful))
+            print('T=%s msd=%.4f h=%d live=(%.6f,%.6f) sim=(%.6f,%.6f) dz=%+.6f %s' % (
+                str(tuple(Tc)), m, h, live[0], live[1], sim[0], sim[1], dz,
+                'FAITHFUL' if faithful else 'GAP'))
+    o = os.path.join(_rb, '_generated', 'transient_probe.json')
+    json.dump(out, open(o, 'w'), indent=1)
+    print('wrote', o)
+    return out
+
+
+def _bits(x):
+    return struct.unpack('<I', struct.pack('<f', float(x)))[0]
+
+
 def band_sweep(anchor, tests=None, holds=(1, 2, 3), pre_aim=3, post_aim=3):
-    """JITTER-IMMUNE transient characterization: for each test stick T and hold length h, deliver
-    `[aim]*pre_aim + [T]*h + [aim]*post_aim` after a walk-to-cruise preamble, and read the live decode
-    (target/msd) game_frame-tagged on EVERY frame of the T span (and the bracketing aim frames). This
-    is the tool the sheathed-clip Next-step #1 needs: it answers whether a 1-frame BAND transient is a
-    pure NO-OP (holds the prior aim value exactly) or a PARTIAL SLEW (moves partway toward T), and
-    whether a 2/3-frame band hold SETTLES to T's raw decode on frame 2+.
+    """Per-frame band-transient sweep -- deliver `[aim]*pre_aim + [T]*h + [aim]*post_aim` per test and
+    save the FULL game_frame-tagged rows. WARNING: per-frame DECODE reads here are NOT reliable for a
+    1-FRAME event -- run_dtm's stream->row offset is +-1 ambiguous (O=2 and O=3 both fit settled runs),
+    and a 1-frame transient lives inside that window ([[run-dtm-1frame-jitter]], dead-end #33). For a
+    1-frame effect use `transient_probe` (deterministic stopped position). This sweep is still useful
+    for the ROBUST z-TRAJECTORY (positions are slowly-varying, +-1-immune) and for HELD (>=2f) decode.
 
     The game-side path (PADRead->PADClamp->CStick::update->CButton::update) is STATELESS (decomp,
-    session 41), so any prior-frame dependence measured here is a DTM-delivery/SI-layer artifact, and
-    the model for it belongs in the delivered-byte decode, keyed on the prior delivered stick.
-
-    Compares each live frame to: PRIOR = the aim's closed-form decode; RAW = T's closed-form decode."""
+    session 41), so the closed-form decode is faithful; the modelling gap is the band WALK-SPEED."""
     from harness.rollstab import rest as C
     from tww_sim.core.mathlib import main_stick_decode
     _, straight, aim = C.sticks_of(anchor)
@@ -218,5 +270,8 @@ if __name__ == '__main__':
     elif 'bandsweep' in sys.argv:
         A = kw.get('anchor', 'kaze_r11_rollstab_sheathed@twwgz')
         band_sweep(A)
+    elif 'probe' in sys.argv:
+        A = kw.get('anchor', 'kaze_r11_rollstab_sheathed@twwgz')
+        transient_probe(A, holds=(1, 2, 3, 4))          # sweep hold length -> per-frame band speed
     else:
         ship(int(kw.get('hit', 0)))

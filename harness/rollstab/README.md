@@ -119,7 +119,11 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > **NEXT (Dereck's directive: model what the sim isn't modeling): resolve the RED gate by modeling the
 > console's band-magnitude walk speed to f32.** Decomp-first from `setStickData`/`mMainStickValue` /
 > `JUTGamePad::CStick::update` value near the cap; characterize the arc-carried context dependence via
-> the DETERMINISTIC stopped-position probe (never per-frame run_dtm reads for 1-frame events). Then
+> the DETERMINISTIC stopped-position probe **`harness.rollstab.capture_decode.transient_probe`**
+> (`... capture_decode probe`; PROMOTED this session out of scratch -- it is the band-walk-speed
+> measurement tool: sweep `holds=(1,2,3,4)` on a band stick at cap, the incremental stopped distance
+> per added frame is the console's per-frame band speed). NEVER per-frame run_dtm reads for 1-frame
+> events (±1-ambiguous; the `band_sweep` per-frame decode is flagged unreliable). Then
 > REMOVE the `fine_family` band-exclusion so the solver can USE band sticks again (restoring the
 > near-full-mag fine-perp density the band-free search lacks -- session 40's 0.0013u wall), re-solve,
 > deliver. Every other thread (walk-stab clip, Tetra push-aside/turnaround, thrust scanner) UNCHANGED.

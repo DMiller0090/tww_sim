@@ -558,8 +558,9 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
       (constant -> ±1 read cannot corrupt it) -- gives, for the culprit `(96,192)`, live stopped pos ==
       the sim's raw-decode prediction BIT-FOR-BIT (0 ULP; sim's no-op "holds prior" prediction was off
       by 20.9u). A sub-band control `(98,188)` likewise. So the sim's `main_stick_decode` (target + msd)
-      is correct for band 1-frame transients -- overturns #32. Tool: `scratchpad transient_probe`
-      pattern (stopped-position, deterministic); the per-frame `capture_decode.band_sweep` is NOT
+      is correct for band 1-frame transients -- overturns #32. Tool: `harness.rollstab.capture_decode.
+      transient_probe` (stopped-position, deterministic; `python -m harness.rollstab.capture_decode
+      probe`); the per-frame `capture_decode.band_sweep` is NOT
       reliable for 1-frame reads (its stream->row offset is ±1 ambiguous; O=2 and O=3 both give 0
       disagreement on settled runs).
     - **The divergence is purely SPEED (z), not facing (x).** gf-aligned to the jitter-immune golden
