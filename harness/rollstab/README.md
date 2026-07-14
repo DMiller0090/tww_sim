@@ -115,10 +115,13 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   `harness/rollstab/*.py` behavior changed (the exploratory `clean_settle` field was reverted).
 >
 > **NEXT (open approaches -- the clip is not solved yet; keep pushing):** (1) **model the transient-band
-> input-layer behavior to f32** (characterize it with a live band-transient sweep -- is a 1-frame band
-> stick == the prior frame's value? a 2-frame slew? -- then make `main_stick_decode`/the input buffer
-> reproduce it), so the sim is FAITHFUL and the solver searches over what live ACTUALLY does; then solve
-> band-faithfully and deliver. (2) **expand the search** far beyond the shapes tried -- more knobs, longer
+> input-layer behavior to f32** -- characterize it with a live band-transient sweep via
+> **`harness/rollstab/capture_decode.py`** (the jitter-immune decode + two-angle capture tool promoted
+> this session; `capture()`/`hold_decode()`/`ship`, RAM offsets + the run_dtm poll-jitter trap in its
+> docstring): is a 1-frame band stick == the prior frame's value? a 2-frame slew? -- then make
+> `main_stick_decode`/the input buffer reproduce it, so the sim is FAITHFUL and the solver searches over
+> what live ACTUALLY does; then solve band-faithfully and deliver. (2) **expand the search** far beyond
+> the shapes tried -- more knobs, longer
 > crawls, other draw/arc placements, other A_proj phases, a warm-start off the walk-stab solver -- to
 > close the last ~0.0013u to the f32 dust; the 0.0013u floor is a property of the LATTICES tried, so a
 > richer input alphabet is the lever. (3) reconsider the delivery mechanics themselves (draw timing, B
