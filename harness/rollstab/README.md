@@ -76,13 +76,13 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-14, session 45)
+## Status (2026-07-14, session 46)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-14, session 45): the SOLVER GENERALIZATION is BEGUN -- Phases 1-2 of the
+> **CURRENT THREAD (2026-07-14, session 46): the SOLVER GENERALIZATION is BEGUN -- Phases 1-2 of the
 > session-45 kickoff are DONE + green (OFFLINE, ZERO behavior change).** Dereck scoped this: the Tetra
 > push clip (`geometry_tetra`/`solver_tetra`/`pushaside`/`turnaround`) is a STANDALONE, single-seam solver
 > and stays separate; the generalization is for STANDARD roll/wall clips (`geometry.py` + `solver.py` +
