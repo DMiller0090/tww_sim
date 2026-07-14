@@ -434,6 +434,35 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
         proc-timing, idle-arm, `REST_NOOPS` (swept 0..4, s36), or equip bug. Fix = model the walk-entry
         foot poses to f32 (session 37 handoff). Ground truth: `fixtures/sheathed_walkentry_golden.json`
         (RED) + `fixtures/idle13_walkentry_golden.json` (bit-exact reference), game_frame-aligned.
+    - **CORRECTED + RESOLVED (session 38): the session-37 `f312`-FK story is REFUTED; the walk-entry
+      foot-FK is BIT-EXACT. The real (and only) cause was a one-frame walk-entry DTM-ALIGNMENT noop --
+      the anchor savestate's emulator SUB-FRAME CAPTURE PHASE, NOT in-game.** Diagnosis, all offline
+      against the s37 goldens except two paused-RAM probes:
+      - **The FK poses are bit-exact.** With the known 1-frame `mFootData` lag (sim pose N == live
+        mFootData N+1) EVERY idle13 golden row matches the sim 12/12, and BOTH sheathed WAIT frames
+        (gf2 d=53.9, gf4 d=55.0) match 12/12 EXACT. The s37 `m359C` "razor" mismatch was an ALIGNMENT
+        artifact: the sim was one d-advance AHEAD (already MOVE at d=55.0 while live is still WAIT at
+        d=55.0), so s37 compared a sim MOVE frame against a live WAIT frame -- not an FK residual.
+      - **The sole divergence is the WAIT->MOVE alignment.** By the jitter-immune d_frame clock, live
+        sheathed does 3 WAIT d-advances (52.8->53.9->55.0->MOVE@56.1) but the sim (REST_NOOPS=2) did 2
+        (->MOVE@55.0). With **`noops=1`** the sheathed from-rest sim is **0-divergence on pos, m3598, and
+        m359C at every d-aligned WAIT+MOVE frame**. idle13 needs 2, breaks at 1 (converse confirmed).
+      - **It is a savestate CAPTURE PHASE, proven not in-game.** Loading each anchor paused and
+        single-stepping neutral (no DTM, no jitter): idle13's first frame HOLDS d (30.8->30.8) then
+        advances; sheathed's ADVANCES immediately. idle13's hold frame mutates **zero** player-RAM bytes
+        (a pure emulator re-display of a frame captured mid-execution). It survives `load->save`, a single
+        advance destroys it, VI-frame parity doesn't predict it, and none of 6 candidate player-RAM fields
+        flip it (causal write-test). idle13 was minted MID-FRAME (legacy translate lineage) -> +1 spurious
+        re-display -> noops=2; sheathed via `mint_current` (boundary capture, the canonical phase, same as
+        the future live-RAM UI feed) -> noops=1. So `noops=1` is the STANDARD; idle13's 2 is a capture
+        artifact pinned to its locked golden.
+      - **FIX (no hardcode, no re-mint, locked goldens intact):** `mint.capture_rest` now DERIVES the
+        phase from its existing t1-advance (advances-until-`d`-changes) into `seed['rest_noops']`;
+        `rest.rest_state` reads it (legacy seeds default `REST_NOOPS=2`). Sheathed seed `rest_noops=1`
+        (derived live). `tests/test_sheathed_roll_rest.py` FLIPPED to a plain assert (d_frame-aligned vs
+        `sheathed_walkentry_golden.json`, GREEN); full suite 341 passed, locked idle13/walkstab untouched.
+        The FK model of #25/#28 remains genuinely open (session-25 slot-7 residual, curved MOVE-turn
+        overlap) -- it was just NOT the sheathed blocker.
 
 ## Pointers
 

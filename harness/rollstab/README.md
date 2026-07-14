@@ -76,13 +76,51 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-13, session 37)
+## Status (2026-07-13, session 38)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-13, session 37): the sheathed anchor's `REST`-not-bit-exact blocker is
+> **CURRENT THREAD (2026-07-13, session 38): the sheathed anchor's `REST`-not-bit-exact blocker is
+> RESOLVED offline -- and it was NEVER the walk-entry foot-FK (session 37 was wrong). The sole cause
+> was a one-frame walk-entry DTM-ALIGNMENT noop, which is the anchor savestate's emulator SUB-FRAME
+> CAPTURE PHASE (not in-game). Now derived per-anchor; sheathed from-rest is BIT-EXACT; RED test flipped
+> GREEN; 341 passed, locked goldens untouched.**
+> Diagnosis (offline vs the s37 goldens + 2 paused-RAM probes; Dolphin up for the derivation):
+> - **The FK poses are bit-exact.** With the 1-frame `mFootData` lag, every idle13 golden row matches
+>   the sim 12/12 and BOTH sheathed WAIT frames match 12/12 EXACT. Session 37's `f312` "razor" mismatch
+>   was an ALIGNMENT artifact -- it compared a sim MOVE frame against a live WAIT frame at the same
+>   d=55.0, because the sim was one d-advance ahead. No FK residual.
+> - **Sole divergence = WAIT->MOVE alignment.** By the jitter-immune d_frame clock, live sheathed does
+>   3 WAIT d-advances then MOVE; the sim (REST_NOOPS=2) did 2. With **noops=1** sheathed is 0-divergence
+>   on pos + m3598 + m359C at every d-aligned frame. idle13 needs 2 (breaks at 1); the two anchors
+>   genuinely differ by one leading no-op.
+> - **Proven a savestate CAPTURE-PHASE artifact, not in-game.** Loading each anchor paused + single-
+>   stepping: idle13's first frame HOLDS d then advances; sheathed's advances immediately. idle13's hold
+>   frame mutates ZERO player-RAM bytes (a pure re-display of a frame captured mid-execution); survives
+>   load->save; a single advance destroys it; no player-RAM field flips it. idle13 = legacy MID-FRAME
+>   capture (+1 spurious re-display -> noops=2); sheathed = `mint_current` BOUNDARY capture -> noops=1.
+>   **noops=1 is the canonical standard** (clean mints + the future live-RAM UI feed all land there);
+>   idle13's 2 is an artifact pinned to its locked golden.
+> - **FIX (no hardcode, no re-mint, no refactor -- Dereck's call to keep noops=2 for legacy alignment):**
+>   `mint.capture_rest` DERIVES the phase from its existing t1-advance (advances-until-`d`-changes) into
+>   `seed['rest_noops']`; `rest.rest_state` reads it (default `REST_NOOPS=2` for legacy seeds, so
+>   idle13/walkstab locked goldens stay bit-exact). Sheathed seed `rest_noops=1` (derived live).
+>   `tests/test_sheathed_roll_rest.py` flipped xfail->PASS (d_frame-aligned vs the jitter-proof
+>   `sheathed_walkentry_golden.json`). Full suite **341 passed, 1 skipped, 1 xfailed** (was 340/2xf).
+>   dead-end #30 corrected. The FK model of #25/#28 stays genuinely open (session-25 slot-7 residual) --
+>   it was simply NOT the sheathed blocker.
+>
+> **NEXT (the remaining LIVE increment -- the sheathed-roll milestone's "done"): solve + deliver.** The
+> offline from-rest sim is now bit-exact for the sheathed anchor, so: `solver.search(anchor, draw_at=~3)`
+> offline (<2 min; `draw_at` plumbing done s36) -> a from-rest sheathed roll-stab hit -> `deliver.py`
+> clean DTM + live 0-ULP clip -> "done" = the scanner routes a not-drawn anchor's ROLL verdict end-to-end
+> to a live clip. Verify the anchor jitter-proof with `capture_walkentry` (d_frame-aligned), NOT the
+> row-indexed `rest.py` gate (which the run_dtm poll jitter can trip -- it misled sessions 36-37). Every
+> other thread (walk-stab clip, Tetra push-aside/turnaround, thrust scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-13, session 37): the sheathed anchor's `REST`-not-bit-exact blocker is
 > RE-ROOT-CAUSED -- the session-36 diagnosis was a POLL-JITTER artifact; the real cause is the
 > walk-entry foot toe-stream FK residual (dead-end #25/#28). No solver behavior changed; the fix
 > (model the walk-entry foot poses to f32) is HANDED OFF to a dedicated session (Dereck's call).**

@@ -69,14 +69,17 @@ def capture_rest(src):
                 rest_m359C=_f32_at(h, m, Pp + 0x34C4),
                 rest_m35B4=_f32_at(h, m, Pp + 0x34DC),
                 rest_t2=_foot_tuple(h, m, Pp))
-    # ONE paused frame-advance: the advanced frame's execute stores the anchor's held pose into
-    # mFootData (the t1 the from-rest sim composes with at its first real row).
+    # ONE paused frame-advance stores the anchor's held pose into mFootData (t1). rest_noops =
+    # advances-until-d-changes = the anchor's DTM-alignment / savestate capture phase (see #30).
     d0 = rest['rest_d_frame']
+    noops = 0
     for _ in range(3):
         D.control_pipe_quiet('advance', {'frames': 1})
         time.sleep(0.3)
+        noops += 1
         if _f32_at(h, m, Pp + 0x2F64) != d0:
             break
+    rest['rest_noops'] = noops
     rest['rest_t1'] = _foot_tuple(h, m, Pp)
     _load_paused(src)          # restore: the advance must never leak into the minted anchor
     return rest

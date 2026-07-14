@@ -1,28 +1,24 @@
-"""From-rest regression for the SHEATHED roll-stab anchor (kaze r11, session 36; re-root-caused s37).
+"""From-rest regression for the SHEATHED roll-stab anchor (kaze r11; root-caused + fixed session 38).
 
 The sheathed-roll milestone (session 35 wired the mid-walk draw into the ROLL solver) needs a
 SHEATHED anchor at the kaze roll seam that is REST BIT-EXACT so a solved from-rest clip delivers
-0-ULP. Session 36 minted one (`kaze_r11_rollstab_sheathed@twwgz`, equip-only change off idle13 via
-an idle A-press, `mEquipItem` 0x100) and captured its live verification calib
-(`fixtures/sheathed_rest_calib.json`, the same [straight]*NPREF + [aim]*NCRUISE walk `rest.py`
-plays).
+0-ULP (the acceptance is f32 dust; dead-end #28). Session 36 minted one
+(`kaze_r11_rollstab_sheathed@twwgz`, equip-only change off idle13, `mEquipItem` 0x100).
 
-STATUS (root cause CORRECTED session 37 -- see dead-end #30 + the s37 handoff): the from-rest sim
-is NOT yet bit-exact for this anchor. The session-36 story ("sheathed proc-transitions to MOVE one
-frame LATER than idle13") was a `run_dtm` row-0 POLL-JITTER artifact -- a jitter-proof measurement
-(emulator-frame-aligned, `harness.rollstab.capture_walkentry`) shows BOTH anchors reach proc-MOVE at
-the SAME game-frame (gf6) and the big walk step at gf8. The REAL divergence is the walk-entry foot
-TOE-STREAM (`posMoveFromFootPos`/`f312`): at the sheathed idle phase (d~52.8) the sim's first-move
-toe delta is ~0.034 while live is ~0.060, and the decomp-faithful 0.05 speedF clamp
-(`_py_foot_compose`) then zeros the sim but keeps live -- opposite sides of the razor -- accumulating
-~0.8u over the m3598>0 blend frames. It is PHASE-driven, NOT equip: forcing `sword_drawn`/`model_draw`
-moves it ~0.003u; idle13 (d~30.8, drawn) is bit-exact. This is the walk-entry foot-FK frontier
-(dead-end #25/#28). GROUND TRUTH for the fix: jitter-proof, foot-pose-rich goldens
-`fixtures/sheathed_walkentry_golden.json` (RED) + `fixtures/idle13_walkentry_golden.json` (the
-bit-exact reference), aligned by game_frame with raw mFootData toe/heel + plant per frame.
+ROOT CAUSE (session 38, corrects sessions 36 + 37): the walk-entry foot-FK is BIT-EXACT -- session
+37's `f312`-toe-stream story was a measurement artifact (it compared a sim MOVE frame against a live
+WAIT frame). The sole divergence was a ONE-FRAME walk-entry alignment: the sheathed anchor needs DTM
+alignment noops=1, idle13 needs 2. This is NOT in-game -- it is the anchor savestate's emulator
+SUB-FRAME CAPTURE PHASE. idle13 (legacy translate-lineage mint) was captured MID-FRAME, so its first
+post-load frame is a pure no-op re-display (proven: it mutates zero game state) -> +1 alignment noop.
+The sheathed anchor (mint_current, boundary capture -- the canonical phase, same as the future
+live-RAM UI feed) has no such re-display -> noops=1. `mint.capture_rest` now DERIVES this per anchor
+(advances-until-d-changes) into `seed['rest_noops']`; `rest.rest_state` reads it (legacy seeds default
+REST_NOOPS=2, keeping their locked goldens bit-exact). See dead-end #30 (corrected) + #25/#28.
 
-This test flags RED (strict xfail) until the sheathed walk-entry is modelled from rest. Flip it to a
-plain assert when it goes bit-exact. Live golden -- NEVER edit the fixture to make the sim pass.
+Ground truth: `fixtures/sheathed_walkentry_golden.json` -- jitter-proof, emulator-frame-tagged, raw
+mFootData per row. Aligned by the deterministic d_frame clock (immune to run_dtm row-0 poll jitter).
+Live golden -- NEVER edit the fixture to make the sim pass.
 """
 import json
 import os
@@ -31,15 +27,15 @@ import struct
 import pytest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_FIX = os.path.join(os.path.dirname(_HERE), 'fixtures', 'sheathed_rest_calib.json')
+_GOLD = os.path.join(os.path.dirname(_HERE), 'fixtures', 'sheathed_walkentry_golden.json')
 
 try:
     from harness.rollstab import rest as C
-    _HAVE = C.rest_state is not None and os.path.exists(_FIX)
+    _HAVE = C.rest_state is not None and os.path.exists(_GOLD)
 except Exception:
     _HAVE = False
 
-pytestmark = pytest.mark.skipif(not _HAVE, reason="rollstab harness / sheathed calib unavailable")
+pytestmark = pytest.mark.skipif(not _HAVE, reason="rollstab harness / sheathed golden unavailable")
 
 ANCHOR = 'kaze_r11_rollstab_sheathed@twwgz'
 
@@ -48,27 +44,40 @@ def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
 
-def _replay():
-    """Seed rest_state (sheathed => model_draw auto-ON, no B => no draw), replay the calib's
-    verification walk ([straight]*NPREF + [aim]*NCRUISE); yield (k, sim, live)."""
-    calib = json.load(open(_FIX))
-    assert calib['anchor'] == ANCHOR
+def _sim_rows():
+    """Seed rest_state (sheathed => model_draw auto-ON, no B => no draw; rest_noops=1 from the seed),
+    replay the verification walk ([straight]*NPREF + [aim]*NCRUISE); one dict per row keyed by d_frame."""
     _, straight, aim = C.sticks_of(ANCHOR)
     stream = [straight] * C.NPREF + [aim] * C.NCRUISE
     s = C.rest_state(ANCHOR)
-    for k, (sx, sy) in enumerate(stream):
+    rows = []
+    for sx, sy in stream:
         s.step(sx, sy)
-        if k >= len(calib['frames']):
-            break
-        yield k, s, calib['frames'][k]
+        rows.append(dict(d=s._foot.st.fc0.frame, pos_x=s.pos_x, pos_z=s.pos_z,
+                         m3598=s._foot.st.m3598, m359C=s._foot.prev_f312))
+    return rows
 
 
-@pytest.mark.xfail(strict=True, reason="sheathed walk-entry not yet modelled from rest: the toe-stream "
-                   "f312 is ~0.034 vs live ~0.060 at the first walk frame -> the 0.05 speedF clamp flips "
-                   "(walk-entry foot-FK residual, phase-driven; session 37 root-cause, dead-end #30)")
 def test_sheathed_full_position_bitexact():
     """The sheathed from-rest walk must be BIT-EXACT (0 ULP) every row before its solver hits are
-    trusted (the acceptance is f32 dust; dead-end #28). Currently RED -- see the module docstring."""
-    bad = [k for k, s, lf in _replay()
-           if not (_bits(s.pos_x) == _bits(lf['pos_x']) and _bits(s.pos_z) == _bits(lf['pos_z']))]
-    assert not bad, "position diverged at rows %s" % bad
+    trusted. Align to the golden by the deterministic d_frame clock (jitter-immune): every live row
+    whose d_frame the sim reproduces must match pos, the WAIT<->MOVE blend m3598, and the toe stream
+    m359C bit-for-bit."""
+    golden = json.load(open(_GOLD))
+    assert golden['anchor'] == ANCHOR
+    sim = _sim_rows()
+    by_d = {_bits(r['d']): r for r in sim}
+    matched = 0
+    bad = []
+    for gr in golden['rows']:
+        sr = by_d.get(_bits(gr['d_frame']))
+        if sr is None:
+            continue
+        matched += 1
+        if not (_bits(sr['pos_x']) == _bits(gr['pos_x'])
+                and _bits(sr['pos_z']) == _bits(gr['pos_z'])
+                and abs(sr['m3598'] - gr['m3598']) < 1e-6
+                and _bits(sr['m359C']) == _bits(gr['m359C'])):
+            bad.append(gr['game_frame'])
+    assert matched >= 12, "too few d_frame-aligned rows matched (%d)" % matched
+    assert not bad, "sheathed from-rest diverged at game_frames %s" % bad

@@ -91,10 +91,13 @@ def rest_state(anchor, walls=None, model_draw=None):
                   model_draw=model_draw)
     # NO _pending_morf arming (the walk-entry frame triggers the oldframe-morf itself; arming it
     # too made the sim morf AGAIN one frame later -- caught by verify_rest row 4).
+    # rest_noops = the anchor's savestate capture-phase DTM alignment, derived per-anchor by
+    # mint.capture_rest (1 = boundary/canonical, 2 = legacy mid-frame). Default 2 for old seeds (#30).
+    noops = int(seed.get('rest_noops', REST_NOOPS))
     s._foot.seed_rest_blend(d_frame=seed['rest_d_frame'], w_frame=seed['rest_w_frame'],
                             d_rate=seed['rest_d_rate'], w_rate=seed['rest_w_rate'],
                             m359C=seed['rest_m359C'], m35B4=seed.get('rest_m35B4', 0.0),
-                            noops=REST_NOOPS,
+                            noops=noops,
                             t1=seed.get('rest_t1'), t2=seed.get('rest_t2'))
     s.step(128, 128)           # the DTM seed frame (build_dtm_from_sticks seed=1; rest no-op 1/2)
     return s
