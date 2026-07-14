@@ -76,13 +76,49 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-14, session 46)
+## Status (2026-07-14, session 47)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-14, session 46): the SOLVER GENERALIZATION is BEGUN -- Phases 1-2 of the
+> **CURRENT THREAD (2026-07-14, session 47): generalization Phase 3 DONE -- `SeamGeo` is THREADED
+> through `solver.py`; the module-global `geometry as G` is GONE from the solver (OFFLINE, ZERO behavior
+> change, suite 354 green).** Continues the session-46 Phases 1-2. Done this session (offline, no live run):
+> - **`solver.py` takes a per-seam `seam=` param** on `run`/`base`... `search`/`start_family`/`fine_family`/
+>   `arc_family` (default `None` = the kaze r11 seam `geometry.SEAM`, a `SeamGeo` instance). Every
+>   `G.X` is now `seam.X`: `G.along`/`B_BTN`/`A_BTN`/`KROLL`/`genuine_clip`/`seg_blocked`/`perp` in `run`,
+>   the `r['facing'] != G.F` accept gate -> `seam.F`, and the drill dust cache `G.pred_genuine` ->
+>   `seam.pred_genuine`. The family aim `F` defaults from `seam.F` (was `G.F`). `import geometry as G` is
+>   DELETED from the solver -- it now imports only `geometry.SEAM` (the kaze default instance) + the
+>   `load_seed` anchor helper. **csangle stays anchor-sourced** (`load_seed(anchor)['csangle']`, unchanged):
+>   it is the camera yaw for decoding sticks, genuinely per-anchor, and `solver_tetra`'s `F=GT.F` family
+>   reuse depends on it -- so it is NOT bound to the seam (all kaze anchors share csangle 29883 anyway).
+>   `geometry.py` gains a public `SEAM = _SEAM` handle; still a byte-identical shim.
+> - **GATE (Phase 3) PASSED:** the shipped seed-0 kaze hit (`_generated/rollstab_hits.json[0]`,
+>   `old=(9072.2089844,308.0280762)`) recomposes BIT-FOR-BIT via the parameterized path, both `seam=None`
+>   (default) and `seam=geometry.SEAM` (explicit), down to identical stream bytes ->
+>   `new=(9069.8886719,258.8625793)`, facing 33295, genuine+clear.
+> - **Regression `tests/test_solver_seam_param.py` (3 green):** shipped-hit-bit-exact-via-explicit-seam
+>   (== default byte-identical), seam-honored-by-families (a shifted-yaw `SeamGeo`'s different `F` moves
+>   `start_family`'s aim -- guards against a reintroduced module-global hardcode), default-seam-is-kaze.
+>   Suite **354 passed, 1 skipped, 2 xfailed** (was 351; +3). NO `sim.py`/`land.py` change, so the live
+>   sim-vs-Dolphin regression is unaffected; `solver_tetra`/`thrust_scan`/`deliver` callers unchanged
+>   (default seam = byte-identical; `test_tetra_solver`'s `F=`-family reuse still green).
+>
+> **NEXT (per the session-45/46 handoffs, OFFLINE until the Phase-5 live close):** Phase 4 -- generalize
+> `walkstab` the same way (absorb its PRIVATE acceptance duplicates into `SeamGeo`; derive the settled
+> thrust facing from the bisector like `F`; derive the crawl-window center from `bear_to_S`, not
+> `CRUISE_BETA`) -- GATE: reproduce the shipped walk-stab clip bit-exact. Then Phase 5 -- drop
+> `thrust_scan`'s `_matches` kaze guard, dispatch to a NEW enumerated seam, MINT an anchor there, solve
+> via the generalized path, DELIVER a clean-DTM 0-ULP clip (the real "generalization works" proof). NOTE
+> for Phase 5: the solver still carries kaze-specific numeric ranges that Phase 3 deliberately left alone
+> (the `ZLO/ZHI = 302.6/308.2` old_z band and the drill `_dust_cache` x/z bounds `9071.5..9072.7` /
+> `302.6..308.2`) -- these must be DERIVED per-seam (from the seam's along/perp band) before a novel seam
+> solves. Every other thread (sheathed clip DONE, walk-stab clip, Tetra push-aside/turnaround, thrust
+> scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-14, session 46): the SOLVER GENERALIZATION is BEGUN -- Phases 1-2 of the
 > session-45 kickoff are DONE + green (OFFLINE, ZERO behavior change).** Dereck scoped this: the Tetra
 > push clip (`geometry_tetra`/`solver_tetra`/`pushaside`/`turnaround`) is a STANDALONE, single-seam solver
 > and stays separate; the generalization is for STANDARD roll/wall clips (`geometry.py` + `solver.py` +

@@ -41,6 +41,7 @@ _CANON_ANCHOR = 'kaze_r11_rollstab_sheathed@twwgz'      # the shipped kaze roll 
 CSANGLE = load_seed(_CANON_ANCHOR)['csangle'] & 0xFFFF  # from the anchor's RAM snapshot, not pasted
 
 _SEAM = SeamGeo(GEO, CSANGLE)
+SEAM = _SEAM     # public handle: the kaze r11 SeamGeo instance (the solver's default `seam`)
 
 # --- module-level re-exports (backward-compatible with the pre-SeamGeo `G` surface) -----------
 F = _SEAM.F
