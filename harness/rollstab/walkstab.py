@@ -1,5 +1,12 @@
 """WALK-stab seam-clip driver + solver scaffold (kaze r11, anchor kaze_r11_walkstab@twwgz).
 
+GENERALIZED (session 48): the seam geometry + exact acceptance is the shared `seamgeo.SeamGeo`
+(built from `fixtures/kaze_r11_walkstab_geo.json` + the anchor csangle), not private duplicates. The
+acceptance functions below (`in_front`/`genuine_clip`/`perp_ray`/`fast_cut`) delegate to it. The
+thrust facing F and the crawl-window center are DERIVED, not pasted: F = derive_F(bear_to_S) (a nearly
+flat seam grazes toward S, not into the corner bisector; == the shipped 5625), and `solve_focused`'s
+`cruise_beta` defaults to bear_to_S (was the pasted 5556).
+
 The walk stab is the roll stab WITHOUT the roll: walk up to a sub-cap speed, then thrust (fwd stick
 + B) so a CUT_F fires out of a MOVE. lunge = speedF + 23.220 (the CUT_F joint-0 root translate; KB
 mechanics/walk-stab.md), so a capped walk (speedF 17) reaches disp 40.22. The kaze r11 slot-3 seam
@@ -53,58 +60,56 @@ if _rb not in sys.path:
 
 from tww_sim.land.land import CUT_F
 from tww_sim.land.plan_land import stick_for_bearing
-from tww_sim.land.constants import _cM_ssin_s16
-from tww_sim.core import mathlib as S
-from tww_sim.core.collision import Tri, Plane, crr_pos_walls
 from tww_sim.core.fp import f32 as _f
 from harness.rollstab import rest as C
+from harness.rollstab.seamgeo import SeamGeo
 
 ANCHOR = 'kaze_r11_walkstab@twwgz'
-CUT_ROOT = 23.220
 CDOWN = 0                       # substickY=0 = C-down = the free-cam pin (delivery MUST hold it)
-LINK_Y = -6534.329
-SEAM = (9030.955078125, 1385.858)
 
-_M = json.load(open(os.path.join(_rb, 'fixtures', 'kaze_r11_walls_ordered.json')))
-_BY = {p['poly']: p for p in _M['polys']}
+# The seam geometry + exact acceptance is the shared seamgeo.SeamGeo (see the module docstring); the
+# acceptance functions below delegate to it via sg(). SEAM/LINK_Y are the fixture's full-precision vertex.
+GEO_PATH = os.path.join(_rb, 'fixtures', 'kaze_r11_walkstab_geo.json')
+_GEO = json.load(open(GEO_PATH))
+SEAM = (_GEO['S'][0], _GEO['S'][2])     # the seam vertex (x, z), full f32 precision
+LINK_Y = _GEO['link_y']                 # the walkable floor Y at the seam
 
-
-def _mk(pid):
-    p = _BY[pid]
-    return Tri(p['v'][0], p['v'][1], p['v'][2],
-               plane=Plane(p['n'][0], p['n'][1], p['n'][2], p['d']))
+_SG = None
 
 
-WALLA = _mk(803)                # n ~ (-0.4217,-0.9067)
-WALLB = _mk(802)                # n ~ (-0.2404,-0.9707)
-# the local wall chain as the CrrPos barrier (the r=35 cylinder sweep sees every tri it could touch)
-TRIS = [_mk(801), WALLA, WALLB, _mk(804), _mk(798), _mk(800)]
-
-
-def _pfunc(pla, x, z):
-    return pla.func((_f(x), LINK_Y, _f(z)))
+def sg():
+    """The walk-stab seam's SeamGeo (the general roll/wall acceptance object), built once from the geo
+    fixture + the anchor csangle, its thrust facing F derived from bear_to_S (a nearly-flat seam grazes
+    toward S, not into the corner -- see seamgeo). Cached; every acceptance call below delegates here."""
+    global _SG
+    if _SG is None:
+        _SG = SeamGeo(_GEO, seed().csangle, aim_deg=bear_to_S() / 65536.0 * 360.0)
+    return _SG
 
 
 def in_front(x, z):
-    return _pfunc(WALLA.pla, x, z) > 0 and _pfunc(WALLB.pla, x, z) > 0
+    g = sg()
+    return g.in_front(g.p32(x, z))
 
 
 def genuine_clip(old, new):
-    """EXACT acceptance: the cut segment old->new clips the seam -- CrrPos NOT blocked, `old` in
-    front of BOTH seam faces, `new` behind at least one. Returns (ok, why)."""
-    if not in_front(*old):
+    """EXACT acceptance (delegates to the seam's SeamGeo): the cut segment old->new clips the seam --
+    CrrPos NOT blocked, `old` in front of BOTH seam faces, `new` behind at least one. Returns
+    (ok, why); the boolean is byte-identical to the pre-SeamGeo private copy (same TRIS, planes, LINK_Y)."""
+    g = sg()
+    if not g.in_front(g.p32(old[0], old[1])):
         return False, 'old_behind'
-    ox, oz, nx, nz = _f(old[0]), _f(old[1]), _f(new[0]), _f(new[1])
-    _, info = crr_pos_walls((ox, LINK_Y, oz), (nx, LINK_Y, nz), TRIS)
-    if info['line_hit'] or info['wall_hit']:
+    if g.seg_blocked(old, new):
         return False, 'blocked'
-    behind = _pfunc(WALLA.pla, nx, nz) < 0 or _pfunc(WALLB.pla, nx, nz) < 0
+    pn = g.p32(new[0], new[1])
+    behind = g.wA.pla.func(pn) < 0 or g.wB.pla.func(pn) < 0
     return (behind, 'clip' if behind else 'short')
 
 
 def perp_dist_to_S(old, facing):
-    """Perpendicular distance from S to the ray from `old` at angle `facing` -- the RAZOR quantity
-    (`rho`). Bit-exact from rest to ~3.7e-5u under the C-down pin (see the module docstring)."""
+    """Perpendicular distance from S to the ray from `old` at angle `facing` -- a rough label (uses
+    continuous trig for the direction, offset by the >>4 console table). See perp_ray for the exact
+    razor quantity (`rho`)."""
     a = facing / 65536.0 * 2 * math.pi
     dx, dz = math.sin(a), math.cos(a)
     px, pz = -dz, dx
@@ -156,34 +161,12 @@ def snapshot_walk(sticks, nmax=18):
     return snaps
 
 
-_CUT_L0 = None
-
-
-def cut_lunge_const():
-    """The CUT_F entry lunge is the joint-0 root translate at frame CUT_START (4.0), which is a
-    CONSTANT (m3700_prev==0 in _cut_init, m34C2==1). Cached once; the whole entry `new` is then a
-    pure function of (old, facing, nspeed) with no J3D eval per cut -- see fast_cut."""
-    global _CUT_L0
-    if _CUT_L0 is None:
-        s = seed()
-        _CUT_L0 = s._cut_m3700_at(CUT_F, s.CUT_START)
-    return _CUT_L0
-
-
 def fast_cut(old_x, old_z, facing, nspeed):
-    """The CUT_F entry lunge, computed with the CONSTANT root translate -- BIT-IDENTICAL to
-    enter_cut(CUT_F, aim=None) but ~20x cheaper (no clone, no J3D keyframe eval). Mirrors
-    _CutMixin.enter_cut's entry-frame pos block exactly: travel==facing (aim None), speedF snaps
-    |nspeed|<0.05 to 0, add = rotate(L0) by facing. Returns (new_x, new_z)."""
-    L0 = cut_lunge_const()
-    speedF = 0.0 if abs(nspeed) < 0.05 else nspeed
-    s = _cM_ssin_s16(facing)
-    c = S.cM_scos_s16(facing)
-    add_x = _f(_f(L0[2] * s) + _f(L0[0] * c))
-    add_z = _f(_f(L0[2] * c) - _f(L0[0] * s))
-    nx = _f(_f(old_x + _f(speedF * s)) + add_x)
-    nz = _f(_f(old_z + _f(speedF * c)) + add_z)
-    return nx, nz
+    """The CUT_F entry lunge -- BIT-IDENTICAL to enter_cut(CUT_F, aim=None) but ~20x cheaper (no clone,
+    no J3D keyframe eval). Delegates to SeamGeo.cut_new with the runtime walk `facing` + per-frame
+    `nspeed` (a walk-stab cut's lunge speed is the walk speedF, not a fixed roll cap). Returns
+    (new_x, new_z)."""
+    return sg().cut_new((old_x, old_z), facing=facing, speedf=nspeed)
 
 
 def cut_at(snap, aim=None):
@@ -201,13 +184,10 @@ def cut_at(snap, aim=None):
 
 
 def perp_ray(old, new):
-    """Signed perpendicular distance from S to the ACTUAL cut ray old->new (table-exact geometry).
-    ~0 for a clip. This is the correct razor quantity (unlike `perp_dist_to_S`, which uses continuous
-    trig for the direction and is offset by the >>4 console table -- fine as a rough label, not a
-    predictor). A clip needs |perp_ray| inside the seam's ~2e-4u f32 sliver at the walk facing."""
-    dx, dz = new[0] - old[0], new[1] - old[1]
-    L = math.hypot(dx, dz) or 1.0
-    return ((SEAM[0] - old[0]) * dz - (SEAM[1] - old[1]) * dx) / L
+    """Signed perpendicular distance from S to the ACTUAL cut ray old->new (delegates to the seam's
+    SeamGeo.perp_to_ray). ~0 for a clip. The correct razor quantity (unlike `perp_dist_to_S`, a rough
+    label). A clip needs |perp_ray| inside the seam's ~2e-4u f32 sliver at the walk facing."""
+    return sg().perp_to_ray(old, new)
 
 
 def perp_margin(old, new):
@@ -408,7 +388,6 @@ def solve(budget=110.0, want=20, verbose=True):
 # --- the FOCUSED K=3 search (session 32): the objective-compliant one-shot ---
 # Why K=3 + an octagon-interior byte nudge beats solve()'s K<=2: see solve_focused's docstring + KB walk-stab.
 _BASE_WALLED = None
-CRUISE_BETA = 5556                    # cruise aim -> facing settles to 5625 (the threading facing)
 PERP_GATE_F = 0.006                   # keep only near-razor cuts for the exact test (razor ~2e-4u)
 NLO_F, NHI_F = 10, 15
 
@@ -420,7 +399,7 @@ def seed_walled():
     is bit-identical to the wall-less walk, so the fast wall-less search is exact for accepted hits)."""
     global _BASE_WALLED
     if _BASE_WALLED is None:
-        _BASE_WALLED = C.rest_state(ANCHOR, walls=TRIS)
+        _BASE_WALLED = C.rest_state(ANCHOR, walls=sg().TRIS)
     return _BASE_WALLED.clone()
 
 
@@ -452,7 +431,7 @@ def _stream_k3(cs, c1, c2, c3d, cruise):
     return [c1, c2, c3d] + [cruise] * 30
 
 
-def solve_focused(budget=110.0, want=30, cruise_beta=CRUISE_BETA, verbose=True):
+def solve_focused(budget=110.0, want=30, cruise_beta=None, verbose=True):
     """One-shot walk-stab dust search (pure sim, no calibration), the freeze-solver pattern:
     cheap monotone predictor (perp_ray, no CrrPos) + bracket + exact bit-confirm + wall-faithful gate.
 
@@ -464,8 +443,13 @@ def solve_focused(budget=110.0, want=30, cruise_beta=CRUISE_BETA, verbose=True):
     Phase C (walled confirm): re-sim each genuine hit with walls; accept only wall_hit==False (old is
       the true pre-brake position; speedF still 17). Rank by perp_margin (delivery robustness).
 
+    `cruise_beta` is the crawl-window CENTER (the cruise aim). It DERIVES from bear_to_S (the bearing
+    from the anchor start to S) -- the flat-seam grazing direction -- not a pasted constant.
+
     Writes ranked hits (each carries the explicit delivered `sticks` + N for deliver()) to HITS_PATH."""
     t0 = time.time()
+    if cruise_beta is None:
+        cruise_beta = bear_to_S()
     cs = seed().csangle
     cruise = _sfbd(cruise_beta, cs, 1.0)
     c3base = _sfb(cruise_beta, cs, 0.66)

@@ -76,13 +76,61 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-14, session 47)
+## Status (2026-07-14, session 48)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-14, session 47): generalization Phase 3 DONE -- `SeamGeo` is THREADED
+> **CURRENT THREAD (2026-07-14, session 48): generalization Phase 4 DONE -- `walkstab.py` is THREADED
+> through `SeamGeo`; its private acceptance duplicates are ABSORBED, and its thrust facing + crawl-window
+> center are DERIVED, not pasted (OFFLINE, GATE PASSED, suite 359 green).** Continues session-47 Phase 3.
+> Done this session (offline; 1 in-budget `solve_focused` run, no live Dolphin run):
+> - **`walkstab.py` acceptance is now the shared `SeamGeo`.** `in_front`/`genuine_clip`/`perp_ray`/
+>   `fast_cut` DELEGATE to a walk-stab `SeamGeo` instance (`sg()`, built from the new geo fixture +
+>   anchor csangle); the private `WALLA`/`WALLB`/`TRIS`/`_mk`/`_pfunc`/`cut_lunge_const` and the pasted
+>   `LINK_Y`/`SEAM` literals are GONE. `SEAM`/`LINK_Y` are now sourced from the fixture at FULL f32
+>   precision (was `z=1385.858`/`link_y=-6534.329`, rounded; verified the precise values give a
+>   byte-identical `genuine_clip` verdict, since the seam faces are near-vertical). `genuine_clip` keeps
+>   its `(ok, why)` signature with the boolean byte-identical to the pre-SeamGeo copy.
+> - **NEW walk-stab geo fixture + reproducible builder.** `fixtures/kaze_r11_walkstab_geo.json`
+>   (`make_walkstab_geo.py`, offline from the ordered DZB mesh): wallA/wallB = polys 803/802, the ordered
+>   CrrPos barrier `tris = [801,803,802,804,798,800]` (the r=35 sweep chain the shipped solver used), S =
+>   the precise shared floor vertex, interior 168.968, link_y precise.
+> - **F is DERIVED from `bear_to_S`, NOT the corner bisector** (Dereck-confirmed the per-seam aim
+>   source). This seam is nearly FLAT (interior 169 deg): it is clipped by GRAZING toward S, so its
+>   thrust facing = `derive_F(bear_to_S)` == **5625 bit-exact** (the shipped threading facing). The corner
+>   bisector (~19.4 deg) would give a different facing (3576) -- wrong for a flat seam. `SeamGeo` gained a
+>   per-seam `aim_deg=` (default = the fixture bisector, so CORNER seams like the roll are unchanged;
+>   walk-stab passes `aim_deg=bear_to_S`). `solve_focused`'s `cruise_beta` now defaults to `bear_to_S`
+>   (was the pasted `CRUISE_BETA=5556`; deleted).
+> - **`SeamGeo` generalized (roll path byte-identical).** `cut_new`/`pred_genuine` take optional
+>   `facing=`/`speedf=` (default the roll F + `roll_speedf`; walk-stab passes the runtime walk facing +
+>   per-frame nspeed, since its lunge speed is the walk speedF, not the roll cap) -- bit-identical to
+>   `enter_cut`. New `perp_to_ray(old,new)` (the exact ray-vs-S razor, walk-stab's `perp_ray`). `TRIS`
+>   now comes from the fixture's explicit `tris` when present, else the legacy `[wA,wA,wB]+barrier`
+>   composition (the roll fixture has no `tris` -> unchanged).
+> - **GATE PASSED + `solve_focused` still finds hits.** The shipped walk-stab clip reproduces bit-exact
+>   (`test_walkstab_clip.py`/`test_walkstab_rest.py` 9 green). `solve_focused` with the DERIVED crawl
+>   center (`bear_to_S=5584`) found **2 wall-faithful genuine hits in 79.9s** (< 2 min; top margin 17,
+>   facing 5625, speedF 17). NEW `tests/test_walkstab_seam.py` (5 green): F-from-bear_to_S (== 5625, NOT
+>   the bisector), F-camera-dependent, geometry-from-fixture (ordered tris + precise S/link_y), shipped
+>   verdict via SeamGeo, `fast_cut`==`enter_cut` 0-ULP. Suite **359 passed, 1 skipped, 2 xfailed** (was
+>   354; +5). NO `sim.py`/`land.py` change (live regression unaffected); the roll/tetra solvers
+>   (`test_seamgeo`/`test_solver_seam_param`/`test_tetra_solver`) still byte-identical.
+>
+> **NEXT (per the session-45/46/47 handoffs, OFFLINE until the Phase-5 live close): Phase 5 --** drop
+> `thrust_scan._matches`'s kaze guard, dispatch a NEW enumerated seam to the generalized standard-roll
+> path, MINT an anchor there (`mint.py`), solve via the generalized solver, and DELIVER a clean-DTM 0-ULP
+> clip (the real "generalization works" proof). **Phase-5 prerequisite (deliberately left by Phases 3-4):
+> the solver still carries kaze-specific numeric ranges** -- `solver.py`'s `ZLO/ZHI = 302.6/308.2` (roll
+> old_z clear band) and the drill `_dust_cache` bounds (`x 9071.5..9072.7`, `z 302.6..308.2`), and
+> `walkstab.solve_focused`'s hardcoded `d2S`/N windows (`34.0..40.5`, `NLO_F/NHI_F=10/15`) + the perp
+> gate. These must be DERIVED per-seam (from the seam's along/perp band) before a novel seam solves;
+> threading them onto `SeamGeo` is the natural Phase-5 companion. Every other thread (sheathed clip DONE,
+> Tetra push-aside/turnaround, thrust scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-14, session 47): generalization Phase 3 DONE -- `SeamGeo` is THREADED
 > through `solver.py`; the module-global `geometry as G` is GONE from the solver (OFFLINE, ZERO behavior
 > change, suite 354 green).** Continues the session-46 Phases 1-2. Done this session (offline, no live run):
 > - **`solver.py` takes a per-seam `seam=` param** on `run`/`base`... `search`/`start_family`/`fine_family`/

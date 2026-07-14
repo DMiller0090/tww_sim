@@ -5,11 +5,16 @@ This generalizes the STANDARD bare roll-stab clip (formerly the kaze-hardcoded
 `harness.rollstab.geometry`) to ANY enumerated seam. The two things that used to be pasted
 by-inspection literals -- the roll facing `F` and the cut lunge -- are now COMPUTED from the seam:
 
-  * F      = the roll facing == the closest-reachable full-deflection stick decode to the interior
-             bisector at this camera yaw. `stick_for_bearing(bisector, csangle, 1.0)` inverts the
+  * F      = the thrust facing == the closest-reachable full-deflection stick decode to the seam's
+             AIM direction at this camera yaw. `stick_for_bearing(aim, csangle, 1.0)` inverts the
              walk want-target (m34E8) to a byte stick, but the octagon clamp + byte quantization mean
-             the reachable decode is the CLOSEST, not the exact, bisector -- so F is that reachable
+             the reachable decode is the CLOSEST, not the exact, aim -- so F is that reachable
              want-target (the relationship documented in cornergate.py:10-11, now coded here).
+             The AIM direction is per-seam: a CORNER seam (roll) aims INTO the corner along the
+             interior bisector (the fixture's `bisector_deg`, the default); a NEARLY-FLAT seam
+             (walk-stab, interior ~169 deg) is clipped by GRAZING toward the seam vertex S, so its aim
+             is the bearing from the approach start to S (`bear_to_S`), passed as `aim_deg=`. Both go
+             through the same derive_F stick-settle; only the source direction differs.
   * cut_new(old) = the CUT_F entry endpoint out of a full-cap roll (speedF `ROLL_SPEEDF`): the ANM_CUT
              joint-0 root translate (m3700 @ frame 4.0, facing-rotated) + the speedF lunge term,
              bit-identical to `LandState.enter_cut` / `walkstab.fast_cut` (verified 0-ULP). No frozen
@@ -71,13 +76,14 @@ def _cut_root_translate():
     return _CUT_L0
 
 
-def derive_F(bisector_deg, csangle):
-    """The roll facing for a seam: the walk want-target (m34E8) of the closest-reachable
-    full-deflection stick to the interior bisector at this camera yaw. `stick_for_bearing` inverts
+def derive_F(aim_deg, csangle):
+    """The thrust facing for a seam: the walk want-target (m34E8) of the closest-reachable
+    full-deflection stick to the seam's AIM direction at this camera yaw. `stick_for_bearing` inverts
     m34E8 -> a byte stick (clamp-aware); decoding it back and re-adding csangle gives the reachable
-    want-target, which the octagon/quantization pin near, not on, the bisector."""
-    bis = deg_to_s16(float(bisector_deg) % 360.0)
-    stk = stick_for_bearing(bis, int(csangle) & 0xFFFF, 1.0)
+    want-target, which the octagon/quantization pin near, not on, the aim. `aim_deg` is the interior
+    bisector for a corner seam, or the bearing-to-S for a nearly-flat seam (see the module docstring)."""
+    aim = deg_to_s16(float(aim_deg) % 360.0)
+    stk = stick_for_bearing(aim, int(csangle) & 0xFFFF, 1.0)
     ang, _m = main_stick_decode(*stk)
     return (ang + 0x8000 + (int(csangle) & 0xFFFF)) & 0xFFFF
 
@@ -87,16 +93,22 @@ class SeamGeo:
 
     A_BTN, B_BTN, KROLL, ROLL_SPEEDF = A_BTN, B_BTN, KROLL, ROLL_SPEEDF
 
-    def __init__(self, geo, csangle, roll_speedf=ROLL_SPEEDF):
+    def __init__(self, geo, csangle, roll_speedf=ROLL_SPEEDF, aim_deg=None):
         self.geo = geo
         self.csangle = int(csangle) & 0xFFFF
         self.roll_speedf = roll_speedf
         self.wA, self.wB = _mk(geo["wallA"]), _mk(geo["wallB"])
         self.BARRIER = [_mk(t) for t in geo["barrier"]]
-        self.TRIS = [self.wA, self.wA, self.wB] + self.BARRIER
+        # The CrrPos barrier the r=35 cylinder sweeps: the fixture's explicit `tris` (game block-grid
+        # order) when present, else the legacy [wA,wA,wB]+barrier composition (byte-identical for roll).
+        self.TRIS = ([_mk(t) for t in geo["tris"]] if "tris" in geo
+                     else [self.wA, self.wA, self.wB] + self.BARRIER)
         self.LINK_Y = geo["link_y"]
         self.S = (geo["S"][0], geo["S"][2])
-        self.F = derive_F(geo["bisector_deg"], self.csangle)
+        # aim_deg: per-seam thrust direction (bisector for a corner, bear_to_S for a flat seam). Default
+        # = the fixture's interior bisector (the corner convention), so corner seams need no override.
+        self.aim_deg = geo["bisector_deg"] if aim_deg is None else aim_deg
+        self.F = derive_F(self.aim_deg, self.csangle)
         _r = self.F / 65536.0 * 2 * math.pi
         self.DIRX, self.DIRZ = math.sin(_r), math.cos(_r)
         self.PX, self.PZ = -self.DIRZ, self.DIRX      # perp(F) axis (plan_search convention)
@@ -121,30 +133,43 @@ class SeamGeo:
             return False
         return self.wA.pla.func(pn) < 0 or self.wB.pla.func(pn) < 0
 
-    def cut_new(self, old):
-        """The CUT_F entry endpoint from `old` out of a full-cap roll -- bit-identical to
-        `LandState.enter_cut(CUT_F, aim=None)` / `walkstab.fast_cut` (travel==facing==F, the root
-        translate rotated by F + the speedF lunge term; the two component f32 adds, per candidate)."""
+    def cut_new(self, old, facing=None, speedf=None):
+        """The CUT_F entry endpoint from `old` -- bit-identical to `LandState.enter_cut(CUT_F,
+        aim=None)` / `walkstab.fast_cut` (travel==facing, the root translate rotated by facing + the
+        speedF lunge term; the two component f32 adds, per candidate). `facing`/`speedf` default to the
+        seam's thrust facing F + `roll_speedf` (the roll-stab out-of-a-roll cut); a walk-stab cut passes
+        the runtime walk `facing` and per-frame `nspeed`, since its lunge speed is not the fixed roll cap."""
+        fac = self.F if facing is None else facing
+        sp = self.roll_speedf if speedf is None else speedf
         L0 = _cut_root_translate()
-        speedF = 0.0 if abs(self.roll_speedf) < 0.05 else self.roll_speedf
-        s = _cM_ssin_s16(self.F)
-        c = M.cM_scos_s16(self.F)
+        speedF = 0.0 if abs(sp) < 0.05 else sp
+        s = _cM_ssin_s16(fac)
+        c = M.cM_scos_s16(fac)
         add_x = _f(_f(L0[2] * s) + _f(L0[0] * c))
         add_z = _f(_f(L0[2] * c) - _f(L0[0] * s))
         nx = _f(_f(_f(old[0]) + _f(speedF * s)) + add_x)
         nz = _f(_f(_f(old[1]) + _f(speedF * c)) + add_z)
         return (nx, nz)
 
-    def pred_genuine(self, old):
+    def pred_genuine(self, old, facing=None, speedf=None):
         """genuine_clip against the REAL cut endpoint at `old` (bit-identical to the sim's cut
-        `new`) -- the pure-geometry dust test used by maps/rankers."""
-        return self.genuine_clip(old, self.cut_new(old))
+        `new`) -- the pure-geometry dust test used by maps/rankers. `facing`/`speedf` as `cut_new`."""
+        return self.genuine_clip(old, self.cut_new(old, facing, speedf))
 
     def perp(self, p):
         return (p[0] - self.S[0]) * self.PX + (p[1] - self.S[1]) * self.PZ
 
     def along(self, p):
         return (p[0] - self.S[0]) * self.DIRX + (p[1] - self.S[1]) * self.DIRZ
+
+    def perp_to_ray(self, old, new):
+        """Signed perpendicular distance from S to the ACTUAL cut ray old->new (table-exact geometry).
+        ~0 for a clip -- the razor quantity a nearly-flat seam threads (walk-stab's `perp_ray`). Unlike
+        `perp(p)` (a point's offset along the fixed F-perp axis), this measures the real fired ray, so
+        it is exact regardless of any facing quantization between the walk facing and F."""
+        dx, dz = new[0] - old[0], new[1] - old[1]
+        L = math.hypot(dx, dz) or 1.0
+        return ((self.S[0] - old[0]) * dz - (self.S[1] - old[1]) * dx) / L
 
     @property
     def LUNGE(self):
