@@ -20,7 +20,9 @@ from harness.rollstab.seamgeo import SeamGeo, derive_F
 from harness.rollstab import geometry as G
 
 _GEO = json.load(open(os.path.join(_rb, 'fixtures', 'kaze_r11_geo.json')))
-_KAZE_CSANGLE = 29883                       # the kaze roll seam's frozen camera yaw
+# csangle comes from STATE (the anchor's RAM snapshot), not a pasted literal -- the same field a
+# live tww-python Dolphin feed supplies. It happens to be 29883 (the kaze camera is frozen).
+_KAZE_CSANGLE = G.load_seed('kaze_r11_rollstab_sheathed@twwgz')['csangle'] & 0xFFFF
 
 
 def test_F_derived_bit_exact():

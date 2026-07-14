@@ -89,10 +89,13 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > `walkstab.py`). Done this session:
 > - **`SeamGeo` abstraction built (`harness/rollstab/seamgeo.py`).** A per-seam roll/wall-clip geometry +
 >   exact-acceptance object, DERIVED from a geo fixture + the anchor camera yaw. `geometry.py` is now a
->   THIN instance-backed shim over it (loads the kaze r11 fixture, `CSANGLE=29883`, builds `SeamGeo`, and
->   re-exports the whole `G` surface -- `F`/`LUNGE`/`TRIS`/`genuine_clip`/`pred_genuine`/`perp`/`along`/...).
->   The full suite is BYTE-IDENTICAL (346 pre-existing passed, unchanged; the razor accept in `solver.run`
->   already used the real sim cut, not `G.LUNGE`).
+>   THIN instance-backed shim over it (loads the kaze r11 fixture, builds `SeamGeo`, re-exports the whole
+>   `G` surface -- `F`/`LUNGE`/`TRIS`/`genuine_clip`/`pred_genuine`/`perp`/`along`/...). Both of SeamGeo's
+>   inputs come from STATE, not pasted constants -- exactly what a live tww-python Dolphin feed will supply:
+>   the seam geometry from the room's DZB collision (the fixture was built from live RAM by
+>   `capture_walls.py`) and the camera yaw from Link's `csangle` (READ from the canonical kaze anchor's
+>   rest snapshot, not hardcoded). The full suite is BYTE-IDENTICAL (346 pre-existing passed, unchanged;
+>   the razor accept in `solver.run` already used the real sim cut, not `G.LUNGE`).
 > - **F is DERIVED, not pasted (`seamgeo.derive_F`).** F = the walk want-target (m34E8) of the
 >   closest-reachable full-deflection stick to the interior `bisector_deg` at csangle
 >   (`stick_for_bearing(bisector, csangle, 1.0)` -> decode -> `+0x8000+csangle`). GATE: derived F == 33295

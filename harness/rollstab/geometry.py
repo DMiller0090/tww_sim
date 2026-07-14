@@ -26,12 +26,19 @@ if _rb not in sys.path:
 
 from harness.rollstab.seamgeo import SeamGeo, A_BTN, B_BTN, KROLL
 
-GEO = json.load(open(os.path.join(_rb, 'fixtures', 'kaze_r11_geo.json')))
 ANCHOR_DIR = os.path.join(_rb, 'tests', 'dolphin', 'anchors')
 
-# The kaze roll seam's camera is frozen (README Phase R); every kaze roll anchor rests at this yaw.
-# F is derived from it + the fixture bisector (== the by-inspection literal 33295); see seamgeo.
-CSANGLE = 29883
+
+def load_seed(anchor):
+    """The anchor's frame-0 rest snapshot (tests/dolphin/anchors/<anchor>.seed.json)."""
+    return json.load(open(os.path.join(ANCHOR_DIR, anchor + '.seed.json')))
+
+
+# Back-compat single-seam shim. Both SeamGeo inputs come from STATE (what a live Dolphin feed supplies),
+# not pasted literals: the geo fixture is built from live DZB RAM, csangle is read from the anchor.
+GEO = json.load(open(os.path.join(_rb, 'fixtures', 'kaze_r11_geo.json')))
+_CANON_ANCHOR = 'kaze_r11_rollstab_sheathed@twwgz'      # the shipped kaze roll seam anchor
+CSANGLE = load_seed(_CANON_ANCHOR)['csangle'] & 0xFFFF  # from the anchor's RAM snapshot, not pasted
 
 _SEAM = SeamGeo(GEO, CSANGLE)
 
@@ -53,8 +60,3 @@ genuine_clip = _SEAM.genuine_clip
 pred_genuine = _SEAM.pred_genuine
 perp = _SEAM.perp
 along = _SEAM.along
-
-
-def load_seed(anchor):
-    """The anchor's frame-0 rest snapshot (tests/dolphin/anchors/<anchor>.seed.json)."""
-    return json.load(open(os.path.join(ANCHOR_DIR, anchor + '.seed.json')))
