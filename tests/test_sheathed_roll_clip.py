@@ -91,15 +91,18 @@ def test_sheathed_offline_clip_bitexact():
     assert G.pred_genuine((r['old'][0], _f(r['old'][1] - MARGIN_Z)))
 
 
-@pytest.mark.xfail(strict=True, reason="make_dtm DELIVERY DROP (RAM-confirmed, session 42), NOT a sim "
-                                       "gap: the pipeline default make_dtm(polls=4, seed=1) drops the "
-                                       "clustered 1-frame band fine at row 18 -- the game polls its full "
-                                       "neighbour (cpad_val 1.0 not 0.9605), so live holds speedF 17 "
-                                       "where the sim (correctly acting the delivered band) dips to "
-                                       "15.091 -> a 1.9u along-track lag frozen through the roll. The "
-                                       "sim/decomp are faithful; the golden records the buggy delivery. "
-                                       "Fix: make_dtm seed=0 + re-derive rest_noops (see module "
-                                       "docstring); validate with capture_decode.delivery_sweep.")
+@pytest.mark.xfail(strict=True, reason="make_dtm DELIVERY DROP (RAM-confirmed, session 42) + a re-solve "
+                                       "requirement (session 43): the pipeline default make_dtm(polls=4, "
+                                       "seed=1) drops the clustered row-18 band fine (dead-end #34). The "
+                                       "delivery fix is seed=0, and session 43 MEASURED its from-rest "
+                                       "model live (REST bit-exact at noops=2, test_sheathed_roll_rest) -- "
+                                       "BUT the session-39 hit was solved on the seed=1 model and is NOT "
+                                       "genuine under seed=0 (its old shifts +0.588u off the razor, "
+                                       "test_s39_hit_not_genuine_under_seed0). So a fresh seed-0 solve is "
+                                       "required; it hits the sessions-39/40 f32-dust density wall "
+                                       "(~0.0035u, 0 genuine so far). Flips GREEN when a seed-0 solve "
+                                       "clips live. (This test still compares the seed=1 delivery, which "
+                                       "correctly diverges.)")
 def test_sheathed_ship_delivery():
     """RED (the make_dtm delivery bug, session 42): replay the sheathed hit's stream from rest and
     compare the along-track z to the jitter-immune live golden, game_frame-aligned (sim row i <-> live

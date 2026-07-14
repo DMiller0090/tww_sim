@@ -65,7 +65,7 @@ def sticks_of(anchor):
     return seed, straight, aim
 
 
-def rest_state(anchor, walls=None, model_draw=None):
+def rest_state(anchor, walls=None, model_draw=None, dtm_seed=1, noops=None):
     """The bit-exact-from-REST sim state -- NO live calibration run. Seeds the WAIT(4) rest blend
     (both frame ctrls + rates, the stored rest toe stream, m359C/m35B4) from the anchor's seed
     json rest_* fields and models the 2 alignment no-ops, so ANY input stream from row 0 --
@@ -76,7 +76,14 @@ def rest_state(anchor, walls=None, model_draw=None):
     `not sword_drawn` -- a SHEATHED anchor auto-enables it so a walk-up B edge draws the sword
     (setting `sword_drawn` at the draw-completion frame, satisfying the roll->CUT gate); a
     sword-drawn anchor never draws so it stays OFF (byte-identical). No B edge => no draw => the
-    walk is byte-identical either way (session-34 handoff)."""
+    walk is byte-identical either way (session-34 handoff).
+    `dtm_seed` (session 43): the make_dtm leading-neutral-poll count the stream will be DELIVERED
+    with. The stored `rest_noops` bakes in the pipeline default seed=1; a different seed shifts the
+    leading-poll layout, so the sim's leading no-op count = `rest_noops + (1 - dtm_seed)`. MEASURED,
+    not guessed (session 43, capture_walkentry seed=0 vs the seed-1 golden, d_frame-aligned): seed=1
+    => noops=1 (28/0 bit-exact, byte-identical to before), seed=0 => noops=2 (28/0 bit-exact -- the
+    seed-0 delivery fix; FEWER leading neutral polls => the game's rest blend advances one MORE frame
+    before the plan takes hold, so the sim needs one MORE leading no-op). `noops` overrides outright."""
     seed, straight, aim = sticks_of(anchor)
     # Sword state picks the walk/dash anim SET (WALKS/DASHS vs base WALK/DASH -- different legs; see
     # KB mechanics/walk-stab.md). From the anchor's captured equip; default True (roll-stab idle anchors).
@@ -93,7 +100,10 @@ def rest_state(anchor, walls=None, model_draw=None):
     # too made the sim morf AGAIN one frame later -- caught by verify_rest row 4).
     # rest_noops = the anchor's savestate capture-phase DTM alignment, derived per-anchor by
     # mint.capture_rest (1 = boundary/canonical, 2 = legacy mid-frame). Default 2 for old seeds (#30).
-    noops = int(seed.get('rest_noops', REST_NOOPS))
+    # (1 - dtm_seed) shifts it for a non-default make_dtm leading-poll count (session 43 fix,
+    # MEASURED live); `noops` overrides outright (measurement path).
+    if noops is None:
+        noops = max(0, int(seed.get('rest_noops', REST_NOOPS)) + (1 - int(dtm_seed)))
     s._foot.seed_rest_blend(d_frame=seed['rest_d_frame'], w_frame=seed['rest_w_frame'],
                             d_rate=seed['rest_d_rate'], w_rate=seed['rest_w_rate'],
                             m359C=seed['rest_m359C'], m35B4=seed.get('rest_m35B4', 0.0),

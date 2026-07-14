@@ -76,13 +76,60 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-14, session 42)
+## Status (2026-07-14, session 43)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-14, session 42): the sheathed-clip row-18 blocker is RAM-CONFIRMED as a
+> **CURRENT THREAD (2026-07-14, session 43): the make_dtm seed=0 delivery fix is PLUMBED end-to-end and
+> its from-rest model is MEASURED LIVE + bit-exact -- but shipping is BLOCKED on a RE-SOLVE: the
+> session-39 hit does NOT survive seed=0, and re-solving hits the sessions-39/40 f32-dust density wall.
+> No sim/physics behavior changed; all `seed`/`dtm_seed` plumbing is byte-identical at the seed=1
+> default (suite 342 passed, unchanged).** This was session-42 NEXT (ship the fix). Done this session
+> (offline + 1 live jitter-immune capture_walkentry seed=0, never advancewith):
+> - **`seed`/`dtm_seed` threaded end-to-end** (additive, default 1 = byte-identical): `rest.rest_state
+>   (dtm_seed=, noops=)`, `capture_walkentry.capture(seed=)`, `solver.base/run/search(dtm_seed=)` +
+>   `_record` tags each hit's `dtm_seed`, `deliver.gate/replay/ship` read the hit's `dtm_seed` and
+>   author the DTM with it. The `run_dtm`/`make_dtm` `seed` param already existed.
+> - **The seed-0 leading-poll layout is MEASURED, not guessed (handoff step 2 DONE).** Captured the
+>   seed-0 walk-entry live (jitter-immune, game_frame-tagged) and diffed the sim d_frame-aligned vs the
+>   seed-1 golden: seed=1 => noops=1 (28/0 bit-exact, byte-identical to before), **seed=0 => noops=2
+>   (28/0 bit-exact, dz=0 every aligned row)**. So the coupling is `noops = rest_noops + (1 - dtm_seed)`
+>   (fewer leading neutral polls => the game's rest blend advances one MORE frame before the plan, so
+>   the sim needs one MORE leading no-op -- the OPPOSITE sign of the intuitive guess). Immutable golden
+>   `fixtures/sheathed_walkentry_seed0_golden.json`; gate `tests/test_sheathed_roll_rest.py::
+>   test_sheathed_rest_bitexact_seed0`.
+> - **The `solver.fine_family` band-exclusion is REMOVED (handoff step 4a):** band fines (msd 0.889-1.0)
+>   are usable again under seed=0 (delivery faithful). NOTE they are an ALONG knob (the speedF dip), not
+>   perp, and near-cap ones octagon-clamp -- so they did NOT break the perp density wall below.
+> - **LOAD-BEARING NEGATIVE RESULT: the session-39 hit does NOT clip under seed=0.** Replaying its exact
+>   stream bytes through the (measured-correct) seed-0 model, `old` shifts **+0.588u in z (308.028 ->
+>   308.616), off the f32 razor -> NOT genuine** (behind neither wall). So the handoff's hope that "the
+>   s39 hit should clip" under seed=0 is DISPROVEN; a fresh seed-0 solve is REQUIRED (gate
+>   `test_s39_hit_not_genuine_under_seed0`). [Mechanism: seed-0's extra leading no-op shifts the whole
+>   from-rest approach; the dust is single f32 columns, so any along-shift lands off-razor.]
+> - **The re-solve hits the sessions-39/40 f32-DUST DENSITY WALL (open).** ~several-thousand-run focused
+>   sweeps under seed=0 (arc gross-perp -> |rho| 0.017 collapses because full-mag arcs octagon-clamp;
+>   partial interior 3rd-crawl-byte fine-perp -> ~2e-4 steps but a DEAD-BAND GAP over rho=0; A_proj/sub-
+>   band along fines -> coarse z, few distinct sticks at bearing F; partial-mag arc -> 0.033 worse)
+>   reached **~0.0035u nearest, 0 genuine** -- mirroring session 40's 0.0013u wall. The lattices tried
+>   don't align onto a genuine column. This is the SAME frontier that consumed sessions 39-40; the
+>   generic `solver.search` drill is over-budget (>2min) and under-samples.
+>
+> **NEXT (Dereck to steer the re-solve strategy -- the delivery fix + its live-measured model are DONE
+> and locked; only the seed-0 solve remains): find a seed-0 genuine hit, then `deliver ship` (auto
+> seed=0 from the hit's dtm_seed) -> confirm live OOB clip -> flip `test_sheathed_ship_delivery` GREEN.**
+> Candidate levers (none broke the wall this session): (1) resurrect session-39's *focused* solve method
+> (an uncommitted ad-hoc warm-start; adapt walkstab.solve_focused's Phase-A/B/C bracket->drill->exact to
+> the roll path under seed=0); (2) a denser interior-byte perp vernier that FILLS the dead-band gap over
+> rho=0 (a K=4 all-partial crawl at genuinely low speed, or a 2-byte 3rd+4th-frame lattice); (3) exploit
+> delivery DOF not yet used (draw timing, B timing, the roll-entry frame -- session-40 list item 3);
+> (4) accept a longer search budget than <2min for this seam. Validate any hit with
+> `capture_decode.delivery_sweep` (every fine received + roll-row unchanged + OOB). Every other thread
+> (walk-stab clip, Tetra push-aside/turnaround, thrust scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-14, session 42): the sheathed-clip row-18 blocker is RAM-CONFIRMED as a
 > `make_dtm` DELIVERY DROP -- NOT a physics/decode gap, and NOT the "band walk-speed" of #33 (overturned).
 > The game never RECEIVES the row-18 band fine; make_dtm's default `seed=1` poll phase drops it. The fix
 > is characterized live (`seed=0` + re-derive `rest_noops`) but NOT yet shipped. No sim/physics code

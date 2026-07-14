@@ -37,8 +37,8 @@ def bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
 
-def replay(anchor, stream):
-    s = C.rest_state(anchor)
+def replay(anchor, stream, dtm_seed=1):
+    s = C.rest_state(anchor, dtm_seed=dtm_seed)
     rows = []
     for sx, sy, b in stream:
         s.step(sx, sy, buttons=b)
@@ -49,8 +49,9 @@ def replay(anchor, stream):
 def gate(idx=0):
     hit = json.load(open(HITS_PATH))[idx]
     anchor = hit['anchor']
+    dtm_seed = int(hit.get('dtm_seed', 1))       # the make_dtm leading-poll seed this hit solves on
     stream = [tuple(fr) for fr in hit['stream']]
-    rows = replay(anchor, stream)
+    rows = replay(anchor, stream, dtm_seed=dtm_seed)
     ci = next((i for i, rr in enumerate(rows) if rr[0] in (CUT_F, CUT_A)), None)
     if ci is None or ci == 0:
         print('FAIL: CUT never fired')
@@ -79,7 +80,7 @@ def gate(idx=0):
               for (sx, sy, b) in stream]
     plan = dict(anchor=anchor, hit={k: v for k, v in hit.items() if k != 'stream'},
                 stream=[list(x) for x in stream], sticks=sticks, old=list(old), new=list(new),
-                cut_idx=ci, robust=bool(robust),
+                cut_idx=ci, robust=bool(robust), dtm_seed=dtm_seed,
                 rows=[[r[0], r[1], r[2], r[3]] for r in rows])
     json.dump(plan, open(PLAN_PATH, 'w'))
     print('  wrote %s' % PLAN_PATH)
@@ -95,7 +96,8 @@ def ship(idx=0, norelaunch=False):
     sticks += [dict(stickX=128, stickY=128, substickX=128, substickY=128, buttons=0)] * WATCH_TAIL
     log_n = plan['cut_idx'] + 14
     end = run_dtm(sticks, anchor=plan['anchor'], ready=land_ready,
-                  relaunch_dolphin=not norelaunch, log_frames=log_n, verbose=True)
+                  relaunch_dolphin=not norelaunch, log_frames=log_n, verbose=True,
+                  seed=int(plan.get('dtm_seed', 1)))
     frames = end['log']
     live_cut = next((i for i, f in enumerate(frames) if f['proc'] in (0x42, 0x41)), None)
     for i, f in enumerate(frames):

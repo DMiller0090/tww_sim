@@ -69,7 +69,7 @@ def _read_f0(sav):
     return _emu_frame()
 
 
-def capture(anchor='kaze_r11_rollstab_sheathed@twwgz', out=None):
+def capture(anchor='kaze_r11_rollstab_sheathed@twwgz', out=None, seed=1):
     from harness.dtm.run_dtm import run_dtm, land_ready, resolve_anchor
     import harness.dtm.run_dtm as RD
     import dolphin_mem as D
@@ -110,7 +110,7 @@ def capture(anchor='kaze_r11_rollstab_sheathed@twwgz', out=None):
               for (sx, sy) in stream] + [dict(stickX=128, stickY=128, substickX=128,
                                               substickY=128, buttons=0)] * 20
     end = run_dtm(sticks, anchor=anchor, ready=land_ready, relaunch_dolphin=True,
-                  log_frames=len(stream) + 2, verbose=True)
+                  log_frames=len(stream) + 2, verbose=True, seed=seed)
     RD._read_frame = _orig
 
     rows = []
@@ -130,7 +130,7 @@ def capture(anchor='kaze_r11_rollstab_sheathed@twwgz', out=None):
             r['m3598'], r['m359C'], r['plant']))
         prevz = r['pos_z']
 
-    result = dict(anchor=anchor, F0=f0, NPREF=R.NPREF, NCRUISE=R.NCRUISE, rows=rows)
+    result = dict(anchor=anchor, F0=f0, NPREF=R.NPREF, NCRUISE=R.NCRUISE, seed=seed, rows=rows)
     if out:
         with open(out, 'w') as f:
             json.dump(result, f, indent=1)
@@ -141,4 +141,5 @@ def capture(anchor='kaze_r11_rollstab_sheathed@twwgz', out=None):
 if __name__ == '__main__':
     kw = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
     o = kw.pop('out', DEFAULT_OUT)
-    capture(anchor=kw.get('anchor', 'kaze_r11_rollstab_sheathed@twwgz'), out=(o or None))
+    capture(anchor=kw.get('anchor', 'kaze_r11_rollstab_sheathed@twwgz'), out=(o or None),
+            seed=int(kw.get('seed', 1)))

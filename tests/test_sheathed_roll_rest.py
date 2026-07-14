@@ -31,6 +31,7 @@ _GOLD = os.path.join(os.path.dirname(_HERE), 'fixtures', 'sheathed_walkentry_gol
 
 try:
     from harness.rollstab import rest as C
+    from harness.rollstab import geometry as G
     _HAVE = C.rest_state is not None and os.path.exists(_GOLD)
 except Exception:
     _HAVE = False
@@ -44,12 +45,16 @@ def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
 
-def _sim_rows():
+_GOLD0 = os.path.join(os.path.dirname(_HERE), 'fixtures', 'sheathed_walkentry_seed0_golden.json')
+
+
+def _sim_rows(dtm_seed=1):
     """Seed rest_state (sheathed => model_draw auto-ON, no B => no draw; rest_noops=1 from the seed),
-    replay the verification walk ([straight]*NPREF + [aim]*NCRUISE); one dict per row keyed by d_frame."""
+    replay the verification walk ([straight]*NPREF + [aim]*NCRUISE); one dict per row keyed by d_frame.
+    `dtm_seed` picks the make_dtm leading-poll layout the stream is DELIVERED with (session 43)."""
     _, straight, aim = C.sticks_of(ANCHOR)
     stream = [straight] * C.NPREF + [aim] * C.NCRUISE
-    s = C.rest_state(ANCHOR)
+    s = C.rest_state(ANCHOR, dtm_seed=dtm_seed)
     rows = []
     for sx, sy in stream:
         s.step(sx, sy)
@@ -81,3 +86,50 @@ def test_sheathed_full_position_bitexact():
             bad.append(gr['game_frame'])
     assert matched >= 12, "too few d_frame-aligned rows matched (%d)" % matched
     assert not bad, "sheathed from-rest diverged at game_frames %s" % bad
+
+
+def test_sheathed_rest_bitexact_seed0():
+    """Session 43: the roll-stab clip must ship via make_dtm seed=0 (the delivery fix -- seed=1 drops
+    a clustered band fine, dead-end #34). Delivering with seed=0 shifts the leading-poll layout, so
+    the sim's from-rest leading no-op count changes: MEASURED live (capture_walkentry seed=0,
+    jitter-immune, d_frame-aligned) the seed-0 walk-entry is BIT-EXACT with rest_state(dtm_seed=0)
+    (=> noops=2, one MORE than seed=1's noops=1). Locks the seed-0 REST model against the live golden
+    so a seed-0 solve/deliver is trustworthy."""
+    golden = json.load(open(_GOLD0))
+    assert golden['anchor'] == ANCHOR and golden.get('seed') == 0
+    by_d = {_bits(r['d']): r for r in _sim_rows(dtm_seed=0)}
+    matched, bad = 0, []
+    for gr in golden['rows']:
+        sr = by_d.get(_bits(gr['d_frame']))
+        if sr is None:
+            continue
+        matched += 1
+        if not (_bits(sr['pos_x']) == _bits(gr['pos_x'])
+                and _bits(sr['pos_z']) == _bits(gr['pos_z'])
+                and abs(sr['m3598'] - gr['m3598']) < 1e-6
+                and _bits(sr['m359C']) == _bits(gr['m359C'])):
+            bad.append(gr['game_frame'])
+    assert matched >= 12, "too few d_frame-aligned rows matched (%d)" % matched
+    assert not bad, "seed-0 from-rest diverged at game_frames %s" % bad
+
+
+def test_s39_hit_not_genuine_under_seed0():
+    """Session 43 (a load-bearing negative result): the session-39 hit was solved on the seed=1 model
+    and is NOT genuine under the (measured-correct) seed-0 model -- its `old` shifts ~+0.588u in z off
+    the f32 razor. So delivering the s39 hit via seed=0 will NOT clip; a fresh seed-0 solve is REQUIRED
+    (the handoff's hope that 'the s39 hit should clip' under seed=0 is disproven). Guards against a
+    regression that would re-assert the old hit is deliverable."""
+    from harness.rollstab import solver as SV
+    from tww_sim.land.land import CUT_F, CUT_A
+    MOVES = ((9, (73, 254), 2), (10, (99, 183)), (4, (96, 192)), (6, (98, 188)))
+    START = ((77, 249), (98, 191))
+    stream = [tuple(x) for x in SV.run(ANCHOR, MOVES, A_proj=-500.0, start=START, draw_at=3)['stream']]
+    s = C.rest_state(ANCHOR, dtm_seed=0)
+    rows = []
+    for sx, sy, b in stream:
+        s.step(sx, sy, buttons=b)
+        rows.append((s.state & 0xFF, s.pos_x, s.pos_z))
+    ci = next((i for i, r in enumerate(rows) if r[0] in (CUT_F, CUT_A)), None)
+    assert ci is not None
+    old, new = (rows[ci - 1][1], rows[ci - 1][2]), (rows[ci][1], rows[ci][2])
+    assert not G.genuine_clip(old, new), "s39 hit unexpectedly genuine under seed-0 (re-solve may be moot)"

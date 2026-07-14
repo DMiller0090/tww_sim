@@ -38,26 +38,20 @@ from harness.rollstab import rest as C
 HITS_PATH = os.path.join(_rb, '_generated', 'rollstab_hits.json')
 ZLO, ZHI = 302.6, 308.2        # old_z clear band (roll stops at the face below ~302.6)
 START_KMAX = 3                 # start-crawl window (K<=3: low-speed micro-moves, 1D approach)
-BAND_LO, BAND_HI = 0.889, 1.0  # the live-divergent PADClamp magnitude band (never emit as a 1-frame stick)
 _BASE = {}
 
 
-def _in_band(stk):
-    """True if the delivered stick's decoded magnitude is in the live-divergent (0.889, 1.0) band.
-    A 1-frame band stick at the speed cap makes the sim dip speedF (msd^2 target) but not the console
-    -- the sheathed-clip live blocker (dead-end #33). Sub-band and full are bit-exact live."""
-    from tww_sim.core.mathlib import main_stick_decode
-    _, m = main_stick_decode(stk[0], stk[1])
-    return BAND_LO < m < BAND_HI
+def base(anchor, dtm_seed=1):
+    """A cloned from-rest sim seeded for the make_dtm `dtm_seed` the stream will be DELIVERED with.
+    The roll-stab clip ships with seed=0 (the make_dtm delivery fix, session 43) so it solves on the
+    seed-0 model (noops=2); legacy callers keep seed=1 (byte-identical)."""
+    key = (anchor, dtm_seed)
+    if key not in _BASE:
+        _BASE[key] = C.rest_state(anchor, dtm_seed=dtm_seed)
+    return _BASE[key].clone()
 
 
-def base(anchor):
-    if anchor not in _BASE:
-        _BASE[anchor] = C.rest_state(anchor)
-    return _BASE[anchor].clone()
-
-
-def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None):
+def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None, dtm_seed=1):
     """One exact run from REST. `start` = sticks for stream rows 0..len-1 (the acceleration
     micro-crawl; the entry acts them with the 2-frame delay). `moves` = [(lead, stick[, dur]),
     ...] placed lead frames before the A press (fixpoint placement: the press frame is
@@ -72,7 +66,7 @@ def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None):
     start = tuple(start)
     placed = None
     for _ in range(4):
-        s = base(anchor)
+        s = base(anchor, dtm_seed=dtm_seed)
         suffix = []
         ci = 0
         cross = None
@@ -166,14 +160,14 @@ def start_family(anchor, kmax=START_KMAX, F=None):
 
 
 def fine_family(anchor, mstep=0.004, leads=(4, 5, 6, 7, 10), F=None):
-    """1-frame partial-magnitude perp fines, LIVE-VALID by construction: sticks whose decoded msd is
-    in the (0.889, 1.0) PADClamp BAND are EXCLUDED. At the speed cap the sim reduces the walk-speed
-    target to msd^2*max for a band stick (speedF dip) but the console does not for a 1-frame band
-    stick -- session 41 root-caused the sheathed-clip live miss to exactly one such fine ((96,192),
-    msd 0.9605) losing 1.9u of along-track that the console kept (robust z-diff vs the jitter-immune
-    golden). The decode itself is faithful (probe); it is the near-cap SPEED that diverges. So the
-    fine alphabet is msd <= 0.889 (sub-band, bit-exact live incl. at cap) plus full 1.0. See
-    knowledge/mechanics/precise-stop.md (the "never emit Y 192-254" rule) + dead-end #33."""
+    """1-frame partial-magnitude perp fines across the full msd range down to 0.50. The (0.889, 1.0)
+    band is INCLUDED (session 43): the s41 "band walk-speed" exclusion was overturned -- RAM-reading
+    `g_mDoCPd_cpadInfo[0]` proved the physics + decode are faithful and a 1-frame band stick delivers
+    its raw value when ISOLATED (dead-end #34). The s41 live miss was a make_dtm DELIVERY DROP (the
+    default seed=1 poll cadence dropped a clustered band fine), fixed by delivering with seed=0; so
+    band fines are usable again and restore the near-full-mag perp density the band-free search lacked
+    (session 40's ~0.0013u wall). Solve on the seed-0 model (`run(..., dtm_seed=0)`) so the sim matches
+    the seed-0 delivery, and ship via seed=0."""
     F = G.F if F is None else F
     out, seen = [], set()
     seed = G.load_seed(anchor)
@@ -185,8 +179,7 @@ def fine_family(anchor, mstep=0.004, leads=(4, 5, 6, 7, 10), F=None):
             stk = C.dtm_stick(stick_for_bearing((F + 16 * j) & 0xFFFF, cs, m))
             if stk not in seen:
                 seen.add(stk)
-                if not _in_band(stk):            # drop the (0.889,1.0) band: sim over-reads speed at cap
-                    out.append(stk)
+                out.append(stk)
             m -= mstep
     return [(ld, stk) for stk in out if stk != aim for ld in leads]
 
@@ -211,9 +204,9 @@ def arc_family(anchor, bstep=50, durs=(1, 2, 3), leads=(10, 9, 8, 7), min_settle
     return out
 
 
-def _record(hits, r, moves, A_proj, start, anchor):
+def _record(hits, r, moves, A_proj, start, anchor, dtm_seed=1, draw_at=None):
     hits.append(dict(anchor=anchor, moves=[[m[0], list(m[1])] + list(m[2:]) for m in moves],
-                     A_proj=A_proj, start=[list(x) for x in start],
+                     A_proj=A_proj, start=[list(x) for x in start], dtm_seed=dtm_seed, draw_at=draw_at,
                      old=list(r['old']), new=list(r['new']),
                      rho=r['rho'], facing=r['facing'], disp=r['disp'], cut_proc=r['cut_proc'],
                      n_roll=r['n_roll'], stream=[list(x) for x in r['stream']]))
@@ -221,7 +214,7 @@ def _record(hits, r, moves, A_proj, start, anchor):
     json.dump(hits, open(HITS_PATH, 'w'))
 
 
-def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None):
+def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None, dtm_seed=1):
     """Arc/fine singles, then the start-crawl sweep (dense along-track fill), then (optionally)
     an iterative-deepening drill combining the nearest configs. Every accept is the exact run.
 
@@ -230,7 +223,7 @@ def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None):
     (`rest_state` model_draw ON) the draw completes before the A press so the roll routes to a
     CUT; None (a drawn anchor) is byte-identical to the pre-session-35 behaviour."""
     t0 = time.time()
-    r0 = run(anchor, [], draw_at=draw_at)
+    r0 = run(anchor, [], draw_at=draw_at, dtm_seed=dtm_seed)
     print('baseline old=(%.7f,%.7f) z=%.4f rho=%+0.6f' % (
           r0['old'][0], r0['old'][1], r0['z'], r0['rho']), flush=True)
     hits, samples, n = [], [], 0
@@ -238,7 +231,7 @@ def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None):
     def check(moves, A_proj, start=()):
         nonlocal n
         n += 1
-        r = run(anchor, moves, A_proj, start=start, draw_at=draw_at)
+        r = run(anchor, moves, A_proj, start=start, draw_at=draw_at, dtm_seed=dtm_seed)
         if (r is None or not r.get('fired') or r['facing'] != G.F or r['spF_at_A'] != 17.0):
             return None
         samples.append((r['old'][0], r['old'][1], [list(m) for m in moves], A_proj,
@@ -247,7 +240,7 @@ def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None):
             print('CLIP start=%s moves=%s A=%.0f old=(%.7f,%.7f) rho=%+0.6f (%.0fs)' % (
                   list(start), moves, A_proj, r['old'][0], r['old'][1], r['rho'],
                   time.time() - t0), flush=True)
-            _record(hits, r, moves, A_proj, start, anchor)
+            _record(hits, r, moves, A_proj, start, anchor, dtm_seed=dtm_seed, draw_at=draw_at)
         return r
 
     A_projs = (-506.0, -512.0, -500.0)

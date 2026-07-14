@@ -642,11 +642,49 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
       leading-poll layout desyncs the from-rest prefix the sim's `rest_noops` (session 38) is calibrated
       to. So the clean fix is **`seed=0` PLUS re-derive `rest_noops` for the seed-0 layout** (mint.capture_rest
       derives it from the t1-advance), re-verify REST BIT-EXACT, then the session-39 hit should clip.
+      **[UPDATED session 43 -> #35: the delivery fix + its live-measured seed-0 model are RIGHT and DONE,
+      but "then the session-39 hit should clip" is WRONG -- the s39 hit was solved on the seed=1 model
+      and is NOT genuine under seed=0. A fresh seed-0 solve is required. Read #35.]**
       Validate with `capture_decode.delivery_sweep`: VALID == every authored fine received + roll row
       unchanged + OOB `proc 0x24`. The `fine_family` band-exclusion (#33/solver.py) is NOT the fix and
       should be REMOVED once make_dtm delivers faithfully (it removes usable fine-perp density -- s40's
       0.0013u wall). OPEN: whether this drop is Dolphin-DTM-specific or real-hardware (a real TAS would
       hit the same SI cadence) -- the fix makes the sim+DTM self-consistent regardless.
+
+## The sheathed roll-stab clip: seed=0 delivery fix is DONE, but the seed-1 hit doesn't survive it (session 43, LIVE-measured)
+
+35. **The make_dtm seed=0 delivery fix and its from-rest model are correct + shipped, but the session-39
+    hit does NOT clip under seed=0 -- a fresh seed-0 solve is required, and it re-hits the sessions-39/40
+    f32-dust density wall.** Refines #34's over-optimistic "then the session-39 hit should clip".
+    - **The seed-0 leading-poll layout was MEASURED, not guessed.** Captured the seed-0 walk-entry live
+      (`capture_walkentry seed=0`, jitter-immune, game_frame-tagged) and diffed the sim d_frame-aligned:
+      seed=1 => noops=1 (bit-exact, byte-identical to the shipped model), **seed=0 => noops=2 (28/0
+      bit-exact, dz=0)**. Coupling: `noops = rest_noops + (1 - dtm_seed)` -- fewer leading neutral polls
+      => the game's rest blend advances one MORE frame before the plan, so the sim needs one MORE leading
+      no-op (OPPOSITE sign to the intuitive "seed=0 => fewer" guess; #34's "re-derive rest_noops" framing
+      was right in spirit -- it is +1, not via mint's savestate-phase advance which is seed-independent).
+      Golden `fixtures/sheathed_walkentry_seed0_golden.json`; gate `test_sheathed_rest_bitexact_seed0`.
+    - **RULED OUT: delivering the session-39 hit via seed=0.** Its exact stream bytes, replayed through
+      the measured-correct seed-0 model, land `old` at z=308.616 (=308.028 + 0.588), OFF the f32 razor,
+      genuine=False (behind neither wall). seed-0's extra leading no-op shifts the whole from-rest
+      approach ~0.59u along-track; the dust is single f32 columns, so any such shift lands off-razor.
+      The hit does not survive; gate `test_s39_hit_not_genuine_under_seed0`.
+    - **RULED OUT (this session's re-solve sweeps, ~several-thousand runs, seed-0, band fines re-enabled):
+      the ad-hoc focused sweeps do NOT break the density wall.** Full-mag arcs octagon-clamp (perp
+      collapses to discrete values, |rho| floor ~0.017); the partial interior 3rd-crawl-byte gives fine
+      perp (~2e-4 steps) but a DEAD-BAND GAP straddling rho=0; A_proj barely moves z (the fixpoint snaps);
+      sub-band along fines at bearing F yield only ~6 distinct sticks (coarse z); a partial-mag arc was
+      worse (0.033). Nearest ~0.0035u, 0 genuine -- the same wall session 40 hit at 0.0013u. Band fines
+      (msd 0.889-1.0), now deliverable under seed=0, are an ALONG knob (the speedF dip), NOT perp, and
+      near-cap ones clamp -- so re-enabling them did not add perp density. The generic `solver.search`
+      drill is over-budget (>2 min) and under-samples the 1-f32-col-per-z dust.
+    - **OPEN levers (none tried broke it):** (1) a *focused* roll solver (adapt walkstab.solve_focused's
+      Phase-A/B/C bracket->drill->exact -- session 39's 91s focused warm-start was ad-hoc/uncommitted);
+      (2) a denser interior perp vernier that FILLS the rho=0 dead-band (a K=4 all-partial low-speed crawl,
+      or a 2-byte 3rd+4th-frame lattice); (3) delivery DOF not yet used (draw/B/roll-entry timing); (4)
+      a search budget > 2 min for this seam. Infrastructure now in place: `dtm_seed` threaded through
+      rest/solver/deliver/capture_walkentry (default 1 = byte-identical); a hit records its `dtm_seed`;
+      `deliver` ships with it.
 
 ## Pointers
 
