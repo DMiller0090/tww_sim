@@ -548,7 +548,14 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
 
 ## The sheathed roll-stab clip: row-18 blocker is a BAND WALK-SPEED gap, not decode (session 41, LIVE, deterministic)
 
-33. **The row-18 live miss is a ONE-FRAME along-track (walk-SPEED) deficit from a band-magnitude stick
+33. **[CORRECTED session 42 -> #34: the "console's BAND WALK-SPEED is unmodeled" mechanism below is
+    WRONG. Reading the RAW SI-delivered pad (`g_mDoCPd_cpadInfo[0]`) from RAM proved the sim/decomp
+    physics are FAITHFUL and the stick decode is faithful even for Y>=192 when ISOLATED -- there is no
+    band-walk-speed gap to model. The row-18 miss is a make_dtm DELIVERY DROP: the game never receives
+    the band fine (it polls the full neighbour). The "OPEN SUBTLETY" below (probe dips, ship doesn't)
+    was the tell -- a walk-speed formula cannot be context-dependent; a delivery cadence can. The z/speed
+    observations below are all correct; only the mechanism (walk-speed formula) is wrong. Read #34.]**
+    **The row-18 live miss is a ONE-FRAME along-track (walk-SPEED) deficit from a band-magnitude stick
     at the speed cap -- the sim is NOT modeling the console's band walk-speed. NOT a decode gap (#32
     wrong) and NOT a facing/MOVE-turn overshoot (#31 wrong).** Both prior diagnoses were ±1-frame
     misreads of run_dtm's per-frame log; reading the ROBUST z-trajectory (immune to ±1 -- a
@@ -599,6 +606,47 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
       dependence via the deterministic stopped-position probe, NOT per-frame run_dtm reads). Once
       faithful, REMOVE the `fine_family` band-exclusion so the solver can USE band sticks again
       (restoring density), re-solve, deliver.
+
+## The sheathed roll-stab clip: row-18 miss is a make_dtm DELIVERY DROP, not physics (session 42, LIVE, RAM-confirmed)
+
+34. **The row-18 live miss is a `make_dtm` poll-cadence DELIVERY DROP -- the game never receives the
+    band fine -- NOT a Link-physics gap and NOT the "band walk-speed" of #33 (WRONG).** Found by reading
+    the RAW SI-delivered pad from RAM (`g_mDoCPd_cpadInfo[0].mMainStickValue` @ JP 0x80398310, and PosX/
+    PosY/Angle @ 0x80398308/+4/+0xC), i.e. what the game ACTUALLY polls, instead of inferring it from
+    downstream speed/position. Tool: the cpad read is now in `harness.rollstab.capture_decode` (`capture`
+    logs cpad_val/px/py; `delivery_sweep` = the (polls,seed) delivery probe; `sweep` CLI). Established:
+    - **The decomp physics + decode are FAITHFUL (traced, not assumed).** Every function in the row-18
+      path matches the sim line-for-line: `setStickData` (10569), `setNormalSpeedF` (2301: the
+      `dVar10 = msd^2*max` decel is unconditional once `msd^2*max < mNormalSpeed`), `setSpeedAndAngleNormal`
+      (2751), `setBlendMoveAnime`'s `m3598` (pure function of nspeed, 2976/3163/3180), the 0.3/0.7 toe
+      recursion (2399-2484). `PADRead->PADClamp->CStick::update->mMainStickValue` is stateless. So per the
+      decomp, IF the game received `(96,192)` msd 0.9605, it MUST decel -- there is nothing to "model".
+    - **The stick decode is faithful even for Y>=192 when ISOLATED.** A 1-frame `(96,192)` (and `(96,193)`,
+      `(98,192)`) after plain cruise delivers `cpad_val` == the sim's `main_stick_decode` bit-for-bit and
+      dips. So #33's "band walk-speed" premise is void -- there is no band-magnitude walk-speed gap.
+    - **In the SHIP the band fine is DROPPED in delivery.** At fed-index 16 (acted row 18) the game polls
+      the FULL neighbour: `cpad_val=1.0, (px,py)=(-0.32,0.95)` == the `(77,249)` stick, NOT `(96,192)`'s
+      `(-0.3148,0.9074)`. A distinctive px=0 marker at fed-16 ALSO drops (positional, value-independent);
+      an all-full ramp delivers every frame; the ship's OTHER fines (0.9313 START, 0.7848 arc, 0.8784)
+      DO deliver -- so a CLUSTER of preceding partials induces a sub-frame poll-phase slip that drops a
+      later 1-frame partial. This single dropped dip is the ENTIRE 1.9125u miss (offline: forcing row-18
+      to full shifts along-track by exactly -1.91248u; live old_z 306.116 == sim 308.028 - 1.912).
+    - **The cause is `make_dtm`'s poll cadence, and `seed` controls it (live sweep):** with the pipeline
+      default `(polls=4, seed=1)` the band drops (roll row 22); `(4, seed=0)` DELIVERS the band at the
+      SAME roll row 22 (timing preserved); `(4, seed>=2)` delivers but shifts timing (roll row 23);
+      `(8, *)` delivers every frame but at ~2x timing (each authored frame spans 2 game frames -> the
+      plan's discrete B/A land wrong; no clip). So the game reads ~4 SI polls per 30fps logic frame
+      (polls=4 = correct 1:1); `seed=1`'s leading neutral poll sets the phase that slips.
+    - **THE FIX (characterized, NOT yet shipped):** `make_dtm(seed=0)` restores delivery at correct
+      timing, BUT seed=0 alone still leaves a ~0.6u residual and no OOB clip -- because changing the
+      leading-poll layout desyncs the from-rest prefix the sim's `rest_noops` (session 38) is calibrated
+      to. So the clean fix is **`seed=0` PLUS re-derive `rest_noops` for the seed-0 layout** (mint.capture_rest
+      derives it from the t1-advance), re-verify REST BIT-EXACT, then the session-39 hit should clip.
+      Validate with `capture_decode.delivery_sweep`: VALID == every authored fine received + roll row
+      unchanged + OOB `proc 0x24`. The `fine_family` band-exclusion (#33/solver.py) is NOT the fix and
+      should be REMOVED once make_dtm delivers faithfully (it removes usable fine-perp density -- s40's
+      0.0013u wall). OPEN: whether this drop is Dolphin-DTM-specific or real-hardware (a real TAS would
+      hit the same SI cadence) -- the fix makes the sim+DTM self-consistent regardless.
 
 ## Pointers
 

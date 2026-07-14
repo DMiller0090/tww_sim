@@ -8,33 +8,37 @@ passes the OFFLINE ship gate 0-ULP -- but the LIVE delivery does NOT clip.
 Recipe (pure sim, from the anchor seed only -- no calibration): A_proj=-500, draw_at=3, a K=2 crawl
 + arc + 2 fines. The offline gate is bit-exact and genuine; see `harness/rollstab/deliver.py`.
 
-ROOT CAUSE (session 41, RE-ROOT-CAUSED jitter-immune -- overturns BOTH dead-end #31 (MOVE-turn
-overshoot) AND #32 (band-decode "holds prior"), which were ±1-frame misreads of run_dtm's jittery
-per-frame log): the live miss is a ONE-FRAME along-track (speedF) deficit, NOT a facing/decode error.
-At ship row 18 the acted stick is the fine (96,192), a PARTIAL-magnitude "band" stick (decoded
-msd 0.9605, in the (0.889,1.0) PADClamp band the KB bans -- precise-stop.md "never emit Y 192-254").
-At the speed cap the sim reduces the walk-speed target to msd^2*max = 15.68 (setNormalSpeedF,
-d_a_player_main.cpp:2306) and dips speedF 17->15.091 for that frame; the CONSOLE does NOT dip for a
-1-frame band stick at cap (it holds 17.0). That one frame's ~1.9u deficit FREEZES through the roll ->
-`old` lands 1.9u short -> off the f32 razor -> no clip. Proven:
-  * the DECODE is faithful even for band 1-frame transients (deterministic stopped-position probe,
-    session 41: (96,192) live stopped pos == the sim's raw-decode prediction, 0 ULP);
-  * the divergence is purely ALONG-TRACK (z/speed): perp x matches to 0.02u, and gf-aligned z vs the
-    jitter-immune golden is bit-exact rows 0-17, diverging only at row 18's speed (below);
-  * mStickDistance IS the divergence: setStickData (d_a_player_main.cpp:10569) sets it from
-    `g_mDoCPd_cpadInfo[0].mMainStickValue`; for a band magnitude the console's effective walk-speed
-    differs from the sim's `min(hypot(clamped)/54, 1)` -> msd^2 model (precise-stop.md's held example
-    (128,196): console 15.76 vs sim 16.38). THE SIM IS NOT MODELING THE CONSOLE'S BAND WALK-SPEED.
+ROOT CAUSE (session 42, RAM-CONFIRMED -- this overturns session 41's "band walk-speed" story, which
+was itself a correction of #31/#32): the live miss is a make_dtm DELIVERY DROP, NOT a Link-physics or
+stick-decode gap. Reading `g_mDoCPd_cpadInfo[0].mMainStickValue` (@JP 0x80398310 -- the RAW SI-delivered
+pad the game actually polls, BEFORE setStickData latches it) directly, per game frame, proved:
+  * The decomp physics + decode are FAITHFUL. Every function in the row-18 path (setStickData 10569,
+    setNormalSpeedF 2301, setSpeedAndAngleNormal 2751, setBlendMoveAnime m3598, the 0.3/0.7 toe
+    recursion 2399-2484) matches the sim line-for-line; PADRead->PADClamp->CStick::update is stateless.
+  * The stick decode is faithful even for Y>=192 when ISOLATED: a 1-frame (96,192) after plain cruise
+    delivers cpad_val=0.9605 (== the sim) and dips. So there is NO band-walk-speed gap to model.
+  * But in the SHIP, the band fine at fed-index 16 (acted row 18) is NEVER RECEIVED: the game polls its
+    FULL neighbour (cpad_val=1.0, px=-0.32) instead. This is make_dtm's poll-cadence: the pipeline
+    default `make_dtm(polls=4, seed=1)` drops a 1-frame partial fine that is CLUSTERED after other
+    partials (the arc + earlier fines induce a sub-frame phase slip). A distinctive px=0 marker at
+    fed-16 ALSO drops (positional, not value-specific); an all-full ramp delivers every frame cleanly.
+  * That single dropped dip is the ENTIRE 1.9125u miss (offline: forcing the row-18 stick to full
+    shifts along-track by exactly -1.91248u -> live old_z 306.116 == sim 308.028 minus that).
 
-NEXT SESSION (Dereck's directive: model what the sim isn't modeling): resolve `test_sheathed_band_
-speed_at_cap` (below, RED) by modeling the console's band-magnitude walk speed to f32 -- decomp-first
-from setStickData / mMainStickValue near the cap (JUTGamePad::CStick::update value, PADClamp), then
-live-confirm. Once faithful, the solver can USE band sticks again (restoring the near-full-magnitude
-fine-perp density the band-free search lacks -- session 40 stalled at 0.0013u from the dust), re-solve,
-and deliver. The `fine_family` band-exclusion (solver.py, session 41) is the interim workaround.
+THE FIX (session 42, characterized live -- not yet shipped): `make_dtm(seed=0)` DELIVERS the dropped
+band at the SAME timing (roll row unchanged); `polls=8` delivers but at 2x timing (breaks the plan's
+discrete B/A). seed=0 alone still leaves a ~0.6u residual because it shifts the leading-poll layout the
+from-rest prefix (rest_noops, session 38) was calibrated to -- so the clean fix is `seed=0` PLUS
+re-deriving rest_noops for the seed-0 layout, then re-verify REST BIT-EXACT and the session-39 hit
+should clip. Diagnostic tool: `harness.rollstab.capture_decode.delivery_sweep` (`... capture_decode
+sweep`) -- reports which fines the game receives per (polls,seed) + roll-row + OOB clip. The
+`fine_family` band-exclusion (solver.py, session 41) is NOT the fix (it removes usable density); it
+should be REMOVED once make_dtm delivers band fines faithfully.
 
 The live golden is IMMUTABLE (`fixtures/sheathed_roll_ship_jitterproof.json`, game_frame-tagged so
-run_dtm poll jitter cannot misalign it) -- never edit it to make the sim pass.
+run_dtm poll jitter cannot misalign it) -- never edit it to make the sim pass. It records the BUGGY
+seed=1 delivery (band dropped); the sim (which acts every authored frame) correctly does NOT match it
+until make_dtm delivers every frame.
 """
 import json
 import os
@@ -87,20 +91,24 @@ def test_sheathed_offline_clip_bitexact():
     assert G.pred_genuine((r['old'][0], _f(r['old'][1] - MARGIN_Z)))
 
 
-@pytest.mark.xfail(strict=True, reason="the sim is not modeling the console's BAND-magnitude walk "
-                                       "speed: a 1-frame band stick (96,192) at cap makes the sim dip "
-                                       "speedF to msd^2*max (17->15.091) but the console holds 17.0, so "
-                                       "the sim's along-track z lags 1.9u from row 18 through the roll. "
-                                       "Resolve by modeling mStickDistance/walk-speed near the cap to "
-                                       "f32 (decomp: setStickData/mMainStickValue). Session 41.")
-def test_sheathed_band_speed_at_cap():
-    """RED (the discrepancy to model next session): replay the sheathed hit's stream from rest and
+@pytest.mark.xfail(strict=True, reason="make_dtm DELIVERY DROP (RAM-confirmed, session 42), NOT a sim "
+                                       "gap: the pipeline default make_dtm(polls=4, seed=1) drops the "
+                                       "clustered 1-frame band fine at row 18 -- the game polls its full "
+                                       "neighbour (cpad_val 1.0 not 0.9605), so live holds speedF 17 "
+                                       "where the sim (correctly acting the delivered band) dips to "
+                                       "15.091 -> a 1.9u along-track lag frozen through the roll. The "
+                                       "sim/decomp are faithful; the golden records the buggy delivery. "
+                                       "Fix: make_dtm seed=0 + re-derive rest_noops (see module "
+                                       "docstring); validate with capture_decode.delivery_sweep.")
+def test_sheathed_ship_delivery():
+    """RED (the make_dtm delivery bug, session 42): replay the sheathed hit's stream from rest and
     compare the along-track z to the jitter-immune live golden, game_frame-aligned (sim row i <-> live
     gf = liveMOVE + 2*(i - simMOVE); the emulator counter ticks twice per game frame). z is robust to
-    a ±1 misalignment (that would show as a ~17u step, not the 1.9u we see), so this isolates the real
-    physics gap: everything is bit-exact through row 17, then at row 18 (the band fine (96,192) at cap)
-    the sim dips speedF while the console does not -> a frozen ~1.9u along-track lag -> `old` off the
-    razor. Flip GREEN by modeling the console's band walk-speed to f32 (see the module docstring)."""
+    a ±1 misalignment (that would show as a ~17u step, not the 1.9u we see). Bit-exact through row 17,
+    then at row 18 the sim dips speedF (it acts the band fine make_dtm authored) while the console held
+    17 (that fine was DROPPED in delivery -- polls=4/seed=1 phase slip). This test flips GREEN when
+    make_dtm delivers every authored frame (seed=0 + rest_noops re-derived) so live == the sim, which
+    is the objective (pure-sim -> DTM that reproduces it). NOT a sim/physics change (RAM-confirmed)."""
     g = json.load(open(_FX))
     live = {r['gf']: r for r in g['rows']}
     r = _run()

@@ -23,13 +23,18 @@ the player-specific 0x34xx/0x35xx fields; the fopAc base fields use run_dtm's pr
   speedF               @ P+0x17C  (f32)   -- run_dtm reads this
   shape_angle.y/travel -- via run_dtm's named reads ('shape_angle_y' / 'travel_angle')
 
-KEY FINDING this tool established (dead-end #32): the closed-form `main_stick_decode` is BIT-EXACT live
-for a HELD stick (incl. the (0.889,1.0) band), but a 1-FRAME TRANSIENT band stick decodes live to ~the
-prior/aim value (input-layer smoothing near the magnitude cap) -- the sim decodes it raw. Modelling that
-transient behaviour to f32 is the open frontier for the sheathed roll-stab clip; use `hold` (settled
-truth) and a transient sweep (build on `capture`) to characterize it.
+KEY FINDING this tool established (session 42, RAM-confirmed -- overturns the #33 "band walk-speed"
+story): reading `g_mDoCPd_cpadInfo[0]` (the RAW SI-delivered pad, what the game ACTUALLY polls, added
+here) proved the row-18 sheathed-clip miss is a **make_dtm DELIVERY DROP**, not a physics/decode gap.
+The stick decode is faithful even for Y>=192 when isolated (`transient_probe`/`hold_decode`); but with
+the pipeline default `make_dtm(polls=4, seed=1)`, a 1-frame partial fine CLUSTERED after other partials
+is DROPPED -- the game polls its full neighbour instead (`cpad_val` reads the full value, not the fine).
+`seed=0` restores delivery at the SAME timing (`polls=8` delivers but at 2x timing). Use `delivery_sweep`
+to see which fines the game receives per (polls, seed) and to validate a make_dtm fix; the physics /
+`main_stick_decode` are decomp-faithful and are NOT the gap.
 
-    python -m harness.rollstab.capture_decode ship [hit=0]        # play a solver hit's stream, diff vs sim
+    python -m harness.rollstab.capture_decode ship [hit=0]        # play a solver hit's stream, diff vs sim (+cpad)
+    python -m harness.rollstab.capture_decode sweep [hit=0]       # (polls,seed) delivery sweep -- the make_dtm probe
     python -m harness.rollstab.capture_decode hold                # jitter-immune held-stick decode test
     python -m harness.rollstab.capture_decode probe               # DETERMINISTIC stopped-pos probe (1-frame safe)
     python -m harness.rollstab.capture_decode bandsweep           # per-frame band sweep (z-trajectory only)
@@ -54,6 +59,10 @@ if _tb not in sys.path:
 
 LINK_PTR = 0x803AD860
 OFF = dict(target=0x3410, m34dc=0x3404, mStickDistance=0x34D8)   # JP player-ptr offsets
+# g_mDoCPd_cpadInfo[0] (JP static, 0x3c/entry): the RAW SI-delivered pad the game polled THIS frame,
+# BEFORE setStickData latches it -- reads what the console RECEIVED, not what downstream speed implies.
+CPAD = 0x80398308                       # &g_mDoCPd_cpadInfo[0]
+CPAD_OFF = dict(px=0x00, py=0x04, value=0x08, angle=0x0C)   # interface_of_controller_pad layout
 
 
 def _emu_frame():
@@ -74,10 +83,15 @@ def _read_f0(sav):
     return _emu_frame()
 
 
-def capture(anchor, stream, tail=6, log_extra=2):
+def capture(anchor, stream, tail=6, log_extra=2, polls=4, seed=1):
     """Play `stream` (list of (sx, sy, buttons)) from `anchor` via a clean DTM and return rows tagged
     with the deterministic game_frame plus the decode + two-angle state. Jitter-immune by game_frame.
-    `stream` is DELIVERED as-is -- calibrate bytes with rest.dtm_stick BEFORE calling if planning."""
+    `stream` is DELIVERED as-is -- calibrate bytes with rest.dtm_stick BEFORE calling if planning.
+
+    `polls`/`seed` = the make_dtm poll cadence (default 4/1 = the pipeline default). Session 42 found
+    the DEFAULT `seed=1` DROPS a clustered 1-frame partial fine (the game receives its full neighbour
+    instead -- read cpad_val to see it); `seed=0` restores delivery at the SAME timing. Sweep these
+    with `delivery_sweep` to validate a make_dtm fix."""
     from harness.dtm.run_dtm import run_dtm, land_ready, resolve_anchor
     import harness.dtm.run_dtm as RD
     import dolphin_mem as D
@@ -94,6 +108,11 @@ def capture(anchor, stream, tail=6, log_extra=2):
         d['msd'] = struct.unpack('>f', D.read_bytes(h, m, p + OFF['mStickDistance'], 4))[0]
         d['shape'] = D.read_named(h, m, 'shape_angle_y') & 0xFFFF
         d['travel'] = D.read_named(h, m, 'travel_angle') & 0xFFFF
+        # RAW SI-delivered pad (g_mDoCPd_cpadInfo[0]) -- what the game actually polled this frame.
+        d['cpad_val'] = struct.unpack('>f', D.read_bytes(h, m, CPAD + CPAD_OFF['value'], 4))[0]
+        d['cpad_px'] = struct.unpack('>f', D.read_bytes(h, m, CPAD + CPAD_OFF['px'], 4))[0]
+        d['cpad_py'] = struct.unpack('>f', D.read_bytes(h, m, CPAD + CPAD_OFF['py'], 4))[0]
+        d['cpad_ang'] = struct.unpack('>h', D.read_bytes(h, m, CPAD + CPAD_OFF['angle'], 2))[0] & 0xFFFF
         return d
     RD._read_frame = rich
     try:
@@ -101,16 +120,49 @@ def capture(anchor, stream, tail=6, log_extra=2):
                   for (sx, sy, b) in stream]
         sticks += [dict(stickX=128, stickY=128, substickX=128, substickY=128, buttons=0)] * tail
         end = run_dtm(sticks, anchor=anchor, ready=land_ready, relaunch_dolphin=True,
-                      log_frames=len(stream) + log_extra, verbose=False)
+                      log_frames=len(stream) + log_extra, verbose=False, polls=polls, seed=seed)
     finally:
         RD._read_frame = _orig
     rows = []
     for r in end['log']:
         gf = (r['emu'] - f0) if (r.get('emu') is not None and f0 is not None) else None
         rows.append(dict(game_frame=gf, proc=r['proc'], pos_x=r['pos_x'], pos_z=r['pos_z'],
-                         shape=r['shape'], travel=r['travel'], speedF=r['speedF'],
-                         target=r['target'], m34dc=r['m34dc'], msd=round(r['msd'], 6)))
+                         pos_y=r.get('pos_y'), shape=r['shape'], travel=r['travel'], speedF=r['speedF'],
+                         target=r['target'], m34dc=r['m34dc'], msd=round(r['msd'], 6),
+                         cpad_val=round(r['cpad_val'], 6), cpad_px=round(r['cpad_px'], 4),
+                         cpad_py=round(r['cpad_py'], 4), cpad_ang=r['cpad_ang']))
     return dict(anchor=anchor, F0=f0, rows=rows)
+
+
+def delivery_sweep(anchor, stream, combos=((4, 1), (4, 0), (8, 1)), tail=40):
+    """Author `stream` as a clean DTM at each (polls, seed) and report which distinctive PARTIAL-
+    magnitude fines the game ACTUALLY receives (`g_mDoCPd_cpadInfo[0].mMainStickValue` != full),
+    the roll-proc row (timing landmark), and whether Link goes OOB (proc 0x24 = the clip). THIS IS
+    THE TOOL THAT FOUND THE make_dtm DELIVERY BUG (session 42): with the pipeline default
+    `(polls=4, seed=1)` a clustered 1-frame partial fine is DROPPED (the game polls the full
+    neighbour instead), so a from-rest hit that relies on that fine's speed dip does NOT reproduce
+    live. `(4, 0)` restores delivery at the SAME roll-row (timing preserved); `(8, *)` delivers but
+    at ~2x timing (each authored frame spans 2 game frames -> the plan's discrete B/A land wrong).
+    A make_dtm fix is VALID when every authored partial fine appears AND the roll row is unchanged
+    AND Link goes OOB. `stream` = a hit's DELIVERED (sx,sy,buttons) rows (e.g. solver.run(...)['stream']).
+    Live-only; relaunches Dolphin per combo."""
+    out = []
+    for (polls, seed) in combos:
+        res = capture(anchor, stream, tail=tail, log_extra=6, polls=polls, seed=seed)
+        rows = res['rows']
+        fines = sorted({round(r['cpad_val'], 4) for r in rows if 0.05 < r['cpad_val'] < 0.99})
+        roll_row = next((i for i, r in enumerate(rows) if r['proc'] == 0x1e), None)
+        oob = any(r['proc'] == 0x24 for r in rows)
+        miny = min((r['pos_y'] for r in rows if r['pos_y'] is not None), default=None)
+        rec = dict(polls=polls, seed=seed, fines_received=fines, roll_row=roll_row,
+                   oob_clip=oob, min_pos_y=None if miny is None else round(miny, 3))
+        out.append(rec)
+        print("polls=%d seed=%d | fines_received=%s roll_row=%s OOB_CLIP=%s min_y=%s" % (
+            polls, seed, fines, roll_row, oob, rec['min_pos_y']))
+    o = os.path.join(_rb, '_generated', 'delivery_sweep.json')
+    json.dump(out, open(o, 'w'), indent=1)
+    print('wrote', o)
+    return out
 
 
 def hold_decode(anchor, test_sticks, hold=8):
@@ -257,14 +309,32 @@ def ship(idx=0):
     print('wrote %s (F0=%s)' % (out, res['F0']))
     print(' live rows (game_frame-tagged): idx gf proc shape travel tgt msd speedF -- diff vs sim by hand')
     for i, r in enumerate(res['rows']):
-        print(' %2d gf=%3s 0x%02x shape=%d travel=%d tgt=%d msd=%.4f spF=%.2f' % (
-            i, r['game_frame'], r['proc'], r['shape'], r['travel'], r['target'], r['msd'], r['speedF']))
+        print(' %2d gf=%3s 0x%02x shape=%d travel=%d tgt=%d msd=%.4f cpad_val=%.4f cpad=(%.2f,%.2f) spF=%.2f' % (
+            i, r['game_frame'], r['proc'], r['shape'], r['travel'], r['target'], r['msd'],
+            r['cpad_val'], r['cpad_px'], r['cpad_py'], r['speedF']))
     return res
+
+
+def _sheathed_ship_stream():
+    """Reconstruct the session-39 sheathed roll-stab hit's DELIVERED stream from the solver recipe
+    (the durable source; mirrors tests/test_sheathed_roll_clip.py, so it works without the gitignored
+    _generated/rollstab_hits.json)."""
+    from harness.rollstab import solver as SV
+    ANCHOR = 'kaze_r11_rollstab_sheathed@twwgz'
+    MOVES = ((9, (73, 254), 2), (10, (99, 183)), (4, (96, 192)), (6, (98, 188)))
+    START = ((77, 249), (98, 191))
+    r = SV.run(ANCHOR, MOVES, A_proj=-500.0, start=START, draw_at=3)
+    return ANCHOR, [tuple(x) for x in r['stream']]
 
 
 if __name__ == '__main__':
     kw = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
-    if 'hold' in sys.argv:
+    if 'sweep' in sys.argv:
+        # the make_dtm delivery probe (session 42): which (polls,seed) delivers every fine + clips OOB.
+        anchor, stream = _sheathed_ship_stream()
+        combos = ((4, 1), (4, 0), (8, 1))
+        delivery_sweep(anchor, stream, combos=combos)
+    elif 'hold' in sys.argv:
         A = kw.get('anchor', 'kaze_r11_rollstab_sheathed@twwgz')
         hold_decode(A, [(96, 192), (98, 191), (98, 196), (77, 249)])
     elif 'bandsweep' in sys.argv:

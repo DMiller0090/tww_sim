@@ -76,13 +76,58 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-14, session 41)
+## Status (2026-07-14, session 42)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-14, session 41): the sheathed-clip row-18 blocker is RE-ROOT-CAUSED
+> **CURRENT THREAD (2026-07-14, session 42): the sheathed-clip row-18 blocker is RAM-CONFIRMED as a
+> `make_dtm` DELIVERY DROP -- NOT a physics/decode gap, and NOT the "band walk-speed" of #33 (overturned).
+> The game never RECEIVES the row-18 band fine; make_dtm's default `seed=1` poll phase drops it. The fix
+> is characterized live (`seed=0` + re-derive `rest_noops`) but NOT yet shipped. No sim/physics code
+> changed.** Following Dereck's steer to READ THE PAD FROM RAM (not infer it), done this session
+> (decomp trace + ~7 live DTM captures reading `g_mDoCPd_cpadInfo[0]`, never advancewith):
+> - **Decomp EXONERATES the physics + decode (traced, not assumed).** Every row-18-path function matches
+>   the sim line-for-line (`setStickData` 10569, `setNormalSpeedF` 2301 -- the `msd^2*max` decel is
+>   UNCONDITIONAL once below nspeed, `setSpeedAndAngleNormal` 2751, `setBlendMoveAnime` m3598, the 0.3/0.7
+>   toe recursion 2399-2484); `PADRead->PADClamp->CStick::update->mMainStickValue` is stateless. So IF the
+>   game received `(96,192)` (msd 0.9605) it MUST decel -- there is nothing to "model" (kills #33).
+> - **The decode is faithful even for Y>=192 when ISOLATED.** A 1-frame `(96,192)` after plain cruise
+>   delivers `cpad_val=0.9605` == the sim and dips (`transient_probe`). So no band-walk-speed gap exists.
+> - **In the SHIP the band fine is DROPPED (RAM-confirmed).** At fed-index 16 (acted row 18) the game polls
+>   the FULL neighbour: `cpad_val=1.0, (px,py)=(-0.32,0.95)` = the `(77,249)` stick, not `(96,192)`. A
+>   distinctive px=0 marker at fed-16 ALSO drops (positional, value-independent); an all-full ramp delivers
+>   every frame; the ship's other fines (0.9313/0.7848/0.8784) DO deliver -- so a CLUSTER of preceding
+>   partials induces a poll-phase slip that drops a later 1-frame partial. That one dropped dip is the
+>   ENTIRE 1.9125u miss (offline: forcing row-18 to full shifts along-track by exactly -1.91248u).
+> - **`make_dtm`'s poll cadence is the cause; `seed` controls it (live sweep, `delivery_sweep`):**
+>   `(polls=4, seed=1)` [default] drops the band, roll row 22; `(4, seed=0)` DELIVERS it at the SAME roll
+>   row 22 (timing preserved); `(4, seed>=2)` delivers but shifts timing to row 23; `(8, *)` delivers all
+>   but at ~2x timing (breaks the plan's discrete B/A). The game reads ~4 SI polls / 30fps frame (polls=4
+>   = correct 1:1); `seed=1`'s leading neutral poll is the phase that slips.
+> - **THE FIX (characterized live, NOT shipped):** `make_dtm(seed=0)` alone delivers the band but leaves a
+>   ~0.6u residual and no OOB clip -- because it shifts the leading-poll layout the from-rest prefix's
+>   `rest_noops` (s38) is calibrated to. Clean fix = **`seed=0` PLUS re-derive `rest_noops` for the seed-0
+>   layout**, re-verify REST BIT-EXACT, then the session-39 hit should clip. The `fine_family` band-exclusion
+>   (s41/solver.py) is NOT the fix and should be REMOVED once delivery is faithful (it kills usable density).
+> - **Artifacts:** the RAW pad read (`g_mDoCPd_cpadInfo[0]`) is PROMOTED into `capture_decode.py`
+>   (`capture` logs cpad_val/px/py; `delivery_sweep(anchor, stream, combos)` = the (polls,seed) delivery
+>   probe reporting fines-received/roll-row/OOB-clip; `python -m harness.rollstab.capture_decode sweep`).
+>   RED gate renamed `test_sheathed_roll_clip.py::test_sheathed_ship_delivery` (reason corrected to the
+>   delivery drop). dead-end #34 (+ #33 correction banner). Suite **342 passed, 1 skipped, 2 xfailed**
+>   (unchanged count). NO sim/physics behavior changed; the interim `fine_family` exclusion is UNTOUCHED.
+>
+> **NEXT: ship the make_dtm fix.** (1) `make_dtm`/`run_dtm`/deliver default to `seed=0` (or thread it),
+> keeping `polls=4`. (2) Re-derive the sheathed anchor's `rest_noops` for the seed-0 leading-poll layout
+> (mint.capture_rest derives it; or bump/measure it) and re-verify REST BIT-EXACT via `capture_walkentry`.
+> (3) `deliver ship` the session-39 hit -> confirm live 0-ULP CLIP (proc 0x24 OOB) -> flip
+> `test_sheathed_ship_delivery` GREEN. (4) REMOVE `solver.fine_family` band-exclusion, re-solve if needed.
+> GUARD: re-run the existing bit-exact goldens (walk-stab, tetra, rollstab_rest) under the new seed --
+> if seed=0 changes their alignment, thread `seed` per-call rather than changing the global default.
+> Every other thread (walk-stab clip, Tetra push-aside/turnaround, thrust scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-14, session 41): the sheathed-clip row-18 blocker is RE-ROOT-CAUSED
 > DETERMINISTICALLY and it OVERTURNS BOTH #31 AND #32 -- the live miss is a ONE-FRAME WALK-SPEED
 > gap the sim isn't modeling (a band-magnitude stick at cap), NOT a decode or facing error. Per
 > Dereck's directive, a RED gate is added for next session to resolve by MODELING it. No sim behavior
