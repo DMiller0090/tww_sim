@@ -76,13 +76,55 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-14, session 44)
+## Status (2026-07-14, session 45)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-14, session 44): the SHEATHED ROLL-STAB CLIP IS DELIVERED LIVE, 0-ULP,
+> **CURRENT THREAD (2026-07-14, session 45): the SOLVER GENERALIZATION is BEGUN -- Phases 1-2 of the
+> session-45 kickoff are DONE + green (OFFLINE, ZERO behavior change).** Dereck scoped this: the Tetra
+> push clip (`geometry_tetra`/`solver_tetra`/`pushaside`/`turnaround`) is a STANDALONE, single-seam solver
+> and stays separate; the generalization is for STANDARD roll/wall clips (`geometry.py` + `solver.py` +
+> `walkstab.py`). Done this session:
+> - **`SeamGeo` abstraction built (`harness/rollstab/seamgeo.py`).** A per-seam roll/wall-clip geometry +
+>   exact-acceptance object, DERIVED from a geo fixture + the anchor camera yaw. `geometry.py` is now a
+>   THIN instance-backed shim over it (loads the kaze r11 fixture, `CSANGLE=29883`, builds `SeamGeo`, and
+>   re-exports the whole `G` surface -- `F`/`LUNGE`/`TRIS`/`genuine_clip`/`pred_genuine`/`perp`/`along`/...).
+>   The full suite is BYTE-IDENTICAL (346 pre-existing passed, unchanged; the razor accept in `solver.run`
+>   already used the real sim cut, not `G.LUNGE`).
+> - **F is DERIVED, not pasted (`seamgeo.derive_F`).** F = the walk want-target (m34E8) of the
+>   closest-reachable full-deflection stick to the interior `bisector_deg` at csangle
+>   (`stick_for_bearing(bisector, csangle, 1.0)` -> decode -> `+0x8000+csangle`). GATE: derived F == 33295
+>   bit-exact at the kaze roll seam (csangle 29883); `test_F_is_camera_dependent` proves it moves with the
+>   camera (no reintroduced literal). The pasted `F = 33295` is deleted.
+> - **The cut LUNGE is DERIVED per-candidate, not a frozen delta.** `SeamGeo.cut_new(old)` computes the
+>   CUT_F entry endpoint from the CUT anim's joint-0 root translate at F + the roll speedF (26) lunge term,
+>   BIT-IDENTICAL to `LandState.enter_cut` (gated `test_cut_new_matches_enter_cut_bit_exact`, 4 olds
+>   spanning the band, 0-ULP). This deletes the pasted `LUNGE = (-2.32.., -49.16..)`: the old literal was
+>   an approximation extracted at ONE `old` (the shipped hit's ~9072), and (the audit found) the two
+>   geometry modules' LUNGE literals were even extracted at DIFFERENT `old` conventions (kaze at the
+>   shipped old, tetra at origin) -- computing per-`old` removes that drift entirely. Verified: the new
+>   per-`old` `pred_genuine` gives IDENTICAL genuine verdicts to the old frozen add over the entire
+>   337,200-point dust-cache region + the deliver sliver points (0 mismatches). `LUNGE` remains exposed as
+>   an origin-referenced derived property (magnitude 49.2202, the roll-stab reach) for compatibility.
+> - **Regression `tests/test_seamgeo.py` (5 green)** locks F-derived-bit-exact, F-camera-dependent,
+>   cut_new==enter_cut 0-ULP, shim-is-instance-backed (verdicts identical over the dust band), and the
+>   reach magnitude. Suite **351 passed, 1 skipped, 2 xfailed** (was 346; +5 new). NO `sim.py`/`land.py`
+>   change, so the live sim-vs-Dolphin regression is unaffected.
+>
+> **NEXT (per the session-45 handoff, OFFLINE until the Phase-5 live close):** (3) thread `SeamGeo` through
+> `solver.run`/`base`/`search`/families (replace the module-global `G`; `!= G.F` gate -> `seam.F`; the
+> drill cache -> `seam.pred_genuine`) -- GATE: re-solve the kaze roll seam via the parameterized path,
+> reproduce the shipped seed-0 hit bit-exact. (4) Generalize `walkstab` the same way (absorb its PRIVATE
+> acceptance duplicates into SeamGeo; derive the settled thrust facing from the bisector like F; derive the
+> crawl-window center from `bear_to_S`, not `CRUISE_BETA`) -- GATE: reproduce the shipped walk-stab clip.
+> (5) Drop `thrust_scan`'s `_matches` kaze guard, dispatch to a NEW enumerated seam, MINT an anchor there,
+> solve via the generalized path, DELIVER a clean-DTM 0-ULP clip -- that live clip on a novel seam is the
+> real "generalization works" proof. Every other thread (sheathed clip DONE, walk-stab clip, Tetra
+> push-aside/turnaround, thrust scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-14, session 44): the SHEATHED ROLL-STAB CLIP IS DELIVERED LIVE, 0-ULP,
 > pure-sim, no calibration.** The session-43 blocker (the session-39 hit "doesn't survive seed=0") was
 > NOT a density wall to grind past -- it was a GENERAL seed-0 crawl-composition bug, fixed structurally
 > (no tuned constants). Done this session (offline + 2 live clean-DTM runs -- 1 ship + 1 golden capture,
