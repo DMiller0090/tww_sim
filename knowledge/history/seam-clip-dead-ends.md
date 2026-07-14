@@ -464,6 +464,35 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
         The FK model of #25/#28 remains genuinely open (session-25 slot-7 residual, curved MOVE-turn
         overlap) -- it was just NOT the sheathed blocker.
 
+## The sheathed roll-stab clip: SOLVED offline, LIVE-blocked by a sim MOVE-turn facing overshoot (session 39, LIVE)
+
+31. **The row-18 facing overshoot is a two-angle/MOVE-turn SETTLE residual, NOT input buffering, and it
+    blocks the live roll-stab clip for BOTH the sheathed and drawn anchors.** Session 39 SOLVED a
+    from-rest sheathed roll-stab clip (pure sim, seed-only; `old=(9072.209,308.028)`, offline `deliver
+    gate` PASS 0-ULP genuine, sliver-robust) but the LIVE ship did not clip. Per-frame sim-vs-live diff
+    (fixture `fixtures/sheathed_roll_ship_live.json`):
+    - **Rows 0-17 are BIT-EXACT live** -- the K=2 crawl, the row-3 draw B-edge, the arc, and the fines
+      all deliver 0-ULP, so delivery alignment / `rest_noops` (#30) are correct and the draw is not it.
+    - **Row 18 diverges by a single frame:** on an aim-stick frame (after the row-16 fine settles) the
+      SIM's `shape_angle` OVERSHOOTS to 33367 while live holds the settled 33295; the phantom turn dips
+      speedF to 15.05 vs live's 17.0 cap -> a **~1.9u along-track lag that FREEZES** for the whole roll
+      -> `old` lands off the f32 razor -> the CUT fires from the wrong spot (live `new` not behind the
+      walls; the lunge misdirects). Same class as the #25 speedF-freeze, but the trigger is the TURN.
+    - **DISCRIMINATOR (ruled out the buffering hypothesis): live shape+travel (`0x136`/`0x12E`) per
+      frame == the sim on EVERY row except 18** -- live does NOT lead the sim by a frame, so it is NOT a
+      stick INPUT_DELAY/buffering shift (the pushaside-#3 class). The sim inserts one spurious facing
+      value at row 18 that live never has -> a genuine `shape_angle` chase / `setMoveSlantAngle` settle
+      overshoot after an arc+fine (README model term #5; the Phase-R MOVE-turn frontier). NOT fixed this
+      session (Dereck: diagnose first). Two open paths: (a) re-search for a CLEAN-SETTLE hit (constrain
+      speedF==17 on every cruise frame from the last turn through A -- no sim change); (b) model the turn
+      overshoot to f32 (decomp-first, the general fix, also unblocks the drawn idle13 hit). RED gate
+      `tests/test_sheathed_roll_clip.py::test_sheathed_ship_matches_live` (strict-xfail).
+    - **Side note (search speed):** `solver.search` is over-budget for the roll-stab -- at 200s it had
+      not finished drill level 0 for idle13 OR sheathed; its `_dust_cache` under-samples the
+      1-f32-col-per-z genuine set (step 0.001 >> f32) and mis-guides the drill. The 91s find used a
+      focused warm-start from the same-seam idle13 recipe (objective-compliant: seed-only). Fold that
+      into a reproducible <2-min sheathed solve; do NOT trust the generic drill for the roll-stab.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

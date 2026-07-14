@@ -76,13 +76,62 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-13, session 38)
+## Status (2026-07-13, session 39)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-13, session 38): the sheathed anchor's `REST`-not-bit-exact blocker is
+> **CURRENT THREAD (2026-07-13, session 39): the sheathed roll-stab clip is SOLVED offline
+> (pure-sim, from-rest, 0-ULP ship-gate PASS) but LIVE delivery is BLOCKED by a newly root-caused
+> sim MOVE-turn facing-settle residual. Diagnosed to a single frame; RED regression added; NO sim
+> code changed (Dereck's call: diagnose first).** This is session-38 NEXT (solve + deliver).
+> Done this session (offline, plus 4 live DTM runs -- 1 ship + 3 diagnostic, never advancewith):
+> - **SOLVE done.** A from-rest SHEATHED roll-stab genuine clip found ENTIRELY in the sim:
+>   `old=(9072.2089844,308.0280762)` -> `new=(9069.8886719,258.8625793)`, disp 49.2202, CUT_F,
+>   facing 33295, spF@A=17.0, sliver-robust (+-2e-4). `deliver.py gate` PASSES 0-ULP (dOLD/dNEW=(0,0),
+>   genuine, clear, behind BOTH walls). Recipe (pure sim, seed-only): `A_proj=-500`, `draw_at=3`, a
+>   K=2 crawl `((77,249),(98,191))` + arc `(9,(73,254),2)` + fines `(10,(99,183))`,`(4,(96,192))`,
+>   `(6,(98,188))`. Found in **91 s** by a focused sweep warm-started from the same-seam idle13 recipe.
+> - **LIVE ship FAILED -- root-caused by per-frame sim-vs-live diff (do NOT guess inputs).** Rows 0-17
+>   of the ship stream (crawl, the row-3 draw B-edge, arc, fines) are **BIT-EXACT live** -- so delivery
+>   alignment and `rest_noops` are correct. At **row 18** (an aim frame after the row-16 fine settles)
+>   the SIM's `shape_angle` OVERSHOOTS to 33367 while live holds the settled 33295; that phantom
+>   one-frame turn dips speedF to 15.05 vs live's 17.0 cap -> a **~1.9u along-track lag that freezes**
+>   for the rest of the roll -> `old` lands off the f32 razor -> the CUT fires from the wrong spot (no
+>   clip; live `new` is not behind the walls). The **drawn idle13 cached hit has the IDENTICAL row-18
+>   overshoot**, so this blocks the roll-stab clip for BOTH anchors -- the cached idle13 hit appears to
+>   have never been live-shipped through the current turn model.
+> - **DISCRIMINATOR (Dereck's directive): it is a two-angle/MOVE-turn SETTLE residual, NOT an input-
+>   delay/buffering shift.** Live shape+travel per frame (`0x136`/`0x12E`) vs the sim: `live[row r] ==
+>   sim[row r]` on EVERY row except 18 -- live does NOT lead the sim by a frame (rules out the
+>   pushaside-#3 class). The sim inserts one spurious facing value (33367) at row 18 that live never
+>   has. Root is the `shape_angle` chase / `setMoveSlantAngle` settle after an arc+fine (README model
+>   term #5; the Phase-R MOVE-turn frontier). dead-end #31 (NEW).
+> - **Artifacts:** offline hit recorded to `_generated/rollstab_hits.json[0]` (gitignored);
+>   live-golden fixture `fixtures/sheathed_roll_ship_live.json` (jitter-immune: shape+travel+pos per
+>   row, first divergence row 18, IMMUTABLE); gate `tests/test_sheathed_roll_clip.py` -- offline clip
+>   test GREEN (the solve is real), ship-vs-live test strict-xfail RED (the turn residual). Full suite
+>   **342 passed, 1 skipped, 2 xfailed** (was 341/1xf). NO `harness/rollstab/*.py` behavior changed.
+> - **Side finding:** `solver.search` is over-budget for the roll-stab -- at 200s it had not finished
+>   drill level 0 for EITHER idle13 or sheathed (the dust cache under-samples the 1-f32-col-per-z
+>   genuine set, mis-guiding the drill). The 91s find used a focused warm-start, not `solver.search`.
+>   The <2-min pure-sim search is met by the focused path, not the generic drill as it stands.
+>
+> **NEXT (Dereck decides the branch; diagnosis is DONE): make the sheathed clip deliver live.** Two
+> objective-compliant paths, neither started this session:
+> 1. **Re-search for a CLEAN-SETTLE hit (no sim change):** add an acceptance constraint that the
+>    from-rest approach holds speedF==17 on every cruise frame from the last intended turn through the
+>    A press (reject any stream with a phantom row-18-type dip), then search for a deliverable sheathed
+>    hit. Fast to try; open whether such a hit reaches the f32 razor.
+> 2. **Fix the sim MOVE-turn model (decomp-first, the general fix):** find why `shape_angle` overshoots
+>    one frame after an arc+fine (`setMoveSlantAngle`/two-angle settle, `d_a_player_main.cpp`) and model
+>    it to f32 so any arc approach delivers 0-ULP -- flips `test_sheathed_ship_matches_live` GREEN. Per
+>    the sim-change protocol: decomp-first, then live-confirm. Also fixes the drawn idle13 clip.
+> Separately, fold the 91s focused solve into the harness as a reproducible <2-min sheathed solve.
+> Every other thread (walk-stab clip, Tetra push-aside/turnaround, thrust scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-13, session 38): the sheathed anchor's `REST`-not-bit-exact blocker is
 > RESOLVED offline -- and it was NEVER the walk-entry foot-FK (session 37 was wrong). The sole cause
 > was a one-frame walk-entry DTM-ALIGNMENT noop, which is the anchor savestate's emulator SUB-FRAME
 > CAPTURE PHASE (not in-game). Now derived per-anchor; sheathed from-rest is BIT-EXACT; RED test flipped
