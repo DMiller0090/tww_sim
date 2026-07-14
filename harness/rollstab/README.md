@@ -76,13 +76,55 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-14, session 40)
+## Status (2026-07-14, session 41)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-14, session 40): the session-39 live blocker is RE-ROOT-CAUSED
+> **CURRENT THREAD (2026-07-14, session 41): the sheathed-clip row-18 blocker is RE-ROOT-CAUSED
+> DETERMINISTICALLY and it OVERTURNS BOTH #31 AND #32 -- the live miss is a ONE-FRAME WALK-SPEED
+> gap the sim isn't modeling (a band-magnitude stick at cap), NOT a decode or facing error. Per
+> Dereck's directive, a RED gate is added for next session to resolve by MODELING it. No sim behavior
+> shipped except the interim `fine_family` band-exclusion.** Done this session (offline + ~5 live
+> DETERMINISTIC DTM measurements, never advancewith):
+> - **The band DECODE is faithful even for a 1-frame transient (overturns #32).** A deterministic
+>   stopped-position probe (`aim-cruise + [1-frame T] + neutral-to-DEAD-STOP`, read the constant
+>   stopped pos -> ±1 log jitter cannot corrupt it): the culprit `(96,192)` live stopped pos == the
+>   sim's RAW-decode prediction BIT-FOR-BIT (the "holds prior" prediction was off 20.9u); sub-band
+>   control likewise. The decode formula is correct; the whole game stick path (PADRead->PADClamp->
+>   CStick::update) is STATELESS (decomp), zero prior-frame state.
+> - **The divergence is purely ALONG-TRACK (speedF), not facing (overturns #31).** gf-aligned to the
+>   jitter-immune golden (emulator counter ticks 2x/game frame -> gf = 2*row + const, 0 conflicts):
+>   rows 0-17 BIT-EXACT (incl. the arc + sub-band fines + a held-2 full stick), then row 18 the sim
+>   dips speedF 17->15.091 while live holds 17.0 (perp x matches to 0.02u). `17-15.091 = 1.909` ==
+>   the 1.9125u lag, frozen through the roll -> `old` off the razor -> no clip. Two independent live
+>   runs agree (golden + a fresh `deliver ship`: live old z 306.116 vs sim 308.028).
+> - **The gap = the console's BAND-magnitude WALK-SPEED (the thing to model).** decomp: target speed
+>   `dVar10 = msd^2*max` (setNormalSpeedF 2306); `mStickDistance = mMainStickValue` (setStickData
+>   10569). For a band magnitude (0.889,1.0) the console's effective walk-speed differs from the sim's
+>   `min(hypot/54,1)`->msd^2 model -- the SAME caveat precise-stop.md documents (held `(128,196)`:
+>   console 15.76 vs sim 16.38). Only band AT CAP dips (`start1 (98,191)` is band but was bit-exact --
+>   it is in the low-speed start crawl, still accelerating). Sessions 39/40 misdiagnosed it (MOVE-turn
+>   / band-decode) by reading run_dtm's ±1-ambiguous per-frame log instead of the robust z-trajectory.
+> - **OPEN SUBTLETY (recorded, not over-claimed): the probe (band after plain cruise) matched the
+>   sim's dip, yet the ship (band after the ARC) shows live NOT dipping** -- an arc-carried hidden
+>   state changes the console's band-speed response; not isolated. Doesn't change the fix. (dead-end #33.)
+> - **Artifacts:** RED gate `tests/test_sheathed_roll_clip.py::test_sheathed_band_speed_at_cap`
+>   (strict-xfail, corrected reason: band walk-speed, gf-aligned to the immutable jitterproof golden);
+>   interim `solver.fine_family` band-exclusion (`_in_band`, `BAND_LO/HI`); `capture_decode.band_sweep`
+>   (per-frame sweep -- but per-frame band reads are ±1-unreliable, use the stopped-position probe).
+>   Suite **342 passed, 1 skipped, 2 xfailed** (unchanged count).
+>
+> **NEXT (Dereck's directive: model what the sim isn't modeling): resolve the RED gate by modeling the
+> console's band-magnitude walk speed to f32.** Decomp-first from `setStickData`/`mMainStickValue` /
+> `JUTGamePad::CStick::update` value near the cap; characterize the arc-carried context dependence via
+> the DETERMINISTIC stopped-position probe (never per-frame run_dtm reads for 1-frame events). Then
+> REMOVE the `fine_family` band-exclusion so the solver can USE band sticks again (restoring the
+> near-full-mag fine-perp density the band-free search lacks -- session 40's 0.0013u wall), re-solve,
+> deliver. Every other thread (walk-stab clip, Tetra push-aside/turnaround, thrust scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-14, session 40): the session-39 live blocker is RE-ROOT-CAUSED
 > (jitter-immune) and it OVERTURNS dead-end #31. No sim code changed. The tried approaches did not
 > deliver; the frontier is open.** Path 1 (the session-39 handoff's "try first") was run, then the
 > blocker was re-measured jitter-immune. Done this session (offline + 3 live jitter-immune DTM captures,

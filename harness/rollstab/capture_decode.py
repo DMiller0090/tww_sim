@@ -138,6 +138,52 @@ def hold_decode(anchor, test_sticks, hold=8):
     return out
 
 
+def band_sweep(anchor, tests=None, holds=(1, 2, 3), pre_aim=3, post_aim=3):
+    """JITTER-IMMUNE transient characterization: for each test stick T and hold length h, deliver
+    `[aim]*pre_aim + [T]*h + [aim]*post_aim` after a walk-to-cruise preamble, and read the live decode
+    (target/msd) game_frame-tagged on EVERY frame of the T span (and the bracketing aim frames). This
+    is the tool the sheathed-clip Next-step #1 needs: it answers whether a 1-frame BAND transient is a
+    pure NO-OP (holds the prior aim value exactly) or a PARTIAL SLEW (moves partway toward T), and
+    whether a 2/3-frame band hold SETTLES to T's raw decode on frame 2+.
+
+    The game-side path (PADRead->PADClamp->CStick::update->CButton::update) is STATELESS (decomp,
+    session 41), so any prior-frame dependence measured here is a DTM-delivery/SI-layer artifact, and
+    the model for it belongs in the delivered-byte decode, keyed on the prior delivered stick.
+
+    Compares each live frame to: PRIOR = the aim's closed-form decode; RAW = T's closed-form decode."""
+    from harness.rollstab import rest as C
+    from tww_sim.core.mathlib import main_stick_decode
+    _, straight, aim = C.sticks_of(anchor)
+    if tests is None:
+        # ladder near the aim bearing, below-band -> deep-band (RAW vs PRIOR distinguishable);
+        # (99,183)/(98,188) non-band controls, (96,192)=0.9605 the shipped hit's culprit fine.
+        tests = [(99, 183), (98, 188), (99, 189), (99, 190), (97, 190),
+                 (98, 192), (96, 192), (98, 193), (96, 193), (96, 194)]
+    aim_ang, aim_msd = main_stick_decode(*aim)
+    aim_m34dc = ((aim_ang if aim_ang is not None else 0) + 0x8000) & 0xFFFF
+    stream = [straight + (0,)] * 10 + [aim + (0,)] * 6
+    spans = []                                              # (T, h, start_idx, end_idx)
+    for t in tests:
+        for h in holds:
+            stream += [aim + (0,)] * pre_aim
+            spans.append((tuple(t), h, len(stream), len(stream) + h))
+            stream += [tuple(t) + (0,)] * h
+            stream += [aim + (0,)] * post_aim
+    res = capture(anchor, stream, tail=4, log_extra=2)
+    # Save FULL game_frame-tagged rows + the delivered stream: align OFFLINE by game_frame, NOT by
+    # log-row index (run_dtm poll jitters +-1 -> a 1-frame transient misreads; see the module docstring).
+    o = os.path.join(_rb, '_generated', 'band_sweep_decode.json')
+    json.dump(dict(anchor=anchor, F0=res['F0'], aim=list(aim), aim_decode=[aim_m34dc, round(aim_msd, 4)],
+                   stream=[list(x) for x in stream],
+                   spans=[[list(t), h, a, b] for (t, h, a, b) in spans],
+                   rows=[dict(gf=r['game_frame'], m34dc=r['m34dc'], msd=round(r['msd'], 4),
+                              shape=r['shape'], speedF=round(r['speedF'], 3)) for r in res['rows']]),
+              open(o, 'w'), indent=1)
+    print('wrote %s (F0=%s, %d rows, aim decode m34dc=%d msd=%.4f)' % (
+        o, res['F0'], len(res['rows']), aim_m34dc, aim_msd))
+    return res
+
+
 def ship(idx=0):
     """Play a solver hit's ship stream jitter-immune and diff vs the from-rest sim, aligned by
     game_frame -- the trustworthy per-frame delivery diff (do NOT use a raw run_dtm log for this)."""
@@ -169,5 +215,8 @@ if __name__ == '__main__':
     if 'hold' in sys.argv:
         A = kw.get('anchor', 'kaze_r11_rollstab_sheathed@twwgz')
         hold_decode(A, [(96, 192), (98, 191), (98, 196), (77, 249)])
+    elif 'bandsweep' in sys.argv:
+        A = kw.get('anchor', 'kaze_r11_rollstab_sheathed@twwgz')
+        band_sweep(A)
     else:
         ship(int(kw.get('hit', 0)))

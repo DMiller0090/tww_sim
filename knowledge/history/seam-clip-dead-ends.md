@@ -499,7 +499,14 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
 
 ## The sheathed roll-stab clip: row-18 blocker RE-ROOT-CAUSED as a transient band-stick decode divergence (session 40, LIVE, jitter-immune)
 
-32. **The row-18 blocker is a TRANSIENT (0.889,1.0)-magnitude-band stick input-layer decode divergence
+32. **[CORRECTED session 41 -> #33: the "1-frame band stick decodes to ~aim / holds prior" claim below
+    is WRONG. A deterministic stopped-position probe proved the band DECODE registers its raw value
+    bit-for-bit (target + msd), even as a 1-frame transient. The row-18 divergence is a WALK-SPEED gap
+    (the sim dips speedF on the band magnitude at cap; the console does not), NOT a decode gap. The
+    session-40 single-frame decode read was itself a ±1-frame misread of run_dtm's log (the same trap
+    it claimed to have designed out -- the log's stream->frame offset is ±1 ambiguous, and a 1-frame
+    event lives entirely inside that window). Read #33.]**
+    **The row-18 blocker is a TRANSIENT (0.889,1.0)-magnitude-band stick input-layer decode divergence
     -- NOT the two-angle/MOVE-turn settle of #31.** Session 40, all measured jitter-immune (deterministic
     game_frame tags, `fixtures/sheathed_roll_ship_jitterproof.json`), the run_dtm poll-jitter that misled
     #31 designed out:
@@ -538,6 +545,59 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
       property of the tried lattices, so a richer alphabet is the lever; (3) exploit delivery-mechanics
       DOF not yet used (draw timing, B timing, roll-entry frame). Ground truth:
       `fixtures/sheathed_roll_ship_jitterproof.json`.
+
+## The sheathed roll-stab clip: row-18 blocker is a BAND WALK-SPEED gap, not decode (session 41, LIVE, deterministic)
+
+33. **The row-18 live miss is a ONE-FRAME along-track (walk-SPEED) deficit from a band-magnitude stick
+    at the speed cap -- the sim is NOT modeling the console's band walk-speed. NOT a decode gap (#32
+    wrong) and NOT a facing/MOVE-turn overshoot (#31 wrong).** Both prior diagnoses were ±1-frame
+    misreads of run_dtm's per-frame log; reading the ROBUST z-trajectory (immune to ±1 -- a
+    misalignment shows as a ~17u step, not 1.9u) settled it. Established this session:
+    - **The band DECODE is faithful, even for a 1-frame transient.** A DETERMINISTIC probe -- deliver
+      `aim*cruise + [1-frame T] + neutral*16 (decel to a DEAD STOP)` and read the STOPPED position
+      (constant -> ±1 read cannot corrupt it) -- gives, for the culprit `(96,192)`, live stopped pos ==
+      the sim's raw-decode prediction BIT-FOR-BIT (0 ULP; sim's no-op "holds prior" prediction was off
+      by 20.9u). A sub-band control `(98,188)` likewise. So the sim's `main_stick_decode` (target + msd)
+      is correct for band 1-frame transients -- overturns #32. Tool: `scratchpad transient_probe`
+      pattern (stopped-position, deterministic); the per-frame `capture_decode.band_sweep` is NOT
+      reliable for 1-frame reads (its stream->row offset is ±1 ambiguous; O=2 and O=3 both give 0
+      disagreement on settled runs).
+    - **The divergence is purely SPEED (z), not facing (x).** gf-aligned to the jitter-immune golden
+      (`fixtures/sheathed_roll_ship_jitterproof.json`, gf = 2*row + const; the emulator counter ticks
+      twice per game frame -- 0 gf conflicts, clean +2 cadence): rows 0-17 are BIT-EXACT (incl. the
+      whole arc at rows 12-16, and sub-band 1-frame fines, and a held-2 full stick). At row 18 the sim
+      dips speedF 17->15.091 while live holds 17.0; perp x matches to 0.02u. The one-frame deficit
+      `17 - 15.091 = 1.909` == the observed 1.9125u lag, which FREEZES through the roll -> `old` off the
+      f32 razor -> no clip. Confirmed by two independent live runs (the golden + a fresh `deliver ship`:
+      live old z 306.116 vs sim 308.028, d = -1.912).
+    - **The mechanism (decomp): `mStickDistance` walk-speed.** `setNormalSpeedF` (d_a_player_main.cpp:2306)
+      sets the target speed `dVar10 = mStickDistance * (mMaxNormalSpeed * mStickDistance)` = msd^2*max;
+      for `(96,192)` msd 0.9605 that is 15.68 < 17 -> the sim decelerates. `setStickData` (10569) sets
+      `mStickDistance = g_mDoCPd_cpadInfo[0].mMainStickValue` (JUTGamePad::CStick::update value =
+      `min(hypot(clamped)/54, 1)`). The whole game path (PADRead->PADClamp->CStick::update) is STATELESS
+      (decode faithful), so the gap is the console's EFFECTIVE walk-speed for a band magnitude, which
+      differs from msd^2*max. This is the SAME band-speed caveat precise-stop.md already documents
+      (held `(128,196)`: console 15.76 vs sim 16.38 -- sim HIGHER when held; but for a 1-frame band at
+      cap the console holds full and the sim dips -- sim LOWER). Only band magnitudes (0.889,1.0)
+      diverge; sub-band and full are bit-exact live (rows 0-17 prove it). `start1 (98,191)` is band too
+      but was bit-exact -- because it is in the start crawl at LOW speed (target above current -> still
+      accelerating -> no dip); only band AT CAP dips.
+    - **OPEN SUBTLETY (do not over-claim a mechanism -- the #31/#32 lesson): the probe (band after plain
+      cruise) MATCHED the sim's dip bit-for-bit, yet the ship (band after the arc) shows live NOT
+      dipping.** Same stick, same cap speed, same bit-exact entering state -- so an arc-carried hidden
+      state (travel/anim/turn-lean) changes the console's band-speed response, and the sim does not model
+      it. Not isolated this session; it does not change the fix.
+    - **INTERIM WORKAROUND (session 41): `solver.fine_family` now EXCLUDES the (0.889,1.0) band**
+      (`_in_band`), so the solver cannot emit a divergent 1-frame band fine. But this lands on session
+      40's wall -- the band-free search does not reach the f32 dust (band fines were the near-full-mag
+      fine-perp density). Deliverable hit is NOT found band-free.
+    - **NEXT (Dereck's directive: model what the sim isn't modeling): resolve the RED gate
+      `tests/test_sheathed_roll_clip.py::test_sheathed_band_speed_at_cap` by modeling the console's
+      band-magnitude walk speed to f32** -- decomp-first from `setStickData`/`mMainStickValue` /
+      `JUTGamePad::CStick::update` value near the cap (and characterize the arc-carried context
+      dependence via the deterministic stopped-position probe, NOT per-frame run_dtm reads). Once
+      faithful, REMOVE the `fine_family` band-exclusion so the solver can USE band sticks again
+      (restoring density), re-solve, deliver.
 
 ## Pointers
 

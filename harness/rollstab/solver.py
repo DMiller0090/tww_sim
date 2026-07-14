@@ -38,7 +38,17 @@ from harness.rollstab import rest as C
 HITS_PATH = os.path.join(_rb, '_generated', 'rollstab_hits.json')
 ZLO, ZHI = 302.6, 308.2        # old_z clear band (roll stops at the face below ~302.6)
 START_KMAX = 3                 # start-crawl window (K<=3: low-speed micro-moves, 1D approach)
+BAND_LO, BAND_HI = 0.889, 1.0  # the live-divergent PADClamp magnitude band (never emit as a 1-frame stick)
 _BASE = {}
+
+
+def _in_band(stk):
+    """True if the delivered stick's decoded magnitude is in the live-divergent (0.889, 1.0) band.
+    A 1-frame band stick at the speed cap makes the sim dip speedF (msd^2 target) but not the console
+    -- the sheathed-clip live blocker (dead-end #33). Sub-band and full are bit-exact live."""
+    from tww_sim.core.mathlib import main_stick_decode
+    _, m = main_stick_decode(stk[0], stk[1])
+    return BAND_LO < m < BAND_HI
 
 
 def base(anchor):
@@ -156,6 +166,14 @@ def start_family(anchor, kmax=START_KMAX, F=None):
 
 
 def fine_family(anchor, mstep=0.004, leads=(4, 5, 6, 7, 10), F=None):
+    """1-frame partial-magnitude perp fines, LIVE-VALID by construction: sticks whose decoded msd is
+    in the (0.889, 1.0) PADClamp BAND are EXCLUDED. At the speed cap the sim reduces the walk-speed
+    target to msd^2*max for a band stick (speedF dip) but the console does not for a 1-frame band
+    stick -- session 41 root-caused the sheathed-clip live miss to exactly one such fine ((96,192),
+    msd 0.9605) losing 1.9u of along-track that the console kept (robust z-diff vs the jitter-immune
+    golden). The decode itself is faithful (probe); it is the near-cap SPEED that diverges. So the
+    fine alphabet is msd <= 0.889 (sub-band, bit-exact live incl. at cap) plus full 1.0. See
+    knowledge/mechanics/precise-stop.md (the "never emit Y 192-254" rule) + dead-end #33."""
     F = G.F if F is None else F
     out, seen = [], set()
     seed = G.load_seed(anchor)
@@ -167,7 +185,8 @@ def fine_family(anchor, mstep=0.004, leads=(4, 5, 6, 7, 10), F=None):
             stk = C.dtm_stick(stick_for_bearing((F + 16 * j) & 0xFFFF, cs, m))
             if stk not in seen:
                 seen.add(stk)
-                out.append(stk)
+                if not _in_band(stk):            # drop the (0.889,1.0) band: sim over-reads speed at cap
+                    out.append(stk)
             m -= mstep
     return [(ld, stk) for stk in out if stk != aim for ld in leads]
 
