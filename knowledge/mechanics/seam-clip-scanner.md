@@ -11,7 +11,9 @@ batch-scanned into the collision-viewer CSVs?
 the full room) and Hyrule seams (near-coincident pair, -1727 needs-push), all clean-placement CLIP
 drift 0. Guards: [`tests/test_seam_clip_check.py`](../../tests/test_seam_clip_check.py) (single-seam
 `clip_check`, 10 cases) and [`tests/test_seam_locator.py`](../../tests/test_seam_locator.py) (the
-shipped locator: superset + structural gates + native-ring identity).
+shipped locator: superset + structural gates + native-ring identity) and
+[`tests/test_seam_wall_classification.py`](../../tests/test_seam_wall_classification.py) (the
+decomp-faithful wall/ground/roof split + the Omori false-positive it fixed).
 **Source:** [`harness/collision/seam_locator.py`](../../harness/collision/README.md) (`scan_region` /
 `locate`, the shipped scanner), `seam_clip_check.py` (`clip_check`, the single-seam checker + the
 shared standability gates), `gap_search.py` (`first_f32_clip`; native ring in `core/_collc.pyx`),
@@ -124,9 +126,30 @@ Two live-confirmed Hyrule clips were missing from the first dump; `enumerate_sea
   rounding opens a threadable gap (live A_mori (4077.6,-1708.8)). NOT categorical: the f32 verify
   decides per-seam. See [seam-clip.md](seam-clip.md) + [history](../history/seam-scanner-analytic-attempts.md).
 
-## Two gather / verify false-positive fixes (2026-07-15)
+## Wall/ground/roof classification = the NORMAL, not a stored attribute
 
-`locate` reported "clips that don't work" (user-flagged, GanonK top-of-room). Two causes, both fixed:
+The scanner selects "wall" triangles by the game's own rule (`cBgW_CheckB*`, `c_bg_w.h`; see
+[collision.md](collision.md#ground--wall--roof-classification)) - a pure test on the face-normal **Y**,
+canonically `tww_sim.core.collision.bg_is_{ground,roof,wall}`:
+- `ny >= 0.5` → ground, `ny < -0.8` → roof, ELSE (`-0.8 <= ny < 0.5`) → **wall** (`bg_is_wall`).
+- The **CrrPos blocker set** fed to `crr_pos_walls` is wall **+** roof = NOT ground (`bg_blocks_crrpos`):
+  the game's `WallCorrectRp`/`RwgWallCrrPos` walk a block's wall AND roof poly lists (`d_bg_w.cpp`).
+- This is NOT a per-triangle attribute. The DZB's per-tri property/group ids (`GetGroundCode`) carry
+  surface MATERIAL (sand, grass, void `code 4`, ...), never the wall-vs-ground geometry.
+
+There is no "verticality" threshold: a **sloped wall up to `ny` 0.5** is a wall the game braces against.
+
+## Three gather / verify false-positive fixes (2026-07-15)
+
+`locate` reported "clips that don't work" (user-flagged). Three causes, all fixed:
+- **Wall classification too strict** (Omori Room0 S=(1075.9,350,-1190.57), interior 160.1). The scanner
+  had classified walls as `|ny| < 0.03` (near-vertical ONLY), so it dropped the sloped walls
+  (`bg_is_wall` up to `ny` 0.5) that also brace. Here a sloped wall (poly 392, `ny`=0.384) shares the
+  seam vertex; the game's WallCorrect braces the r=35 cylinder on it and BLOCKS (live drift 35.70), but
+  the strict filter saw a phantom clip. Now the whole pipeline classifies via `bg_is_wall` /
+  `bg_blocks_crrpos`. (Live/offline geometry was bit-identical, and only ADDING blockers - so this
+  can only kill false positives, never a live-confirmed clip; A_mori/GanonL/GanonK goldens unchanged.)
+  Diagnosis handoff + gate [`tests/test_seam_wall_classification.py`](../../tests/test_seam_wall_classification.py).
 - The CrrPos barrier was gathered at the **seam-vertex Y**, but the wall cylinder is at **Link's floor
   Y** - hundreds of u higher on a tall corner (GanonK top: base 6997, floor 7778), so the walls at
   Link's height were excluded and the verify missed the WallCorrect blocker. Now gathered at the

@@ -68,6 +68,34 @@ def fsqrt(a):
     return _f(math.sqrt(_f(a)))
 
 
+# surface classification -- wall/ground/roof (WallCorrect vs GroundCross) = a pure face-normal-Y test,
+# NOT a stored attribute. Decomp cBgW_CheckB* (c_bg_w.h); rationale: knowledge/mechanics/collision.md.
+BG_GROUND_NY = 0.5             # cBgW_CheckBGround: ny >= 0.5  -> ground
+BG_ROOF_NY = -4.0 / 5.0        # cBgW_CheckBRoof:   ny < -0.8  -> roof
+
+
+def bg_is_ground(ny):
+    return ny >= BG_GROUND_NY
+
+
+def bg_is_roof(ny):
+    return ny < BG_ROOF_NY
+
+
+def bg_is_wall(ny):
+    """cBgW_CheckBWall: neither ground nor roof, i.e. -0.8 <= ny < 0.5. This is the class whose
+    triangles form clippable wall seams (NOT the old |ny|<0.03 near-vertical-only heuristic -- that
+    dropped sloped walls the game braces against; see knowledge/mechanics/seam-clip-scanner.md)."""
+    return not bg_is_ground(ny) and not bg_is_roof(ny)
+
+
+def bg_blocks_crrpos(ny):
+    """The XZ-blocking set the game's CrrPos actually walks: WallCorrectRp / RwgWallCrrPos process a
+    block's WALL *and* ROOF poly lists (d_bg_w.cpp), i.e. everything that is NOT ground. Near-flat
+    roofs self-skip inside wall_correct (their nx^2+nz^2 is-zero). Feed THIS set to crr_pos_walls."""
+    return not bg_is_ground(ny)
+
+
 # Gekko frsqrte (reciprocal-sqrt estimate) — Dolphin's exact table + algorithm. VECMag/cM3d_CalcPla
 # normalise via frsqrte+Newton (not correctly-rounded sqrt); the ~1-ULP difference flips seam clips.
 _FRSQRTE = [

@@ -22,9 +22,8 @@ import os
 import struct
 import sys
 
-from tww_sim.core.collision import Tri, calc_pla
+from tww_sim.core.collision import Tri, calc_pla, bg_is_wall
 
-WALL_NY_MAX = 0.03
 GROUND_NY_MIN = 0.5
 
 
@@ -151,7 +150,7 @@ def main(argv):
         elif a == "no-standable":
             standable = False
     region, box, _ = load_room_region(stage, room)
-    walls = sum(1 for t in region if abs(t["n"][1]) < WALL_NY_MAX)
+    walls = sum(1 for t in region if bg_is_wall(t["n"][1]))
     grounds = sum(1 for t in region if t["n"][1] >= GROUND_NY_MIN)
     print("stage=%s room=%d: %d tris (%d walls, %d ground) box=%s"
           % (stage, room, len(region), walls, grounds,

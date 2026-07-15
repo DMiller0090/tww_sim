@@ -41,12 +41,12 @@ _TOOLS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..
 if _TOOLS not in sys.path:
     sys.path.insert(0, _TOOLS)
 
-from tww_sim.core.collision import Tri, Plane, wall_correct
+from tww_sim.core.collision import (Tri, Plane, wall_correct, bg_is_wall, bg_is_ground,
+                                     bg_blocks_crrpos)
 from tww_sim.core.fp import f32 as _f
 from harness.collision.gap_search import min_f32_clip, WALL_H, WALL_R
 
 GATHER_R = 60.0        # XZ edge-distance radius for gathering interfering wall tris around a seam
-WALL_NY_MAX = 0.03     # |ny| below this == a vertical wall (the seam-clip verticality requirement)
 
 
 # --------------------------------------------------------------------- pure geometry
@@ -125,7 +125,7 @@ def enumerate_seams(region_tris, box):
     walls store slightly-offset seam vertices is still paired (see ``SEAM_XZ_TOL``).
     """
     xmin, xmax, ymin, ymax, zmin, zmax = box
-    walls = [t for t in region_tris if abs(t["n"][1]) < WALL_NY_MAX]
+    walls = [t for t in region_tris if bg_is_wall(t["n"][1])]
     # every vertical wall edge as [x, z, ylo, yhi, lo_vertex, tri]
     ve = []
     for t in walls:
@@ -204,7 +204,7 @@ def _gather(region_tris, S, link_y):
     lo, hi = link_y - 5.0, link_y + WALL_H[-1] + 5.0
     out = []
     for t in region_tris:
-        if abs(t["n"][1]) >= WALL_NY_MAX:
+        if not bg_blocks_crrpos(t["n"][1]):     # keep the game's CrrPos set (wall+roof, i.e. not ground)
             continue
         ys = [c[1] for c in t["v"]]
         if max(ys) < lo or min(ys) > hi:

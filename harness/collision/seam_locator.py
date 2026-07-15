@@ -56,10 +56,11 @@ import os
 import sys
 import time
 
-from tww_sim.core.collision import line_check, crr_pos_walls  # noqa: F401  (barriers handled in the verify)
+from tww_sim.core.collision import (line_check, crr_pos_walls,  # noqa: F401 (barriers in the verify)
+                                     bg_blocks_crrpos)
 from tww_sim.core.fp import f32 as _f
 from harness.collision.seam_scan import (enumerate_seams, _gather, disp_floor, interior_angle_deg,
-                                         GROUND_NY_MIN, WALL_NY_MAX)
+                                         GROUND_NY_MIN)
 from harness.collision.seam_clip_check import (_seam_walls, _valid_initial, _floor_at, _wall_yspan,
                                                _representative_link_y, _is_step_riser)
 from harness.collision.gap_search import bisector_dir, settle, first_f32_clip, WALL_H
@@ -198,7 +199,7 @@ def locate(region, ground, seam, stats=None):
     # any clip whose full-room sweep is stopped short. Far walls can't touch the short segment (no FN). KB.
     old, new = r["old"], r["new"]
     po, pn = (_f(old[0]), _f(old[1]), _f(old[2])), (_f(new[0]), _f(old[1]), _f(new[2]))
-    res, info = crr_pos_walls(po, pn, [t["T"] for t in region if abs(t["n"][1]) < WALL_NY_MAX])
+    res, info = crr_pos_walls(po, pn, [t["T"] for t in region if bg_blocks_crrpos(t["n"][1])])
     if info["line_hit"] or info["wall_hit"] or abs(res[0] - pn[0]) > 1e-2 or abs(res[2] - pn[2]) > 1e-2:
         if stats is not None:
             stats["fullroom_rejected"] = stats.get("fullroom_rejected", 0) + 1

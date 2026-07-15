@@ -32,12 +32,12 @@ Offline replay of a captured region (no Dolphin):
 import math
 import sys
 
-from tww_sim.core.collision import wall_correct
+from tww_sim.core.collision import wall_correct, bg_is_wall
 from harness.collision.gap_search import (first_f32_clip, settle,
                                           bisector_dir, WALL_H, WALL_R)
 from harness.collision.seam_scan import (enumerate_seams, interior_angle_deg, disp_floor, _gather,
                                          floor_ys_at, read_region_tris, load_region_tris,
-                                         GROUND_NY_MIN, WALL_NY_MAX)
+                                         GROUND_NY_MIN)
 
 ROLL_STAB_MAX = 49.2202     # max single-frame roll-stab lunge (roll speedF 26 + CUT root 23.22)
 STEP_EPS = 5.0              # tolerance (u) for floor-height matches in the step/ledge-riser test
@@ -237,10 +237,10 @@ def _seam_walls(region_tris, seam):
     XZ vertex-incidence. None only if NO wall tri is incident here."""
     polyset = set(seam.get("polys") or ())
     if polyset:
-        inc = [t for t in region_tris if t["poly"] in polyset and abs(t["n"][1]) < WALL_NY_MAX]
+        inc = [t for t in region_tris if t["poly"] in polyset and bg_is_wall(t["n"][1])]
     else:
         sx, sz = seam["S"][0], seam["S"][2]
-        inc = [t for t in region_tris if abs(t["n"][1]) < WALL_NY_MAX
+        inc = [t for t in region_tris if bg_is_wall(t["n"][1])
                and any(abs(v[0] - sx) < 0.1 and abs(v[2] - sz) < 0.1 for v in t["v"])]
     groups = {}
     for t in inc:
