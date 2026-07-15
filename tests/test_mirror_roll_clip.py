@@ -69,11 +69,35 @@ def test_mirror_rest_bitexact():
     assert not bad, "mirror from-rest diverged at rows %s" % bad
 
 
-@pytest.mark.xfail(strict=True, reason="novel-seam live clip not yet delivered: cold search hits the "
-                                       "octagon-clamp reachable-lattice density wall (dead-ends #29/#32); "
-                                       "needs the K=3-byte densifier / a focused recipe, then a live DTM")
+_SHIP = os.path.join(os.path.dirname(_HERE), 'fixtures', 'mirror_roll_ship_golden.json')
+
+
+@pytest.mark.skipif(not os.path.exists(_SHIP), reason="mirror ship golden unavailable")
 def test_mirror_clip_delivered():
-    """RED until the mirror-seam roll-stab clip is delivered LIVE 0-ULP (the Phase-5 proof). Flips
-    GREEN when a genuine wall-faithful hit ships via a clean DTM and reproduces bit-for-bit live."""
-    p = os.path.join(os.path.dirname(_HERE), 'fixtures', 'mirror_roll_ship_golden.json')
-    assert os.path.exists(p), "no shipped mirror clip golden yet"
+    """The Phase-5 PROOF (session 51): the NOVEL mirror-seam roll-stab clip, found by the generalized
+    `solver.solve_focused` (arc gross-perp bracket + low-speed byte-nudge densifier + wall_faithful gate,
+    pure sim <2 min) and delivered LIVE 0-ULP via a clean DTM at seed=0.
+
+    The from-rest sim (rest_state on the shipped hit's exact stream) reproduces the live CUT_F entry
+    old/new BIT-FOR-BIT (0 ULP), and Link goes OOB (proc 0x24) through the seam. Live-captured golden,
+    never edited to make the sim pass (SESSION_PROMPT hard rule)."""
+    from harness.rollstab.deliver import replay
+    from tww_sim.land.land import CUT_F, CUT_A
+    g = json.load(open(_SHIP))
+    assert g['anchor'] == ANCHOR and g.get('dtm_seed') == 0
+    assert g['threads'] and g['behindA'] and g['behindB'], "golden did not confirm a live clip"
+
+    # Re-derive the sim old/new from rest on the shipped stream, assert 0-ULP vs the LIVE frames.
+    stream = [tuple(fr) for fr in g['stream']]
+    rows = replay(ANCHOR, stream, dtm_seed=0)
+    ci = next((i for i, rr in enumerate(rows) if rr[0] in (CUT_F, CUT_A)), None)
+    assert ci and ci > 0, "sim CUT never fired"
+    sim_old, sim_new = (rows[ci - 1][1], rows[ci - 1][2]), (rows[ci][1], rows[ci][2])
+    for name, s, l in (('old', sim_old, g['live_old']), ('new', sim_new, g['live_new'])):
+        assert _bits(s[0]) == _bits(l[0]) and _bits(s[1]) == _bits(l[1]), \
+            "%s not 0-ULP: sim=%s live=%s" % (name, s, l)
+
+    # Link falls OOB (proc 0x24) after the live CUT_F -- the definitive through-the-seam signal.
+    lc = g['live_cut_frame']
+    assert g['live'][lc]['proc'] == (CUT_F & 0xFF), "live cut proc not CUT_F"
+    assert any(f['proc'] == 0x24 for f in g['live'][lc:]), "no OOB fall after the cut"

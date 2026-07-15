@@ -32,6 +32,7 @@ if _rb not in sys.path:
 
 from tww_sim.land.land import FRONT_ROLL, CUT_F, CUT_A
 from tww_sim.land.plan_land import stick_for_bearing
+from tww_sim.core.fp import f32 as _F
 from harness.rollstab.geometry import SEAM as _KAZE_SEAM, load_seed
 from harness.rollstab import rest as C
 
@@ -411,7 +412,178 @@ def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None, dtm_se
     return hits
 
 
+NUDGE_SPMAX = 14.0             # nudge only start-crawl frames acted below this speedF (the octagon INTERIOR;
+                               # above it sticks CLAMP + the fine lattice collapses -- see solve_focused doc).
+
+
+def _genuine_perps(seam, samples=None):
+    """The perp offsets of the genuine dust columns inside the seam's reach band -- a PURE-GEOMETRY
+    (no sim) target set for the Phase-A bracket ranker. Scans `pred_genuine` over the band in the seam's
+    (along, perp) frame and returns the sorted distinct perp values where a column exists. The corner
+    razor is NOT at perp 0 (that is only true for a flat grazing seam); this derives its actual offset
+    band from the geometry, so the ranker needs no per-seam target perp ([[no-overtuned-constants]])."""
+    lo, hi = seam.search_band()
+    Sx, Sz = seam.S
+    out = set()
+    a = -hi
+    while a <= -lo:
+        p = -0.5
+        while p <= 0.5:
+            x = Sx + a * seam.DIRX + p * seam.PX
+            z = Sz + a * seam.DIRZ + p * seam.PZ
+            if seam.pred_genuine((_F(x), _F(z))):
+                out.add(round(p, 3))
+            p += 0.001
+        a += 0.05
+    return sorted(out)
+
+
+def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
+                  off_step=120, nudge=10, kbr=40, verbose=True):
+    """Focused roll-stab dust search (the walkstab.solve_focused pattern in the roll `run` form): an ARC
+    gross-perp bracket + a LOW-SPEED byte-nudge densifier + the wall_faithful gate. Pure sim, no
+    calibration. This is the objective-compliant one-shot for a NOVEL seam whose reachable roll line sits
+    units off the razor -- which the cold `search`/drill cannot thread.
+
+    WHY the cold drill fails and this doesn't (session 51): the genuine acceptance is a single f32 column
+    (~0.001u wide, sparse) and, for a novel seam, the reachable roll `old` sits GROSSLY off it in perp (the
+    mirror seam's approach line is ~2.7u off the F-through-S line; the proven kaze seam was already near its
+    razor, so `search`'s fine knobs sufficed there). Closing that gap needs the ARC (a full-mag off-aim
+    stint -- the gross perp knob; it octagon-SATURATES, so a wide off range collapses onto the same shift).
+    Then the exact column is threaded by a byte-NUDGE of a start-crawl frame acted at LOW speed (the nudged
+    frame's speedF < NUDGE_SPMAX): near the walk cap sticks octagon-CLAMP and the reachable lattice
+    collapses; below it the partial-mag stick stays in the octagon INTERIOR. NOTE the nudge is NOT a smooth
+    fine knob in the roll form (unlike walk-stab's short walk-then-cut): a low-speed perturbation propagates
+    through the whole cruise+roll, so the reachable `old` lattice is CHAOTIC -- a genuine hit is an isolated
+    lattice point, found by sweeping the nudge grid and testing each EXACTLY.
+
+    Phase A (wall-less, cheap): sweep arc(off, lead, dur) x the derived A_projs; rank the fired spF@A==17
+      candidates by how near `old`'s perp sits to a genuine dust COLUMN in the reach band (`_genuine_perps`,
+      pure geometry -- the corner razor's perp offset is derived, not a typed target). Keep the top `kbr`.
+    Phase B (nudge): for each bracket, add a K=3 start crawl (full, full, byte-NUDGED 3rd frame, acted at
+      low speed) and sweep the nudge over a +-`nudge` byte grid; test the EXACT genuine_clip + clear at
+      spF@A==17, facing==seam.F.
+    Phase C (walled confirm): `wall_faithful` re-sim -- accept only cuts whose approach reaches `old` past
+      the wall (dead-end #3). Rank by the perp sliver margin (delivery robustness). Records to HITS_PATH
+      (same schema as `search`, carrying the explicit `start`/`moves`/`A_proj`/`dtm_seed`) for `deliver`.
+
+    Every knob is derived or a documented physical regime (NUDGE_SPMAX, the octagon-interior magnitude
+    0.66, the general symmetric arc span, the geometry-derived genuine-perp target) -- no per-seam tuned
+    constants ([[no-overtuned-constants]])."""
+    t0 = time.time()
+    _cs = load_seed(anchor)['csangle'] & 0xFFFF
+    full = C.dtm_stick(stick_for_bearing(seam.F, _cs, 1.0))
+    c3raw = stick_for_bearing(seam.F, _cs, 0.66)      # octagon-interior mid-magnitude nudge base
+    r0 = run(anchor, [], dtm_seed=dtm_seed, seam=seam)
+    A_projs = _derive_a_projs(anchor, seam, dtm_seed, r0)
+    gperps = _genuine_perps(seam)
+
+    def score(old):                                   # nearness of old's perp to a genuine column
+        po = seam.perp(old)
+        return min((abs(po - g) for g in gperps), default=abs(po))
+
+    if verbose:
+        print('focused: %d genuine perp cols in band [%s]; A_projs=%s (%.0fs)' % (
+              len(gperps), ('%.3f..%.3f' % (gperps[0], gperps[-1])) if gperps else '-',
+              [round(a, 1) for a in A_projs[:8]], time.time() - t0), flush=True)
+
+    # --- Phase A: arc gross-perp brackets, ranked by nearest genuine perp column ---
+    brackets, n_arc = [], 0
+    for off in range(-off_span, off_span + 1, off_step):
+        if off == 0:
+            continue
+        arc = C.dtm_stick(stick_for_bearing((seam.F + off) & 0xFFFF, _cs, 1.0))
+        for dur in (2, 3, 4, 5):
+            for lead in (4, 5, 6, 7):
+                for A in A_projs[:6]:
+                    n_arc += 1
+                    r = run(anchor, [(lead, arc, dur)], A_proj=A, dtm_seed=dtm_seed, seam=seam)
+                    if not (r and r.get('fired') and r.get('old') and r.get('spF_at_A') == 17.0):
+                        continue
+                    brackets.append((score(r['old']), off, dur, lead, A))
+    brackets.sort(key=lambda b: b[0])
+    brackets = brackets[:kbr]
+    if verbose:
+        print('Phase A: %d arcs -> %d brackets, best score=%.5f (%.0fs)' % (
+              n_arc, len(brackets), brackets[0][0] if brackets else -1,
+              time.time() - t0), flush=True)
+
+    # --- Phase B + C: low-speed byte-nudge densifier on each bracket ---
+    hits, seen = [], set()
+    for (pr0, off, dur, lead, A) in brackets:
+        if time.time() - t0 > budget or len(hits) >= want:
+            break
+        arc = C.dtm_stick(stick_for_bearing((seam.F + off) & 0xFFFF, _cs, 1.0))
+        for dx in range(-nudge, nudge + 1):
+            for dz in range(-nudge, nudge + 1):
+                c3d = C.dtm_stick((min(254, max(1, c3raw[0] + dx)),
+                                   min(254, max(1, c3raw[1] + dz))))
+                start = (full, full, c3d)
+                r = run(anchor, [(lead, arc, dur)], A_proj=A, start=start,
+                        dtm_seed=dtm_seed, seam=seam)
+                if not (r and r.get('fired') and r['facing'] == seam.F
+                        and r['spF_at_A'] == 17.0):
+                    continue
+                if not (r['genuine'] and r['clear']):
+                    continue
+                if not wall_faithful(anchor, r['stream'], r['old'], seam, dtm_seed):
+                    continue
+                key = (round(r['old'][0], 5), round(r['old'][1], 5))
+                if key in seen:
+                    continue
+                seen.add(key)
+                margin = _perp_margin(seam, r['old'], r['new'])
+                moves = [(lead, arc, dur)]
+                _record(hits, r, moves, A, start, anchor, dtm_seed=dtm_seed)
+                hits[-1]['margin'] = margin
+                json.dump(hits, open(HITS_PATH, 'w'))
+                if verbose:
+                    print('  CLIP margin=%d off=%+d dur=%d lead=%d A=%.1f nudge=(%+d,%+d) '
+                          'old=(%.7f,%.7f) perp_ray=%+.6f d2S=%.3f (%.0fs)' % (
+                          margin, off, dur, lead, A, dx, dz, r['old'][0], r['old'][1],
+                          seam.perp_to_ray(r['old'], r['new']), seam.d2S(r['old']),
+                          time.time() - t0), flush=True)
+    hits.sort(key=lambda h: -h.get('margin', 0))
+    json.dump(hits, open(HITS_PATH, 'w'))
+    if verbose:
+        print('focused done: %d wall-faithful clips in %.0fs -> %s' % (
+              len(hits), time.time() - t0, HITS_PATH), flush=True)
+    return hits
+
+
+def _perp_margin(seam, old, new, step=2e-5, cap=60):
+    """The contiguous perp half-window at `old` (fresh in-line lunge), in +-`step` u -- how far `old` can
+    shift PERPENDICULAR and still clip. Ranks hits by f32-sliver width (delivery robustness); the from-rest
+    sim is 0-ULP so the live `old` lands exactly on the sim's and any positive-margin hit delivers (the
+    same metric walkstab.perp_margin uses)."""
+    from tww_sim.core.fp import f32 as _f
+    a = math.atan2(new[0] - old[0], new[1] - old[1])
+    pdx, pdz = -math.cos(a), math.sin(a)
+    lunge = (_f(new[0] - old[0]), _f(new[1] - old[1]))
+
+    def clips(k):
+        o2 = (_f(old[0] + _f(k * step * pdx)), _f(old[1] + _f(k * step * pdz)))
+        n2 = (_f(o2[0] + lunge[0]), _f(o2[1] + lunge[1]))
+        return seam.genuine_clip(o2, n2)
+
+    if not clips(0):
+        return -1
+    p = 0
+    while p < cap and clips(p + 1):
+        p += 1
+    q = 0
+    while q < cap and clips(-(q + 1)):
+        q += 1
+    return min(p, q)
+
+
 if __name__ == '__main__':
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
-    search(o.get('anchor', 'kaze_r11_rollstab_idle2@twwgz'),
-           do_drill=('drill' in sys.argv))
+    anchor = o.get('anchor', 'kaze_r11_rollstab_idle2@twwgz')
+    if 'focused' in sys.argv:
+        from harness.rollstab.seamgeo import SeamGeo
+        geo = json.load(open(o['geo'])) if 'geo' in o else None
+        seam = SeamGeo(geo, load_seed(anchor)['csangle']) if geo else _KAZE_SEAM
+        solve_focused(anchor, seam, dtm_seed=int(o.get('seed', 0)))
+    else:
+        search(anchor, do_drill=('drill' in sys.argv))

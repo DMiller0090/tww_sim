@@ -100,14 +100,17 @@ def gate(idx=0, geo=None, seam=None):
     return plan
 
 
-def ship(idx=0, norelaunch=False, geo=None, seam=None):
+def ship(idx=0, norelaunch=False, geo=None, seam=None, golden=None):
     from harness.dtm.run_dtm import run_dtm, land_ready
     plan = gate(idx, geo=geo, seam=seam)
     if plan is None:
         return 1
     sm = _seam_for(plan['anchor'], geo=plan.get('geo'), seam=seam)
-    sticks = list(plan['sticks'])
-    sticks += [dict(stickX=128, stickY=128, substickX=128, substickY=128, buttons=0)] * WATCH_TAIL
+    # C-down (substickY=0) = the free-cam pin for a novel/seed-0 anchor (else the auto-cam swings csangle
+    # off the frozen sim value); csy=128 byte-identical for proven anchors. Same rule as rest.main.
+    csy = 0 if (plan.get('geo') or seam is not None or int(plan.get('dtm_seed', 1)) == 0) else 128
+    sticks = [dict(sk, substickY=csy) for sk in plan['sticks']]
+    sticks += [dict(stickX=128, stickY=128, substickX=128, substickY=csy, buttons=0)] * WATCH_TAIL
     log_n = plan['cut_idx'] + 14
     end = run_dtm(sticks, anchor=plan['anchor'], ready=land_ready,
                   relaunch_dolphin=not norelaunch, log_frames=log_n, verbose=True,
@@ -133,12 +136,28 @@ def ship(idx=0, norelaunch=False, geo=None, seam=None):
           lo[0], lo[1], ln[0], ln[1], d[0], d[1]))
     print('%s: threads=%s behindA=%s behindB=%s' % (
           'CLIP CONFIRMED' if ok else 'CHECK', threads, behindA, behindB))
+    if ok and golden:
+        # Live-data-backed immutable golden (SESSION_PROMPT): `stream`/`sim_*` = the from-rest prediction,
+        # `live_*` = the clean-DTM frames; the gate asserts sim==live 0-ULP. NEVER edit to make the sim pass.
+        gd = dict(anchor=plan['anchor'], geo=plan.get('geo'), dtm_seed=int(plan.get('dtm_seed', 1)),
+                  hit=plan['hit'], stream=[list(x) for x in plan['stream']],
+                  sim_old=list(plan['old']), sim_new=list(plan['new']),
+                  cut_idx=plan['cut_idx'], live_cut_frame=live_cut,
+                  live_old=list(lo), live_new=list(ln),
+                  threads=bool(threads), behindA=bool(behindA), behindB=bool(behindB),
+                  live=[dict(proc=f['proc'] & 0xFF, pos_x=f['pos_x'], pos_z=f['pos_z'],
+                             pos_y=f.get('pos_y', 0.0), facing=f['facing'] & 0xFFFF)
+                        for f in frames])
+        os.makedirs(os.path.dirname(golden), exist_ok=True)
+        json.dump(gd, open(golden, 'w'), indent=1)
+        print('  live golden -> %s' % golden)
     return 0 if ok else 1
 
 
 if __name__ == '__main__':
     idx = next((int(a.split('=')[1]) for a in sys.argv if a.startswith('hit=')), 0)
     geo = next((a.split('=', 1)[1] for a in sys.argv if a.startswith('geo=')), None)
+    golden = next((a.split('=', 1)[1] for a in sys.argv if a.startswith('golden=')), None)
     if 'ship' in sys.argv:
-        sys.exit(ship(idx, norelaunch=('norelaunch' in sys.argv), geo=geo))
+        sys.exit(ship(idx, norelaunch=('norelaunch' in sys.argv), geo=geo, golden=golden))
     sys.exit(0 if gate(idx, geo=geo) else 1)

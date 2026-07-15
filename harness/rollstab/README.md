@@ -76,13 +76,56 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-15, session 50)
+## Status (2026-07-15, session 51)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-15, session 50): Phase 5 IN PROGRESS -- a NOVEL seam (the mirror-roll
+> **CURRENT THREAD (2026-07-15, session 51): PHASE 5 IS DONE -- the NOVEL mirror-roll seam clip is
+> DELIVERED LIVE, 0-ULP, pure-sim, no calibration. The "generalization works" proof is HIT: a seam the
+> solver was never hardcoded to, solved by a reproducible <2-min pure-sim search and delivered via a clean
+> DTM at seed=0.**
+> - **The blocker (session 50's density wall) is BEATEN by the walkstab-style focused search, ported into
+>   the roll path (`solver.solve_focused`).** Root cause, refined: for a NOVEL seam the reachable roll
+>   `old` sits GROSSLY off the razor in perp (the mirror approach line is ~2.7u off the F-through-S line;
+>   the proven kaze seam was already near its razor, so `search`'s fine knobs sufficed there). Closing that
+>   needs the ARC (full-mag off-aim; the gross perp knob, octagon-SATURATING); threading the exact f32
+>   column needs a byte-NUDGE of a start-crawl frame acted at LOW speed (spF < `NUDGE_SPMAX`=14, the
+>   octagon INTERIOR -- Dereck's steer). NOTE the nudge is NOT smooth in the roll form (a low-speed
+>   perturbation propagates through the whole cruise+roll -> a CHAOTIC reachable lattice); a genuine hit is
+>   an isolated lattice point, found by sweeping the nudge grid + testing EXACTLY.
+> - **`solver.solve_focused(anchor, seam)` NEW** (the objective-compliant one-shot; the freeze-solver
+>   pattern): Phase A brackets arc(off,dur,lead)xA_proj ranked by how near `old`'s perp sits to a genuine
+>   dust COLUMN in the reach band (`_genuine_perps`, PURE GEOMETRY -- the corner razor's perp offset is
+>   derived, not a typed target, [[no-overtuned-constants]]); Phase B byte-nudges the low-speed start-crawl
+>   frame; Phase C `wall_faithful` gate. It found a **margin-24** wall-faithful hit on the mirror in **85s**
+>   (< 2 min): `old=(9072.0332031,-313.3167725) -> new=(9069.8251953,-264.1460876)`, disp 49.2202, CUT_F,
+>   spF@A=17, facing=seam.F. Every knob derived or a documented physical regime; no per-seam constants.
+> - **LIVE CLIP CONFIRMED 0-ULP** (`deliver ship geo=... golden=...`, clean DTM seed=0, C-down every
+>   frame). Live `old`/`new` bit-for-bit == the sim (drift d(old)=(0,0)); proc 0x42 (CUT_F) at the cut then
+>   proc 0x24 (OOB) THROUGH the mirror seam -- threads=True, behindA=True, behindB=True. Delivered twice,
+>   deterministic.
+> - **Delivery path threaded for the C-down camera pin.** `deliver.ship` now authors substickY=0 (the
+>   free-cam pin) for a novel/seed-0 anchor (same rule `rest.main` uses; byte-identical csy=128 for the
+>   proven anchors) -- else the auto-cam swings csangle off the frozen sim value and the clip misses. Added
+>   a live-golden save (`golden=<path>`) so novel deliveries auto-lock an immutable regression.
+> - **Locked live-data-backed:** immutable `fixtures/mirror_roll_ship_golden.json` (the clean-DTM run).
+>   Gate `tests/test_mirror_roll_clip.py::test_mirror_clip_delivered` xfail-RED -> **GREEN** (the from-rest
+>   sim on the shipped stream reproduces the live CUT_F old/new 0-ULP + OOB fall). Suite **367 passed, 1
+>   skipped, 2 xfailed** (was 366; +1, mirror clip flipped). Only `harness/rollstab/{solver,deliver}.py`
+>   behavior changed (kaze byte-identical -- `test_solver_seam_param`/`_seamgeo`/`_seam_bands`/`_sheathed_
+>   roll_clip`/`_walkstab_clip` all green); NO `sim.py`/`land.py` change, so the live regression is
+>   unaffected.
+>
+> **NEXT (Phase-5 tidy + the north star):** (1) wire `thrust_scan._matches`'s kaze guard drop -> dispatch
+> an ENUMERATED seam to the generalized standard-roll path building a `SeamGeo` per seam (now that the
+> full mint->solve->deliver pipeline is proven end-to-end on a novel seam, this is the last generalization
+> chore). (2) OPTIONAL: fold the mirror focused solve into a self-checking harness entry. Every other
+> thread (sheathed clip DONE, walk-stab clip, Tetra push-aside/turnaround) UNCHANGED; the Tetra push clip
+> stays a STANDALONE solver.
+
+> **PRIOR THREAD (2026-07-15, session 50): Phase 5 IN PROGRESS -- a NOVEL seam (the mirror-roll
 > corner) has a fresh live-minted anchor that is REST BIT-EXACT, and two real generalization bugs are
 > fixed; the LIVE CLIP is NOT yet delivered (blocked on the octagon-clamp dust-density wall). OFFLINE +
 > live mint/verify; suite 366 green (+1).**
