@@ -102,6 +102,10 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   90-deg aim from the fixture with NO per-CLI plumbing. Byte-identical for every existing seam (bisector
 >   default unchanged; walkstab still passes its explicit `aim_deg`). Gate: `test_seamgeo`/`_seam_bands`/
 >   `_solver_seam_param`/`_walkstab_seam`/`_mirror_roll_clip` all green.
+> - **`seam_feasibility.py` gained a REACHABILITY screen** (`wall_reach`): of the genuine dust at an aim,
+>   how much sits >= the roll's ~35u wall hold from both walls. Validates the lesson -- 97-corner 0/15
+>   reachable (dust 2.8-5.4u off wallA), shipped mirror 12/35 reachable -- so a future novel-seam pick sees
+>   "clippable but dust hugs a wall" up front instead of discovering it mid-solve (this session's surprise).
 > - **`solve_focused` ran clean but found 0 wall-faithful hits** (`test_seam97_clip_delivered` xfail-RED,
 >   strict). The reachability tension (the puzzle to resolve, see the dead-end ledger 97-deg STATUS): the
 >   verified-genuine dust is confined <=5.4u in front of wallA (the razor runs ~parallel to the aim the

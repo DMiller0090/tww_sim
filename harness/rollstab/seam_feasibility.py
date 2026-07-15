@@ -53,6 +53,22 @@ def scan_aim(seam, F, perp_w=2.0, pstep=0.001, astep=0.3, along_frac=(0.5, 1.05)
     return len(hits), hits
 
 
+WALL_R = 35.0   # Link's roll wall-cylinder radius (WallCorrect wall_r, collision.py): his center is held
+                # >= this from every incident wall, so dust within WALL_R of a wall is unreachable by a roll.
+
+
+def wall_reach(seam, hits, wall_r=WALL_R):
+    """Nearest-incident-wall distance of each genuine `old` (from scan_aim), and how many are REACHABLE
+    (nearest-wall dist >= wall_r). Returns (n_reachable, min_d, max_d). NB scan_aim's default perp_w=2.0
+    only samples near the ray-through-S; reachable dust (if any) sits further out, so 0-reachable here
+    means 'none near the razor' -- confirm with a WIDE-perp scan before concluding (see the s52 reachscan)."""
+    ds = [min(seam.wA.pla.func(seam.p32(ox, oz)), seam.wB.pla.func(seam.p32(ox, oz)))
+          for _a, _p, ox, oz in hits]
+    if not ds:
+        return 0, None, None
+    return sum(1 for d in ds if d >= wall_r), min(ds), max(ds)
+
+
 def feasible_aims(seam, fstep=2048, budget=140.0, verbose=True, **scan_kw):
     """Sweep the FULL aim circle; return the facings whose roll-stab has genuine dust, most first.
     A coarse facing step FLAGS candidate aims (the razor spans a few hundred s16 in aim); refine a
@@ -96,3 +112,11 @@ if __name__ == '__main__':
         for a, p, ox, oz in hits[:8]:
             print('   along=%.2f perp=%+.4f old=(%.5f,%.5f) d2S=%.2f'
                   % (a, p, ox, oz, math.hypot(ox - seam.S[0], oz - seam.S[1])))
+        nr, dmin, dmax = wall_reach(seam, hits)
+        if dmin is not None:
+            print('REACHABILITY: dust nearest-wall dist %.2f..%.2f u (roll hold ~%.0fu); %d/%d reachable.'
+                  % (dmin, dmax, WALL_R, nr, len(hits)))
+            if nr == 0:
+                print('  -> clippable but the dust HUGS a wall: NOT reachable near the razor. Before minting,'
+                      ' run a WIDE-perp reachability scan + relax wall_faithful for concave touches / verify'
+                      ' the hold live (session-52 97-deg corner; see the dead-end ledger).')
