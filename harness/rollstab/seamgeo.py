@@ -208,3 +208,24 @@ class SeamGeo:
     def d2S(self, p):
         """Straight-line distance from `p=(x,z)` to the seam vertex S."""
         return math.hypot(p[0] - self.S[0], p[1] - self.S[1])
+
+    # --- reachability (is a WallCorrect-standable old able to clip this seam?) ------------
+    def roll_reachable(self):
+        """Is there a WallCorrect-STANDABLE `old` whose clip threads this seam -- i.e. is the seam
+        reachable by a free roll, not just geometrically clippable? Defers DIRECTLY to the shipped
+        analytic locator's geometry-first core (`seam_locator.locate_geo`) on THIS seam's own walls +
+        barrier + flat floor (`LINK_Y`) -- it settles a real standable old and f32-verifies the clip
+        from it, so a seam whose only genuine dust hugs a wall (inside Link's ~35u WallCorrect hold)
+        yields no standable clip and is correctly rejected. Returns the locator clip dict
+        (`old`/`new`/`disp`/`interior`/`floor`, full f32) or None (== not roll-reachable).
+
+        This is the ACCURATE reachability screen. It replaces the old proxies -- the disp-floor tier
+        (`floor <= 49.22`, which the 97-deg corner PASSED) and a nearest-wall distance heuristic (which
+        false-NEGATED the proven kaze seam, whose reachable old is deep but close to ONE wall).
+        LIVE-VALIDATED (session 53): None for the 97-deg corner (its roll is held 35u off wallA,
+        bit-exact vs live) and a clip for the proven + mirror seams (both roll-delivered). NOTE the
+        locator `disp` is a DEEP-first upper bound: a non-None result proves a standable clip EXISTS;
+        for the precise roll-stab reach, confirm `pred_genuine` at a `search_band` old."""
+        from harness.collision.seam_locator import locate_geo
+        return locate_geo(self.BARRIER, [], self.S, self.wA, self.wB,
+                          override_link_y=self.LINK_Y, require_standable=False)

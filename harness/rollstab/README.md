@@ -106,13 +106,28 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   gate). NO `sim.py`/`land.py`/`harness/rollstab/*.py` change (only tests + a fixture + KB), so the live
 >   regression is unaffected.
 >
-> **NEXT (STRATEGIC -- Dereck's pick): this corner needs a non-roll technique.** Options: (1) push-steer the
-> 97-corner via the standalone Tetra Co-push path (its lunge overrides the 35u free-roll hold -- the way the
-> wall-hugging Tetra-corner clip was delivered); (2) pick a DIFFERENT novel corner as the generalization
-> proof -- one whose genuine dust sits in the OPEN mouth >=35u out (like the proven/mirror seams), so a free
-> roll can reach it (screen candidates with `seam_feasibility.py` + a reachable-mouth f32 scan BEFORE
-> minting); (3) something else. Every other thread (mirror/sheathed clips DONE, walk-stab, Tetra
-> push-aside/turnaround STANDALONE) UNCHANGED.
+> **REACHABILITY SCREEN WIRED IN (session 53, Dereck's steer -- "pick a different novel roll corner" + add
+> a reachable-mouth screen): the shipped analytic locator is now the ONE accurate reachability oracle,
+> shared by the CSV dump, region scans, AND the seamgeo layer.** `seam_locator.locate` was refactored into a
+> geometry-first core `locate_geo(barrier_tris, ground_tris, S, wA, wB, override_link_y=, require_standable=)`
+> (it settles a real WallCorrect-standable `old` + f32-verifies the clip FROM it); `locate` is now a thin
+> region adapter over it (byte-identical -- the slow `test_seam_locator` guard + the `scan_all_dzb` CSV dump
+> are unaffected). `SeamGeo.roll_reachable()` calls `locate_geo` DIRECTLY on the seam's own walls + flat
+> floor (no region reload, no dict plumbing). This REPLACES the two weaker screens: the deleted
+> `seam_feasibility.wall_reach` nearest-wall heuristic (false-NEGATED the proven seam) and the disp-floor
+> proxy (`floor<=49.22`, which the 97-corner PASSED). Validated (gate `test_seamgeo.py::
+> test_roll_reachable_screen`): it REJECTS the 97-corner (matches the live wall-hold finding) and ACCEPTS the
+> proven + mirror seams (both roll-delivered). A kaze-r11 room scan (74 clippable of 159 seams) confirms the
+> 97-corner is the only interior-97 corner rejected; its z-mirror at S=(13539.24,-493.36) IS locator-clippable
+> (a candidate). Suite **370 passed** (+1). `disp` stays a deep-first upper bound (a non-None result proves a
+> standable clip EXISTS; the precise roll-stab reach = `pred_genuine` at a `search_band` old).
+>
+> **NEXT (Dereck's pick, tooling now in place): choose a novel roll-reachable corner + deliver it.** Use
+> `SeamGeo.roll_reachable()` (or `seam_locator` room scan) to pick a corner whose dust sits in the OPEN mouth
+> (roll-reachable), MINT an anchor (the fixed-camera aligned-idle recipe), solve via the generalized path,
+> DELIVER a clean-DTM 0-ULP clip. Candidate surfaced: the 97-corner's z-mirror (13539.24,-493.36). The
+> 97-corner (+493) itself needs a non-roll (push-steer) technique. Every other thread (mirror/sheathed clips
+> DONE, walk-stab, Tetra push-aside/turnaround STANDALONE) UNCHANGED.
 >
 > **PRIOR THREAD (2026-07-15, session 52): the 97-deg corner has a WALLED-REST-BIT-EXACT anchor and a
 > clean solver run, but 0 wall-faithful hits -- an OPEN search/model gap, NOT an impossibility (Dereck's

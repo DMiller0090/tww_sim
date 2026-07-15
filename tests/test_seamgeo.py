@@ -77,3 +77,29 @@ def test_lunge_magnitude_is_roll_reach():
     seam = SeamGeo(_GEO, _KAZE_CSANGLE)
     mag = (seam.LUNGE[0] ** 2 + seam.LUNGE[1] ** 2) ** 0.5
     assert abs(mag - 49.2202) < 1e-3
+
+
+def test_roll_reachable_screen():
+    """`SeamGeo.roll_reachable` is the ACCURATE reachability screen: it defers to the shipped analytic
+    locator's geometry-first core (seam_locator.locate_geo) on the seam's own walls + flat floor, so a
+    seam whose only genuine dust hugs a wall (inside Link's 35u WallCorrect hold) has NO standable-old
+    clip and is rejected -- while a seam whose dust sits in the open corner mouth is accepted.
+
+    Live-anchored ground truth (session 53): the 97-deg corner is roll-UNREACHABLE (its roll is held
+    35u off wallA, bit-exact vs live -- test_seam97_clip.py); the proven + mirror corners were both
+    roll-DELIVERED. This screen replaces the disp-floor proxy (which the 97-corner passed) and the
+    deleted nearest-wall heuristic (which false-negated the proven seam)."""
+    def seam_of(fixture, anchor):
+        cs = G.load_seed(anchor)['csangle'] & 0xFFFF
+        return SeamGeo(json.load(open(os.path.join(_rb, 'fixtures', fixture))), cs)
+
+    proven = seam_of('kaze_r11_geo.json', 'kaze_r11_rollstab_idle13@twwgz')
+    mirror = seam_of('kaze_r11_seam_mirror_geo.json', 'kaze_r11_rollstab_mirror@twwgz')
+    corner97 = seam_of('kaze_r11_seam97_geo.json', 'kaze_r11_rollstab_seam97@twwgz')
+
+    assert corner97.roll_reachable() is None, "97-deg corner must be rejected (dust hugs wallA)"
+    for name, seam in (('proven', proven), ('mirror', mirror)):
+        r = seam.roll_reachable()
+        assert r is not None, "%s corner must be roll-reachable (a standable old clips)" % name
+        # a standable old that clears BOTH walls, and the clip lands past the seam (behind a wall)
+        assert seam.wA.pla.func(r['old']) > 0 and seam.wB.pla.func(r['old']) > 0, (name, r['old'])

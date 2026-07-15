@@ -77,41 +77,41 @@ def _ordered_rels(half):
     return rels
 
 
-def locate(region, ground, seam, stats=None):
-    """Decide whether ``seam`` clips and return one exact clipping ``(S, disp, rel, s)`` or ``None``.
+def locate_geo(barrier_tris, ground_tris, S_xz, wA, wB, yspan=None, override_link_y=None,
+               require_standable=True, stats=None):
+    """Geometry-first core: decide whether the seam at ``S_xz`` (between walls ``wA``/``wB``) clips
+    from a WallCorrect-STANDABLE old, and return one exact clip dict or ``None``. This is the reusable
+    API the region wrapper :func:`locate` and any geometry-holder (e.g. ``SeamGeo.roll_reachable``)
+    call directly -- no region/seam dicts, no re-enumeration.
 
-    ``region`` = list of tri dicts (``poly``/``v``/``n``/``T``); ``ground`` = its ground-tri subset;
-    ``seam`` = an :func:`seam_scan.enumerate_seams` entry. Pure geometry, no Dolphin. ``disp`` is a
-    deep-first UPPER bound (see the module docstring); reachability is the analytic
-    ``disp_floor(interior) <= ROLL_STAB_MAX``."""
+      barrier_tris     : the gathered near-wall CrrPos barrier :class:`Tri` (WITHOUT the leading
+                         [wA, wA, wB]; this prepends them, as the scanners do).
+      ground_tris      : ground :class:`Tri`-dicts for the standable-floor gates; ``[]`` with an
+                         ``override_link_y`` = a caller that already knows the seam stands on flat
+                         ground (mirrors ``seam_clip_check.clip_check``'s override).
+      override_link_y  : force a flat floor Y (skip the per-(x,z) ``_floor_at`` lookup).
+      require_standable: as ``_valid_initial`` -- False when a flat ``override_link_y`` already
+                         guarantees standability.
+
+    ``disp`` is a deep-first UPPER bound (see the module docstring). Returns ``dict(S, interior, floor,
+    disp, rel, s, reachable_rollstab, old, new)`` or ``None``."""
     if stats is None:
         stats = {}
-    walls = _seam_walls(region, seam)
-    if walls is None:
-        return None
-    wA, wB = walls
-    S = (seam["S"][0], seam["S"][2])
+    S = (S_xz[0], S_xz[-1])
     interior = interior_angle_deg((wA.pla.nx, 0.0, wA.pla.nz), (wB.pla.nx, 0.0, wB.pla.nz))
     floor = disp_floor(interior)
     if not math.isfinite(floor):
         return None
     base = bisector_dir([wA, wA, wB])
     half = interior / 2.0
-    polyset = set(seam["polys"])
-    ys = [v[1] for t in region if t["poly"] in polyset for v in t["v"]]
-    yspan = (min(ys), max(ys)) if ys else _wall_yspan(wA, wB)
-    tl = [wA, wA, wB] + list(_gather(region, seam["S"], seam["S"][1]))
-    # local ground: only tris whose XZ AABB is within reach of S — floor_ys_at over the whole region
-    # per cell was the entire cheap-pass cost. reach = deepest settled-old distance + a margin.
-    R = floor + DIST_OFFSETS[3] + 45.0
-    lg = [t for t in ground
-          if not (max(v[0] for v in t["v"]) < S[0] - R or min(v[0] for v in t["v"]) > S[0] + R
-                  or max(v[2] for v in t["v"]) < S[1] - R or min(v[2] for v in t["v"]) > S[1] + R)]
+    if yspan is None:
+        yspan = _wall_yspan(wA, wB)
+    tl = [wA, wA, wB] + list(barrier_tris)
 
     # SAME standable-floor + step/ledge-riser gates as seam_clip_check.clip_check (else the f32 verify
     # re-admits the OOB-skirt / step-riser phantoms). See knowledge/mechanics/seam-clip-scanner.md.
-    rep_ly = _representative_link_y(lg, S, base, half, floor, yspan)
-    if rep_ly is None or _is_step_riser(lg, S, yspan, rep_ly):
+    rep_ly = _representative_link_y(ground_tris, S, base, half, floor, yspan, override_link_y)
+    if rep_ly is None or _is_step_riser(ground_tris, S, yspan, rep_ly):
         return None
 
     budget = SEAM_BUDGET
@@ -123,11 +123,11 @@ def locate(region, ground, seam, stats=None):
         for off in DIST_OFFSETS:
             d = floor + off
             ox, oz = S[0] - d * dx, S[1] - d * dz
-            oyt = _floor_at(lg, ox, oz, yspan)
+            oyt = override_link_y if override_link_y is not None else _floor_at(ground_tris, ox, oz, yspan)
             if oyt is None:
                 continue
             cand = settle(tl, (ox, oz), oyt)
-            if _valid_initial(tl, lg, cand, wA, wB, yspan, True):
+            if _valid_initial(tl, ground_tris, cand, wA, wB, yspan, require_standable):
                 old, oy = cand, oyt
                 break
         if old is None:
@@ -151,6 +151,32 @@ def locate(region, ground, seam, stats=None):
                 return None
             s += S_STEP
     return None
+
+
+def locate(region, ground, seam, stats=None):
+    """Decide whether ``seam`` clips and return one exact clip dict or ``None``. Thin REGION adapter
+    over :func:`locate_geo`: extracts the two incident walls, the gathered CrrPos barrier, the local
+    ground subset, and the wall Y-span from ``region``/``seam``, then defers to the shared core.
+
+    ``region`` = list of tri dicts (``poly``/``v``/``n``/``T``); ``ground`` = its ground-tri subset;
+    ``seam`` = an :func:`seam_scan.enumerate_seams` entry. Pure geometry, no Dolphin."""
+    walls = _seam_walls(region, seam)
+    if walls is None:
+        return None
+    wA, wB = walls
+    polyset = set(seam["polys"])
+    ys = [v[1] for t in region if t["poly"] in polyset for v in t["v"]]
+    yspan = (min(ys), max(ys)) if ys else _wall_yspan(wA, wB)
+    barrier = list(_gather(region, seam["S"], seam["S"][1]))
+    # local ground: only tris whose XZ AABB is within reach of S — floor_ys_at over the whole region
+    # per cell was the entire cheap-pass cost. reach = deepest settled-old distance + a margin.
+    floor = disp_floor(interior_angle_deg((wA.pla.nx, 0.0, wA.pla.nz), (wB.pla.nx, 0.0, wB.pla.nz)))
+    S = (seam["S"][0], seam["S"][2])
+    R = floor + DIST_OFFSETS[3] + 45.0
+    lg = [t for t in ground
+          if not (max(v[0] for v in t["v"]) < S[0] - R or min(v[0] for v in t["v"]) > S[0] + R
+                  or max(v[2] for v in t["v"]) < S[1] - R or min(v[2] for v in t["v"]) > S[1] + R)]
+    return locate_geo(barrier, lg, seam["S"], wA, wB, yspan=yspan, stats=stats)
 
 
 def scan_region(region, box, require_standable=True, override_link_y=None, verbose=True):
