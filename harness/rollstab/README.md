@@ -76,13 +76,60 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-14, session 48)
+## Status (2026-07-15, session 49)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-14, session 48): generalization Phase 4 DONE -- `walkstab.py` is THREADED
+> **CURRENT THREAD (2026-07-15, session 49): the Phase-5 PREREQUISITE is DONE -- the solvers' last
+> kaze-hardcoded numeric ranges are now DERIVED per-seam, with candidate REACHABILITY decided by a real
+> walled physics re-sim rather than a typed-in `old_z` band (Dereck's call; OFFLINE, suite 365 green).**
+> This clears the blocker Phases 3-4 deliberately left for a NOVEL seam to solve. Done this session
+> (offline; 1 in-budget `solve_focused` + a short roll `search` smoke run, no live Dolphin run):
+> - **Reachability is decided by PHYSICS, not a typed near-edge (Dereck chose this over a derived-span
+>   or padded band).** The kaze `solver.py` `ZLO/ZHI = 302.6/308.2` old_z band was really a proxy for
+>   the dead-end-#3 guard (reject an `old` the WALL-LESS roll overshot into). It is DELETED; the
+>   recording gate is now `genuine and clear and wall_faithful(...)`, where new `solver.wall_faithful`
+>   replays the candidate's exact stream through a WALLED `rest_state` and accepts only if the roll
+>   reaches `old` bit-for-bit with no `wall_hit` before the CUT. This is the SAME walled re-sim
+>   `walkstab._wall_faithful` (Phase C) already used -- the two solvers now share one physics guard, no
+>   typed boundary. Verified: it ACCEPTS the shipped seed-0 roll hit (old bit-exact, no wall stop) and
+>   REJECTS a fabricated unreachable `old`.
+> - **The FAR edge + search windows are DERIVED from the lunge reach (`SeamGeo`).** New `SeamGeo.reach`
+>   / `reach_at(speedf)` (the cut displacement, from `cut_new`, no pasted distance) and `search_band()`
+>   (a general seam-INDEPENDENT relative bracket `[reach*0.80, reach*1.02]` -- the same rule for every
+>   seam, not per-case constants). The reachable band's near edge is a reachability limit (the wall
+>   braking the approach), NOT geometry -- confirmed by a fine scan (the geometric genuine region runs
+>   all the way to the seam vertex for BOTH seams) -- so a generous relative window + the physics guard
+>   is the honest split.
+> - **`walkstab.solve_focused`'s `d2S`/N windows + perp gate are DERIVED (`bounds()`).** WIN_LO/HI =
+>   `sg().search_band(speedf=17)`; the N window is the frame range where the baseline cruise walk's d2S
+>   enters the reach band, widened for the crawl start-delay (derived from the baseline trajectory);
+>   the perp pre-filter is a small general multiple of reach (~the f32 razor). The pasted `WIN_LO/HI
+>   =34.5/40.35`, `NLO_F/NHI_F=10/15`, `34.0..40.5`, `PERP_GATE_F=0.006` are GONE.
+> - **The `solver.py` drill `_dust_cache` box is DERIVED, not the kaze `x 9071.5..9072.7 / z
+>   302.6..308.2`.** It now centers on the sim's baseline roll landing (`r0['old']`) with extents from
+>   the seam's reach band, capped -- a region built from the search's own reachable samples + geometry.
+> - **GATE PASSED (both halves).** The kaze roll + walk seams still reproduce their shipped hits
+>   bit-exact (`test_solver_seam_param`/`test_walkstab_clip`/`_rest`/`_seam` all green), and the SEARCH
+>   still finds them under the derived ranges: `solve_focused` found **4 wall-faithful genuine hits in
+>   60.1s** (< 2 min; top margin 17, N=13), and the roll `search` runs the physics gate end-to-end
+>   (baseline fires, 1261 runs/12s, no error). NEW `tests/test_seam_bands.py` (6 green) locks the
+>   derivations (reach/band camera-and-`roll_speedf`-dependent, windows bracket the shipped hits,
+>   `wall_faithful` accepts the shipped hit + rejects an unreachable `old`). Suite **365 passed, 1
+>   skipped, 2 xfailed** (was 359; +6). NO `sim.py`/`land.py` change (live regression unaffected); the
+>   roll/tetra solvers stay byte-identical at their defaults (the band change only affects which hits a
+>   full `search` RECORDS, not stream recomposition, so all bit-exact gates hold).
+>
+> **NEXT (the live "generalization works" proof -- Phase 5 proper):** drop `thrust_scan._matches`'s
+> kaze guard, dispatch a NEW enumerated seam to the generalized standard-roll path, MINT an anchor
+> there (`mint.py`), solve via the generalized solver (now range-free per-seam), and DELIVER a
+> clean-DTM 0-ULP clip -- the real proof. All the per-seam numeric prerequisites are now in place; the
+> remaining work is the enumeration/dispatch + the mint + the live delivery. Every other thread
+> (sheathed clip DONE, walk-stab clip, Tetra push-aside/turnaround, thrust scanner) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-14, session 48): generalization Phase 4 DONE -- `walkstab.py` is THREADED
 > through `SeamGeo`; its private acceptance duplicates are ABSORBED, and its thrust facing + crawl-window
 > center are DERIVED, not pasted (OFFLINE, GATE PASSED, suite 359 green).** Continues session-47 Phase 3.
 > Done this session (offline; 1 in-budget `solve_focused` run, no live Dolphin run):

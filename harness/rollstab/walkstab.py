@@ -221,9 +221,40 @@ _BEAR_S = None
 CRAWLS = ((0.72, 0.72), (0.6, 0.72), (0.72, 0.6), (0.66, 0.66), (0.6,))
 LEADS_DURS = ((5, 3), (4, 3), (5, 2), (4, 2))
 OFFS = (800, 900, 1000, 700, 600, 1100, 400, 0)
-WIN_LO, WIN_HI = 34.5, 40.35
-NMAX = 15
 HITS_PATH = os.path.join(_rb, '_generated', 'walkstab_hits.json')
+
+_BOUNDS = None
+
+
+def bounds():
+    """The search-region bounds, DERIVED per-seam (session 49) -- NO kaze-hardcoded d2S / N windows.
+    Which candidates are truly REACHABLE is decided by the walled physics re-sim (`_wall_faithful`,
+    Dereck's session-49 call); these bounds only FOCUS the search, and every accept is the exact
+    genuine test -- so a generous, seam-general window is correct. Returns a dict:
+      * WIN_LO/WIN_HI: the distance-to-S bracket = the seam's derived reach band at the walk cap
+        (`sg().search_band(speedf=17)`) -- a general relative bracket around the lunge reach, not a
+        typed distance ([[no-overtuned-constants]]).
+      * NLO/NHI/NMAX: the walk-frame range where the baseline cruise walk's d2S enters the reach
+        band, widened for the crawl streams' start-delay (a crawl covers less ground early, so it
+        reaches the band a few frames LATER). Derived from the baseline trajectory + WIN_HI.
+      * PERP_GATE: the coarse |perp_ray| pre-filter for the exact test -- a small general multiple of
+        the reach (~the f32 razor, ~2e-4u). Real acceptance is the exact genuine_clip; this prunes."""
+    global _BOUNDS
+    if _BOUNDS is None:
+        g = sg()
+        lo, hi = g.search_band(speedf=17.0)
+        cs = seed().csangle
+        cruise = _sfbd(bear_to_S(), cs, 1.0)
+        n_cross = None
+        for (N, ox, oz, fac, nsp) in _walk_fast([cruise] * 24, 22):
+            if math.hypot(g.S[0] - ox, g.S[1] - oz) <= hi:
+                n_cross = N
+                break
+        n_cross = n_cross or 12
+        nlo = max(2, n_cross - 2)              # edge frame + start-delay slack (seam-general)
+        nhi = n_cross + 4                      # a K=3 crawl reaches the band up to ~4 frames later
+        _BOUNDS = dict(WIN_LO=lo, WIN_HI=hi, NLO=nlo, NHI=nhi, NMAX=nhi, PERP_GATE=hi * 1.5e-4)
+    return _BOUNDS
 
 
 def bear_to_S():
@@ -290,6 +321,8 @@ def _cut_all(sticks, base, base_k):
     FAST PATH: skip the cruise foot pose (bit-exact for walk-then-cut) and cut via the cached-lunge
     `fast_cut` (no clone, no J3D eval) -- both are 0-ULP vs the full engine (see fast_cut / the
     skip_cruise_pose flag). Reads (old, facing, nspeed) straight off the walking state per frame."""
+    B = bounds()
+    NMAX = B['NMAX']
     s = base.clone()
     s._foot.skip_cruise_pose = True
     snaps = []
@@ -299,10 +332,10 @@ def _cut_all(sticks, base, base_k):
             s.step(sticks[k][0], sticks[k][1], csx=128, csy=CDOWN)
     out = []
     for (k, ox, oz, fac, nsp) in snaps:
-        if k < 10:
+        if k < B['NLO']:
             continue
         dd = math.hypot(SEAM[0] - ox, SEAM[1] - oz)
-        if not (WIN_LO <= dd <= WIN_HI):
+        if not (B['WIN_LO'] <= dd <= B['WIN_HI']):
             continue
         old = (ox, oz)
         nx, nz = fast_cut(ox, oz, fac, nsp)
@@ -388,8 +421,7 @@ def solve(budget=110.0, want=20, verbose=True):
 # --- the FOCUSED K=3 search (session 32): the objective-compliant one-shot ---
 # Why K=3 + an octagon-interior byte nudge beats solve()'s K<=2: see solve_focused's docstring + KB walk-stab.
 _BASE_WALLED = None
-PERP_GATE_F = 0.006                   # keep only near-razor cuts for the exact test (razor ~2e-4u)
-NLO_F, NHI_F = 10, 15
+# PERP_GATE_F / NLO_F / NHI_F are now DERIVED per-seam via bounds() (session 49) -- see bounds().
 
 
 def seed_walled():
@@ -439,7 +471,8 @@ def solve_focused(budget=110.0, want=30, cruise_beta=None, verbose=True):
       bracket where the cut ray passes near S (the razor). No genuine test yet -- perp is the cheap
       predictor. Keeps the top brackets.
     Phase B (fine, wall-less): for each bracket, add a byte-NUDGED 3rd crawl frame (octagon interior,
-      the fine perp fill), walk, and where |perp| < PERP_GATE_F test the EXACT genuine_clip.
+      the fine perp fill), walk, and where |perp| < the derived perp gate (bounds()) test the EXACT
+      genuine_clip.
     Phase C (walled confirm): re-sim each genuine hit with walls; accept only wall_hit==False (old is
       the true pre-brake position; speedF still 17). Rank by perp_margin (delivery robustness).
 
@@ -450,6 +483,8 @@ def solve_focused(budget=110.0, want=30, cruise_beta=None, verbose=True):
     t0 = time.time()
     if cruise_beta is None:
         cruise_beta = bear_to_S()
+    B = bounds()
+    NLO_F, NHI_F, WIN_LO, WIN_HI = B['NLO'], B['NHI'], B['WIN_LO'], B['WIN_HI']
     cs = seed().csangle
     cruise = _sfbd(cruise_beta, cs, 1.0)
     c3base = _sfb(cruise_beta, cs, 0.66)
@@ -467,7 +502,7 @@ def solve_focused(budget=110.0, want=30, cruise_beta=None, verbose=True):
                         if not (NLO_F <= N <= NHI_F):
                             continue
                         d2S = math.hypot(SEAM[0] - ox, SEAM[1] - oz)
-                        if not (34.0 <= d2S <= 40.5):
+                        if not (WIN_LO <= d2S <= WIN_HI):
                             continue
                         nx, nz = fast_cut(ox, oz, fac, nsp)
                         pr = abs(perp_ray((ox, oz), (nx, nz)))
@@ -493,7 +528,7 @@ def solve_focused(budget=110.0, want=30, cruise_beta=None, verbose=True):
                     if kN == N:
                         ox, oz, fac, nsp = x, z, f, n
                 nx, nz = fast_cut(ox, oz, fac, nsp)
-                if abs(perp_ray((ox, oz), (nx, nz))) >= PERP_GATE_F:
+                if abs(perp_ray((ox, oz), (nx, nz))) >= B['PERP_GATE']:
                     continue
                 if not genuine_clip((ox, oz), (nx, nz))[0]:
                     continue

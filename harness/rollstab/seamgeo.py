@@ -54,6 +54,10 @@ KROLL = 15                     # aim frames between the A roll init and the sing
 ROLL_SPEEDF = 26.0             # the full-cap roll's peak speedF carried into the CUT_F lunge
                                # (capped walk 17 -> roll 26; KB mechanics/roll-stab.md). NOT per-seam.
 
+# General search-window bracket = fractions of the derived lunge reach -- seam-INDEPENDENT, NOT
+# per-case distances (the same rule for every seam); rationale in SeamGeo.search_band. [[no-overtuned-constants]]
+BAND_LO_FRAC, BAND_HI_FRAC = 0.80, 1.02
+
 
 def _mk(t):
     return Tri(t["v"][0], t["v"][1], t["v"][2],
@@ -177,3 +181,30 @@ class SeamGeo:
         for the roll-stab reach magnitude (~49.2202u). Informational: acceptance uses `cut_new(old)`
         per candidate, so no consumer depends on this being evaluated at a particular `old`."""
         return self.cut_new((0.0, 0.0))
+
+    # --- derived reachable band (Phase-5 generalization: no per-seam hardcoded ranges) ----
+    def reach_at(self, speedf=None):
+        """The CUT_F lunge DISPLACEMENT magnitude at `speedf` (default the roll cap `roll_speedf`).
+        This is the FAR edge of the reachable clip band: `old` must sit within a lunge-length of the
+        seam for `new` to cross it. Fully DERIVED from the cut model (`cut_new`), no pasted distance --
+        the roll uses the fixed roll cap; a walk-stab passes its capped walk speedF (17)."""
+        nx, nz = self.cut_new((0.0, 0.0), speedf=speedf)
+        return math.hypot(nx, nz)
+
+    @property
+    def reach(self):
+        """The roll-stab lunge reach (|LUNGE|, at `roll_speedf`)."""
+        return self.reach_at()
+
+    def search_band(self, speedf=None, lo_frac=BAND_LO_FRAC, hi_frac=BAND_HI_FRAC):
+        """The distance-to-S window to FOCUS the search on (NOT the reachability guard -- that is the
+        walled physics re-sim in the solvers). A general relative bracket around the derived lunge
+        reach: `[reach*lo_frac, reach*hi_frac]`. Same rule for every seam; the fractions are
+        seam-independent ([[no-overtuned-constants]]). `speedf` picks the reach (roll cap by default,
+        the walk cap 17 for a walk-stab). Returns (d2S_lo, d2S_hi)."""
+        R = self.reach_at(speedf)
+        return (R * lo_frac, R * hi_frac)
+
+    def d2S(self, p):
+        """Straight-line distance from `p=(x,z)` to the seam vertex S."""
+        return math.hypot(p[0] - self.S[0], p[1] - self.S[1])

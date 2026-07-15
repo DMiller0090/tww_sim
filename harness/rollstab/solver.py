@@ -36,9 +36,9 @@ from harness.rollstab.geometry import SEAM as _KAZE_SEAM, load_seed
 from harness.rollstab import rest as C
 
 HITS_PATH = os.path.join(_rb, '_generated', 'rollstab_hits.json')
-ZLO, ZHI = 302.6, 308.2        # old_z clear band (roll stops at the face below ~302.6)
 START_KMAX = 3                 # start-crawl window (K<=3: low-speed micro-moves, 1D approach)
 _BASE = {}
+_BASE_WALLED = {}
 
 
 def base(anchor, dtm_seed=1):
@@ -49,6 +49,45 @@ def base(anchor, dtm_seed=1):
     if key not in _BASE:
         _BASE[key] = C.rest_state(anchor, dtm_seed=dtm_seed)
     return _BASE[key].clone()
+
+
+def walled_base(anchor, seam, dtm_seed=1):
+    """A cloned from-rest sim with the seam's wall tris in the stepper (Phase W CrrPos), so the roll
+    approach BRAKES exactly as live does. Used by `wall_faithful` to decide reachability by real
+    physics rather than a typed-in `old_z` band (Dereck's session-49 call)."""
+    key = (anchor, dtm_seed, id(seam))
+    if key not in _BASE_WALLED:
+        _BASE_WALLED[key] = C.rest_state(anchor, walls=seam.TRIS, dtm_seed=dtm_seed)
+    return _BASE_WALLED[key].clone()
+
+
+def wall_faithful(anchor, stream, old_ref, seam, dtm_seed=1):
+    """PHYSICS reachability guard (dead-end #3): replay the candidate's exact recorded `stream`
+    through a WALLED rest_state; the candidate `old` is genuinely REACHABLE iff the roll reaches it
+    with NO wall stopping the approach first. Returns True/False.
+
+    This replaces the kaze-hardcoded `ZLO/ZHI` old_z band: that band was a proxy for exactly this
+    check (rejecting an `old` the wall-LESS roll overshot into -- the session-4 artifact). Deciding
+    it by the actual walled sim is per-seam-general and needs no typed boundary. A candidate is
+    rejected if any frame before the CUT flags `wall_hit`, or if the walled `old` differs from the
+    wall-less `old` (the wall subtly diverted the approach)."""
+    s = walled_base(anchor, seam, dtm_seed=dtm_seed)
+    rows = []
+    hit_before_cut = False
+    cut_i = None
+    for (sx, sy, btn) in stream:
+        s.step(sx, sy, buttons=btn)
+        st = s.state & 0xFF
+        if cut_i is None and st in (CUT_F, CUT_A):
+            cut_i = len(rows)                     # index of the CUT row (old is the row before)
+        if cut_i is None and getattr(s, 'wall_hit', False):
+            hit_before_cut = True
+        rows.append((st, s.pos_x, s.pos_z))
+    if cut_i is None or cut_i == 0 or hit_before_cut:
+        return False
+    from tww_sim.core.fp import f32 as _f
+    wold = (rows[cut_i - 1][1], rows[cut_i - 1][2])
+    return _f(wold[0]) == _f(old_ref[0]) and _f(wold[1]) == _f(old_ref[1])
 
 
 def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None, dtm_seed=1, seam=None):
@@ -249,7 +288,9 @@ def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None, dtm_se
             return None
         samples.append((r['old'][0], r['old'][1], [list(m) for m in moves], A_proj,
                         [list(x) for x in start]))
-        if (ZLO <= r['z'] <= ZHI) and r['genuine'] and r['clear']:
+        # Reachability is decided by the WALLED physics re-sim, not a typed-in old_z band (session 49):
+        # accept only genuine + clear cuts whose approach actually reaches `old` past the wall.
+        if r['genuine'] and r['clear'] and wall_faithful(anchor, r['stream'], r['old'], seam, dtm_seed):
             print('CLIP start=%s moves=%s A=%.0f old=(%.7f,%.7f) rho=%+0.6f (%.0fs)' % (
                   list(start), moves, A_proj, r['old'][0], r['old'][1], r['rho'],
                   time.time() - t0), flush=True)
@@ -285,18 +326,27 @@ def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None, dtm_se
     _dc = []
 
     def _dust_cache():
+        # The drill's genuine TARGET set: sweep pred_genuine over the region the search REACHES --
+        # centered on the sim baseline `old`, extents from the seam reach band, capped (session 49; no kaze box).
         if not _dc:
             from tww_sim.core.fp import f32 as _f
-            zz = 302.6
-            x_lo, x_hi = 9071.5, 9072.7
-            while zz <= 308.2:
+            lo, hi = seam.search_band()
+            span = min(hi - lo, 8.0)                     # along extent, capped
+            cx, cz = r0['old']
+            olds = [(s[0], s[1]) for s in samples] or [(cx, cz)]
+            hx = min(max(abs(o[0] - cx) for o in olds) + 0.6, 2.0)   # perp-ish (x), thin
+            hz = min(max(abs(o[1] - cz) for o in olds) + 0.6, span)  # along-ish (z)
+            x_lo, x_hi, z_lo, z_hi = cx - hx, cx + hx, cz - hz, cz + hz
+            zz = z_lo
+            while zz <= z_hi:
                 xx = x_lo
                 while xx <= x_hi:
                     if seam.pred_genuine((_f(xx), _f(zz))):
                         _dc.append((float(_f(xx)), float(_f(zz))))
                     xx += 0.001
                 zz += 0.02
-            print('dust cache: %d pts' % len(_dc), flush=True)
+            print('dust cache: %d pts (box x[%.2f,%.2f] z[%.2f,%.2f])' % (
+                  len(_dc), x_lo, x_hi, z_lo, z_hi), flush=True)
         return _dc
 
     pool = {json.dumps(s[2]) + str(s[3]) + json.dumps(s[4]): s for s in samples}

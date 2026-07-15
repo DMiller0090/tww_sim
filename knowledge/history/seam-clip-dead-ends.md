@@ -737,6 +737,30 @@ wrong for a NEARLY-FLAT seam and was ruled out before building on it.**
 - **Do NOT** re-bind a flat seam's F to the bisector when minting a novel near-flat seam in Phase 5.
   Check the interior angle: sharp corner -> bisector aim; near-flat -> bear_to_S aim.
 
+## The reachable band's NEAR edge is NOT geometric -- it is a reachability limit (session 49, offline)
+
+Deriving the solvers' per-seam ranges (the Phase-5 prerequisite: `solver.py` ZLO/ZHI + dust-cache box,
+`walkstab.solve_focused`'s d2S/N windows), the tempting move is to derive the search box's NEAR edge
+from the seam's genuine geometry (a `pred_genuine` scan). **That is wrong -- ruled out before building
+on it.**
+- Measured (fine `pred_genuine` scan outward from S along the aim, at cap speed): the geometric genuine
+  region runs ALL THE WAY from the seam vertex (d2S ~ 0) to the lunge reach (d2S ~ `reach`) for BOTH
+  the roll and the walk seam. There is NO geometric near bound at the shipped windows' lower edge
+  (roll `ZLO`->d2S~43.5, walk `WIN_LO`=34.5). With infinite wall planes a close `old` + a full lunge
+  still lands `new` far behind the plane, so it reads "genuine".
+- The shipped windows' near edge is therefore a REACHABILITY limit: the wall braking the roll/walk
+  approach short (dead-end #3 -- the wall-LESS sim overshoots to an `old` live cannot reach). It is a
+  DYNAMICS quantity, not seam geometry, so no geometric scan recovers it.
+- Resolution (Dereck-chosen, over a derived-span or padded band): decide reachability by a real WALLED
+  PHYSICS re-sim -- `solver.wall_faithful` (new) / `walkstab._wall_faithful` (existing) -- and keep only
+  the FAR edge + a generous general RELATIVE search bracket `SeamGeo.search_band()=[reach*0.80,
+  reach*1.02]` (seam-independent fractions, not per-case constants) to FOCUS the search. The far edge
+  `reach` is derived from the cut model (`SeamGeo.reach_at`). Gate: kaze roll + walk still reproduce
+  their shipped hits and `solve_focused` still finds wall-faithful hits < 2 min. See the
+  `no-overtuned-constants` memory + README `## Status` (session 49).
+- **Do NOT** reintroduce a typed-in `old_z`/d2S near-edge, and do NOT try to derive one from a
+  genuine-geometry scan -- the near edge is only knowable by simulating the approach WITH the wall.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.
