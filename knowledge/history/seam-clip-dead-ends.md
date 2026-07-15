@@ -761,27 +761,36 @@ on it.**
 - **Do NOT** reintroduce a typed-in `old_z`/d2S near-edge, and do NOT try to derive one from a
   genuine-geometry scan -- the near edge is only knowable by simulating the approach WITH the wall.
 
-## A distinct SHARP corner can be roll-INFEASIBLE despite disp_floor < reach (session 50, offline)
+## A sharp corner's clippable aim can be FAR off the bisector -- feasibility must sweep ALL aims (session 50 CLAIM, OVERTURNED session 51)
 
 Picking the first Phase-5 novel target, the distinct 97-deg corner S=(13539.24, 493.36) (kaze r11, walls
 871 x 899) was chosen because its `disp_floor = wall_r/sin(interior/2) = 46.73 < 49.22` (roll reach), so
-the scanner tiers it ROLL. **It is NOT roll-clippable -- ruled out by a dedicated search before minting.**
-- SIX independent methods found NO CrrPos-missing gap at ANY displacement (not just within reach):
-  `scan_seam`/`min_f32_clip` (the f32-truth), `find_clip`, `min_displacement_for_line` (out to 55u),
-  a fine 2D sweep (perp 0.002 / along 0.01, dir +-15, dist 44..58), and a coarse locate. The SAME tools
-  find the proven roll seam's gap immediately (50+ non-blocked new at 0.01 res; min disp 43.25).
-- ROOT CAUSE: `disp_floor` is a NECESSARY lower bound (it assumes both walls extend symmetrically around
-  the bisector), NOT sufficient. Here wall 899 (x=13539.24) extends +z -- AWAY from the into-corner roll
-  direction (+x,-z) -- and wall 871 extends -x, so a roll into the corner immediately EXITS both FINITE
-  wall segments into open space; there is no overlapping seam region to thread (the roll line always
-  grazes a finite wall edge -> line_hit, or lands past both segments). `characterize` reports "clippable"
-  because its CONTINUOUS screen ignores the finite extents; the f32 CrrPos truth catches every crossing.
-- LESSON: a seam's tier from `disp_floor` alone OVER-PROMISES for asymmetric corners. Before minting a
-  novel-seam anchor, CONFIRM an actual f32 gap with `min_f32_clip`/`find_clip` (or a `SeamGeo.pred_genuine`
-  f32 dust scan giving a nonzero count -- the mirror-roll seam gave 74, comparable to the proven 95). The
-  feasible novel seams turned out to be the geometrically-SIMILAR ones (the mirror-roll 109-deg corner;
-  near-flat walk seams); genuinely-distinct sharp corners were the infeasible ones. Tooling:
-  `make_seam_geo.py`, the s50 scratch probes.
+the scanner tiers it ROLL.
+
+**Session 50 ruled it "NOT roll-clippable at ANY displacement" -- that ruling is WRONG (overturned session
+51). The seam IS roll-clippable; the s50 search just never aimed where the gap is.** At aim ~90 deg (facing
+16384) it has a coherent genuine f32 razor: **26 `SeamGeo.pred_genuine` points**, all in_front, along-band
+d2S 29.6..49.1, perp -0.094..-0.057 (perp grows linearly with along -> a real threadable gap, not an f32
+fluke). Confirmed by an ALL-FACING f32 scan (`pred_genuine` at true f32 perp resolution ~0.0005u; a coarse
+perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearing).
+- WHY s50 missed it: its "6 methods" swept aim only `dir +-15deg` around the INTO-CORNER bisector (131.5
+  deg). The clippable aim here is ~90 deg -- ~41 deg OFF the bisector -- so it fell outside every sweep.
+  The into-corner aim genuinely gives 0 (wall 899 extends +z, away from the +x,-z into-corner roll dir, so
+  an into-corner lunge exits both finite wall segments); but a GRAZING aim (~90 deg, roughly along wall
+  899) threads the vertex. Same phenomenon as the near-flat walk seam clipping at `bear_to_S`, not the
+  bisector (dead-end above): the clippable aim is NOT always the bisector, even for a SHARP corner.
+- `disp_floor` is still only a NECESSARY lower bound (assumes symmetric walls), and `characterize`'s
+  continuous screen still over-promises vs the finite-extent f32 CrrPos truth -- both true. What was wrong
+  was concluding "infeasible" from an aim-BOUNDED f32 sweep.
+- LESSON (corrected): a feasibility scan MUST sweep the FULL aim circle (all facings) at TRUE f32 perp
+  resolution, not just +-15 deg around the bisector. The right feasibility probe is
+  `SeamGeo.pred_genuine` over (along, perp) at each facing (the exact sim acceptance). `derive_F` from the
+  bisector is only the DEFAULT aim; a corner whose gap is off-bisector needs its clippable aim passed as
+  `aim_deg=` (the s48 per-seam-aim mechanism), same as a near-flat seam.
+- STATUS: the 97-deg clip is geometrically FEASIBLE + precise but NOT YET delivered -- delivery needs an
+  anchor minted to aim ~90 deg at this corner + a wall-faithful-reachable `old`, then `solve_focused`
+  (which threads exactly this kind of precise razor). Tooling: `make_seam_geo.py wallA=871 wallB=899`, the
+  s51 scratch probes (all-facing f32 scan).
 
 ## Pointers
 
