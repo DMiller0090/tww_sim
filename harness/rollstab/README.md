@@ -118,12 +118,20 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   roll_clip`/`_walkstab_clip` all green); NO `sim.py`/`land.py` change, so the live regression is
 >   unaffected.
 >
-> **NEXT (Phase-5 tidy + the north star):** (1) wire `thrust_scan._matches`'s kaze guard drop -> dispatch
-> an ENUMERATED seam to the generalized standard-roll path building a `SeamGeo` per seam (now that the
-> full mint->solve->deliver pipeline is proven end-to-end on a novel seam, this is the last generalization
-> chore). (2) OPTIONAL: fold the mirror focused solve into a self-checking harness entry. Every other
-> thread (sheathed clip DONE, walk-stab clip, Tetra push-aside/turnaround) UNCHANGED; the Tetra push clip
-> stays a STANDALONE solver.
+> **NEXT (deliver the 97-deg corner -- Dereck's target): the DISTINCT 97-deg corner S=(13539.24,493.36)
+> (walls 871x899) IS roll-clippable, OVERTURNING session 50's "infeasible" ruling.** New tool
+> `seam_feasibility.py` (the full-aim-circle f32 `pred_genuine` probe -- session 50 swept aim only
+> `dir+-15deg` of the into-corner bisector and MISSED the gap): the clip sits at a ~90-deg GRAZING aim
+> (facing **16384**, ~41deg off the bisector 131.5), an 18-26-point f32 razor (along d2S 25..49, perp
+> -0.048..-0.094, all in_front; precise, as Dereck expected from the 91-deg Tetra corner). Geo
+> `fixtures/kaze_r11_seam97_geo.json` (regen `make_seam_geo wallA=871 wallB=899`). TO DELIVER: (1) build
+> the SeamGeo with `aim_deg~=90` (NOT the default bisector -- the s48 per-seam-aim mechanism; the clippable
+> aim is off-bisector like a near-flat seam's bear_to_S); (2) MINT an anchor aiming ~90deg at this corner
+> (`mint.mint_novel`, camera+C-down recipe as the mirror), verify REST BIT-EXACT; (3) `solve_focused` (it
+> threads exactly this precise razor) -- OPEN UNKNOWN: wall-faithful REACHABILITY of the ~90-deg-aim `old`
+> (needs the anchor to check); (4) `deliver ship geo=... golden=...` -> live 0-ULP. Secondary Phase-5 tidy:
+> wire `thrust_scan._matches`'s kaze guard drop -> SeamGeo-per-enumerated-seam. Every other thread
+> (mirror/sheathed clips DONE, walk-stab, Tetra push-aside/turnaround STANDALONE) UNCHANGED.
 
 > **PRIOR THREAD (2026-07-15, session 50): Phase 5 IN PROGRESS -- a NOVEL seam (the mirror-roll
 > corner) has a fresh live-minted anchor that is REST BIT-EXACT, and two real generalization bugs are
