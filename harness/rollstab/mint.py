@@ -153,9 +153,59 @@ def mint(base, name, dx, dz):
           dst, rest['rest_d_frame'], rest['rest_w_frame'], rest['rest_m359C']))
 
 
+def _sdiff(a, b):
+    d = (int(a) - int(b)) & 0xFFFF
+    return d - 65536 if d > 32768 else d
+
+
+def mint_novel(name, rest_x, rest_z, facing, target_csangle, floor_y, base='kaze_r11_rollstab_idle13@twwgz',
+               settle_walk=14, settle_idle=20):
+    """Mint a fresh anchor for a NOVEL seam with the camera BEHIND Link (session-50 procedure).
+
+    Load `base`, `cmd_teleport` to (rest_x, floor_y, rest_z) facing `facing` (SAME floor Y => no
+    sploosh), then get the camera behind Link and mint. The L (recenter) button is NOT wired to live
+    input, so the camera is aimed by PANNING the free cam with the C-STICK; and because the free cam
+    gets a one-time leash pull as Link speeds up, the camera is PRE-SETTLED by WALKING (C-down held)
+    past that pull before minting -- else csangle drifts during the solver's approach and breaks REST
+    bit-exactness. All of this is PRE-mint, so none of it lands in the delivered DTM (Dereck's ask).
+    After minting, verify with `rest.main(anchor, seam=<SeamGeo>, dtm_seed=0)` -- a mint_current anchor
+    needs seed=0 (noops=2) + C-down. Returns the seed dict."""
+    from harness.rollstab.rest import dtm_stick
+    from tww_sim.land.plan_land import stick_for_bearing
+    import time
+    ENV.ensure_running()
+    src = os.path.join(ANCHOR_DIR, base + '.sav')
+    _load_paused(src)
+    h, m = D.attach()
+    D.cmd_teleport(['x=%r' % rest_x, 'y=%r' % floor_y, 'z=%r' % rest_z, 'facing=%d' % (int(facing) & 0xFFFF), 'frames=2'])
+    time.sleep(0.4)
+
+    def cs():
+        return D.read_named(h, m, 'csangle') & 0xFFFF
+    # pan the free cam toward target_csangle (C-right raises csangle, C-left lowers), 1 frame at a time
+    for _ in range(80):
+        if abs(_sdiff(target_csangle, cs())) < 800:
+            break
+        sub = 255 if _sdiff(target_csangle, cs()) > 0 else 0
+        D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': sub, 'substickY': 128, 'buttons': 0, 'frames': 1})
+        time.sleep(0.03)
+    # walk-settle: walk toward `facing` with C-down held so csangle reaches its walk-frozen value
+    sx, sy = dtm_stick(stick_for_bearing(int(facing) & 0xFFFF, cs(), 1.0))
+    D.control_pipe_quiet('advancewith', {'stickX': sx, 'stickY': sy, 'substickX': 128, 'substickY': 0, 'buttons': 0, 'frames': settle_walk})
+    time.sleep(0.3)
+    # stop + idle (C-down) to a clean WAITS rest at the frozen camera
+    D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128, 'substickY': 0, 'buttons': 0, 'frames': settle_idle})
+    time.sleep(0.3)
+    print('pre-mint: csangle=%d (target %d) state=%d' % (cs(), int(target_csangle) & 0xFFFF, D.read_named(h, m, 'link_state')), flush=True)
+    return mint_current(name)
+
+
 if __name__ == '__main__':
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
-    if 'current' in o:                    # mint the live paused state as a fresh full-seed anchor
+    if 'novel' in o:                      # camera-behind mint for a NOVEL seam (session-50 procedure)
+        mint_novel(o['novel'], float(o['x']), float(o['z']), int(o['facing'], 0),
+                   int(o['csangle'], 0), float(o['y']), base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
+    elif 'current' in o:                  # mint the live paused state as a fresh full-seed anchor
         ENV.ensure_running()
         mint_current(o['current'])
     else:

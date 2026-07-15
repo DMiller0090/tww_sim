@@ -56,12 +56,17 @@ def dtm_stick(stk):
     return (_DTM_CAL.get(stk[0], stk[0]), _DTM_CAL.get(stk[1], stk[1]))
 
 
-def sticks_of(anchor):
+def sticks_of(anchor, seam=None):
+    """(seed, straight, aim) for the verification/approach stream. `straight` aims at the anchor
+    facing; `aim` aims at the seam's thrust facing F. `seam` (a SeamGeo) generalizes a NOVEL seam --
+    default None uses the kaze `geometry.F` (byte-identical). For an anchor minted facing INTO its
+    corner, straight ~= aim, so the straight walk alone already verifies the from-rest approach."""
     seed = G.load_seed(anchor)
     cs = seed['csangle'] & 0xFFFF
     f0 = seed['shape_angle_y'] & 0xFFFF
+    F = seam.F if seam is not None else G.F
     straight = dtm_stick(stick_for_bearing(f0, cs, 1.0))
-    aim = dtm_stick(stick_for_bearing(G.F, cs, 1.0))
+    aim = dtm_stick(stick_for_bearing(F, cs, 1.0))
     return seed, straight, aim
 
 
@@ -113,17 +118,18 @@ def rest_state(anchor, walls=None, model_draw=None, dtm_seed=1, noops=None):
     return s
 
 
-def verify_rest(anchor, calib=None):
+def verify_rest(anchor, calib=None, seam=None, dtm_seed=1):
     """Offline gate: replay the calibration stream FROM REST and diff every row vs the live
-    trace -- pos, d/w frames, m359C. Returns nbad (0 == REST BIT-EXACT)."""
+    trace -- pos, d/w frames, m359C. Returns nbad (0 == REST BIT-EXACT). `seam`/`dtm_seed` for a
+    NOVEL seam (aim at seam.F) / a seed-0 delivery; defaults byte-identical to the kaze path."""
     def bits(x):
         return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
     if calib is None:
         calib = json.load(open(CALIB_PATH))
         assert calib['anchor'] == anchor, (calib['anchor'], anchor)
-    s = rest_state(anchor)
-    _, straight, aim = sticks_of(anchor)
+    s = rest_state(anchor, dtm_seed=dtm_seed)
+    _, straight, aim = sticks_of(anchor, seam=seam)
     stream = [straight] * NPREF + [aim] * NCRUISE
     nbad = 0
     for k, (sx, sy) in enumerate(stream):
@@ -145,10 +151,12 @@ def verify_rest(anchor, calib=None):
     return nbad
 
 
-def main(anchor):
+def main(anchor, seam=None, dtm_seed=1):
     """The per-anchor LIVE gate: one clean-DTM run of the verification stream, logging the anim
     fields per frame, then the offline from-rest diff. A new anchor must print REST BIT-EXACT
-    before its solver hits are trusted."""
+    before its solver hits are trusted. `seam` (a SeamGeo, or built from a `geo=` fixture) aims the
+    cruise at a NOVEL seam's F; `dtm_seed` picks the make_dtm leading-poll layout (0 for the seed-0
+    delivery a mint_current anchor needs -- noops = rest_noops + (1-dtm_seed))."""
     from harness.dtm.run_dtm import run_dtm, land_ready
     import harness.dtm.run_dtm as R
     import dolphin_mem as D
@@ -163,13 +171,16 @@ def main(anchor):
         return d
     R._read_frame = rich
 
-    _, straight, aim = sticks_of(anchor)
+    _, straight, aim = sticks_of(anchor, seam=seam)
+    # csy=0 (C-down, free-cam pin) for a NOVEL mint_current anchor whose camera would else drift as Link
+    # walks (session 50); csy=128 (neutral) is byte-identical to the legacy proven-anchor goldens.
+    csy = 0 if (seam is not None or dtm_seed == 0) else 128
     stream = [straight] * NPREF + [aim] * NCRUISE
-    sticks = [dict(stickX=sx, stickY=sy, substickX=128, substickY=128, buttons=0)
+    sticks = [dict(stickX=sx, stickY=sy, substickX=128, substickY=csy, buttons=0)
               for (sx, sy) in stream] + [dict(stickX=128, stickY=128, substickX=128,
-                                              substickY=128, buttons=0)] * 20
+                                              substickY=csy, buttons=0)] * 20
     end = run_dtm(sticks, anchor=anchor, ready=land_ready, relaunch_dolphin=True,
-                  log_frames=len(stream) + 2, verbose=True)
+                  log_frames=len(stream) + 2, verbose=True, seed=dtm_seed)
     frames = end['log']
     calib = dict(anchor=anchor, NPREF=NPREF,
                  frames=[dict(pos_x=f['pos_x'], pos_z=f['pos_z'],
@@ -180,9 +191,15 @@ def main(anchor):
     os.makedirs(os.path.dirname(CALIB_PATH), exist_ok=True)
     json.dump(calib, open(CALIB_PATH, 'w'))
     print('wrote %s (%d frames)' % (CALIB_PATH, len(frames)), flush=True)
-    return 0 if verify_rest(anchor, calib) == 0 else 1
+    return 0 if verify_rest(anchor, calib, seam=seam, dtm_seed=dtm_seed) == 0 else 1
 
 
 if __name__ == '__main__':
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
-    sys.exit(main(o.get('anchor', 'kaze_r11_rollstab_idle2@twwgz')))
+    _seam = None
+    if 'geo' in o:                    # NOVEL seam: build a SeamGeo from its geo fixture + anchor csangle
+        from harness.rollstab.seamgeo import SeamGeo
+        _a = o.get('anchor', 'kaze_r11_rollstab_idle2@twwgz')
+        _seam = SeamGeo(json.load(open(o['geo'])), csangle=G.load_seed(_a)['csangle'] & 0xFFFF)
+    sys.exit(main(o.get('anchor', 'kaze_r11_rollstab_idle2@twwgz'),
+                  seam=_seam, dtm_seed=int(o.get('seed', 1))))

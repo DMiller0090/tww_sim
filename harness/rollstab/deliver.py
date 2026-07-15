@@ -46,10 +46,23 @@ def replay(anchor, stream, dtm_seed=1):
     return rows
 
 
-def gate(idx=0):
+def _seam_for(anchor, geo=None, seam=None):
+    """The acceptance geometry: an explicit SeamGeo, or one built from a geo-fixture path + the anchor
+    camera yaw (a NOVEL seam), else the kaze `geometry` shim (default, byte-identical)."""
+    if seam is not None:
+        return seam
+    if geo is None:
+        return G
+    from harness.rollstab.seamgeo import SeamGeo
+    cs = G.load_seed(anchor)['csangle'] & 0xFFFF
+    return SeamGeo(json.load(open(geo)), csangle=cs)
+
+
+def gate(idx=0, geo=None, seam=None):
     hit = json.load(open(HITS_PATH))[idx]
     anchor = hit['anchor']
     dtm_seed = int(hit.get('dtm_seed', 1))       # the make_dtm leading-poll seed this hit solves on
+    sm = _seam_for(anchor, geo=geo or hit.get('geo'), seam=seam)
     stream = [tuple(fr) for fr in hit['stream']]
     rows = replay(anchor, stream, dtm_seed=dtm_seed)
     ci = next((i for i, rr in enumerate(rows) if rr[0] in (CUT_F, CUT_A)), None)
@@ -61,12 +74,12 @@ def gate(idx=0):
     roll = [(rr[1], rr[2]) for rr in rows if rr[0] == FRONT_ROLL]
     dOLD = (bits(old[0]) - bits(hit['old'][0]), bits(old[1]) - bits(hit['old'][1]))
     dNEW = (bits(new[0]) - bits(hit['new'][0]), bits(new[1]) - bits(hit['new'][1]))
-    gen = G.genuine_clip(old, new)
-    clear = gen and not any(G.seg_blocked(roll[i], roll[i + 1]) for i in range(len(roll) - 1))
-    behindA = G.wA.pla.func((new[0], G.LINK_Y, new[1])) < 0
-    behindB = G.wB.pla.func((new[0], G.LINK_Y, new[1])) < 0
-    robust = (G.pred_genuine((old[0], _f(old[1] + MARGIN_Z)))
-              and G.pred_genuine((old[0], _f(old[1] - MARGIN_Z))))
+    gen = sm.genuine_clip(old, new)
+    clear = gen and not any(sm.seg_blocked(roll[i], roll[i + 1]) for i in range(len(roll) - 1))
+    behindA = sm.wA.pla.func((new[0], sm.LINK_Y, new[1])) < 0
+    behindB = sm.wB.pla.func((new[0], sm.LINK_Y, new[1])) < 0
+    robust = (sm.pred_genuine((old[0], _f(old[1] + MARGIN_Z)))
+              and sm.pred_genuine((old[0], _f(old[1] - MARGIN_Z))))
     ok = dOLD == (0, 0) and dNEW == (0, 0) and gen and clear and behindA and behindB
     print('gate[%d] anchor=%s cut@%d old=(%.7f,%.7f) new=(%.7f,%.7f)' % (
           idx, anchor, ci, old[0], old[1], new[0], new[1]))
@@ -80,18 +93,19 @@ def gate(idx=0):
               for (sx, sy, b) in stream]
     plan = dict(anchor=anchor, hit={k: v for k, v in hit.items() if k != 'stream'},
                 stream=[list(x) for x in stream], sticks=sticks, old=list(old), new=list(new),
-                cut_idx=ci, robust=bool(robust), dtm_seed=dtm_seed,
+                cut_idx=ci, robust=bool(robust), dtm_seed=dtm_seed, geo=(geo or hit.get('geo')),
                 rows=[[r[0], r[1], r[2], r[3]] for r in rows])
     json.dump(plan, open(PLAN_PATH, 'w'))
     print('  wrote %s' % PLAN_PATH)
     return plan
 
 
-def ship(idx=0, norelaunch=False):
+def ship(idx=0, norelaunch=False, geo=None, seam=None):
     from harness.dtm.run_dtm import run_dtm, land_ready
-    plan = gate(idx)
+    plan = gate(idx, geo=geo, seam=seam)
     if plan is None:
         return 1
+    sm = _seam_for(plan['anchor'], geo=plan.get('geo'), seam=seam)
     sticks = list(plan['sticks'])
     sticks += [dict(stickX=128, stickY=128, substickX=128, substickY=128, buttons=0)] * WATCH_TAIL
     log_n = plan['cut_idx'] + 14
@@ -110,9 +124,9 @@ def ship(idx=0, norelaunch=False):
         return 1
     lo = (frames[live_cut - 1]['pos_x'], frames[live_cut - 1]['pos_z'])
     ln = (frames[live_cut]['pos_x'], frames[live_cut]['pos_z'])
-    threads = G.genuine_clip(lo, ln)
-    behindA = G.wA.pla.func((ln[0], G.LINK_Y, ln[1])) < 0
-    behindB = G.wB.pla.func((ln[0], G.LINK_Y, ln[1])) < 0
+    threads = sm.genuine_clip(lo, ln)
+    behindA = sm.wA.pla.func((ln[0], sm.LINK_Y, ln[1])) < 0
+    behindB = sm.wB.pla.func((ln[0], sm.LINK_Y, ln[1])) < 0
     d = (lo[0] - plan['old'][0], lo[1] - plan['old'][1])
     ok = threads and behindA and behindB
     print('LIVE old=(%.7f,%.7f) new=(%.7f,%.7f) drift-vs-sim d(old)=(%.6f,%.6f)' % (
@@ -124,6 +138,7 @@ def ship(idx=0, norelaunch=False):
 
 if __name__ == '__main__':
     idx = next((int(a.split('=')[1]) for a in sys.argv if a.startswith('hit=')), 0)
+    geo = next((a.split('=', 1)[1] for a in sys.argv if a.startswith('geo=')), None)
     if 'ship' in sys.argv:
-        sys.exit(ship(idx, norelaunch=('norelaunch' in sys.argv)))
-    sys.exit(0 if gate(idx) else 1)
+        sys.exit(ship(idx, norelaunch=('norelaunch' in sys.argv), geo=geo))
+    sys.exit(0 if gate(idx, geo=geo) else 1)

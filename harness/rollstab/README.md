@@ -102,6 +102,12 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   approach at the hardcoded `geometry.F` -> now aims `seam.F` (a novel seam was walked the WRONG way);
 >   (b) the hardcoded A_projs are anchor-DISTANCE specific -> NEW `solver._derive_a_projs` brackets the
 >   reach band per anchor (the mirror at 555u needs different thresholds than the proven at 748u).
+> - **Delivery path HARDENED for novel seams (so the next session isn't re-blocked):** `rest.py`
+>   (`sticks_of`/`main`/`verify_rest`) + `deliver.py` (`gate`/`ship`, new `_seam_for`) + `mint.py`
+>   (new `mint_novel` = the camera-behind mint procedure as one call) now thread a `seam=`/`geo=`
+>   (byte-identical for the kaze default). `rest`/`deliver` CLIs take `geo=<fixture>` (+ `rest` `seed=`);
+>   `mint_novel` encodes teleport + C-stick camera pan + walk-settle. These were the traps this session
+>   hit in scratch -- the proven anchors were unaffected (all gates green).
 > - **BLOCKED (the clip): the cold search finds 0 genuine** -- the same octagon-clamp reachable-lattice
 >   DENSITY WALL as the sheathed roll (dead-ends #29/#32): the fine perp knob collapses to ~27 distinct
 >   bytes. `solver.py` lacks the walkstab K=3-byte densifier (session 32); the proven/sheathed roll clips
