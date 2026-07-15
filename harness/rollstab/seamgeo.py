@@ -109,9 +109,9 @@ class SeamGeo:
                      else [self.wA, self.wA, self.wB] + self.BARRIER)
         self.LINK_Y = geo["link_y"]
         self.S = (geo["S"][0], geo["S"][2])
-        # aim_deg: per-seam thrust direction (bisector for a corner, bear_to_S for a flat seam). Default
-        # = the fixture's interior bisector (the corner convention), so corner seams need no override.
-        self.aim_deg = geo["bisector_deg"] if aim_deg is None else aim_deg
+        # aim_deg: per-seam thrust direction. Explicit arg wins; else the fixture may DECLARE its
+        # clippable aim (`"aim_deg"`, e.g. the 97-deg corner's ~90 grazing aim); else the interior bisector.
+        self.aim_deg = aim_deg if aim_deg is not None else geo.get("aim_deg", geo["bisector_deg"])
         self.F = derive_F(self.aim_deg, self.csangle)
         _r = self.F / 65536.0 * 2 * math.pi
         self.DIRX, self.DIRZ = math.sin(_r), math.cos(_r)

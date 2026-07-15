@@ -787,10 +787,25 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
   `SeamGeo.pred_genuine` over (along, perp) at each facing (the exact sim acceptance). `derive_F` from the
   bisector is only the DEFAULT aim; a corner whose gap is off-bisector needs its clippable aim passed as
   `aim_deg=` (the s48 per-seam-aim mechanism), same as a near-flat seam.
-- STATUS: the 97-deg clip is geometrically FEASIBLE + precise but NOT YET delivered -- delivery needs an
-  anchor minted to aim ~90 deg at this corner + a wall-faithful-reachable `old`, then `solve_focused`
-  (which threads exactly this kind of precise razor). Tooling: `make_seam_geo.py wallA=871 wallB=899`, the
-  s51 scratch probes (all-facing f32 scan).
+- STATUS (session 52): the anchor IS minted + WALLED-REST BIT-EXACT (`kaze_r11_rollstab_seam97@twwgz`,
+  golden `fixtures/seam97_rest_golden.json`, gate `tests/test_seam97_clip.py`), and `solve_focused` runs
+  clean -- but 0 wall-faithful hits so far. This is an OPEN SEARCH/MODEL gap, NOT an impossibility
+  (`pred_genuine` verifies the clip EXISTS -> the search must find the reachable path; Dereck's standing
+  rule). The reachability tension to resolve: the verified-genuine dust is confined <=5.4u in front of
+  wallA (the razor runs ~parallel to wallA, the aim the roll grazes along), while the walled roll holds
+  Link's center 35u off wallA (WallCorrect `wall_r=35`), so the roll is pushed ~30u off the razor before
+  the CUT; a 108-sample x all-aims scan of the REACHABLE corner mouth (>=35u from BOTH walls -- where the
+  proven/mirror clips sit, ~38-40u out) found 0 genuine. TWO angles for the next session, both from
+  Dereck's steers: (1) CONCAVE corners (this is one, interior 97) may TOUCH/SLIDE walls -- only a BONK
+  (`FRONT_ROLL_CRASH`) disqualifies -- but `solver.wall_faithful` rejects on ANY `wall_hit`; relax it to
+  reject only bonks (necessary; the 97 roll slides without bonking). (2) The roll-near-CONCAVE-corner wall
+  behaviour is NOT yet verified against live (the walk verification only reached ~x13290, before the
+  corner) -- confirm live whether Link is really held 35u off wallA here or the concave WallCorrect lets
+  him closer (if closer, the dust is reachable and this is a sim over-correction). Tooling:
+  `make_seam_geo.py wallA=871 wallB=899`, `seam_feasibility.py` (all-facing f32 scan), and the mint recipe
+  in `tests/test_seam97_clip.py` (a fixed-camera novel anchor must be a GENUINELY aligned idle:
+  travel_angle == facing, via align-walk -> settle -> teleport-to-rest -> mint_current; a teleport-rotated
+  idle inherits the base travel_angle and arcs off-course into the wall).
 
 ## Pointers
 

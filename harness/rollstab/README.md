@@ -76,11 +76,52 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-15, session 51)
+## Status (2026-07-15, session 52)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+> **CURRENT THREAD (2026-07-15, session 52): the 97-deg corner has a WALLED-REST-BIT-EXACT anchor and a
+> clean solver run, but 0 wall-faithful hits -- an OPEN search/model gap, NOT an impossibility (Dereck's
+> rule: `pred_genuine` verifies the clip EXISTS, so the search must find the reachable path). Handoff for
+> a new session.** Target = the DISTINCT 97-deg corner S=(13539.24,493.36), walls 871x899, clippable at a
+> ~90-deg GRAZING aim (facing 16306 at csangle 29883; geo `fixtures/kaze_r11_seam97_geo.json`, which now
+> DECLARES `aim_deg=90`). Done this session (offline + live mint/verify; never advancewith for delivery):
+> - **Anchor `kaze_r11_rollstab_seam97@twwgz` MINTED + WALLED-REST BIT-EXACT** (golden
+>   `fixtures/seam97_rest_golden.json`; gate `tests/test_seam97_clip.py::test_seam97_rest_bitexact_walled`
+>   GREEN). The camera is a FIXED room cam at csangle 29883 (frozen through idle+walk -- NO camera modeling
+>   needed; Dereck's steer to use the initial-savestate camera). The mint needed a real fix: a NOVEL anchor
+>   at a fixed-camera seam must be a GENUINELY aligned idle (`travel_angle` == facing) -- a teleport-rotated
+>   idle inherits the base idle's `travel_angle` (33328) and arcs off-course into the south wall. Recipe
+>   (works, verified): align-walk toward F -> settle to idle -> teleport-to-rest (preserves the aligned
+>   idle) -> `mint_current`. The straight +X approach grazes wallA near the corner, so REST is bit-exact
+>   only WITH walls (wall-less diverges ~row 24); the WALLED sim (walls=`seam.TRIS`) is 0-ULP every row.
+> - **Off-bisector aim threaded cleanly via the FIXTURE.** `SeamGeo` now reads an optional `"aim_deg"` key
+>   from the geo dict (else bisector default), so `rest`/`solver`/`deliver`/`seam_feasibility` all use the
+>   90-deg aim from the fixture with NO per-CLI plumbing. Byte-identical for every existing seam (bisector
+>   default unchanged; walkstab still passes its explicit `aim_deg`). Gate: `test_seamgeo`/`_seam_bands`/
+>   `_solver_seam_param`/`_walkstab_seam`/`_mirror_roll_clip` all green.
+> - **`solve_focused` ran clean but found 0 wall-faithful hits** (`test_seam97_clip_delivered` xfail-RED,
+>   strict). The reachability tension (the puzzle to resolve, see the dead-end ledger 97-deg STATUS): the
+>   verified-genuine dust is confined <=5.4u in front of wallA (the razor runs ~parallel to the aim the
+>   roll grazes along), while the walled roll holds Link's center 35u off wallA (WallCorrect `wall_r=35`),
+>   pushing the roll ~30u off the razor before the CUT. A 108-sample x all-aims scan of the REACHABLE
+>   corner mouth (>=35u from BOTH walls -- where the proven/mirror clips sit ~38-40u out) found 0 genuine.
+> - Suite **368 passed, 1 skipped, 3 xfailed** (was 367/2; +1 pass = seam97 walled REST, +1 xfail = seam97
+>   clip). Only `harness/rollstab/seamgeo.py` behavior changed (the fixture `aim_deg` default; byte-identical
+>   for existing seams); NO `sim.py`/`land.py` change, so the live regression is unaffected.
+>
+> **NEXT (deliver the 97-deg corner -- resolve the search/model gap; do NOT conclude impossible):** two
+> angles, both from Dereck's steers. (1) CONCAVE corners (this is one, interior 97) may TOUCH/SLIDE walls --
+> only a BONK (`FRONT_ROLL_CRASH`) disqualifies -- but `solver.wall_faithful` rejects on ANY `wall_hit`
+> (`solver.py:84`); relax it to reject only bonks (the 97 roll slides without bonking) and re-run
+> `solve_focused`. (2) VERIFY the roll-near-concave-corner wall behaviour LIVE (unverified: the walk
+> verification only reached ~x13290, before the corner) -- is Link really held 35u off wallA here, or does
+> the concave WallCorrect let him closer? If closer, the dust is reachable and the sim is over-correcting.
+> Repro: `python -m harness.rollstab.solver anchor=kaze_r11_rollstab_seam97@twwgz
+> geo=fixtures/kaze_r11_seam97_geo.json seed=0 focused`. Every other thread (mirror/sheathed clips DONE,
+> walk-stab, Tetra push-aside/turnaround STANDALONE) UNCHANGED.
 
 > **CURRENT THREAD (2026-07-15, session 51): PHASE 5 IS DONE -- the NOVEL mirror-roll seam clip is
 > DELIVERED LIVE, 0-ULP, pure-sim, no calibration. The "generalization works" proof is HIT: a seam the
