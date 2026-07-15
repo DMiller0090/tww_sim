@@ -119,6 +119,21 @@ Two live-confirmed Hyrule clips were missing from the first dump; `enumerate_sea
 - **Stacked lower/upper tris.** A tall wall is split into stacked triangles; a single representative tri
   can be the UPPER half (y 199-499). `scan_region` computes the standable `yspan` over ALL incident tris
   of the corner (from `seam['polys']`) so the floor check doesn't reject the real floor.
+- **Coplanar (single-normal) flat-wall seams.** `enumerate_seams` also emits single-normal vertical
+  edges (`coplanar=True`, interior 180) - a flat wall's own tessellation seam can clip where f32
+  rounding opens a threadable gap (live A_mori (4077.6,-1708.8)). NOT categorical: the f32 verify
+  decides per-seam. See [seam-clip.md](seam-clip.md) + [history](../history/seam-scanner-analytic-attempts.md).
+
+## Two gather / verify false-positive fixes (2026-07-15)
+
+`locate` reported "clips that don't work" (user-flagged, GanonK top-of-room). Two causes, both fixed:
+- The CrrPos barrier was gathered at the **seam-vertex Y**, but the wall cylinder is at **Link's floor
+  Y** - hundreds of u higher on a tall corner (GanonK top: base 6997, floor 7778), so the walls at
+  Link's height were excluded and the verify missed the WallCorrect blocker. Now gathered at the
+  representative standable floor Y.
+- Even at the right Y the edge-distance gather can miss a blocker. `locate` now **re-verifies the exact
+  `old`->`new` against the WHOLE room's walls** and drops any clip whose full-room sweep is stopped
+  short. Far walls can't touch the short cut segment, so this never false-negatives a genuine clip.
 
 ## DZB is stored in WORLD coordinates; MULT is NOT applied
 

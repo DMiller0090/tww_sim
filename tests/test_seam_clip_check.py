@@ -82,11 +82,15 @@ def test_enumerate_pairs_near_coincident_seam_vertices():
     box = (-1400.0, -1000.0, -10.0, 100.0, 1500.0, 2000.0)
     seams = enumerate_seams([wallA, wallB], box)
     assert len(seams) == 1, seams
-    assert set(seams[0]["polys"]) == {0, 1}
-    # a third wall whose seam vertex is 5u away must be its own (unpaired -> not a corner) edge
+    assert set(seams[0]["polys"]) == {0, 1} and not seams[0].get("coplanar")
+    # wallC (12u away) must NOT merge into the {0,1} corner; post the coplanar-seam change it is its
+    # OWN single-normal (coplanar, interior 180) edge, but the corner stays exactly the {0,1} pairing.
     wallC = _tri_dict(2, (-1220.0, 0.0, 1765.95), (-1220.0, 200.0, 1765.95), (-1220.0, 0.0, 1900.0))
     seams2 = enumerate_seams([wallA, wallB, wallC], box)
-    assert len(seams2) == 1 and set(seams2[0]["polys"]) == {0, 1}, seams2
+    corner = [s for s in seams2 if not s.get("coplanar")]
+    solo = [s for s in seams2 if s.get("coplanar")]
+    assert len(corner) == 1 and set(corner[0]["polys"]) == {0, 1}, seams2
+    assert len(solo) == 1 and set(solo[0]["polys"]) == {2}, seams2
 
 
 def test_scanner_finds_hyrule_near_coincident_clip_offline():

@@ -132,16 +132,20 @@ the clip vs block outcome flips on the last few float bits. Faithful reproductio
 > (reported 63 u where the true f32 minimum is 49.9 u); treat `min_f32_clip` as authoritative for
 > "clippable?" and min-displacement, and the continuous window as an upper bound only.
 
-> **Flat / 180° seams are unclippable (resolved).** A real flat seam has a ~1-ULP plane difference
-> between its two coplanar segments (verified in RAM: `nx` `0x3f800000` vs `0x3f800001`). Fed those
-> exact planes, the analytic gap search - scanning the offset an order of magnitude finer than that
-> fan - finds NO clip: **at most one of the four triangles ever misses** (never the ≥2 needed for a
-> gap). Mechanism: the two coplanar quads **tile** the wall, so a crossing that lands past the seam
-> for one triangle falls inside the neighbour's footprint, and the neighbour's ~1-ULP-different plane
-> still catches it - there is no angular divergence (unlike a real corner, where "past the seam" is
-> open space) to make both miss. Confirmed at fan resolution on the real Hyrule flat wall x=−157.578
-> (seam pair poly 2360/2355); permanent guard
+> **Flat / 180° (coplanar) seams: clippable PER-SEAM, not categorically unclippable.** A flat wall is
+> two coplanar segments with a ~1-ULP plane difference (RAM: `nx` `0x3f800000` vs `0x3f800001`).
+> USUALLY the two coplanar quads **tile** the wall with no angular divergence, so a crossing past the
+> seam for one triangle lands inside the neighbour's footprint and its ~1-ULP-different plane still
+> catches it - no gap. That holds at the Hyrule flat wall x=−157.578 (poly 2360/2355): the analytic
+> scan (an order of magnitude finer than the fan) finds NO clip - permanent guard
 > `tests/test_seam_clip.py::test_flat_seam_unclippable` (golden `tests/golden/flat_seam_ram.json`).
+> **BUT it is a tendency, not a law:** where the swept line crosses the plane at the wall's own
+> vertical *tessellation edge* (the two coplanar tris meet and f32 rounding opens a threadable gap), a
+> flat wall DOES clip - **live-confirmed at A_mori (4077.6,−1708.8)**, disp ~52.9, `floor_tri` 172,
+> `new` 11.8 u behind landing OOB (external tool + our bit-exact model agree). So `enumerate_seams`
+> emits single-normal (coplanar) seams too (`coplanar=True`), and the exact f32 verify + full-room
+> re-verify decides per-seam - never assume a flat wall is unclippable. History (the overturned blanket
+> claim + the two locator false-positive fixes): [history/seam-scanner-analytic-attempts.md](../history/seam-scanner-analytic-attempts.md).
 >
 > **The clip-offset window IS analytic** (the standing "derive the gap analytically" TODO). For a
 > fixed line direction, parametrise the swept line by its perpendicular offset ρ from the seam
@@ -179,7 +183,7 @@ approximation (pin the swept line through S, sweep travel direction, micro-scan 
 f32-snapped, but the min-displacement over-estimates; see the f32-viability note above).
 [`angle_experiment.py`](../../harness/collision/README.md) sweeps synthetic corner angles through it.
 [`seam_scan.py`](../../harness/collision/README.md) is the stage-wide scanner - enumerate a region's
-differing-normal vertical seam corners live from Dolphin, screen by the analytic floor, and report each
+vertical seams (differing-normal corners AND coplanar flat-wall edges) live from Dolphin, screen by the analytic floor, and report each
 one's reliable f32 min-displacement (`enumerate_seams` / `scan_seam` / `disp_floor`).
 The live (−1727,−990) Hyrule clip is a permanent regression anchor
 (`tests/test_seam_clip.py::test_hyrule_1727_f32_clip_anchor`, golden `hyrule_seam_1727_ram.json`):

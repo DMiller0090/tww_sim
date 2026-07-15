@@ -21,7 +21,17 @@ ANISOTROPICALLY instead:
   * VERIFY along-track ``s`` in coarse WORLD steps (wide, catches the right distance past S) × a THIN
     f32 box perpendicular (fine — the clip sits within a few ULPs of the through-S line), using the
     FULL trilist (barriers included, so barriers are handled by the verify, not a separate — and
-    unsound — direction-level block prune); first ``crr_pos`` clip → done.
+    unsound — direction-level block prune); first ``crr_pos`` clip → done;
+  * RE-VERIFY the winning exact ``old``->``new`` against the WHOLE room's walls (``locate``). The
+    per-seam barrier is gathered by edge-distance ``GATHER_R`` around S at LINK'S floor Y, but it can
+    still MISS a wall that blocks the swept clip — most sharply on a TALL corner where the standable
+    floor sits hundreds of u above the seam-vertex Y (GanonK top-of-room), or a busy side corner
+    (A_mori). A clip whose full-room sweep is stopped short (line/wall hit) is a phantom and dropped.
+    Far walls can't touch the short cut segment, so this never false-NEGATIVES a real clip.
+
+Both differing-normal corners AND single-normal COPLANAR flat-wall seams are searched (``enumerate_seams``
+emits both; the line threads the f32 gap where two coplanar wall tris meet — A_mori (4077.6,-1708.8) is
+a live-confirmed flat-wall clip). Nothing in the acceptance keys off the corner type.
 
 Cheap rejection (fast, no f32 ring) comes from the standable-floor / valid-old gates: most genuinely
 unclippable seams have no standable floor next to them and are dropped instantly. A per-seam f32
@@ -46,9 +56,10 @@ import os
 import sys
 import time
 
-from tww_sim.core.collision import line_check  # noqa: F401  (kept: barriers handled in the verify)
+from tww_sim.core.collision import line_check, crr_pos_walls  # noqa: F401  (barriers handled in the verify)
+from tww_sim.core.fp import f32 as _f
 from harness.collision.seam_scan import (enumerate_seams, _gather, disp_floor, interior_angle_deg,
-                                         GROUND_NY_MIN)
+                                         GROUND_NY_MIN, WALL_NY_MAX)
 from harness.collision.seam_clip_check import (_seam_walls, _valid_initial, _floor_at, _wall_yspan,
                                                _representative_link_y, _is_step_riser)
 from harness.collision.gap_search import bisector_dir, settle, first_f32_clip, WALL_H
@@ -167,16 +178,32 @@ def locate(region, ground, seam, stats=None):
     polyset = set(seam["polys"])
     ys = [v[1] for t in region if t["poly"] in polyset for v in t["v"]]
     yspan = (min(ys), max(ys)) if ys else _wall_yspan(wA, wB)
-    barrier = list(_gather(region, seam["S"], seam["S"][1]))
     # local ground: only tris whose XZ AABB is within reach of S — floor_ys_at over the whole region
     # per cell was the entire cheap-pass cost. reach = deepest settled-old distance + a margin.
-    floor = disp_floor(interior_angle_deg((wA.pla.nx, 0.0, wA.pla.nz), (wB.pla.nx, 0.0, wB.pla.nz)))
+    interior = interior_angle_deg((wA.pla.nx, 0.0, wA.pla.nz), (wB.pla.nx, 0.0, wB.pla.nz))
+    floor = disp_floor(interior)
     S = (seam["S"][0], seam["S"][2])
-    R = floor + DIST_OFFSETS[3] + 45.0
+    R = (floor if math.isfinite(floor) else 60.0) + DIST_OFFSETS[3] + 45.0
     lg = [t for t in ground
           if not (max(v[0] for v in t["v"]) < S[0] - R or min(v[0] for v in t["v"]) > S[0] + R
                   or max(v[2] for v in t["v"]) < S[1] - R or min(v[2] for v in t["v"]) > S[1] + R)]
-    return locate_geo(barrier, lg, seam["S"], wA, wB, yspan=yspan, stats=stats)
+    # Gather the barrier at LINK'S floor Y, not the seam-vertex Y (the wall cylinder is at his feet; a
+    # tall corner's floor sits far above the base, so a base gather drops the blocker). KB: seam-clip-scanner.md.
+    rep_ly = _representative_link_y(lg, S, bisector_dir([wA, wA, wB]), interior / 2.0, floor, yspan)
+    barrier = list(_gather(region, seam["S"], rep_ly if rep_ly is not None else seam["S"][1]))
+    r = locate_geo(barrier, lg, seam["S"], wA, wB, yspan=yspan, stats=stats)
+    if r is None:
+        return None
+    # FINAL soundness re-verify vs the FULL room walls: the edge-dist gather can miss a blocker, so drop
+    # any clip whose full-room sweep is stopped short. Far walls can't touch the short segment (no FN). KB.
+    old, new = r["old"], r["new"]
+    po, pn = (_f(old[0]), _f(old[1]), _f(old[2])), (_f(new[0]), _f(old[1]), _f(new[2]))
+    res, info = crr_pos_walls(po, pn, [t["T"] for t in region if abs(t["n"][1]) < WALL_NY_MAX])
+    if info["line_hit"] or info["wall_hit"] or abs(res[0] - pn[0]) > 1e-2 or abs(res[2] - pn[2]) > 1e-2:
+        if stats is not None:
+            stats["fullroom_rejected"] = stats.get("fullroom_rejected", 0) + 1
+        return None
+    return r
 
 
 def scan_region(region, box, require_standable=True, override_link_y=None, verbose=True):

@@ -13,10 +13,13 @@ live clip and false-positived phantoms — see the 2026-07-06f handoff). Two rul
     cylinder band ``[Yf-5, Yf+H_max+5]``. Centroid-distance gathering (the old bug) grabbed a corner
     stacked overhead or dropped the seam's own huge triangles; edge-distance + Y-overlap fixes both.
 
-**Seam definition.** A seam is a shared *vertical* edge (two verts at ~equal XZ, differing Y) whose
-incident triangles carry ≥2 distinct plane normals — i.e. two non-coplanar vertical walls meeting at
-that edge (a convex/concave corner). Coplanar (flat/180°) shared edges are skipped: they are
-unclippable (the coplanar quads tile the wall; see ``knowledge/mechanics/seam-clip.md``).
+**Seam definition.** A seam is a shared *vertical* edge (two verts at ~equal XZ, differing Y). A
+DIFFERING-normal edge (≥2 distinct incident plane normals) is a convex/concave corner; a SINGLE-normal
+edge is a flat wall's own tessellation seam (``coplanar=True``). BOTH are enumerated: the swept line
+can thread the f32 gap where two COPLANAR wall triangles meet, so flat-wall seams are NOT inherently
+unclippable — counterexample A_mori (4077.6,-1708.8), disp ~52.9, confirmed live. Whether a candidate
+ACTUALLY clips is decided downstream by the exact f32 verify + standability gates + a full-room
+re-verify (:mod:`seam_locator`), never by the corner type. See ``knowledge/mechanics/seam-clip.md``.
 
 **The hard displacement floor.** ``old`` (= ``pm_old_pos``) is always a settled WallCorrect fixed
 point, so it clears both wall cylinders (radius 35) — on the corner bisector that puts it
@@ -112,12 +115,14 @@ SEAM_XZ_TOL = 0.5
 
 
 def enumerate_seams(region_tris, box):
-    """Find differing-normal vertical seam corners in ``box`` = (xmin,xmax,ymin,ymax,zmin,zmax).
+    """Find vertical wall seams in ``box`` = (xmin,xmax,ymin,ymax,zmin,zmax) -- both differing-normal
+    corners AND single-normal (coplanar) flat-wall tessellation edges (see the module "Seam definition").
 
     ``region_tris`` = list of ``dict(poly, v=[v0,v1,v2], n=(nx,ny,nz))`` (stored plane normal).
-    Returns a list of ``dict(S, polys, interior, floor, test_y)`` sorted by ``floor`` (most promising
-    first). Vertical wall edges are clustered by XZ proximity (``SEAM_XZ_TOL``, y-span overlap) so a
-    corner whose two walls store slightly-offset seam vertices is still paired (see ``SEAM_XZ_TOL``).
+    Returns a list of ``dict(S, polys, interior, floor, coplanar, test_y)`` sorted by ``floor`` (most
+    promising first). ``coplanar`` is True for a single-normal edge (interior forced to 180). Vertical
+    wall edges are clustered by XZ proximity (``SEAM_XZ_TOL``, y-span overlap) so a corner whose two
+    walls store slightly-offset seam vertices is still paired (see ``SEAM_XZ_TOL``).
     """
     xmin, xmax, ymin, ymax, zmin, zmax = box
     walls = [t for t in region_tris if abs(t["n"][1]) < WALL_NY_MAX]
@@ -169,8 +174,6 @@ def enumerate_seams(region_tris, box):
         groups = {}
         for e in members:
             groups.setdefault((round(e[5]["n"][0], 4), round(e[5]["n"][2], 4)), []).append(e[5])
-        if len(groups) < 2:
-            continue                    # single-normal edge cluster -> flat / free edge, not a corner
         rep = min(members, key=lambda e: e[2])          # deepest edge is the representative seam vert
         S = rep[4]
         ylo = min(e[2] for e in members)
@@ -180,11 +183,18 @@ def enumerate_seams(region_tris, box):
         if not (xmin <= S[0] <= xmax and zmin <= S[2] <= zmax and yhi >= ymin and ylo <= ymax):
             continue
         gk = sorted(groups, key=lambda k: -len(groups[k]))
-        interior = interior_angle_deg(groups[gk[0]][0]["n"], groups[gk[1]][0]["n"])
+        if len(gk) >= 2:
+            interior = interior_angle_deg(groups[gk[0]][0]["n"], groups[gk[1]][0]["n"])
+            coplanar = False
+        else:
+            # single-normal (coplanar) flat-wall tessellation seam (interior 180): CAN clip where the
+            # f32 gap threads (live A_mori); the downstream f32 verify decides. KB: mechanics/seam-clip.md.
+            interior = 180.0
+            coplanar = True
         test_y = min(max(ylo, ymin), ymax)             # edge base if in-region, else the region floor
         seams.append(dict(S=tuple(S), polys=sorted({e[5]["poly"] for e in members}),
                           interior=round(interior, 3), floor=round(disp_floor(interior), 3),
-                          test_y=test_y))
+                          coplanar=coplanar, test_y=test_y))
     seams.sort(key=lambda s: s["floor"])
     return seams
 

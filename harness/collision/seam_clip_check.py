@@ -228,10 +228,13 @@ def clip_check(barrier_tris, ground_tris, S, wallA, wallB,
 
 
 def _seam_walls(region_tris, seam):
-    """The two incident wall Tri (one representative per distinct wall normal) meeting at the seam.
-    Prefer the pairing :func:`seam_scan.enumerate_seams` already computed (``seam['polys']`` — robust
-    when the two walls' seam vertices are slightly offset); fall back to XZ vertex-incidence. None if
-    fewer than two distinct-normal walls meet here. Their planes give the corner bisector."""
+    """The two incident wall Tri meeting at the seam. For a differing-normal corner, one representative
+    per distinct wall normal. For a COPLANAR seam (``seam['coplanar']`` -- a flat wall's own
+    tessellation edge), two coplanar tris from the single normal group (or the same tri twice): their
+    planes are identical, so ``in_front``/behind reduce to the one wall plane -- exactly the flat-wall
+    genuine-clip test. Prefer the pairing :func:`seam_scan.enumerate_seams` already computed
+    (``seam['polys']`` -- robust when the two walls' seam vertices are slightly offset); fall back to
+    XZ vertex-incidence. None only if NO wall tri is incident here."""
     polyset = set(seam.get("polys") or ())
     if polyset:
         inc = [t for t in region_tris if t["poly"] in polyset and abs(t["n"][1]) < WALL_NY_MAX]
@@ -243,8 +246,13 @@ def _seam_walls(region_tris, seam):
     for t in inc:
         groups.setdefault((round(t["n"][0], 4), round(t["n"][2], 4)), []).append(t)
     gk = sorted(groups, key=lambda k: -len(groups[k]))
-    if len(gk) < 2:
+    if not gk:
         return None
+    if len(gk) < 2:
+        # coplanar seam: two tris from the single normal group (identical planes), so the flat-wall
+        # clip is still testable. Same tri twice if only one is incident (a lone free edge).
+        g = groups[gk[0]]
+        return g[0]["T"], (g[1]["T"] if len(g) > 1 else g[0]["T"])
     return groups[gk[0]][0]["T"], groups[gk[1]][0]["T"]
 
 

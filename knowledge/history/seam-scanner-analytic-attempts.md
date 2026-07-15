@@ -89,3 +89,35 @@ Two cheap-prune ideas from the 07-08b plan, killed 07-08c:
   (gitignored; regenerate via the oracle).
 - The deterministic model (cone + bare-corner-clips-everywhere + prune) on the scanner page is the
   foundation; the missing piece is the cheap, exact prune computation.
+
+## OVERTURNED 2026-07-15: "flat / 180deg (coplanar) seams are unclippable" was over-broad
+
+The old blanket claim (was `mechanics/seam-clip.md`): a flat wall's two coplanar segments **tile**
+it, so any crossing past the seam for one triangle lands inside the neighbour (whose ~1-ULP-different
+plane still catches it) -> no gap -> flat seams unclippable, and `enumerate_seams` SKIPPED every
+single-normal vertical-edge cluster ("flat / free edge, not a corner").
+
+Overturned by a CONFIRMED flat-wall clip at **A_mori (4077.6, -1708.8)** (external prediction tool +
+our bit-exact `crr_pos_walls`, live `floor_tri` 172): old=(4059.622,-1673.617) -> new=(4083.649,
+-1720.699), disp ~52.9, `line_hit`/`wall_hit` both False, `new` 11.8u behind the wall landing OOB.
+The swept line crosses the wall plane EXACTLY at the wall's own vertical **tessellation edge**
+(4077.58,-1708.8), where the two coplanar triangles meet, and f32 rounding opens a threadable gap
+there. So the tiling argument is a TENDENCY, not a law. Fix: `enumerate_seams` now emits single-normal
+(coplanar) seams (`coplanar=True`, interior 180); the exact f32 verify decides per-seam. The specific
+Hyrule wall x=-157.578 (poly 2360/2355) IS still unclippable (sub-ULP gap everywhere) -- its guard
+`tests/test_seam_clip.py::test_flat_seam_unclippable` still passes -- so the refined truth is
+"per-seam, not categorical." Gate: `tests/test_seam_locator.py::test_locator_finds_amori_coplanar_flatwall_clip`.
+
+## Two false-positive causes in the shipped locator, fixed 2026-07-15 (user-flagged)
+
+Both surfaced as "seam clips the scanner listed that don't actually work" (GanonK top-of-room):
+- **Barrier gathered at the SEAM-VERTEX Y, not Link's floor Y.** The wall cylinder is at Link's feet,
+  but `locate` gathered the CrrPos barrier at `seam["S"][1]`. On a TALL corner the standable floor is
+  hundreds of u above the seam base (GanonK top: base 6997, floor ~7778), so the walls at Link's real
+  height were excluded and the f32 verify never saw the WallCorrect blocker -> false clip. Fix: gather
+  at the representative standable floor Y (the same `_representative_link_y` the step-riser gate uses).
+- **The gathered barrier (edge-dist `GATHER_R`) can still MISS a blocker** even at the right Y (busy
+  A_mori side corners: 5 phantoms). Fix: `locate` now RE-VERIFIES the winning exact `old`->`new`
+  against the WHOLE room's walls; a clip whose full-room sweep is stopped short (line/wall hit, or
+  doesn't reach `new`) is dropped. Far walls can't touch the short cut segment, so this never
+  false-negatives a real clip. Gate: `tests/test_seam_locator.py::test_locator_rejects_ganonk_top_flatwall_phantom`.

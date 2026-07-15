@@ -15,6 +15,7 @@ import os
 import pytest
 
 from harness.collision.seam_scan import load_region_tris
+from harness.collision import seam_scan as SS
 from harness.collision import seam_clip_check as SCC
 from harness.collision import seam_locator as SL
 
@@ -71,6 +72,39 @@ def test_locator_rejects_step_riser():
     clips = SL.scan_region(_region("hyrule_step_riser_region.json"), box, verbose=False)
     hits = [c for c in clips if abs(c["S"][0] - 734.87) < 3 and abs(c["S"][2] - 322.73) < 3]
     assert not hits, [tuple(round(x, 1) for x in c["S"]) for c in clips]
+
+
+def test_locator_finds_amori_coplanar_flatwall_clip():
+    """A_mori (4077.6, -1708.8): a CONFIRMED clip (external tool + live floor_tri=172) through a
+    single-normal FLAT wall -- the swept line threads the f32 gap at the wall's own vertical
+    tessellation edge (two COPLANAR tris meeting), not a differing-normal corner. The pre-fix
+    enumerate_seams dropped every single-normal cluster ('flat / free edge, not a corner') so the
+    locator never even tested this spot. It must now be found (interior 180, roll-stab reachable)."""
+    box = (3850.0, 4350.0, 3600.0, 3760.0, -1900.0, -1500.0)
+    clips = SL.scan_region(_region("amori_coplanar_region.json"), box, verbose=False)
+    hits = [c for c in clips if abs(c["S"][0] - 4077.6) < 3 and abs(c["S"][2] + 1708.8) < 3]
+    assert hits, sorted(_keys(clips))
+    assert hits[0]["interior"] >= 179.5, hits[0]          # a flat (coplanar) seam, not a corner
+    assert hits[0]["reachable_rollstab"], hits[0]
+
+
+def test_locator_rejects_ganonk_top_flatwall_phantom():
+    """GanonK top-of-room (+-250, 7770, -2902.6): the external scanner reported these as clips but
+    they DON'T work -- WallCorrect stops Link short (user-flagged). The seams ARE enumerated and the
+    init IS standable (floor ~7770, 780 u ABOVE the seam-vertex Y 6997), so the gate must be the CLIP
+    verify, not a missing floor. Two bugs conspired to false-positive them: (a) the barrier was
+    gathered at the seam-vertex Y, missing the walls at Link's real (much higher) floor; (b) even the
+    gathered set can miss a blocker. The fix gathers at Link's floor Y AND re-verifies the exact
+    old->new against the FULL room. No clip must survive."""
+    box = (-320.0, 320.0, 6900.0, 7950.0, -3000.0, -2800.0)
+    region = _region("ganonk_top_flatwall_region.json")
+    # the two top seams must still be ENUMERATED and STANDABLE (else the test would pass for the
+    # wrong reason -- a dropped-for-no-floor seam, not a rejected phantom clip).
+    seams = [s for s in SS.enumerate_seams(region, box)
+             if abs(s["S"][0]) < 300 and abs(s["S"][2] + 2902.6) < 40]
+    assert len(seams) == 2, [tuple(round(x, 1) for x in s["S"]) for s in seams]
+    clips = SL.scan_region(region, box, verbose=False)
+    assert clips == [], [tuple(round(x, 1) for x in c["S"]) for c in clips]
 
 
 def test_locator_superset_of_shipped_checker():
