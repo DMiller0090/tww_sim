@@ -76,13 +76,45 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-15, session 52)
+## Status (2026-07-15, session 53)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-15, session 52): the 97-deg corner has a WALLED-REST-BIT-EXACT anchor and a
+> **CURRENT THREAD (2026-07-15, session 53): the 97-deg corner's reachability puzzle is RESOLVED WITH LIVE
+> DATA -- its genuine dust is NOT reachable by a standard from-rest ROLL, and that is REAL GEOMETRY, not a
+> sim over-correction. NOT "impossible" (the clip EXISTS; it needs a non-roll technique). Awaiting Dereck's
+> strategic pick for the next target.** The session-52 crux (is the sim's 35u WallCorrect hold faithful near
+> this concave corner, or an over-correction?) was answered LIVE: a clean-DTM roll toward the corner (facing
+> 16306, seed=0, per-frame RAM read; NEVER advancewith) is **BIT-EXACT with the walled sim through the whole
+> roll + wall-slide** -- Link's center is held at wallA_d==35.00 exactly as it grazes wallA, never closer.
+> So the 35u roll hold is decomp-and-live ground truth here.
+> - **The dust is roll-unreachable, rigorously.** The corner's only genuine dust hugs wallA at wallA_d
+>   **2.79..5.43u** (15 f32 points, ~90-deg grazing aim); the live-faithful roll hold is 35u; a **500k+-
+>   candidate f32 scan of the reachable mouth** (old >=33u from BOTH walls) across grazing aims 84.6..94.5deg
+>   found **0 reachable genuine**. The dust sits ~30u inside the hold. A free roll (or walk -- same 35u
+>   cylinder) can never place `old` there. This is the STANDARD-ROLL technique ruled out for THIS corner,
+>   NOT the clip's existence: a wall-hugging clip position is the kind reached by PUSH-STEERING (the
+>   standalone Tetra Co-push, which STEERS the lunge past the free-roll hold) or another mechanic.
+> - **Locked live-data-backed:** immutable `fixtures/seam97_roll_wallhold_golden.json` + gate
+>   `tests/test_seam97_clip.py::test_seam97_roll_wallhold_bitexact` (walled from-rest roll BIT-EXACT vs live
+>   on every FRONT_ROLL frame; live hold min == 35.0). `test_seam97_clip_delivered` stays xfail-RED: the ROLL
+>   path cannot deliver this corner. Angle 1 (relax `solver.wall_faithful` to bonk-only) is a correct
+>   concave-corner model tidy but does NOT unblock (the 35u-held sliders it admits are non-genuine) -- left
+>   unchanged (no passing use-case). Suite **369 passed, 1 skipped, 3 xfailed** (was 368; +1 = the wall-hold
+>   gate). NO `sim.py`/`land.py`/`harness/rollstab/*.py` change (only tests + a fixture + KB), so the live
+>   regression is unaffected.
+>
+> **NEXT (STRATEGIC -- Dereck's pick): this corner needs a non-roll technique.** Options: (1) push-steer the
+> 97-corner via the standalone Tetra Co-push path (its lunge overrides the 35u free-roll hold -- the way the
+> wall-hugging Tetra-corner clip was delivered); (2) pick a DIFFERENT novel corner as the generalization
+> proof -- one whose genuine dust sits in the OPEN mouth >=35u out (like the proven/mirror seams), so a free
+> roll can reach it (screen candidates with `seam_feasibility.py` + a reachable-mouth f32 scan BEFORE
+> minting); (3) something else. Every other thread (mirror/sheathed clips DONE, walk-stab, Tetra
+> push-aside/turnaround STANDALONE) UNCHANGED.
+>
+> **PRIOR THREAD (2026-07-15, session 52): the 97-deg corner has a WALLED-REST-BIT-EXACT anchor and a
 > clean solver run, but 0 wall-faithful hits -- an OPEN search/model gap, NOT an impossibility (Dereck's
 > rule: `pred_genuine` verifies the clip EXISTS, so the search must find the reachable path). Handoff for
 > a new session.** Target = the DISTINCT 97-deg corner S=(13539.24,493.36), walls 871x899, clippable at a

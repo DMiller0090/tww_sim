@@ -787,25 +787,28 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
   `SeamGeo.pred_genuine` over (along, perp) at each facing (the exact sim acceptance). `derive_F` from the
   bisector is only the DEFAULT aim; a corner whose gap is off-bisector needs its clippable aim passed as
   `aim_deg=` (the s48 per-seam-aim mechanism), same as a near-flat seam.
-- STATUS (session 52): the anchor IS minted + WALLED-REST BIT-EXACT (`kaze_r11_rollstab_seam97@twwgz`,
-  golden `fixtures/seam97_rest_golden.json`, gate `tests/test_seam97_clip.py`), and `solve_focused` runs
-  clean -- but 0 wall-faithful hits so far. This is an OPEN SEARCH/MODEL gap, NOT an impossibility
-  (`pred_genuine` verifies the clip EXISTS -> the search must find the reachable path; Dereck's standing
-  rule). The reachability tension to resolve: the verified-genuine dust is confined <=5.4u in front of
-  wallA (the razor runs ~parallel to wallA, the aim the roll grazes along), while the walled roll holds
-  Link's center 35u off wallA (WallCorrect `wall_r=35`), so the roll is pushed ~30u off the razor before
-  the CUT; a 108-sample x all-aims scan of the REACHABLE corner mouth (>=35u from BOTH walls -- where the
-  proven/mirror clips sit, ~38-40u out) found 0 genuine. TWO angles for the next session, both from
-  Dereck's steers: (1) CONCAVE corners (this is one, interior 97) may TOUCH/SLIDE walls -- only a BONK
-  (`FRONT_ROLL_CRASH`) disqualifies -- but `solver.wall_faithful` rejects on ANY `wall_hit`; relax it to
-  reject only bonks (necessary; the 97 roll slides without bonking). (2) The roll-near-CONCAVE-corner wall
-  behaviour is NOT yet verified against live (the walk verification only reached ~x13290, before the
-  corner) -- confirm live whether Link is really held 35u off wallA here or the concave WallCorrect lets
-  him closer (if closer, the dust is reachable and this is a sim over-correction). Tooling:
-  `make_seam_geo.py wallA=871 wallB=899`, `seam_feasibility.py` (all-facing f32 scan), and the mint recipe
-  in `tests/test_seam97_clip.py` (a fixed-camera novel anchor must be a GENUINELY aligned idle:
-  travel_angle == facing, via align-walk -> settle -> teleport-to-rest -> mint_current; a teleport-rotated
-  idle inherits the base travel_angle and arcs off-course into the wall).
+- STATUS (session 53): the reachability puzzle is RESOLVED with LIVE DATA -- the 97-deg corner's genuine
+  dust is NOT reachable by a standard from-rest ROLL, and this is REAL GEOMETRY, not a sim over-correction.
+  The crux (session-52 angle 2) was whether the sim's 35u WallCorrect hold is faithful near this concave
+  corner. Answer, LIVE (clean DTM, facing 16306, seed=0, per-frame RAM read; NEVER advancewith): the walled
+  from-rest roll is **BIT-EXACT with live through the entire roll + wall-slide** -- Link's center is held at
+  wallA_d==35.00 exactly as it grazes wallA, never closer (gate `test_seam97_roll_wallhold_bitexact`,
+  immutable golden `fixtures/seam97_roll_wallhold_golden.json`). So:
+  * The corner's only genuine dust hugs wallA at wallA_d **2.79..5.43u** (15 f32 razor points at the ~90-deg
+    grazing aim). The live-faithful roll hold is 35u. A **500k+-candidate f32 scan of the reachable mouth**
+    (old >=33u from BOTH walls) across grazing aims 84.6..94.5 deg found **0 reachable genuine** -- the s52
+    108-sample result, now rigorous. The dust sits ~30u inside the hold: roll-unreachable.
+  * NOT "impossible" (Dereck's rule stands): a clip position hugging a wall is exactly the kind reached by
+    PUSH-STEERING (the standalone Tetra Co-push STEERS the lunge and overrides the free-roll hold) or another
+    mechanic -- not by a free roll. What is ruled out is the STANDARD ROLL technique for THIS corner, not the
+    clip's existence. Next-target choice (push-steer this corner vs. a different novel roll target for the
+    generalization proof) is a STRATEGIC pick, surfaced to Dereck.
+  * Angle 1 (relax `solver.wall_faithful` to reject only bonks, not any `wall_hit`) is a correct
+    concave-corner model tidy but does NOT unblock: the sliders it would admit are held at 35u = non-genuine.
+    Left unchanged (no passing use-case; would be speculative churn).
+  Tooling used: `seam_feasibility.py` (all-facing f32 scan), the reachable-mouth f32 scan, and the live
+  roll-vs-sim wallA_d diff. The anchor + walled-REST-bit-exact model + mint recipe (align-walk -> settle ->
+  teleport-to-rest -> mint_current for a fixed-camera novel anchor) all stand from session 52.
 
 ## Pointers
 
