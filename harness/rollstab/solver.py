@@ -102,7 +102,10 @@ def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None, dtm_seed=1
     cap in the sword set). Returns an info dict (old/new/rho/z/genuine/clear/spF_at_A/stream) or
     None."""
     seam = _KAZE_SEAM if seam is None else seam
-    _, straight, aim = C.sticks_of(anchor)
+    # Aim the approach at THIS seam's F (generalization Phase 5): C.sticks_of hardcodes geometry.F,
+    # which walks a NOVEL seam's approach the wrong way. Byte-identical for the kaze seam (seam.F==G.F).
+    _cs = load_seed(anchor)['csangle'] & 0xFFFF
+    aim = C.dtm_stick(stick_for_bearing(seam.F, _cs, 1.0))
     start = tuple(start)
     # Prepend (1-dtm_seed) neutral ABSORBER frames so the seed-0 layout's extra leading no-op does not
     # silently eat start[0] (dead-end #35; a full frame preserves seed-0's poll phase). seed=1 => 0.
@@ -260,6 +263,36 @@ def _record(hits, r, moves, A_proj, start, anchor, dtm_seed=1, draw_at=None):
     json.dump(hits, open(HITS_PATH, 'w'))
 
 
+def _derive_a_projs(anchor, seam, dtm_seed, r0):
+    """Per-anchor A-press thresholds that bracket the seam's reach band (generalization Phase 5).
+
+    The A-press fires at the first frame where `along >= A_proj`; the frame is integer, so baseline
+    `old` d2S JUMPS ~one walk step as A_proj varies, and the reach band usually falls in a gap between
+    two landings (the start-crawl fills that gap). So we keep A_projs whose baseline landing sits within
+    ~one walk-step of the band on EITHER side (dedup by integer landing d2S), nearest-to-band first.
+    The hardcoded (-506,-512,-500) were tuned to the kaze roll anchor's DISTANCE; a novel anchor at a
+    different distance from its seam needs a different threshold. Adaptive scan center from r0 so it
+    works regardless of anchor distance. Falls back to the legacy triple if the scan finds nothing."""
+    lo, hi = seam.search_band()
+    ctr = (lo + hi) / 2.0
+    d0 = math.hypot(r0['old'][0] - seam.S[0], r0['old'][1] - seam.S[1]) if r0.get('old') else ctr
+    a_center = -506.0 + (d0 - ctr)          # slide the scan so the band lands mid-window
+    cands, seen = [], set()
+    for i in range(-50, 51):
+        A = a_center + i * 0.5
+        r = run(anchor, [], A_proj=A, dtm_seed=dtm_seed, seam=seam)
+        if not (r and r.get('fired') and r.get('old') and r.get('spF_at_A') == 17.0):
+            continue
+        d2S = math.hypot(r['old'][0] - seam.S[0], r['old'][1] - seam.S[1])
+        if lo - 18.0 <= d2S <= hi + 18.0:
+            key = round(d2S, 0)
+            if key not in seen:
+                seen.add(key)
+                cands.append((abs(d2S - ctr), A))
+    cands.sort()
+    return tuple(a for _, a in cands) or (-506.0, -512.0, -500.0)
+
+
 def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None, dtm_seed=1, seam=None):
     """Arc/fine singles, then the start-crawl sweep (dense along-track fill), then (optionally)
     an iterative-deepening drill combining the nearest configs. Every accept is the exact run.
@@ -297,7 +330,8 @@ def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None, dtm_se
             _record(hits, r, moves, A_proj, start, anchor, dtm_seed=dtm_seed, draw_at=draw_at)
         return r
 
-    A_projs = (-506.0, -512.0, -500.0)
+    A_projs = _derive_a_projs(anchor, seam, dtm_seed, r0)
+    print('A_projs (derived, bracket reach band): %s' % [round(a, 1) for a in A_projs], flush=True)
     fam = arc_family(anchor, seam=seam) + fine_family(anchor, seam=seam)
     for mv in fam:
         for A in A_projs:

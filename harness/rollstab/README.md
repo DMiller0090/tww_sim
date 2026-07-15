@@ -76,13 +76,47 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-15, session 49)
+## Status (2026-07-15, session 50)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-15, session 49): the Phase-5 PREREQUISITE is DONE -- the solvers' last
+> **CURRENT THREAD (2026-07-15, session 50): Phase 5 IN PROGRESS -- a NOVEL seam (the mirror-roll
+> corner) has a fresh live-minted anchor that is REST BIT-EXACT, and two real generalization bugs are
+> fixed; the LIVE CLIP is NOT yet delivered (blocked on the octagon-clamp dust-density wall). OFFLINE +
+> live mint/verify; suite 366 green (+1).**
+> - **Target = the MIRROR-ROLL corner** S=(9069.9043,-265.9138), interior 109.4, walls 355x357 (a
+>   genuinely distinct seam from the proven roll seam at +259, mirrored across z). Dereck first picked the
+>   distinct 97deg corner S=(13539.24,493.36); a **dedicated search proved it NOT roll-clippable** (no
+>   CrrPos-missing gap at any disp -- `disp_floor<reach` is NECESSARY, not SUFFICIENT; wall 899 extends
+>   away from the roll dir so the roll exits both finite wall segments). New dead-end ledger entry.
+> - **`make_seam_geo.py` NEW** (generalized geo-fixture builder from the block-grid ordered mesh;
+>   auto-gathers the CrrPos barrier by GATHER_R + band-overlap in game order). `fixtures/kaze_r11_seam_
+>   mirror_geo.json`. The mirror seam is FEASIBLE: 74 f32 `pred_genuine` dust hits (~ the proven 95).
+> - **Anchor `kaze_r11_rollstab_mirror@twwgz` MINTED + REST BIT-EXACT** (golden `fixtures/mirror_roll_
+>   rest_golden.json`, 30 rows, pos+d/w+m359C 0-ULP). Live-mint procedure (camera behind Link WITHOUT
+>   the L button -- not wired live -- via C-stick pan + a walk-settle past the free-cam leash pull;
+>   deliver at seed=0). Gate `tests/test_mirror_roll_clip.py::test_mirror_rest_bitexact` GREEN.
+> - **Two real Phase-5 solver bugs fixed (kaze byte-identical, gates green):** (a) `solver.run` aimed the
+>   approach at the hardcoded `geometry.F` -> now aims `seam.F` (a novel seam was walked the WRONG way);
+>   (b) the hardcoded A_projs are anchor-DISTANCE specific -> NEW `solver._derive_a_projs` brackets the
+>   reach band per anchor (the mirror at 555u needs different thresholds than the proven at 748u).
+> - **BLOCKED (the clip): the cold search finds 0 genuine** -- the same octagon-clamp reachable-lattice
+>   DENSITY WALL as the sheathed roll (dead-ends #29/#32): the fine perp knob collapses to ~27 distinct
+>   bytes. `solver.py` lacks the walkstab K=3-byte densifier (session 32); the proven/sheathed roll clips
+>   used FOCUSED WARM-START recipes, not a cold drill (over-budget). `test_mirror_clip_delivered` RED
+>   (strict-xfail). Suite **366 passed, 1 skipped, 2 xfailed** (was 365; +1). NO `sim.py`/`land.py` change.
+>
+> **NEXT (deliver the mirror clip = the Phase-5 live proof):** get a genuine wall-faithful hit on the
+> mirror seam, then DELIVER it via a clean DTM (seed=0) and confirm live 0-ULP. To beat the density wall
+> either (1) PORT the walkstab `solve_focused` K=3-byte-nudge densifier into `solver.py`'s roll path (the
+> principled fix -- `start_family`'s msd combos octagon-collapse), or (2) develop a mirror focused
+> warm-start recipe as the proven/sheathed clips did. Then flip `test_mirror_clip_delivered` GREEN and
+> add a ship golden. Remaining Phase-5 tidy: wire `thrust_scan` dispatch to build a SeamGeo per enumerated
+> seam (the `_matches` guard drop) once delivery works. Every other thread UNCHANGED.
+
+> **PRIOR THREAD (2026-07-15, session 49): the Phase-5 PREREQUISITE is DONE -- the solvers' last
 > kaze-hardcoded numeric ranges are now DERIVED per-seam, with candidate REACHABILITY decided by a real
 > walled physics re-sim rather than a typed-in `old_z` band (Dereck's call; OFFLINE, suite 365 green).**
 > This clears the blocker Phases 3-4 deliberately left for a NOVEL seam to solve. Done this session
