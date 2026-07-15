@@ -718,6 +718,25 @@ exposed #22/#23/#24. `run_dtm` has a `log_frames` param for exactly this.
       over-budget and does not reach the dust unaided (the recipe came from a session-39 focused
       warm-start); a reproducible <2-min focused solve is optional polish, the CLIP is done.
 
+## A near-flat seam's thrust facing does NOT derive from the interior bisector (session 48, offline)
+
+Generalizing `walkstab.py` through `SeamGeo` (Phase 4), the session-47 handoff said to "derive the
+settled thrust facing from the bisector like `F`" -- the rule that works for the ROLL seam. **It is
+wrong for a NEARLY-FLAT seam and was ruled out before building on it.**
+- Measured (kaze r11 walk-stab seam, interior 168.97 deg, csangle 4522): the shipped threading facing
+  is **5625**, and `bear_to_S` (the bearing from the anchor start to S) is 5584 -- they match. The
+  geometric interior bisector (the `-(nA+nB)` into-corner convention, ~19.4 deg) decodes to **3576**,
+  ~11 deg / ~2000 s16 off. So `derive_F(bisector)` gives the WRONG facing here.
+- Root cause: a 110-deg corner (the roll seam) is clipped by aiming INTO the corner along the bisector;
+  a near-flat seam is clipped by GRAZING toward the seam vertex S, i.e. `bear_to_S` -- which is
+  anchor-start-dependent, not pure seam geometry. The two aims coincide only for a sharp corner.
+- Resolution (Dereck-confirmed): per-seam AIM SOURCE. `SeamGeo(aim_deg=)` defaults to the fixture
+  bisector (corner seams like the roll unchanged, byte-identical); the flat-seam driver passes
+  `aim_deg=bear_to_S`. Same `derive_F` stick-settle mechanism, different source direction. Verified:
+  `derive_F(bear_to_S)==5625` bit-exact; the shipped walk-stab clip still reproduces 0-ULP.
+- **Do NOT** re-bind a flat seam's F to the bisector when minting a novel near-flat seam in Phase 5.
+  Check the interior angle: sharp corner -> bisector aim; near-flat -> bear_to_S aim.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.
