@@ -64,6 +64,23 @@ CONE_BUDGET = 1_200_000          # per-seam CrrPos-eval cap (a real clip early-e
 PER_CALL_MAX = 8_000             # cap per first_f32_clip so one empty direction can't drain the budget
 
 
+def _cyl_overlaps_edge(link_y, edge_yspan):
+    """Is the SHARED vertical seam edge within Link's cylinder at stance ``link_y``? A corner clip
+    needs BOTH walls present at Link's height; the shared edge (the seam ``enumerate_seams`` clustered)
+    is exactly the y-band where both walls coexist. A stance whose cylinder (feet + ``WALL_H``) sits
+    entirely ABOVE or BELOW that edge faces only one wall (or none) -- the two-plane fan cannot produce
+    a clip, so it is a phantom regardless of what the f32 verify finds.
+
+    Two real cases this culls (both user-flagged): Omori (2249.6,1772.6) -- edge y905..1227 but the
+    standable floor is y358, ~420u BELOW the corner; GanonK top (+-250,-2902.6) -- edge y6997..7504 but
+    the settled floor is y7770, ~260u ABOVE the corner (poly 1319 rises to y9917 ALONE, no corner there).
+    Same collidability convention as :func:`_floor_at`. ``None`` edge span (synthetic geometry) = pass."""
+    if edge_yspan is None:
+        return True
+    elo, ehi = edge_yspan
+    return any(elo - 2.0 <= link_y + h <= ehi + 2.0 for h in WALL_H)
+
+
 def _floor_at(ground_tris, x, z, yspan):
     """Top-most ground height under (x,z) where the seam wall (vertical span ``yspan``) is actually
     COLLIDABLE at Link's stance — i.e. at least one LineCheck cylinder sample (feet + ``WALL_H``) lies
@@ -283,6 +300,10 @@ def scan_region(region_tris, box, require_standable=True, override_link_y=None, 
         barrier = _gather(region_tris, seam["S"], seam["S"][1])
         res = clip_check(barrier, ground, S, wallA, wallB, require_standable=require_standable,
                          override_link_y=override_link_y, yspan=yspan)
+        # Cull a phantom whose settled stance faces only one wall: the shared corner edge must be within
+        # Link's cylinder (see _cyl_overlaps_edge -- Omori/GanonK-top floating-seam false positives).
+        if res["clips"] and not _cyl_overlaps_edge(res["old"][1], seam.get("edge_yspan")):
+            res["clips"] = False
         if res["clips"]:
             # report the seam at the STANDABLE floor Y (clip is height-invariant), not the wall base
             # (which can sit far below reachable ground). See seam-clip-scanner.md "Reported seam Y".

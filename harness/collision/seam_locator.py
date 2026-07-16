@@ -62,7 +62,8 @@ from tww_sim.core.fp import f32 as _f
 from harness.collision.seam_scan import (enumerate_seams, _gather, disp_floor, interior_angle_deg,
                                          GROUND_NY_MIN)
 from harness.collision.seam_clip_check import (_seam_walls, _valid_initial, _floor_at, _wall_yspan,
-                                               _representative_link_y, _is_step_riser)
+                                               _representative_link_y, _is_step_riser,
+                                               _cyl_overlaps_edge)
 from harness.collision.gap_search import bisector_dir, settle, first_f32_clip, WALL_H
 
 CONE_MARGIN = 6.0            # search a little past the analytic cone |rel| <= interior/2
@@ -194,6 +195,12 @@ def locate(region, ground, seam, stats=None):
     barrier = list(_gather(region, seam["S"], rep_ly if rep_ly is not None else seam["S"][1]))
     r = locate_geo(barrier, lg, seam["S"], wA, wB, yspan=yspan, stats=stats)
     if r is None:
+        return None
+    # Cull a phantom whose settled stance faces only one wall: the shared corner edge must be within
+    # Link's cylinder at his floor (_cyl_overlaps_edge; the Omori/GanonK-top floating-seam FPs). KB.
+    if not _cyl_overlaps_edge(r["old"][1], seam.get("edge_yspan")):
+        if stats is not None:
+            stats["edge_rejected"] = stats.get("edge_rejected", 0) + 1
         return None
     # FINAL soundness re-verify vs the FULL room walls: the edge-dist gather can miss a blocker, so drop
     # any clip whose full-room sweep is stopped short. Far walls can't touch the short segment (no FN). KB.

@@ -42,7 +42,7 @@ if _TOOLS not in sys.path:
     sys.path.insert(0, _TOOLS)
 
 from tww_sim.core.collision import (Tri, Plane, wall_correct, bg_is_wall, bg_is_ground,
-                                     bg_blocks_crrpos)
+                                     bg_blocks_crrpos, cross_y_tri_front, ground_cross_y)
 from tww_sim.core.fp import f32 as _f
 from harness.collision.gap_search import min_f32_clip, WALL_H, WALL_R
 
@@ -80,32 +80,25 @@ def disp_floor(interior_deg, wall_r=WALL_R):
 GROUND_NY_MIN = 0.5    # ny >= this == a ground/floor triangle (matches cBgW ground classify)
 
 
-def _bary_xz(v0, v1, v2, x, z):
-    """XZ-projected barycentric: (inside, interpolated_y) for point (x,z) in triangle v0v1v2. Used
-    only for a coarse standable-floor lookup, so plain doubles (not f32) are fine."""
-    det = (v1[2] - v2[2]) * (v0[0] - v2[0]) + (v2[0] - v1[0]) * (v0[2] - v2[2])
-    if abs(det) < 1e-9:
-        return False, None
-    a = ((v1[2] - v2[2]) * (x - v2[0]) + (v2[0] - v1[0]) * (z - v2[2])) / det
-    b = ((v2[2] - v0[2]) * (x - v2[0]) + (v0[0] - v2[0]) * (z - v2[2])) / det
-    c = 1.0 - a - b
-    eps = 1e-3
-    if a < -eps or b < -eps or c < -eps:
-        return False, None
-    return True, a * v0[1] + b * v1[1] + c * v2[1]
-
-
 def floor_ys_at(region_tris, x, z):
     """All DZB ground-triangle heights under XZ point (x,z), sorted ascending. A seam is only a
     reachable clip if Link can STAND next to it, and standability is a property of the static DZB
-    geometry (the ground mesh) — NOT of where Link currently is. Empty list == no floor here."""
+    geometry (the ground mesh) — NOT of where Link currently is. Empty list == no floor here.
+
+    Uses the game's EXACT ground point-in-triangle (``collision.cross_y_tri_front`` =
+    ``cM3d_CrossY_Tri_Front``: strict (z,x) AABB + all three signed areas ≥ -20) and its plane
+    cross-height (``ground_cross_y`` = ``getCrossY_NonIsZero``), NOT a barycentric eps. The old eps
+    (1e-3 in barycentric units ≈ 0.1u of slop on a 200u-wide floor tri) accepted settled ``old``
+    positions parked a hair PAST a floor edge — the wall the settle braces against can overhang the
+    floor lip — so the scanner reported Asoko inits that FALL OOB. The faithful front-check rejects
+    them exactly as ``cBgW::RwgGroundCheck`` does (validated live on Asoko Room0)."""
     ys = []
     for t in region_tris:
-        if t["n"][1] < GROUND_NY_MIN:
+        if not bg_is_ground(t["n"][1]):
             continue
-        inside, y = _bary_xz(t["v"][0], t["v"][1], t["v"][2], x, z)
-        if inside:
-            ys.append(y)
+        v = t["v"]
+        if cross_y_tri_front(v[0], v[1], v[2], x, z):
+            ys.append(ground_cross_y(t["T"].pla, x, z))
     return sorted(ys)
 
 
@@ -194,7 +187,7 @@ def enumerate_seams(region_tris, box):
         test_y = min(max(ylo, ymin), ymax)             # edge base if in-region, else the region floor
         seams.append(dict(S=tuple(S), polys=sorted({e[5]["poly"] for e in members}),
                           interior=round(interior, 3), floor=round(disp_floor(interior), 3),
-                          coplanar=coplanar, test_y=test_y))
+                          coplanar=coplanar, test_y=test_y, edge_yspan=(ylo, yhi)))
     seams.sort(key=lambda s: s["floor"])
     return seams
 

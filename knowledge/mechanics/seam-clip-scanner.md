@@ -92,6 +92,15 @@ Decided from the static DZB (Dolphin-free; `require_standable=False` / `override
 
 - **Floor from the DZB ground mesh** (`floor_ys_at`, ny>=0.5) under the approach XZ, never Link's live
   Y, never the wall base; and `old` must be a settled WallCorrect fixed point in front of both walls.
+  The point-in-triangle is the game's EXACT ground test (`collision.cross_y_tri_front` =
+  `cM3d_CrossY_Tri_Front`: strict (z,x) AABB + all three signed areas >= -20, the front winding; height
+  via `getCrossY_NonIsZero`), NOT a barycentric eps. A settled `old` parks a hair PAST a floor edge (the
+  seam wall it braces against can overhang the floor lip), and a loose eps (1e-3 barycentric ~= 0.1u on a
+  200u floor tri) counted that off-floor point as standable -- so Asoko Room0 reported inits that FALL
+  OOB (user-flagged; live-validated the game's `RwgGroundCheck` rejects them 20/20, scan 20->8 clips).
+  NOT a surface-material bug: every Asoko faller floor is ground-code 0 / attribute NORMAL (the
+  ground-code/void hypothesis was disproven); the defect was geometric edge slop. Gate:
+  [`tests/test_seam_standable_ground.py`](../../tests/test_seam_standable_ground.py).
 - **The wall must be COLLIDABLE at that floor** (`_floor_at`): a floor is valid only if a LineCheck
   cylinder sample (feet + `WALL_H` = 30.1 / 89.9 / 125.0) lands inside the wall's vertical span. This is
   exactly the game's wall-registration rule (`RwgWallCorrect`, `d_bg_w.cpp:85-89`). It rejects **OOB
@@ -138,6 +147,25 @@ canonically `tww_sim.core.collision.bg_is_{ground,roof,wall}`:
   surface MATERIAL (sand, grass, void `code 4`, ...), never the wall-vs-ground geometry.
 
 There is no "verticality" threshold: a **sloped wall up to `ny` 0.5** is a wall the game braces against.
+
+## The shared seam edge must be at Link's stance height (floating-seam false positive)
+
+A corner clip needs BOTH walls present at Link's cylinder; the seam is the two walls' **shared vertical
+edge**, and `enumerate_seams` records its y-span (`seam["edge_yspan"]`). If the standable floor sits far
+ABOVE or BELOW that edge, only one wall (or none) faces Link there, so the two-plane fan can't produce a
+clip, whatever the f32 verify finds. The gate `seam_clip_check._cyl_overlaps_edge(link_y, edge_yspan)`
+(wired into `seam_locator.locate` and `seam_clip_check.scan_region`) drops the clip unless a cylinder
+sample (feet + `WALL_H`) lands inside the edge span. Two user-flagged cases, symmetric:
+- **Edge ABOVE the floor** (Omori Room0 (2249.6, 358, 1772.6), interior 145.2): polys 31/864 share a
+  vertical edge at y905..1227, but the standable floor is y358: poly 31 does not exist at floor level,
+  so there is no corner there ("no seam here"). The old gate accepted the floor because it tested the
+  UNION of both walls' vertices (poly 864 dips to y350), masking that the *other* wall floats overhead.
+- **Edge BELOW the floor** (GanonK top (±250, 7770, -2902.6)): the shared edge tops out at y7504 but the
+  settled floor is y7770; poly 1319 rises to y9917 ALONE above the edge (no corner). Previously this was
+  culled only by the full-room re-verify; the edge-overlap gate rejects it directly (and does not fall
+  back to the pillar-base floor, so it surfaces no new untested candidate). Gate:
+  [`tests/test_seam_edge_overlap.py`](../../tests/test_seam_edge_overlap.py) + the GanonK-top case in
+  `test_seam_locator.py`.
 
 ## Three gather / verify false-positive fixes (2026-07-15)
 

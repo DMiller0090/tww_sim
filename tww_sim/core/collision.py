@@ -302,6 +302,27 @@ def crossZ_tri(tri, pos):
     return _tri_in_2d(v0[0], v0[1], v1[0], v1[1], v2[0], v2[1], pos[0], pos[1])
 
 
+def cross_y_tri_front(v0, v1, v2, px, pz):
+    """cM3d_CrossY_Tri_Front (c_m3d.cpp): the game's GROUND point-in-triangle. Projects to (z, x),
+    strict AABB gate (``incl_box2d``), then all three ``vprod2d >= -20`` (the FRONT winding only --
+    NOT the two-winding ``_tri_in_2d`` used by the swept wall crossing). This is exactly the test
+    ``cBgW::RwgGroundCheckCommon`` runs to decide whether Link stands on a ground poly, so it is the
+    faithful standability predicate: a point a hair past a floor edge (where a settled ``old`` parks,
+    WallCorrect having braced it against a seam wall that overhangs the floor lip) is rejected here
+    exactly as GroundCross rejects it -- unlike a loose barycentric eps. See seam-clip-scanner.md."""
+    if not incl_box2d(v0[2], v0[0], v1[2], v1[0], v2[2], v2[0], pz, px):
+        return False
+    return (vprod2d(v0[2], v0[0], v1[2], v1[0], pz, px) >= -20.0
+            and vprod2d(v1[2], v1[0], v2[2], v2[0], pz, px) >= -20.0
+            and vprod2d(v2[2], v2[0], v0[2], v0[0], pz, px) >= -20.0)
+
+
+def ground_cross_y(pla, px, pz):
+    """cM3dGPla::getCrossY_NonIsZero: the Y where (px, y, pz) lies on the plane (assumes ny != 0).
+    ``y = (-nx*px - nz*pz - d) / ny`` -- the game's ground height at an XZ point."""
+    return fdivs(fsubs(fsubs(fmuls(_f(-pla.nx), px), fmuls(pla.nz, pz)), pla.d), pla.ny)
+
+
 def cross_lin_tri(start, end, tri, a=True, b=False):
     """cM3d_Cross_LinTri -> (hit, point). Plane crossing + point-in-triangle in the projections
     whose normal component is significant (|n_axis| >= 0.008)."""
