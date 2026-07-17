@@ -200,9 +200,74 @@ def mint_novel(name, rest_x, rest_z, facing, target_csangle, floor_y, base='kaze
     return mint_current(name)
 
 
+def mint_online(name, geo_path, d2s=580.0, base='kaze_r11_rollstab_idle13@twwgz',
+                perp_tol=2.0, max_iter=3, settle_est=160.0, target_csangle=None):
+    """Mint an ON-LINE pan-camera anchor for a novel seam, first-class (session-54 procedure,
+    dead-ends #36/#37). The two constraints a novel-seam anchor must satisfy:
+      * the camera must be FROZEN (the mint_novel C-stick pan arms the MANUAL cam; anywhere the
+        auto-cam tracks Link's walk, an unpanned mint's csangle creeps and the constant-cs rest
+        model can never be bit-exact -- #36);
+      * the BASELINE ROLL `old` must sit ON the F-through-S line (within the arc reach ~+-9u;
+        `mint_novel`'s settle walk drifts off the park bearing AND the resulting misaim's MOVE
+        turn to F adds more perp during the approach -- ~12u at the 97m corner's 23-deg misaim --
+        so an off-line anchor makes `solve_focused` find 0 hits with Phase-A best score == the
+        residual offset -- #37).
+    Parks on the seam's aim line at `d2s` (+`settle_est` for the settle walk), pan-mints, then
+    measures the PURE-SIM baseline roll `old`'s perp from the minted seed (`solver.run(anchor, [])`
+    -- the quantity the arc bracket must center on; the REST perp alone under-measures by the turn
+    drift) and RE-PARKS by it (converges in ~1 step: the park shift translates the trajectory ~1:1).
+    The aim comes from the geo fixture (`aim_deg` if declared, else the interior bisector); the park
+    facing = the aim (the anchor need NOT face F exactly -- the arc bracket absorbs the misaim's
+    ANGLE, #37 corollary; it is the misaim's perp DRIFT this loop cancels).
+    After minting, REST-verify: python -m harness.rollstab.rest anchor=<name> geo=<geo> seed=0."""
+    from harness.rollstab.seamgeo import SeamGeo
+    from tww_sim.core.mathlib import deg_to_s16
+    import math
+    geo = json.load(open(geo_path))
+    aim_deg = geo.get('aim_deg', geo['bisector_deg'])
+    ar = math.radians(float(aim_deg) % 360.0)
+    dx, dz = math.sin(ar), math.cos(ar)
+    Sx, Sz = geo['S'][0], geo['S'][2]
+    facing = deg_to_s16(float(aim_deg) % 360.0)
+    if target_csangle is None:
+        target_csangle = facing
+    park_x = Sx - (d2s + settle_est) * dx
+    park_z = Sz - (d2s + settle_est) * dz
+    seed = None
+    for it in range(max_iter):
+        seed = mint_novel(name, park_x, park_z, facing, target_csangle, geo['link_y'], base=base)
+        seam = SeamGeo(geo, seed['csangle'])
+        rest = (seed['link_x'], seed['link_z'])
+        # the load-bearing perp = the PURE-SIM baseline roll old's (rest perp + the turn drift)
+        import harness.rollstab.solver as _SV
+        for _c in (_SV._BASE, _SV._BASE_WALLED):    # the seed on disk just changed: drop the
+            for _k in [k for k in _c if k[0] == name]:  # cached rest states for this anchor
+                del _c[_k]
+        r0 = _SV.run(name, [], dtm_seed=0, seam=seam)
+        old = r0.get('old') if (r0 and r0.get('fired')) else None
+        perp = seam.perp(old) if old else seam.perp(rest)
+        print('mint_online iter %d: old_perp=%.3f (rest_perp=%.3f) old=%s d2S(rest)=%.1f '
+              'csangle=%d F=%d facing=%d' % (
+              it, perp, seam.perp(rest), old, seam.d2S(rest),
+              seed['csangle'], seam.F, seed['shape_angle_y']), flush=True)
+        if abs(perp) <= perp_tol:
+            print('mint_online: ON-LINE (baseline |old perp| %.3f <= %.1f)' % (abs(perp), perp_tol),
+                  flush=True)
+            return seed
+        # re-park: cancel the measured old perp; hold the rest's along distance at d2s
+        along_err = seam.along(rest) + d2s          # rest sits at along ~ -d2s on the aim line
+        park_x -= perp * seam.PX + along_err * seam.DIRX
+        park_z -= perp * seam.PZ + along_err * seam.DIRZ
+    print('mint_online: WARNING still off-line after %d iters (perp=%.3f)' % (max_iter, perp), flush=True)
+    return seed
+
+
 if __name__ == '__main__':
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
-    if 'novel' in o:                      # camera-behind mint for a NOVEL seam (session-50 procedure)
+    if 'online' in o:                     # on-line pan mint for a NOVEL seam (session-54 procedure)
+        mint_online(o['online'], o['geo'], d2s=float(o.get('d2s', 580.0)),
+                    base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
+    elif 'novel' in o:                    # camera-behind mint for a NOVEL seam (session-50 procedure)
         mint_novel(o['novel'], float(o['x']), float(o['z']), int(o['facing'], 0),
                    int(o['csangle'], 0), float(o['y']), base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
     elif 'current' in o:                  # mint the live paused state as a fresh full-seed anchor

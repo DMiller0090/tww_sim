@@ -76,13 +76,55 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-17, session 54)
+## Status (2026-07-17, session 55)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-17, session 54): a SECOND novel corner is DELIVERED LIVE, 0-ULP, pure-sim --
+> **CURRENT THREAD (2026-07-17, session 55): the z-mirror 97-corner S=(13539.2393,-493.3560) is
+> PAN-MINTED + REST BIT-EXACT -- the s54 camera recipe GENERALIZES (the s53/s54 candidate's blocker is
+> CLOSED) -- but the CLIP is NOT delivered: the corner's genuine dust is ~4x thinner than the mirror's
+> and `solve_focused` at the 2-minute budget gives < 1 expected hit per draw (8 independent draws, 0
+> hits). Surfaced to Dereck; scaling options below.**
+> - **`mint.mint_online` NEW (first-class, the handoff's secondary ask): the on-line pan mint as one
+>   call** -- park on the aim line, `mint_novel` C-stick pan, then re-park driving the **BASELINE ROLL
+>   `old`'s perp** to ~0 (measured PURE-SIM from the minted seed via `solver.run(anchor, [])`; converges
+>   in 1 step). The rest-perp-only re-park (s54's recipe) UNDER-measures wherever the settle misaim is
+>   large: the ~23-deg misaim's MOVE turn added ~12u perp between rest and the roll here, leaving a
+>   rest-on-line anchor rolling from perp +15 (outside the arc reach) -- dead-end #38. GOTCHA fixed
+>   in-place: `solver._BASE`/`_BASE_WALLED` cache rest states by anchor NAME; the re-mint loop
+>   invalidates them (else every iteration re-measures the first mint).
+> - **REST BIT-EXACT at an AUTO-cam mid-room corner** (28/28 rows 0-ULP incl. the 23-deg MOVE turn,
+>   seed=0, C-down; csangle 5131 frozen through the whole live approach). This was exactly what blocked
+>   the corner in s54 (#36) -- the pan recipe is now proven at a second auto-cam region.
+> - **The search gap, quantified (the session's finding): dust DENSITY prices the search.** Fine-scan
+>   (0.02 along x 0.0002 perp over the reach band): 97m = **84** genuine samples (13% of along rows,
+>   slivers <=0.0006u, perp band 0.02u) vs the delivered mirror **360** and 152-corner **1409** (70%
+>   rows, 0.41u band). The focused search's chaotic clouds (local perp spacing ~0.008u) expect < 1 hit
+>   per 110s draw at that density. Ruled out at this budget (#39): finer `off_step` (arcs
+>   octagon-saturate -- Phase A brackets byte-identical at 60 vs 120), the NEW `solve_focused(m2s=,
+>   c3m=)` knob families (frame-2 partial magnitude + c3 base -- correct generalizations of the
+>   documented K=3 crawl, kaze byte-identical at defaults, but each cloud is too diffuse), a 2D
+>   frame2 x frame3 byte grid. The full-aim mouth screen confirms the bisector aim is already optimal
+>   (mouth-open dust peaks at F=8769/8936). Roll-reachability is NOT in question.
+> - **Locked live-data-backed:** anchor `kaze_r11_rollstab_seam97m@twwgz` (seed tracked); golden
+>   `fixtures/seam97m_rest_golden.json` (REST BIT-EXACT). Gates `tests/test_seam97m_clip.py::
+>   test_seam97m_rest_bitexact` GREEN + `test_seam97m_clip_delivered` strict-xfail RED (the honest
+>   flag). Suite **381 passed, 1 skipped, 4 xfailed** (+1 pass, +1 xfail). NO `sim.py`/`land.py`
+>   change; `solver.py` changed ONLY additively (`m2s`/`c3m` params, m2=1.0-first order preserves the
+>   original lattice per bracket), all seam-param/bands/mirror/152 gates green.
+>
+> **NEXT (Dereck's pick -- the scaling paths for thin-dust seams, #39):** (a) run() THROUGHPUT: ~4ms
+> per candidate caps a 2-min draw at ~28k; a faster from-rest walk (native core under the rest-exact
+> foot) multiplies search density directly and honors the budget rule; (b) bracket DIVERSITY: a
+> walkstab-style K=2-crawl Phase A (today's Phase A is deterministic -- every draw hangs off the same
+> 40 bracket centers); (c) pick a DENSER novel corner instead (74 clippable in the room scan; screen
+> dust density first -- the new strategy-page rule). Every other thread (proven/mirror/sheathed/152
+> clips DONE, walk-stab, Tetra push-aside/turnaround STANDALONE, 97-corner +493 push-steer-only)
+> UNCHANGED.
+
+> **PRIOR THREAD (2026-07-17, session 54): a SECOND novel corner is DELIVERED LIVE, 0-ULP, pure-sim --
 > the 152-deg corner S=(10555.1904, 190.6696) (interior 151.68, walls 840x845), picked by the session-53
 > screening tooling, minted fresh, solved by `solve_focused` in 80s, and shipped via a clean DTM at seed=0:
 > `old=(10542.6318359, 232.2424469) -> new=(10556.8652344, 185.1252899)`, CUT_F then OOB (proc 0x24),

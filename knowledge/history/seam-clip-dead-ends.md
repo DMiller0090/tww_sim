@@ -834,6 +834,42 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
     Corollary (positive): the anchor need NOT face F -- facing 25794 vs F=29729 (~22 deg) delivered fine;
     the arc bracket absorbs initial misaim, and REST bit-exactness is the only hard precondition.
 
+## Rest-perp-only re-parks + thin-dust knob-family re-draws (session 55, z-mirror 97-corner)
+
+38. **Re-parking an on-line mint by the REST's perp alone: insufficient wherever the settle misaim
+    is large.** #37's fix ("re-park by `-seam.perp(rest)`") under-measures: the settle walk's misaim
+    (~23 deg at the 97m corner, facing 4630 vs F=8769) makes the approach's MOVE turn to F add more
+    perp BETWEEN rest and the roll (~12u here), so a rest-on-line anchor still rolls from perp +15
+    -- outside the arc family's ~+-9u reach, 0 hits with Phase-A best score == the residual (the #37
+    tell, at a smaller magnitude). The fix (shipped, `mint.mint_online`): measure the PURE-SIM
+    baseline roll `old`'s perp from the minted seed (`solver.run(anchor, [])` -- offline, no live
+    round-trip) and re-park by THAT; converges in 1 step (the park shift translates the trajectory
+    ~1:1). s54's 152-corner never saw this because its settle misaim's drift happened to be small.
+    GOTCHA (harness): `solver._BASE`/`_BASE_WALLED` cache rest states by ANCHOR NAME -- a re-park
+    loop that re-mints the same name in one process must invalidate them (mint_online does), else
+    every iteration measures the FIRST mint's trajectory.
+
+39. **A THIN-DUST seam vs. the chaotic-crawl focused search at the 2-minute budget: knob-family
+    re-draws do NOT scale -- 8 independent full draws found 0 hits.** The z-mirror 97-corner is
+    roll-REACHABLE (mouth-open dust 35-37u off both walls; `roll_reachable` accepts; anchor REST
+    BIT-EXACT via the pan mint -- #36's retry is CLOSED, the camera was never the residual blocker),
+    but its genuine dust is an order thinner than the delivered seams': fine-scan (0.02 along x
+    0.0002 perp, reach band) counts **84** samples (13% of along rows, slivers <=0.0006u, perp band
+    0.02u) vs the mirror's **360** and the 152-corner's **1409** (70% rows, 0.41u band -- why those
+    delivered in one ~80s draw). Ruled out at this budget: finer arc `off_step` (60 == 120
+    byte-identical brackets -- arcs octagon-saturate at Phase-A level too); the frame-2 partial-mag
+    m2 sweep + c3 base-magnitude families (shipped as `solve_focused(m2s=, c3m=)` -- correct
+    generalizations of the documented K=3 crawl, kaze byte-identical at defaults, but each draw's
+    chaotic cloud has local perp spacing ~0.008u vs sliver width ~0.0002-0.0006u => < 1 expected hit
+    per draw); a 2D frame2 x frame3 byte grid (6.5k runs, closest approach 7.6e-5, still 0). NOT
+    ruled out (the scaling paths, Dereck's pick): (a) run() THROUGHPUT -- ~4ms/run caps a draw at
+    ~28k candidates; a faster from-rest walk (native core under the rest-exact foot) multiplies
+    density directly; (b) a walkstab-style K=2-crawl Phase A (bracket DIVERSITY -- today's Phase A
+    is deterministic, every draw hangs off the same 40 bracket centers); (c) another roll-reachable
+    corner (the room scan lists 74 clippable seams; screen dust DENSITY first -- see the strategy
+    page). LESSON: before minting a novel corner, fine-scan its dust and compare to the delivered
+    seams' counts; reachability alone does not price the search.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

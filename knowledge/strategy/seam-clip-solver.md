@@ -93,6 +93,18 @@ range. Untried knobs that MIGHT move the tip toward wallA (unproven, likely smal
 (nonzero `m351C` turn-lean at roll entry) and the thrust/roll timing -- both change the push/roll
 geometry, but the tip pin looks geometric, so expectations are low.
 
+## Dust DENSITY prices the search -- screen it before minting (2026-07-17)
+
+Reachability (`SeamGeo.roll_reachable`) says a clip EXISTS from a standable `old`; it does not say
+the focused search can FIND one inside its 2-minute budget. The search's chaotic crawl lattice has
+local perp spacing ~0.008u, so the expected hits per draw scale with the seam's genuine-dust
+measure. Fine-scan it (0.02 along x 0.0002 perp over the reach band, `pred_genuine`) and compare:
+the delivered 152-corner counted **1409** samples (70% of along rows, 0.41u perp band -- one ~80s
+draw), the delivered mirror **360** (17% rows, 0.021u band), while the z-mirror 97-corner's **84**
+(13% rows, slivers <=0.0006u) defeated 8 independent knob-family draws (dead-end #39). Pick novel
+targets by density, not reachability alone; a thin-dust seam needs a throughput/diversity upgrade
+first (run() speed, or a K=2-crawl Phase A).
+
 ## The sim is bit-exact FROM REST -- plan sequences need no live calibration
 
 The from-rest model (`harness/rollstab/rest.rest_state`) matches live 0-ULP from row 0

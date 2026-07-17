@@ -439,7 +439,8 @@ def _genuine_perps(seam, samples=None):
 
 
 def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
-                  off_step=120, nudge=10, kbr=40, verbose=True):
+                  off_step=120, nudge=10, kbr=40, m2s=(1.0, 0.72, 0.6), c3m=0.66,
+                  verbose=True):
     """Focused roll-stab dust search (the walkstab.solve_focused pattern in the roll `run` form): an ARC
     gross-perp bracket + a LOW-SPEED byte-nudge densifier + the wall_faithful gate. Pure sim, no
     calibration. This is the objective-compliant one-shot for a NOVEL seam whose reachable roll line sits
@@ -460,9 +461,14 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
     Phase A (wall-less, cheap): sweep arc(off, lead, dur) x the derived A_projs; rank the fired spF@A==17
       candidates by how near `old`'s perp sits to a genuine dust COLUMN in the reach band (`_genuine_perps`,
       pure geometry -- the corner razor's perp offset is derived, not a typed target). Keep the top `kbr`.
-    Phase B (nudge): for each bracket, add a K=3 start crawl (full, full, byte-NUDGED 3rd frame, acted at
-      low speed) and sweep the nudge over a +-`nudge` byte grid; test the EXACT genuine_clip + clear at
-      spF@A==17, facing==seam.F.
+    Phase B (nudge): for each bracket, add a K=3 start crawl (full, 2nd-frame at an octagon-interior
+      partial magnitude `m2`, byte-NUDGED 3rd frame, acted at low speed) and sweep the nudge over a
+      +-`nudge` byte grid per m2; test the EXACT genuine_clip + clear at spF@A==17, facing==seam.F.
+      `m2s` sweeps the documented start-crawl partial-magnitude family (README knobs, msd 0.52..0.889 --
+      the walkstab densifier's earlier-frame partials, session 55): m2=1.0 first (the original full-full
+      lattice, byte-identical), then each partial RESHUFFLES the whole downstream chaotic lattice, giving
+      fresh independent clouds around the same bracket -- needed when a seam's dust slivers are thinner
+      than one cloud's local density (the 97m corner: <=0.0006u slivers in a 0.02u perp band).
     Phase C (walled confirm): `wall_faithful` re-sim -- accept only cuts whose approach reaches `old` past
       the wall (dead-end #3). Rank by the perp sliver margin (delivery robustness). Records to HITS_PATH
       (same schema as `search`, carrying the explicit `start`/`moves`/`A_proj`/`dtm_seed`) for `deliver`.
@@ -473,7 +479,9 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
     t0 = time.time()
     _cs = load_seed(anchor)['csangle'] & 0xFFFF
     full = C.dtm_stick(stick_for_bearing(seam.F, _cs, 1.0))
-    c3raw = stick_for_bearing(seam.F, _cs, 0.66)      # octagon-interior mid-magnitude nudge base
+    c3raw = stick_for_bearing(seam.F, _cs, c3m)       # octagon-interior mid-magnitude nudge base
+    #                                                   (c3m: the documented msd family 0.52..0.889 --
+    #                                                   a different base = a fresh independent lattice)
     r0 = run(anchor, [], dtm_seed=dtm_seed, seam=seam)
     A_projs = _derive_a_projs(anchor, seam, dtm_seed, r0)
     gperps = _genuine_perps(seam)
@@ -514,35 +522,39 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
         if time.time() - t0 > budget or len(hits) >= want:
             break
         arc = C.dtm_stick(stick_for_bearing((seam.F + off) & 0xFFFF, _cs, 1.0))
-        for dx in range(-nudge, nudge + 1):
-            for dz in range(-nudge, nudge + 1):
-                c3d = C.dtm_stick((min(254, max(1, c3raw[0] + dx)),
-                                   min(254, max(1, c3raw[1] + dz))))
-                start = (full, full, c3d)
-                r = run(anchor, [(lead, arc, dur)], A_proj=A, start=start,
-                        dtm_seed=dtm_seed, seam=seam)
-                if not (r and r.get('fired') and r['facing'] == seam.F
-                        and r['spF_at_A'] == 17.0):
-                    continue
-                if not (r['genuine'] and r['clear']):
-                    continue
-                if not wall_faithful(anchor, r['stream'], r['old'], seam, dtm_seed):
-                    continue
-                key = (round(r['old'][0], 5), round(r['old'][1], 5))
-                if key in seen:
-                    continue
-                seen.add(key)
-                margin = _perp_margin(seam, r['old'], r['new'])
-                moves = [(lead, arc, dur)]
-                _record(hits, r, moves, A, start, anchor, dtm_seed=dtm_seed)
-                hits[-1]['margin'] = margin
-                json.dump(hits, open(HITS_PATH, 'w'))
-                if verbose:
-                    print('  CLIP margin=%d off=%+d dur=%d lead=%d A=%.1f nudge=(%+d,%+d) '
-                          'old=(%.7f,%.7f) perp_ray=%+.6f d2S=%.3f (%.0fs)' % (
-                          margin, off, dur, lead, A, dx, dz, r['old'][0], r['old'][1],
-                          seam.perp_to_ray(r['old'], r['new']), seam.d2S(r['old']),
-                          time.time() - t0), flush=True)
+        for m2 in m2s:
+            if time.time() - t0 > budget or len(hits) >= want:
+                break
+            f2 = full if m2 >= 1.0 else C.dtm_stick(stick_for_bearing(seam.F, _cs, m2))
+            for dx in range(-nudge, nudge + 1):
+                for dz in range(-nudge, nudge + 1):
+                    c3d = C.dtm_stick((min(254, max(1, c3raw[0] + dx)),
+                                       min(254, max(1, c3raw[1] + dz))))
+                    start = (full, f2, c3d)
+                    r = run(anchor, [(lead, arc, dur)], A_proj=A, start=start,
+                            dtm_seed=dtm_seed, seam=seam)
+                    if not (r and r.get('fired') and r['facing'] == seam.F
+                            and r['spF_at_A'] == 17.0):
+                        continue
+                    if not (r['genuine'] and r['clear']):
+                        continue
+                    if not wall_faithful(anchor, r['stream'], r['old'], seam, dtm_seed):
+                        continue
+                    key = (round(r['old'][0], 5), round(r['old'][1], 5))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    margin = _perp_margin(seam, r['old'], r['new'])
+                    moves = [(lead, arc, dur)]
+                    _record(hits, r, moves, A, start, anchor, dtm_seed=dtm_seed)
+                    hits[-1]['margin'] = margin
+                    json.dump(hits, open(HITS_PATH, 'w'))
+                    if verbose:
+                        print('  CLIP margin=%d off=%+d dur=%d lead=%d A=%.1f m2=%.2f nudge=(%+d,%+d) '
+                              'old=(%.7f,%.7f) perp_ray=%+.6f d2S=%.3f (%.0fs)' % (
+                              margin, off, dur, lead, A, m2, dx, dz, r['old'][0], r['old'][1],
+                              seam.perp_to_ray(r['old'], r['new']), seam.d2S(r['old']),
+                              time.time() - t0), flush=True)
     hits.sort(key=lambda h: -h.get('margin', 0))
     json.dump(hits, open(HITS_PATH, 'w'))
     if verbose:
