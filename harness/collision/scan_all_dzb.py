@@ -18,6 +18,13 @@ position, and the interior angle between the two walls). Coordinates are written
 precision — a seam clip is a sub-ULP razor, so rounding a coord turns a CLIP into a BLOCK. DZBs with
 no clippable seam write no file.
 
+UNDECIDED seams (the search hit the per-seam ``SEAM_BUDGET`` mid cone-sweep without resolving
+clip-or-not — a cheap-pass-wide corner, most often a COPLANAR flat-wall seam, whose f32 gap is
+sub-ULP) are NOT proven unclippable, so they are written SEPARATELY to
+``<stage>/<Arc>__<dzb>__unknown.csv`` (``seam_x, seam_y, seam_z, interior, floor``; no init/dest — the
+clip is undetermined). This keeps the clip CSV schema untouched (existing consumers ignore the
+sibling) while flagging what the scan could not decide, instead of silently lumping it with no-clip.
+
     python -m harness.collision.scan_all_dzb                 # all stages -> _generated/seam_clips
     python -m harness.collision.scan_all_dzb stage=M_Dai     # one stage
     python -m harness.collision.scan_all_dzb out=/some/dir   # override the output dir
@@ -71,6 +78,9 @@ def _g(x):
     return repr(float(x))
 
 
+UNKNOWN_HEADER = ["seam_x", "seam_y", "seam_z", "interior", "floor"]
+
+
 def _write_csv(path, clips):
     """One row per clippable seam; FULL precision. ``clips`` = seam_locator result dicts."""
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -82,6 +92,19 @@ def _write_csv(path, clips):
                         _g(old[0]), _g(old[1]), _g(old[2]),
                         _g(new[0]), _g(new[1]), _g(new[2]),
                         _g(r["interior"])])
+
+
+def _write_unknown_csv(path, unknown):
+    """One row per UNDECIDED seam (search hit the per-seam budget without resolving clip/no-clip) --
+    NOT proven unclippable, so flagged separately from the clip CSV. ``unknown`` = the seam_locator
+    ``dict(S, interior, floor)`` entries. Sibling file ``<Arc>__<dzb>__unknown.csv`` (the clip CSV
+    schema is left untouched, so existing consumers ignore these)."""
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(UNKNOWN_HEADER)
+        for u in unknown:
+            S = u["S"]
+            w.writerow([_g(S[0]), _g(S[1]), _g(S[2]), _g(u["interior"]), _g(u["floor"])])
 
 
 def main(argv):
@@ -107,7 +130,7 @@ def main(argv):
             work.append((stage, sdir, arc))
     print("=== scanning %d arcs across %d stages -> %s ===" % (len(work), len(stages), out),
           flush=True)
-    total_clips = total_dzb = errors = 0
+    total_clips = total_unknown = total_dzb = errors = 0
     t0 = time.time()
     for wi, (stage, sdir, arc) in enumerate(work):
         outdir = os.path.join(out, stage)
@@ -123,7 +146,8 @@ def main(argv):
                 continue
             csvpath = os.path.join(outdir, "%s__%s.csv" % (os.path.splitext(arc)[0],
                                                            os.path.splitext(dzbname)[0]))
-            if os.path.exists(csvpath):
+            unkpath = os.path.splitext(csvpath)[0] + "__unknown.csv"
+            if os.path.exists(csvpath) or os.path.exists(unkpath):   # resume: clip OR unknown written
                 total_dzb += 1
                 continue                                    # resume: already done
             m = _ROOM_RE.match(os.path.splitext(arc)[0])
@@ -135,21 +159,28 @@ def main(argv):
                 xform = (0.0, 0.0, 0.0)
             try:
                 region, box = region_from_dzb(data, *xform)
-                clips = scan_region(region, box, verbose=False) if region else []
-                if clips:
+                clips, unknown = (scan_region(region, box, verbose=False, return_unknown=True)
+                                  if region else ([], []))
+                if clips or unknown:
                     os.makedirs(outdir, exist_ok=True)
+                if clips:
                     _write_csv(csvpath, clips)
+                if unknown:
+                    _write_unknown_csv(unkpath, unknown)
                 total_dzb += 1
                 total_clips += len(clips)
-                tag = ("CLIPS=%d" % len(clips)) if clips else "clips=0"
+                total_unknown += len(unknown)
+                tag = "CLIPS=%d" % len(clips) if clips else "clips=0"
+                if unknown:
+                    tag += " UNKNOWN=%d" % len(unknown)
                 print("  [%d/%d] %s/%s::%s tris=%d %s"
                       % (wi + 1, len(work), stage, arc, dzbname, len(region), tag), flush=True)
             except Exception as e:
                 print("  [%d/%d] %s/%s::%s DZB-ERR %s"
                       % (wi + 1, len(work), stage, arc, dzbname, e), flush=True)
                 errors += 1
-    print("=== done: %d DZBs, %d clippable seams total, %d errors, %.0fs ==="
-          % (total_dzb, total_clips, errors, time.time() - t0), flush=True)
+    print("=== done: %d DZBs, %d clippable seams, %d unknown (budget-capped) seams, %d errors, %.0fs ==="
+          % (total_dzb, total_clips, total_unknown, errors, time.time() - t0), flush=True)
     return 0
 
 

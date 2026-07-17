@@ -214,7 +214,8 @@ def locate(region, ground, seam, stats=None):
     return r
 
 
-def scan_region(region, box, require_standable=True, override_link_y=None, verbose=True):
+def scan_region(region, box, require_standable=True, override_link_y=None, verbose=True,
+                return_unknown=False):
     """Every clippable differing-normal vertical seam in ``box`` (sorted by displacement).
 
     ``require_standable`` / ``override_link_y`` are accepted for drop-in signature parity with
@@ -222,23 +223,38 @@ def scan_region(region, box, require_standable=True, override_link_y=None, verbo
     intrinsically standable-only — it settles a real WallCorrect old on the local ground, so a seam
     with no standable floor is dropped regardless; ``require_standable=False`` (the old
     ``no-standable`` mode) therefore has no effect here, and ``override_link_y`` is unused (the floor
-    Y is resolved per approach direction)."""
+    Y is resolved per approach direction).
+
+    ``return_unknown=True`` -> return ``(clips, unknown)`` where ``unknown`` is the list of seams the
+    search could NOT resolve because it exhausted the per-seam ``SEAM_BUDGET`` mid cone-sweep (a
+    cheap-passed corner whose f32 verify drained the cap without a hit AND without finishing). Those
+    are genuinely UNDECIDED -- NOT proven unclippable -- so a caller (the batch scanner) can flag them
+    rather than silently lump them with the no-clip seams. Each unknown entry is ``dict(S, interior,
+    floor)`` (the enumerated seam vertex + interior angle + displacement lower bound). Default
+    (``False``) returns just ``clips`` for signature parity with the old callers/tests."""
     ground = [t for t in region if t["n"][1] >= GROUND_NY_MIN]
     seams = enumerate_seams(region, box)
     clips = []
+    unknown = []
     stats = {}
     for i, seam in enumerate(seams):
+        capped_before = stats.get("capped", 0)
         r = locate(region, ground, seam, stats)
         if r is not None:
             clips.append(r)
+        elif stats.get("capped", 0) > capped_before:
+            # budget-exhausted, no hit found -> UNDECIDED (the ONLY None cause that bumps `capped`; a
+            # phantom-rejected or genuinely no-clip seam returns None without incrementing it).
+            unknown.append(dict(S=seam["S"], interior=seam["interior"], floor=seam["floor"]))
         if verbose and (i + 1) % 25 == 0:
-            print("  ...%d/%d seams, %d clippable" % (i + 1, len(seams), len(clips)), flush=True)
+            print("  ...%d/%d seams, %d clippable, %d unknown"
+                  % (i + 1, len(seams), len(clips), len(unknown)), flush=True)
     clips.sort(key=lambda r: r["disp"])
     if verbose:
-        print("=== %d clippable of %d seams (verify_calls=%d, capped=%d) ==="
-              % (len(clips), len(seams), stats.get("verify_calls", 0), stats.get("capped", 0)),
-              flush=True)
-    return clips
+        print("=== %d clippable, %d unknown of %d seams (verify_calls=%d, capped=%d) ==="
+              % (len(clips), len(unknown), len(seams), stats.get("verify_calls", 0),
+                 stats.get("capped", 0)), flush=True)
+    return (clips, unknown) if return_unknown else clips
 
 
 # hard seams (Hyrule room 0) that the old scanner or earlier prototypes got wrong — a quick probe.

@@ -205,6 +205,15 @@ the viewer live-updates) and is resumable (skips DZBs whose CSV exists). No inte
 DZBs are world-transformed by the stage `MULT`; coords are written at FULL f32 precision (a rounded
 seam coord flips the razor CLIP verdict to BLOCK).
 
+**Undecided seams are flagged, not silently dropped.** A seam whose cone sweep exhausts the per-seam
+`SEAM_BUDGET` (200k f32 CrrPos evals) WITHOUT finding a clip and WITHOUT finishing is UNDECIDED, not
+proven unclippable. `scan_region(..., return_unknown=True)` returns those separately, and `scan_all_dzb`
+writes them to a sibling `<Arc>__<dzb>__unknown.csv` (`seam_x,seam_y,seam_z,interior,floor`; no
+init/dest). The clip CSV schema is untouched. These are mostly COPLANAR flat-wall seams (interior 180,
+~180-deg cone, sub-ULP gap): cheap-pass-wide and expensive to rule out, so the budget caps first (Hyrule
+r0: 58 clips + 76 unknown). A budget-capped seam MIGHT clip in an unexplored direction; treating it as
+no-clip was a silent cap (KB principle: no silent coverage bounds).
+
 ## Live validation: clean placement (HARD gotcha)
 
 `validate_clips.py` confirms a scan's clip live: place Link at `old` by writing BOTH player class-pos
