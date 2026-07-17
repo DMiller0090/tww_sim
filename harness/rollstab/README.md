@@ -76,13 +76,57 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-15, session 53)
+## Status (2026-07-17, session 54)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-15, session 53): the 97-deg corner's reachability puzzle is RESOLVED WITH LIVE
+> **CURRENT THREAD (2026-07-17, session 54): a SECOND novel corner is DELIVERED LIVE, 0-ULP, pure-sim --
+> the 152-deg corner S=(10555.1904, 190.6696) (interior 151.68, walls 840x845), picked by the session-53
+> screening tooling, minted fresh, solved by `solve_focused` in 80s, and shipped via a clean DTM at seed=0:
+> `old=(10542.6318359, 232.2424469) -> new=(10556.8652344, 185.1252899)`, CUT_F then OOB (proc 0x24),
+> live old/new drift (0,0). NO solver/sim code change -- the whole session was screening + mint recipe
+> work; the generalized path delivered as-built.** Two firsts: the fixture DECLARES an off-bisector aim
+> (`aim_deg=163.08`; the 132.3 bisector has no reachable dust -- found by the full-aim mouth screen), and
+> the anchor is a PANNED-camera mint (`mint_novel` C-stick pan) at a region whose AUTO-cam tracks Link.
+> - **The candidate z-MIRROR 97-corner S=(13539.24,-493.36) IS roll-reachable geometrically -- 11
+>   mouth-open genuine points at its DEFAULT bisector F=8824 (dust 35.3-36.9u off BOTH walls, unlike its
+>   +493 sibling whose dust hugs wallA at 2.8-5.4u) -- but was NOT deliverable this session: its bisector
+>   approach crosses a region where the AUTO-camera pans continuously with Link's position (~5-20 s16 per
+>   walk frame; the cam only moves while Link MOVES -- idle never relaxes it), so the constant-csangle
+>   rest model cannot be bit-exact there. NOT a dead end: the C-stick-pan mint (discovered later at the
+>   152-corner, below) was never RETRIED on it -- it is the natural next candidate. Geo fixture kept:
+>   `fixtures/kaze_r11_seam97m_geo.json`.
+> - **CAMERA lesson (the session's real finding): kaze r11 has TWO cam regimes.** The +493 seam sat in a
+>   FIXED-cam region (csangle 29883 frozen; s52's pan "sprang back", hence the aligned-idle-only recipe).
+>   Mid-room, the auto-cam TRACKS Link's position while he walks -- every unpanned mint attempt crept
+>   (29883->29767->29351 near the corner). The fix is the SHIPPED `mint.mint_novel` C-stick pan (arms the
+>   MANUAL cam, which then freezes for good once the walk-settle passes the leash pull) -- the s50 mirror
+>   recipe, which s52 had set aside as fixed-cam-specific. After the pan, csangle 22603 held FROZEN
+>   bit-exact through the whole live approach (REST gate). Screen a novel corner's cam BEFORE minting.
+> - **ON-LINE mint constraint (new, gated by the Phase-A score): the anchor must rest within the arc
+>   reach (~+-15u; aim |perp| < 8u) of the F-through-S line.** `mint_novel`'s settle walk drifts off the
+>   park bearing (travel settles ~22 deg off F here -- advancewith stick injection + cam motion during the
+>   walk), so the first mint sat 117.5u off-line and `solve_focused` found 0 hits with Phase-A best score
+>   118.85 == exactly that offset (the tell). Fix: measure `seam.perp(rest)` from the minted seed and
+>   re-park by -perp (converged in 1 iteration: perp -3.99u, d2S 584u). The anchor does NOT need to face
+>   F: facing 25794 vs F=29729 (~22 deg) -- the arc bracket absorbed it (the hit's arc is off=+1800, dur 3).
+> - **Locked live-data-backed:** anchor `kaze_r11_rollstab_seam152@twwgz` (seed tracked); goldens
+>   `fixtures/seam152_rest_golden.json` (REST BIT-EXACT, straight-then-aim stream incl. the 22-deg MOVE
+>   turn) + `fixtures/seam152_roll_ship_golden.json` (the clean-DTM ship). Gates
+>   `tests/test_seam152_clip.py::test_seam152_rest_bitexact` + `test_seam152_clip_delivered` GREEN. Suite
+>   **380 passed, 1 skipped, 3 xfailed** (was 378; +2). NO `sim.py`/`land.py`/`harness/rollstab/*.py`
+>   change, so the live regression is unaffected.
+>
+> **NEXT:** (1) the z-mirror 97-corner with the PAN mint (its dust is bisector-reachable; the only blocker
+> was the unpanned cam) -- would prove the pan recipe generalizes and close the s53 candidate; (2) fold the
+> cam screen + on-line re-park into `mint.py` as a first-class `mint_online` (both are scratch scripts
+> today); (3) the standing camera-in-the-loop frontier (Phase R) remains the honest fix for approaches
+> that CANNOT be pan-frozen. Every other thread (proven/mirror/sheathed clips DONE, walk-stab, Tetra
+> push-aside/turnaround STANDALONE, 97-corner +493 push-steer-only) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-15, session 53): the 97-deg corner's reachability puzzle is RESOLVED WITH LIVE
 > DATA -- its genuine dust is NOT reachable by a standard from-rest ROLL, and that is REAL GEOMETRY, not a
 > sim over-correction. NOT "impossible" (the clip EXISTS; it needs a non-roll technique). Awaiting Dereck's
 > strategic pick for the next target.** The session-52 crux (is the sim's 35u WallCorrect hold faithful near

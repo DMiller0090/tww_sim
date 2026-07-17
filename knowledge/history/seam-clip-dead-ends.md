@@ -810,6 +810,30 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
   roll-vs-sim wallA_d diff. The anchor + walled-REST-bit-exact model + mint recipe (align-walk -> settle ->
   teleport-to-rest -> mint_current for a fixed-camera novel anchor) all stand from session 52.
 
+## Unpanned mints at an auto-cam region + off-line anchors (session 54, LIVE)
+
+36. **Minting a novel-seam anchor WITHOUT the C-stick pan, anywhere the auto-cam tracks Link: RULED
+    OUT.** Mid-room kaze r11 (unlike the +493 seam's FIXED-cam region, where s52's pan "sprang back"),
+    the auto-camera's yaw chases Link's POSITION while he walks (~5-20 s16/frame; it NEVER moves while
+    Link is idle, so a post-teleport transient does not relax by waiting) -- every unpanned mint's
+    delivery walk creeps csangle and the constant-cs rest model can never be bit-exact. This is what
+    actually blocked the z-mirror 97-corner S=(13539.24,-493.36) (whose dust IS bisector-roll-reachable,
+    11 mouth-open points -- the seam is NOT ruled out; retry it WITH the pan). The fix is the SHIPPED
+    `mint.mint_novel` C-stick pan (arms the MANUAL cam, frozen for good after the walk-settle leash
+    pull) -- proven at the 152-corner: csangle 22603 frozen bit-exact through the whole live approach.
+    Screen a candidate's cam regime BEFORE minting (walk its approach live and diff csangle); do NOT
+    conclude "needs camera-in-the-loop" until the pan has been tried.
+
+37. **An anchor minted OFF the F-through-S line (|perp| beyond the arc reach ~15u): 0 hits, always.**
+    `mint_novel`'s settle walk drifts off the park bearing (advancewith stick injection + the cam moving
+    during the walk), so the rest can land far off-line (117.5u at the first 152-corner mint). The
+    solver's gross perp knob is the arc (~+-15u); nothing else closes tens of units, so `solve_focused`
+    returns 0 wall-faithful with Phase-A best score == the line offset (the diagnostic tell: score >> 1
+    means MINT problem, not search problem). Fix at mint time: measure `seam.perp(rest)` from the seed
+    and re-park by -perp (1 iteration sufficed). Do NOT widen the arc family to chase an off-line anchor.
+    Corollary (positive): the anchor need NOT face F -- facing 25794 vs F=29729 (~22 deg) delivered fine;
+    the arc bracket absorbs initial misaim, and REST bit-exactness is the only hard precondition.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.
