@@ -928,6 +928,30 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
     5 via B2 fines -- the drill earns its budget on dense seams as extra draws around good families
     even though it cannot refine.
 
+## Teleport-to-rest after the cam settle; fixed-frame settle walks (session 58)
+
+42. **Teleporting Link to the anchor rest spot AFTER the camera settle does NOT preserve the frozen
+    manual cam -- a teleport resets the cam-Link leash geometry, so the next from-rest walk RE-PULLS
+    the camera from scratch.** Measured live (163-corner, polys 458x827): after settle-until-frozen
+    (csangle stable at 53178) + teleport back ~120-400u along the aim line, the verification walk's
+    csangle crept 53590 -> 53178 over its first ~16 frames before re-freezing -- REST can never be
+    bit-exact. The motivation was corridor length: the 163-corner's 720u corridor cannot fit
+    park = d2s(580) + settle travel (~300-450u). The honest consequence: a mint needs the settle to
+    genuinely END at the rest spot, so a novel corner needs ~1000u+ of clear approach line --
+    `seam_screen.py` now measures `corridor` per seam so the pick sees it up front. The 163-corner
+    (S=(9709.58,-13.43), the screen's densest walkable candidate, 5221 samples) stays a CANDIDATE
+    blocked on the corridor, not on dust (geo kept: `fixtures/kaze_r11_seam163_geo.json`); the
+    session-58 delivery took the 157-corner (1480 samples, 0.33u band, corridor 1400u) instead.
+    Two REAL mint bugs the same session fixed (both general, in `mint.py`):
+    - **A fixed-frame settle walk under-settles at some seams**: 14 frames left ~258 s16 of leash
+      pull, which then played out during the verification approach (the same creep signature).
+      Fixed: the walk-settle runs in chunks UNTIL csangle stops changing (cap `settle_walk`).
+    - **The 1:1 re-park step oscillates when the settle misaim is large**: the measured baseline-old
+      perp response per unit park shift was ~1.8 at the 163-corner (the MOVE turn amplifies), so
+      -35.98 -> -11.83 -> +9.30. Fixed: a SECANT gain estimated from the iteration history
+      (clamped; 1:1 on the first step) -- `mint_online` then converged in 1-2 iterations at both
+      corners tried.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

@@ -159,7 +159,7 @@ def _sdiff(a, b):
 
 
 def mint_novel(name, rest_x, rest_z, facing, target_csangle, floor_y, base='kaze_r11_rollstab_idle13@twwgz',
-               settle_walk=14, settle_idle=20):
+               settle_walk=42, settle_idle=20):
     """Mint a fresh anchor for a NOVEL seam with the camera BEHIND Link (session-50 procedure).
 
     Load `base`, `cmd_teleport` to (rest_x, floor_y, rest_z) facing `facing` (SAME floor Y => no
@@ -189,13 +189,25 @@ def mint_novel(name, rest_x, rest_z, facing, target_csangle, floor_y, base='kaze
         sub = 255 if _sdiff(target_csangle, cs()) > 0 else 0
         D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': sub, 'substickY': 128, 'buttons': 0, 'frames': 1})
         time.sleep(0.03)
-    # walk-settle: walk toward `facing` with C-down held so csangle reaches its walk-frozen value
-    sx, sy = dtm_stick(stick_for_bearing(int(facing) & 0xFFFF, cs(), 1.0))
-    D.control_pipe_quiet('advancewith', {'stickX': sx, 'stickY': sy, 'substickX': 128, 'substickY': 0, 'buttons': 0, 'frames': settle_walk})
-    time.sleep(0.3)
+    # walk-settle toward `facing` (C-down) UNTIL csangle FREEZES -- a fixed frame count
+    # under-settles at some seams and the cam creeps through the approach (dead-end ledger #42).
+    chunk = 7
+    walked, prev_cs = 0, None
+    while walked < settle_walk:
+        c0 = cs()
+        if prev_cs is not None and c0 == prev_cs:
+            break
+        prev_cs = c0
+        sx, sy = dtm_stick(stick_for_bearing(int(facing) & 0xFFFF, c0, 1.0))
+        D.control_pipe_quiet('advancewith', {'stickX': sx, 'stickY': sy, 'substickX': 128, 'substickY': 0, 'buttons': 0, 'frames': chunk})
+        walked += chunk
+        time.sleep(0.1)
+    time.sleep(0.2)
     # stop + idle (C-down) to a clean WAITS rest at the frozen camera
     D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128, 'substickY': 0, 'buttons': 0, 'frames': settle_idle})
     time.sleep(0.3)
+    # NOTE do NOT teleport-to-rest after the settle: a teleport resets the cam-Link leash and the
+    # next from-rest walk re-pulls the cam, so the settle must END at the rest spot (ledger #42).
     print('pre-mint: csangle=%d (target %d) state=%d' % (cs(), int(target_csangle) & 0xFFFF, D.read_named(h, m, 'link_state')), flush=True)
     return mint_current(name)
 
@@ -215,7 +227,11 @@ def mint_online(name, geo_path, d2s=580.0, base='kaze_r11_rollstab_idle13@twwgz'
     Parks on the seam's aim line at `d2s` (+`settle_est` for the settle walk), pan-mints, then
     measures the PURE-SIM baseline roll `old`'s perp from the minted seed (`solver.run(anchor, [])`
     -- the quantity the arc bracket must center on; the REST perp alone under-measures by the turn
-    drift) and RE-PARKS by it (converges in ~1 step: the park shift translates the trajectory ~1:1).
+    drift) and RE-PARKS by it with a SECANT gain (session 58: the perp response per unit shift is
+    NOT 1:1 everywhere -- ~1.8 at a large settle misaim -- so the 1:1 step can oscillate; the gain
+    is estimated from the previous iteration and clamped). NOTE `d2s` must stay ~580 (the solver's
+    A_proj derivation and the spF-17 cap distance assume the proven rest envelope) and the seam
+    needs park = d2s + settle travel (~1000u+) of clear corridor -- `seam_screen.py` measures it.
     The aim comes from the geo fixture (`aim_deg` if declared, else the interior bisector); the park
     facing = the aim (the anchor need NOT face F exactly -- the arc bracket absorbs the misaim's
     ANGLE, #37 corollary; it is the misaim's perp DRIFT this loop cancels).
@@ -234,6 +250,7 @@ def mint_online(name, geo_path, d2s=580.0, base='kaze_r11_rollstab_idle13@twwgz'
     park_x = Sx - (d2s + settle_est) * dx
     park_z = Sz - (d2s + settle_est) * dz
     seed = None
+    prev_perp, prev_shift = None, None
     for it in range(max_iter):
         seed = mint_novel(name, park_x, park_z, facing, target_csangle, geo['link_y'], base=base)
         seam = SeamGeo(geo, seed['csangle'])
@@ -254,10 +271,18 @@ def mint_online(name, geo_path, d2s=580.0, base='kaze_r11_rollstab_idle13@twwgz'
             print('mint_online: ON-LINE (baseline |old perp| %.3f <= %.1f)' % (abs(perp), perp_tol),
                   flush=True)
             return seed
-        # re-park: cancel the measured old perp; hold the rest's along distance at d2s
+        # re-park by a SECANT-gain step (clamped; 1:1 on the first iteration) -- the perp response
+        # per unit shift is ~1.8 at a large settle misaim, so a 1:1 step oscillates (ledger #42).
+        if prev_shift and prev_perp is not None:
+            gain = (perp - prev_perp) / prev_shift
+            gain = max(0.4, min(2.5, gain))
+        else:
+            gain = 1.0
+        shift = -perp / gain
+        prev_perp, prev_shift = perp, shift
         along_err = seam.along(rest) + d2s          # rest sits at along ~ -d2s on the aim line
-        park_x -= perp * seam.PX + along_err * seam.DIRX
-        park_z -= perp * seam.PZ + along_err * seam.DIRZ
+        park_x += shift * seam.PX - along_err * seam.DIRX
+        park_z += shift * seam.PZ - along_err * seam.DIRZ
     print('mint_online: WARNING still off-line after %d iters (perp=%.3f)' % (max_iter, perp), flush=True)
     return seed
 
@@ -266,6 +291,7 @@ if __name__ == '__main__':
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
     if 'online' in o:                     # on-line pan mint for a NOVEL seam (session-54 procedure)
         mint_online(o['online'], o['geo'], d2s=float(o.get('d2s', 580.0)),
+                    max_iter=int(o.get('max_iter', 3)),
                     base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
     elif 'novel' in o:                    # camera-behind mint for a NOVEL seam (session-50 procedure)
         mint_novel(o['novel'], float(o['x']), float(o['z']), int(o['facing'], 0),

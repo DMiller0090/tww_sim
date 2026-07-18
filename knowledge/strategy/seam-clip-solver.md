@@ -6,8 +6,9 @@ exact geometry instead of a fitted window? What made the sim bit-exact from rest
 **Status:** LIVE-DELIVERED (2026-07-10): a solver hit shipped as a clean DTM landed 0-ULP on the
 sim's predicted cut (kaze r11, idle13 anchor) and threaded the seam. Regression:
 `tests/test_rollstab_rest.py` (live goldens).
-**Source:** sessions 7-10 (2026-07-09/10) + the session-56 throughput/cloud-spread findings
-(2026-07-17), `_notes/seam-clip-live-validation-handoff-*.md`;
+**Source:** sessions 7-10 (2026-07-09/10), the session-56/57 throughput/cloud-spread/ranking
+findings (2026-07-17), and the session-58 room-wide density screen + 157-corner delivery
+(2026-07-18), `_notes/seam-clip-live-validation-handoff-*.md`;
 run protocol + model term list in `harness/rollstab/README.md`;
 collision model [`mechanics/collision.md`](../mechanics/collision.md) (CrrPos, Force25Bit);
 cut mechanics in [`mechanics/land-movement.md`](../mechanics/land-movement.md) (roll stab);
@@ -131,6 +132,16 @@ along from the parent -- chaotic like the nudge), so Phase B2 is extra independe
 last-mile closer. On the 97m the restructure lifted near-band yield (d_true < 0.02) from ~0 to
 ~4.5 per 110s draw (best child 0.00121); at ~0.2-0.4 expected hits/draw the thin seam still needs
 several independent draw families, or a denser corner.
+
+**The screen is now room-wide tooling, and it works (session 58): `harness/rollstab/seam_screen.py`**
+ranks every enumerated corner seam by the density metric plus two delivery constraints the picks
+must respect -- `link_y` on the walkable floor, and approach CORRIDOR length >= ~1000u (the
+settle-until-frozen mint walk must genuinely end at the ~580u rest; teleporting to it resets the
+cam leash, dead-end #42). Its first pick, the 157-corner S=(9689.14, -150.31) (1480 samples, 50%
+rows, **0.33u band**, corridor 1400u), went mint -> REST BIT-EXACT -> **2 wall-faithful clips in
+one default 112s draw** -> live 0-ULP clean-DTM clip, same session -- while the 97m (84 samples,
+0.018u band) sat at 0 across ~15 cumulative draws. A WIDE perp band is the strongest single
+predictor: the chaotic crawl cloud lands near-band candidates cheaply when the band is ~0.3u.
 
 ## The sim is bit-exact FROM REST -- plan sequences need no live calibration
 

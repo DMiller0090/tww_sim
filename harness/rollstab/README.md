@@ -76,11 +76,57 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-17, session 57)
+## Status (2026-07-18, session 58)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+> **CURRENT THREAD (2026-07-18, session 58): Dereck's pick (b) is DELIVERED -- the room-wide density
+> SCREEN is now first-class tooling (`seam_screen.py`) and its first pick, the NOVEL 157-deg corner
+> S=(9689.1406, -150.3137) (polys 456x459, walkable floor, corridor 1400u), went screen -> `mint_online`
+> -> REST BIT-EXACT -> `solve_focused` **2 wall-faithful clips in one default 112s draw** (top margin
+> 60, the fattest yet) -> **LIVE 0-ULP clean-DTM clip at seed=0**:
+> `old=(9734.5458984,-166.6959534) -> new=(9688.2480469,-149.9900513)`, CUT_F then OOB, drift (0,0).
+> The 97m background lottery ran 6 more knob-family draws (kbr=300, c3m 0.56/0.78/0.84 x nudge 10/16,
+> ~880k exact candidates): still 0 -- ~15 cumulative draws now; it stays an honest lottery
+> (`test_seam97m_clip_delivered` strict-xfail RED) while dense corners deliver in one draw.**
+> - **The screen (`seam_screen.py`, ~10 min cold):** enumerate all 159 room seams -> corner filter ->
+>   `roll_reachable` -> the s55 density scan (samples / along-row coverage / perp band width) + two
+>   delivery constraints the metric alone misses: `link_y` on the WALKABLE floor (the two densest raw
+>   candidates sit on the -4680 upper level, unproven) and approach CORRIDOR length (>= ~1000u; see
+>   the mint fixes below). Benchmarks in-scan: 152 = 1408/70%/0.021u (delivered, now 3 clips/draw),
+>   mirror = 360/17%/0.021u (delivered), 97m = 84/14%/0.018u (undelivered). The 157 pick screens
+>   1480/50%/**0.33u band** -- a WIDE perp band is the strongest single predictor (near-band candidates
+>   come cheap: Phase B put 3 in-band in 48s where the 97m's best draws manage ~4 in 110s).
+> - **Two general `mint_online`/`mint_novel` fixes (both bit-measured live, ledger #42):** (1) the
+>   walk-settle now runs UNTIL csangle freezes (chunked, stick re-derived per chunk; a FIXED 14-frame
+>   settle under-settled the 163-corner by ~258 s16 and the cam crept through the verification's first
+>   ~15 rows); (2) the re-park loop steps by a SECANT gain from the iteration history (the 1:1 step
+>   oscillated at a ~25-deg settle misaim, measured response ~1.8x). RULED OUT live (ledger #42):
+>   teleport-to-rest after the settle -- a teleport RESETS the cam-Link leash and the next from-rest
+>   walk re-pulls the cam (~16 frames of csangle creep), so the settle must genuinely END at the rest;
+>   that is WHY the corridor constraint exists. The 163-corner (S=(9709.58,-13.43), 5221 samples, the
+>   densest walkable candidate) stays a candidate BLOCKED on its 720u corridor, not on dust (geo kept:
+>   `fixtures/kaze_r11_seam163_geo.json`; its non-REST-exact anchor was deleted). Also learned:
+>   `_derive_a_projs` implicitly assumes the ~580u rest envelope (a 300u-rest anchor never fires
+>   spF-17 baselines) -- `mint_online` d2s stays 580.
+> - **Locked live-data-backed:** anchor `kaze_r11_rollstab_seam157@twwgz` (seed tracked); goldens
+>   `fixtures/seam157_rest_golden.json` (REST BIT-EXACT, 28/28 rows incl. frame ctrls + m359C) +
+>   `fixtures/seam157_roll_ship_golden.json` (the clean-DTM ship). Gates `tests/test_seam157_clip.py::
+>   test_seam157_rest_bitexact` + `test_seam157_clip_delivered` GREEN. Suite **388 passed, 1 skipped,
+>   4 xfailed** (+2). NO `sim.py`/`land.py`/`solver.py` change (mint + screen tooling only), so the
+>   live regression and all shipped-hit recompositions are unaffected.
+>
+> **NEXT (pick one):** (a) **deliver more screen picks cheaply** -- the ranked list is in
+> `_generated/seam_screen.json` / the session-58 handoff; next in line with corridor >= 1000u:
+> seam_0467_0468 (10762.53,-273.26; 2285 samples, thin 0.031u band), seam_0465_0474 (the 152's
+> z-mirror; 835, 0.458u band), seam_0824_0826 (9689.14,123.46; 725, 0.024u). (b) **keep the 97m
+> lottery running in spare cycles** (untried: crawl slot 0 as a solver param, c3m 0.90+, A_projs
+> deeper than [:6], off_step 60 interleave). (c) **the 163-corner corridor problem** (5221 samples
+> waiting): either a camera-in-the-loop rest model (Phase R, the standing frontier) or a bent/other
+> approach line whose corridor fits. Every other thread (proven/mirror/sheathed/152/157 clips DONE,
+> walk-stab, Tetra push-aside/turnaround STANDALONE, 97-corner +493 push-steer-only) UNCHANGED.
 
 > **CURRENT THREAD (2026-07-17, session 57): `solve_focused` is RESTRUCTURED on two measured bugs
 > (dead-end #41) -- Phase A' now ranks CRAWL-INCLUDED centers (arc x A_proj x the full derived m2
