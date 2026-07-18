@@ -1049,6 +1049,41 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
     each idle frame), so a byte-identical consecutive row is necessarily a log duplicate and is
     dropped before the diff. Kaze captures (no duplicates) are unaffected.
 
+## Room events, deterministic mints, and the anchor-overwrite trap (session 63, third room)
+
+49. **Delivering in a room with an ARMED one-shot auto-event (Hyrule Castle interior `Hyroom` r0,
+    basement level): ANY A press across a broad region of the corridor fires the event instead of
+    the roll** -- Link enters `daPyProc_DEMO_LOOK_AROUND2_e` (0xB5, evmng staff cut, ANM_WHO), the
+    event camera takes over, and the ship movie ends with no CUT frame (deterministic: movie AND
+    pipe; warm AND fresh-boot). Position-only walks NEVER trigger it (a stickless probe walked the
+    whole corridor and wall-held clean), so the REST gate (no buttons) passes while the ship (A at
+    ~row 12) dies -- the tell is `end proc=0xb5` + an event csangle in the failed watch log. The
+    A-hijack region covered rest through d2S ~307 but not ~155; the roll physics pins A at ~460-510u
+    from S, inside it. **Fix is mint-time SETUP (the #47 pattern): the event is ONE-SHOT -- play it
+    out once (A-mash ~270 frames) in the mint BASE and save the consumed-event base
+    (`hyroom_r0_base2@twwgz`); every later A rolls clean.** Validate a new room's base with an
+    A-press probe mid-corridor, not just steady WAITS.
+
+50. **Re-minting over the SAME anchor name while a solved hit is still unshipped ORPHANS the hit**
+    -- `_generated/rollstab_hits.json` / the ship plan reference the anchor by name, and the new
+    seed makes `deliver.gate` honestly fail (`dOLD != 0`), so the solution is lost with no way to
+    reload the old rest state (the first cseam4002 anchor's 2-clip draw died this way). Ship (or
+    at least gate-and-archive the winning stream + seed json) BEFORE any re-mint of the same name.
+
+51. **Re-running an identical mint as a "fresh lottery draw": the mint is DETERMINISTIC from the
+    base** (same teleport/pan/settle -> byte-identical anchor, byte-identical 0-hit lattice). Per
+    #9 the ANCHOR is the lottery ticket; the honest re-roll knob is another FROZEN target from the
+    cam screen's measured set (different csangle -> different F/dust slice/lattice), never a tuned
+    offset. cseam4002: 8 documented families at csangle 44608 drew 0 (best d_true 0.21); the next
+    frozen target (51544 -> cs 48971) delivered on the DEFAULT draw (margin 0).
+
+Room-pick notes (same session): Tower of the Gods `Siren` r0 screens spectacularly (132 locator
+clips on one flat Y) but is UNDELIVERABLE as a hunting ground -- the spawn is a boat spawn (Link
+rides KoRL, state 137) and the big flat floor is the tidal pool bottom. The Hyroom basement's six
+hexagonal Master-Sword-chamber corners screen at n~2.6M / band ~1u (a visibly open gap, not razor
+dust) but their corridors are 460-700u, under the ~900u+ (rest 580 + settle) the standard roll
+mint needs -- a non-roll technique's target, not a roll pick.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

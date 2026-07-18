@@ -85,13 +85,54 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-18, session 62)
+## Status (2026-07-18, session 63)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-18, session 62): ROADMAP Phase A step 4 (second room) -- the pipeline
+> **CURRENT THREAD (2026-07-18, session 63): ROADMAP Phase A step 4's "deliver one corner
+> out-of-kaze" tail is CLOSED -- the THIRD room (Hyrule Castle interior `Hyroom` r0, picked by
+> Dereck's option (b): man-made flat floors) delivered a novel corner LIVE 0-ULP via the one-shot:
+> seam_4002_4004 ("cseam4002", S=(-1210.3112, 207.8036), polys 4002x4004, interior 93.03, basement
+> level link_y -1958.3, band_dense 0.018u, corridor 1340u, ~9.2k exact dust points) went room
+> pre-rank (the seam-locator CSVs: one-flat-Y rooms; Siren r0 ruled a boat/tidal non-room) ->
+> `capture_walls` (3430 walls) -> screen (121 rows) -> floor/cam (5/5 frozen) -> `mint_online` ->
+> **REST BIT-EXACT** -> `solve_focused` -> **LIVE 0-ULP clean-DTM clip at seed=0**:
+> `old=(-1184.0915527,167.6703033) -> new=(-1211.0118408,208.8762207)`, CUT_F at f30, drift (0,0).
+> Ninth delivered seam; third room; second stage outside kaze.**
+> - **The session's real finding (ledger #49): rooms carry ARMED one-shot auto-events.** The first
+>   ship died with `end proc=0xb5` (`daPyProc_DEMO_LOOK_AROUND2_e`, an evmng staff cut): ANY A press
+>   across a broad corridor region fires the event instead of the roll -- deterministically, movie
+>   AND pipe -- while buttonless walks (and therefore the REST gate) pass clean. The event is
+>   ONE-SHOT: play it out in the mint BASE (A-mash ~270 frames) and mint from the consumed state
+>   (`hyroom_r0_base2@twwgz`, the ledger-#47 heal pattern). Probe a new room's base with an A press
+>   mid-corridor, not just steady WAITS.
+> - **Two more general lessons (ledger #50/#51):** a re-mint over the same anchor name ORPHANS a
+>   solved-but-unshipped hit (the first anchor's 2-clip draw was lost; `deliver.gate` honestly
+>   fails dOLD!=0 -- ship before re-minting); and the mint is DETERMINISTIC from its base, so the
+>   honest fresh-lattice re-roll is the NEXT frozen cam target from the measured screen set
+>   (44608: 8 documented families 0-hit, best d_true 0.21; 48971: DEFAULT draw 1 clip, margin 0).
+>   `novel_deliver` gained `max_iter=` (mint re-park budget, aborts cleanly at the cap).
+> - **Locked live-data-backed:** anchors `hyroom_r0_base@twwgz` + `hyroom_r0_base2@twwgz`
+>   (consumed-event base) + `hyroom_r0_rollstab_cseam4002@twwgz` (seed tracked); goldens
+>   `fixtures/cseam4002_rest_golden.json` (REST BIT-EXACT) + `fixtures/cseam4002_roll_ship_golden.
+>   json` (the clean-DTM ship); mesh `fixtures/hyroom_r0_walls_ordered.json`; geo
+>   `fixtures/hyroom_r0_cseam4002_geo.json`. Gates `tests/test_cseam4002_clip.py::
+>   test_cseam4002_rest_bitexact` + `test_cseam4002_clip_delivered` GREEN. Suite **397 passed,
+>   1 skipped, 5 xfailed** (+2). KB: room generalization split to its own page
+>   (`knowledge/strategy/seam-clip-rooms.md`, the solver page hit the 250-line cap). NO
+>   `sim.py`/`land.py`/`solver.py` change (novel_deliver max_iter plumbing only), so the live
+>   regression and all shipped-hit recompositions are unaffected.
+>
+> **NEXT: ROADMAP step 3 re-scope / step 5 (camera-in-the-loop) now need Dereck's call -- steps 1,
+> 2, and 4 are closed (one-shot proven end-to-end in a third room; no kaze assumption anywhere in
+> the chain). The hseam2709 lottery (Hyrule) can also re-roll cheaply now via the ledger-#51
+> frozen-cam-target trick instead of more same-anchor draws. Every other thread (proven/mirror/
+> sheathed/152/157/152m/824/915/cseam4002 clips DONE, walk-stab, Tetra push-aside/turnaround
+> STANDALONE, 97m lottery, 467/163 blocked) UNCHANGED.**
+
+> **PRIOR THREAD (2026-07-18, session 62): ROADMAP Phase A step 4 (second room) -- the pipeline
 > is ROOM-AGNOSTIC and the from-rest model is BIT-EXACT OUTSIDE KAZE. Dereck picked step 4;
 > flooded Hyrule is the second room (its ordered wall mesh already existed from Phase C). The
 > `mesh=`/`prefix=`/`base=` knobs are threaded through `make_seam_geo`/`seam_screen`/

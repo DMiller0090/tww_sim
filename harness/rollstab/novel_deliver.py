@@ -25,6 +25,8 @@ Run from the repo root (fixture/golden paths are stored repo-relative):
     python -m harness.rollstab.novel_deliver wallA=<pid> wallB=<pid> [name=seam<pid>]
         [aim_deg=<deg>] [d2s=580] [budget=110] [start=<stage>] [stop=<stage>]
         [mesh=<walls_ordered.json>] [prefix=kaze_r11] [base=<mint base anchor>]
+        [max_iter=3]   # mint_online re-park budget; raise when the secant is still
+                       # converging at the cap (it aborts cleanly either way)
 
 Second-room knobs (ROADMAP Phase A step 4): `mesh=` names the room's block-grid ordered wall
 mesh (capture_walls.py), `prefix=` names the room in anchor/fixture/test paths (default
@@ -91,7 +93,8 @@ KAZE_BASE = 'kaze_r11_rollstab_idle13@twwgz'
 
 
 def deliver_novel(wallA, wallB, name=None, aim_deg=None, d2s=580.0, budget=110.0,
-                  start='geo', stop='test', mesh=None, prefix='kaze_r11', base=KAZE_BASE):
+                  start='geo', stop='test', mesh=None, prefix='kaze_r11', base=KAZE_BASE,
+                  max_iter=3):
     name = name or ('seam%d' % wallA)
     anchor = '%s_rollstab_%s@twwgz' % (prefix, name)
     geo_rel = 'fixtures/%s_%s_geo.json' % (prefix, name)
@@ -186,7 +189,7 @@ def deliver_novel(wallA, wallB, name=None, aim_deg=None, d2s=580.0, budget=110.0
                 % (anchor, st['cam']['target'], st['cam']['settle']))
         from harness.rollstab.mint import mint_online
         mint_online(anchor, geo_abs, d2s=d2s, settle_est=st['cam']['settle'],
-                    target_csangle=st['cam']['target'], base=base)
+                    target_csangle=st['cam']['target'], base=base, max_iter=max_iter)
         import harness.rollstab.solver as SV
         for _c in (SV._BASE, SV._BASE_WALLED):
             for _k in [k for k in _c if k[0] == anchor]:
@@ -372,4 +375,5 @@ if __name__ == '__main__':
                            d2s=float(o.get('d2s', 580.0)), budget=float(o.get('budget', 110.0)),
                            start=o.get('start', 'geo'), stop=o.get('stop', 'test'),
                            mesh=o.get('mesh'), prefix=o.get('prefix', 'kaze_r11'),
-                           base=o.get('base', KAZE_BASE)))
+                           base=o.get('base', KAZE_BASE),
+                           max_iter=int(o.get('max_iter', 3))))

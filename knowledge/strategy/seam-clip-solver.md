@@ -14,6 +14,8 @@ the session-60 824 delivery + floor/cam-track screen gaps (2026-07-18, dead-ends
 the session-61 one-shot `novel_deliver` + cam-target settle lesson (2026-07-18, dead-end #45);
 the session-62 second-room (Hyrule) mesh knob + floor/idle/log-jitter lessons (2026-07-18,
 dead-ends #46-#48);
+the session-63 third-room (Hyroom) delivery + armed-event/anchor-lottery lessons (2026-07-18,
+dead-ends #49-#51);
 run protocol + model term list in `harness/rollstab/README.md`;
 collision model [`mechanics/collision.md`](../mechanics/collision.md) (CrrPos, Force25Bit);
 cut mechanics in [`mechanics/land-movement.md`](../mechanics/land-movement.md) (roll stab);
@@ -182,21 +184,12 @@ dense band is still deliverable, just not always on the first knob family: the d
 live 0-ULP same session) after two 0-hit default draws -- when a thin-dense-band seam draws 0,
 vary the documented knob families before concluding anything.
 
-## Second room (flooded Hyrule): the pipeline is room-agnostic, the FLOOR is the new screen axis
+## Rooms beyond kaze r11
 
-The whole chain runs on any room via `mesh=`/`prefix=`/`base=` knobs (session 62): capture the
-room's ordered wall mesh (`capture_walls.py`), screen it (`seam_screen mesh=`), one-shot it
-(`novel_deliver mesh= prefix= base=<a settled-idle anchor in that stage>`). Proven END-TO-END
-through REST on Hyrule: the from-rest model held **BIT-EXACT 0-ULP outside kaze r11** on the first
-try once three NEW mint-time blockers were cleared (dead-ends #46-#48): open terrain is mostly
-SLOPED (the flat-floor rest model needs a genuinely flat ~1200u corridor -- floor-LADDER the aim
-line before minting and require constant y, not just fall_tol "FLOOR"), a wall-bottom `link_y`
-can be a phantom ledge with no ground, and a LOW-HEALTH base savestate idles in ANM_WAITB which
-the rest blend model does not cover (heal Link at mint; probe for steady WAITS -- d_rate 1.1 --
-before `mint_current`). A grazing `aim_deg` can trade dust density for a flat corridor (the
-delivered-aim corridor must live on the flat strip; seam_2709_2919 hugs its wall's 300u strip at
-aim 344). Hyrule's one all-gates-green corner is dust-thin (band_dense 0.011-0.014u) -- an honest
-lottery with a REST-verified anchor ready; density and floor quality trade off room by room.
+The pipeline is room-agnostic (`mesh=`/`prefix=`/`base=`), three rooms are live-proven, and the
+room-level screening axes (floor quality, armed one-shot auto-events, boat/tidal non-rooms, the
+anchor-lattice re-roll via frozen cam targets) have their own page:
+[seam-clip-rooms.md](seam-clip-rooms.md) (dead-ends #46-#51).
 
 ## The sim is bit-exact FROM REST -- plan sequences need no live calibration
 
