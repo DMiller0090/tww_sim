@@ -1,5 +1,41 @@
 # Seam-clip north star: the TETRA seam clip, pure-sim (multi-session roadmap)
 
+> **The Tetra north star is HIT (Phase T, session 22/24). The CURRENT north star is Phase A below:
+> refine the screen->mint->solve->deliver pipeline until an ARBITRARY game state + a reasonably
+> close target seam yields the clip inputs one-shot.** Adopted with Dereck, session 58.
+
+## Phase A -- arbitrary-state seam clipping (CURRENT north star, adopted 2026-07-18 session 58)
+
+The generalized pipeline delivers a screened corner per session (proven/sheathed/mirror/152/157
+all live 0-ULP), but it still assumes: a mintable settled idle ~580u out, a freezable camera, a
+straight ~1000u corridor, one room (kaze r11), and several manual steps per delivery. The end
+state is: **feed an arbitrary game state + a nearby target seam, get the input sequence.** Steps
+ordered so each strictly removes one assumption; do them IN ORDER -- 1-4 are refinement (no new
+physics), 5-6 are the expansion and wait until 1-4 are boring:
+
+1. **Make the recipe boring** -- deliver the queued screen picks verbatim (`seam_0465_0474` the
+   152's z-mirror 0.458u band, likely cheapest; `seam_0467_0468`; `seam_0824_0826`), counting
+   every manual touch per delivery. Exit: N-for-N with a written touch-list. (97m lottery keeps
+   running in spare cycles; it is priced, not blocked.)
+2. **One-shot the pipeline** -- fold the touch-list into a `novel_deliver` command: geo fixture ->
+   corridor/cam screen -> `mint_online` (isokey-named) -> REST gate (abort on DIFF) -> dust2d
+   prebuild OUTSIDE the draw budget -> `solve_focused` -> `deliver ship` -> golden + test
+   scaffold. Exit: a novel screened corner delivers with one command + one review.
+3. **Kill the ~580u rest envelope** -- `_derive_a_projs` implicitly assumes the proven rest
+   distance (a 300u anchor never fires a capped baseline; ledger #42 corollary). Derive the
+   A-proj scan center from the anchor's actual rest-to-seam distance. Exit: a ~300u-rest anchor
+   solves; unblocks short-corridor corners (the 163, 5221 samples) without camera work.
+4. **Prove it out-of-room** -- capture a second room's ordered wall mesh, screen it, deliver one
+   corner there. Exit: no kaze-r11 assumption (flat floor Y, cam regime, mesh path) survives.
+5. **Camera-in-the-loop (the old Phase R residual, promoted)** -- model the auto-cam per frame so
+   the constant-csangle precondition (and with it the pan mint, the settle dance, and the
+   corridor constraint) disappears. This is the single biggest idealization left; an arbitrary
+   state will not have a pan-frozen manual cam. Do FIRST of the expansions.
+6. **Arbitrary entry states (mid-walk etc.)** -- a mid-walk mint/seed (in-flight frame ctrls,
+   foot-pose delay buffer, m351C lean, travel/speedF), a mid-walk verification gate replacing
+   REST BIT-EXACT, and the DTM row-alignment contract from a mid-anim savestate. Depends on 5
+   (a mid-route state has a live camera). The sim half exists (bit-exact mid-walk clone).
+
 The kaze r11 roll-stab clip (Phase 0, DONE) proved the method: a from-rest bit-exact sim +
 exact-acceptance search one-shots a razor seam clip live, 0-ULP. The north star is the same
 one-shot for the **Tetra Co-push seam clip** ([[tetra-push-model]] memory; corner at

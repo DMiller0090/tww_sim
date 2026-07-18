@@ -118,15 +118,18 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   4 xfailed** (+2). NO `sim.py`/`land.py`/`solver.py` change (mint + screen tooling only), so the
 >   live regression and all shipped-hit recompositions are unaffected.
 >
-> **NEXT (pick one):** (a) **deliver more screen picks cheaply** -- the ranked list is in
-> `_generated/seam_screen.json` / the session-58 handoff; next in line with corridor >= 1000u:
-> seam_0467_0468 (10762.53,-273.26; 2285 samples, thin 0.031u band), seam_0465_0474 (the 152's
-> z-mirror; 835, 0.458u band), seam_0824_0826 (9689.14,123.46; 725, 0.024u). (b) **keep the 97m
-> lottery running in spare cycles** (untried: crawl slot 0 as a solver param, c3m 0.90+, A_projs
-> deeper than [:6], off_step 60 interleave). (c) **the 163-corner corridor problem** (5221 samples
-> waiting): either a camera-in-the-loop rest model (Phase R, the standing frontier) or a bent/other
-> approach line whose corridor fits. Every other thread (proven/mirror/sheathed/152/157 clips DONE,
-> walk-stab, Tetra push-aside/turnaround STANDALONE, 97-corner +493 push-steer-only) UNCHANGED.
+> **NEXT (DECIDED with Dereck, end of s58): follow ROADMAP.md Phase A -- refine the current
+> pipeline toward arbitrary-state seam clipping, steps IN ORDER.** Step 1 = deliver the queued
+> screen picks verbatim, counting manual touches (next: seam_0465_0474, the 152's z-mirror, 835
+> samples / WIDE 0.458u band -- likely cheapest; then seam_0467_0468 (2285, thin 0.031u band),
+> seam_0824_0826 (725)); ranked list in `_generated/seam_screen.json` (regen: `python -m
+> harness.rollstab.seam_screen`). Then step 2 (one-shot `novel_deliver`), step 3 (kill the ~580u
+> rest envelope in `_derive_a_projs` -- also unblocks the 163-corner), step 4 (second room), and
+> only then the expansions (camera-in-the-loop, mid-walk entry states) -- full rationale + exit
+> criteria in `ROADMAP.md` Phase A. The 97m lottery keeps running in spare cycles (untried: crawl
+> slot 0 as a solver param, c3m 0.90+, A_projs deeper than [:6], off_step 60 interleave). Every
+> other thread (proven/mirror/sheathed/152/157 clips DONE, walk-stab, Tetra push-aside/turnaround
+> STANDALONE, 97-corner +493 push-steer-only) UNCHANGED.
 
 > **CURRENT THREAD (2026-07-17, session 57): `solve_focused` is RESTRUCTURED on two measured bugs
 > (dead-end #41) -- Phase A' now ranks CRAWL-INCLUDED centers (arc x A_proj x the full derived m2
