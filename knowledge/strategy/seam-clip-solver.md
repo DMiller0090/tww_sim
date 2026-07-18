@@ -110,9 +110,27 @@ chaotic crawl cloud's PERP SPREAD, not the dust count alone.** A ~7x run()-throu
 `tests/test_solver_fastpose.py`) bought ~1.2M exact 97m candidates across 7 draws, still 0 hits.
 Measured on the top bracket: the byte-nudge cloud around a razor-close center (score 5.4e-4) lands
 median **~1.9u** in perp from the nearest genuine column -- ~99.8% of candidates never enter the
-razor band. So price a target by expected NEAR-BAND YIELD (candidates within ~1e-3 perp of a
-column per draw), and close a thin seam by putting candidates IN the band (fresh Phase-A bracket
-families, a 2D-exact dust ranking for the B2 fine drill), not by buying more same-family draws.
+razor band. Price a target by expected NEAR-BAND YIELD (the solver now prints it per draw), not
+raw dust count.
+
+**The perp spread was mostly a RANKING artifact, and the ranker was along-blind (session 57,
+dead-end #41 -- overturns how #40 read the cloud).** Two structural bugs: Phase A ranked the
+CRAWL-LESS arc trajectory while Phase B always added the K=3 crawl start, which displaces the
+center ~1.15u of perp (the m2 magnitude family steers centers smoothly, -1.15..-3.2 on the 97m)
+-- the "razor-close" brackets belonged to a family Phase B never evaluated; and the B2 ranker
+measured perp distance to a 1e-3-ROUNDED column set with no along term, putting candidates 3-12u
+of along from any real dust at the top of the drill order. Both fixed in the `solve_focused`
+restructure: Phase A' ranks crawl-INCLUDED centers (arc x A_proj x the full derived m2 family,
+pooled) by TRUE 2D distance to the exact sliver point cloud (`_dust2d`, disk-cached per seam;
+`_dust_dist`, perp x200), with brackets consumed ROUND-ROBIN across arc families -- a center point
+is noise at the cloud's ~1-2u chaotic scale, so a dense seam is priced by family BREADTH and a
+thin seam by nearest-band-first order (greedy alone lost the 152 re-solve; breadth restored it:
+3 clips in 111s vs the old structure's 1 in 80s, mirror 2 in 112s, all via B2 fines). Also
+measured: a 1-frame FINE is NOT a local refiner in the roll form (children land median ~3.5u of
+along from the parent -- chaotic like the nudge), so Phase B2 is extra independent draws, never a
+last-mile closer. On the 97m the restructure lifted near-band yield (d_true < 0.02) from ~0 to
+~4.5 per 110s draw (best child 0.00121); at ~0.2-0.4 expected hits/draw the thin seam still needs
+several independent draw families, or a denser corner.
 
 ## The sim is bit-exact FROM REST -- plan sequences need no live calibration
 

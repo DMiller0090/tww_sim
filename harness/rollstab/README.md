@@ -76,13 +76,58 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-17, session 55)
+## Status (2026-07-17, session 57)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-17, session 56): the s55 NEXT (run() THROUGHPUT) is DELIVERED and GATED --
+> **CURRENT THREAD (2026-07-17, session 57): `solve_focused` is RESTRUCTURED on two measured bugs
+> (dead-end #41) -- Phase A' now ranks CRAWL-INCLUDED centers (arc x A_proj x the full derived m2
+> family, pooled) by TRUE 2D distance to the exact dust cloud with ROUND-ROBIN consumption across
+> arc families, and B2's rounded-column ranker is replaced by the same metric -- and the shipped
+> seams re-solve BETTER than before (152: 3 wall-faithful clips in 111s, was 1 in 80s; mirror: 2 in
+> 112s, was 1 in 85s). The 97m is STILL not delivered: near-band yield went 0 -> ~4.5 per 110s
+> draw (best child d_true 0.00121) but 4 knob-varied draws (~474k exact candidates) found 0 genuine
+> -- expected ~0.2-0.4 hits/draw at this sliver thinness. `test_seam97m_clip_delivered` stays
+> strict-xfail RED (honest).**
+> - **The session's measurements (Dereck's pick was (b), 2D-exact ranking, validate-before-commit;
+>   the measurement half-failed and forced the deeper fix):** (1) the s56 B2 ranker `_dcol` (perp to
+>   1e-3-ROUNDED columns, along-blind) put candidates 3-12u of along from any real dust at the top of
+>   the drill order (dcol 1e-5 with true distance 3.0; top-40 overlap with the true ranking 8/40);
+>   (2) a 1-frame FINE is NOT a local refiner -- children land median ~3.5u of along from the parent
+>   (chaotic like the nudge), so drilling the 200 TRULY nearest keepers x all 150 fines (19,230 exact)
+>   still gave 0 genuine: B2 can never close a last ~1e-3, it is only extra independent draws;
+>   (3) the s56 "cloud sprays median 1.86u of perp around a razor-close center" is a RANKING artifact:
+>   Phase A ranked the CRAWL-LESS trajectory while Phase B always added the K=3 crawl, which shifts
+>   the center ~1.15u of perp (the m2 family steers centers SMOOTHLY, -1.15..-3.2 -- a knob, not chaos).
+> - **The restructure (`solver.py`; `_dust2d` exact sliver cloud 0.005 along x 2e-5 perp over the
+>   column band, disk-cached ~30s/seam under `_generated/`; `_dust_dist` perp-x200 nearest lookup):**
+>   Phase A' sweeps arc(off,dur,lead) x A_projs x m2fam (m2s=None derives the full distinct-stick msd
+>   family, 11 sticks on the 97m) with the crawl INCLUDED and ranks by d_true; brackets are consumed
+>   ROUND-ROBIN across arc families (each off's best m2 first -- a center point is noise at the cloud's
+>   ~1-2u chaotic scale, so pure ranked-greedy over-concentrates: the greedy first cut LOST the 152
+>   re-solve, whose winning family's crawl-included center sits 0.28u of perp off-band at d_true 56;
+>   breadth restored it and MORE); Phase B byte-nudges the kept (bracket, m2) pairs (center's cross
+>   seeds the fixpoint); B2 unchanged but ranked by d_true -- all 5 regression clips arrived via B2
+>   fines, so the drill EARNS its budget on dense seams even though it cannot "close" (finding 2).
+>   The solver now PRINTS the near-band yield per draw (the deliverable metric). Legacy m2s tuples
+>   still honored. Gates: suite **386 passed, 1 skipped, 4 xfailed** (+3 = `tests/test_solver_dust2d.py`:
+>   exact-vs-bruteforce walker, cache round-trip, points-are-genuine); mirror + 152 re-solve in budget
+>   under the new structure; NO `sim.py`/`land.py`/`run()` change (candidate evaluation is untouched --
+>   only WHICH candidates a draw evaluates changed).
+> - **Locked live-data-backed:** nothing new live (no Dolphin run -- anchors/goldens unchanged).
+>
+> **NEXT (pick one):** (a) **hunt the 97m hit with independent draw families** -- each 110s draw at a
+> documented knob family (crawl slot 0 `(f2, full, c3)` [scratch-validated, fresh families], c3m
+> 0.60/0.66/0.72/0.78, kbr depth, nudge width) yields ~4-6 near-band candidates and ~0.2-0.4 expected
+> hits; a handful of draws is the honest price at this dust thinness -- then `deliver ship` -> live
+> 0-ULP -> flip the xfail. (b) **screen the room scan's 74 clippable seams by near-band YIELD** (the
+> solver's printed metric makes this cheap) and deliver a denser corner instead. Every other thread
+> (proven/mirror/sheathed/152 clips DONE, walk-stab, Tetra push-aside/turnaround STANDALONE, 97-corner
+> +493 push-steer-only) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-17, session 56): the s55 NEXT (run() THROUGHPUT) is DELIVERED and GATED --
 > a 2-minute `solve_focused` draw now covers ~7x the candidates (~1.7k/s pooled vs s55's ~255/s) with
 > every output bit identical -- and ~1.2M exact candidates were drawn on the 97m at the new density
 > (7 draws: default grid, nudge=16, m2-dense, c3m=0.72/0.6, kbr=60, + the new Phase-B2 fine drill):

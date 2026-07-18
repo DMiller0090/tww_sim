@@ -23,7 +23,7 @@ walk gives a sub-26 roll and a shrunken lunge -- never clips) + facing==F.
 
 Hits -> _generated/rollstab_hits.json (ship with harness.rollstab.deliver).
 """
-import os, sys, json, math, time
+import bisect, os, sys, json, math, time
 _rb = os.path.dirname(os.path.abspath(__file__))
 while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pyproject.toml')):
     _rb = os.path.dirname(_rb)
@@ -457,10 +457,10 @@ def _pb_init(anchor, seam_args, dtm_seed):
 
 
 def _pb_eval(job):
-    """Evaluate one Phase-B/B2 candidate exactly. Returns None (did not fire / off-gate), a full
+    """Evaluate one Phase-A'/B/B2 candidate exactly. Returns None (did not fire / off-gate), a full
     hit dict (genuine + clear + wall-faithful, with margin -- the fields the parent records), or a
-    compact `('near', old_x, old_z)` for a fired on-gate non-hit (the parent ranks these by perp
-    distance to a genuine column for the Phase-B2 fine drill)."""
+    compact `('near', old_x, old_z, cross)` for a fired on-gate non-hit (the parent ranks these by
+    TRUE 2D distance to the genuine dust cloud; `cross` seeds the bracket's Phase-B fixpoint)."""
     moves, A, start, hint = job
     anchor, seam, dtm_seed = _PB
     r = run(anchor, [tuple(m) for m in moves], A_proj=A, start=start,
@@ -473,7 +473,7 @@ def _pb_eval(job):
             and wall_faithful(anchor, r['stream'], r['old'], seam, dtm_seed)):
         r['margin'] = _perp_margin(seam, r['old'], r['new'])
         return r
-    return ('near', r['old'][0], r['old'][1])
+    return ('near', r['old'][0], r['old'][1], r.get('cross'))
 
 
 def _genuine_perps(seam, samples=None):
@@ -498,8 +498,80 @@ def _genuine_perps(seam, samples=None):
     return sorted(out)
 
 
+DUST_PW = 200.0                # perp weight in the 2D dust distance -- the same x-column-dominates
+                               # weighting the legacy drill's score used (the razor is thin in perp,
+                               # the along-track knobs are dense).
+
+
+def _dust2d(seam, astep=0.005, pstep=2e-5, pmargin=0.010):
+    """The EXACT 2D genuine-dust point cloud in the seam's (along, perp) frame -- the true target
+    set the session-56 rounded-column ranker approximated (dead-end #40: `_genuine_perps` rounds
+    perp to 1e-3, so a candidate could rank razor-close to a phantom column while sitting units
+    from any real dust in along). Scans `pred_genuine` at `astep` along x `pstep` perp over the
+    reach band, with the perp window restricted to the genuine column band +- `pmargin` (derived
+    from `_genuine_perps`, pure geometry -- no per-seam constants). ~30s for a 10u band; DISK-CACHED
+    under `_generated/` keyed by the seam's geometry + frame, so a draw pays it once per seam.
+    Returns (P, A): the cloud's perp values sorted ascending + the matching along values."""
+    import hashlib
+    key = hashlib.sha1(json.dumps([seam.geo, seam.F, seam.roll_speedf, astep, pstep, pmargin],
+                                  sort_keys=True).encode()).hexdigest()[:16]
+    path = os.path.join(_rb, '_generated', 'dust2d_%s.json' % key)
+    if os.path.exists(path):
+        d = json.load(open(path))
+        return d['P'], d['A']
+    gp = _genuine_perps(seam)
+    P, A = [], []
+    if gp:
+        lo, hi = seam.search_band()
+        Sx, Sz = seam.S
+        pts = []
+        a = -hi
+        while a <= -lo:
+            p = gp[0] - pmargin
+            while p <= gp[-1] + pmargin:
+                x = Sx + a * seam.DIRX + p * seam.PX
+                z = Sz + a * seam.DIRZ + p * seam.PZ
+                if seam.pred_genuine((_F(x), _F(z))):
+                    pts.append((a, p))
+                p += pstep
+            a += astep
+        pts.sort(key=lambda ap: ap[1])
+        P = [p for _, p in pts]
+        A = [a for a, _ in pts]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    json.dump({'P': P, 'A': A}, open(path, 'w'))
+    return P, A
+
+
+def _dust_dist(P, A, along, perp, pw=DUST_PW):
+    """Weighted TRUE distance from (along, perp) to the nearest exact dust point:
+    min hypot(pw*(perp - P[i]), along - A[i]). `P` sorted ascending; walks outward from the perp
+    insertion point and stops each side once the perp term alone exceeds the best -- exact, and
+    O(neighbourhood) per query. Empty cloud -> inf (callers fall back to the perp-column score)."""
+    best = float('inf')
+    i = bisect.bisect_left(P, perp)
+    lo_i, hi_i = i - 1, i
+    lo_done, hi_done = lo_i < 0, hi_i >= len(P)
+    while not (lo_done and hi_done):
+        if not lo_done:
+            if abs((P[lo_i] - perp) * pw) > best:
+                lo_done = True
+            else:
+                best = min(best, math.hypot((P[lo_i] - perp) * pw, A[lo_i] - along))
+                lo_i -= 1
+                lo_done = lo_i < 0
+        if not hi_done:
+            if abs((P[hi_i] - perp) * pw) > best:
+                hi_done = True
+            else:
+                best = min(best, math.hypot((P[hi_i] - perp) * pw, A[hi_i] - along))
+                hi_i += 1
+                hi_done = hi_i >= len(P)
+    return best
+
+
 def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
-                  off_step=120, nudge=10, kbr=40, m2s=(1.0, 0.72, 0.6), c3m=0.66,
+                  off_step=120, nudge=10, kbr=40, m2s=None, c3m=0.66,
                   verbose=True, procs=None):
     """Focused roll-stab dust search (the walkstab.solve_focused pattern in the roll `run` form): an ARC
     gross-perp bracket + a LOW-SPEED byte-nudge densifier + the wall_faithful gate. Pure sim, no
@@ -518,26 +590,32 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
     through the whole cruise+roll, so the reachable `old` lattice is CHAOTIC -- a genuine hit is an isolated
     lattice point, found by sweeping the nudge grid and testing each EXACTLY.
 
-    Phase A (wall-less, cheap): sweep arc(off, lead, dur) x the derived A_projs; rank the fired spF@A==17
-      candidates by how near `old`'s perp sits to a genuine dust COLUMN in the reach band (`_genuine_perps`,
-      pure geometry -- the corner razor's perp offset is derived, not a typed target). Keep the top `kbr`.
-    Phase B (nudge): for each bracket, add a K=3 start crawl (full, 2nd-frame at an octagon-interior
-      partial magnitude `m2`, byte-NUDGED 3rd frame, acted at low speed) and sweep the nudge over a
-      +-`nudge` byte grid per m2; test the EXACT genuine_clip + clear at spF@A==17, facing==seam.F.
-      `m2s` sweeps the documented start-crawl partial-magnitude family (README knobs, msd 0.52..0.889 --
-      the walkstab densifier's earlier-frame partials, session 55): m2=1.0 first (the original full-full
-      lattice, byte-identical), then each partial RESHUFFLES the whole downstream chaotic lattice, giving
-      fresh independent clouds around the same bracket -- needed when a seam's dust slivers are thinner
-      than one cloud's local density (the 97m corner: <=0.0006u slivers in a 0.02u perp band).
+    Phase A' (session 57: the bracket ranking includes the CRAWL): sweep arc(off, lead, dur) x the
+      derived A_projs x the m2 crawl family, where each center is the run Phase B will actually nudge
+      -- start=(full, f2(m2), c3 center) -- and rank the fired spF@A==17 centers by TRUE 2D distance
+      to the exact genuine dust cloud (`_dust2d`/`_dust_dist`). Keep `kbr` brackets, consumed
+      ROUND-ROBIN across arc families (each off's best m2 first): a center point is noise at the
+      cloud's ~1-2u chaotic scale, so a DENSE seam needs family breadth while a THIN seam needs the
+      nearest-band families first -- the round-robin serves both. TWO session-56/57
+      measurement findings drive this shape (dead-ends #40/#41): (1) the old Phase A ranked the
+      CRAWL-LESS arc trajectory, but the K=3 crawl Phase B always adds displaces the center ~1.2u of
+      perp on the 97m -- the "razor-close" brackets were razor-close for a family Phase B never
+      evaluated, which is where the cloud's median ~1.9u perp spread actually came from; (2) the
+      rounded-column perp score ranked candidates 3-12u of along away from any real dust at the top
+      (dcol 1e-5 with d_true 3.0). `m2s` is the crawl partial-magnitude family (README knobs; None =
+      the full derived msd family, distinct delivered sticks): each m2 is a fresh independent center
+      family, and the ranking now sees every family's real landing.
+    Phase B (nudge): for each kept (bracket, m2), byte-NUDGE the 3rd crawl frame over a +-`nudge`
+      grid; test the EXACT genuine_clip + clear at spF@A==17, facing==seam.F.
     Phase C (walled confirm): `wall_faithful` re-sim -- accept only cuts whose approach reaches `old` past
       the wall (dead-end #3). Rank by the perp sliver margin (delivery robustness). Records to HITS_PATH
       (same schema as `search`, carrying the explicit `start`/`moves`/`A_proj`/`dtm_seed`) for `deliver`.
-    Phase B2 (fine drill, session 56 -- the freeze-solver drill in the focused path): the nudge cloud's
-      perp spread is ~units (a 97m diagnostic: median 1.86u to the nearest genuine column), so Phase B's
-      yield is its few nearest-to-column candidates, not its bulk. B2 ranks every fired near-miss by perp
-      distance to a genuine column and extends the nearest ones with one documented 1-frame
-      partial-magnitude FINE (`fine_family` -- discrete small perp steps + dense along fill, the knob
-      class that threaded the original kaze razor), tested exactly, until the budget.
+    Phase B2 (fine drill, session 56; ranking fixed session 57): extends the near-misses nearest to
+      REAL dust (TRUE 2D distance, not the rounded-column score) with one documented 1-frame
+      partial-magnitude FINE (`fine_family`), tested exactly, until the budget. NOTE the session-57
+      measurement: a fine is NOT a local refiner in the roll form (children land median ~3.5u of along
+      from the parent -- the same chaotic propagation as the nudge), so B2 is extra independent draws
+      around good families, not a last-mile closer.
 
     Every knob is derived or a documented physical regime (NUDGE_SPMAX, the octagon-interior magnitude
     0.66, the general symmetric arc span, the geometry-derived genuine-perp target) -- no per-seam tuned
@@ -554,43 +632,31 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
     c3raw = stick_for_bearing(seam.F, _cs, c3m)       # octagon-interior mid-magnitude nudge base
     #                                                   (c3m: the documented msd family 0.52..0.889 --
     #                                                   a different base = a fresh independent lattice)
+    c30 = C.dtm_stick(c3raw)
     r0 = run(anchor, [], dtm_seed=dtm_seed, seam=seam)
     A_projs = _derive_a_projs(anchor, seam, dtm_seed, r0)
+    dP, dA = _dust2d(seam)                            # exact 2D dust cloud (disk-cached per seam)
     gperps = _genuine_perps(seam)
 
-    def score(old):                                   # nearness of old's perp to a genuine column
-        po = seam.perp(old)
-        return min((abs(po - g) for g in gperps), default=abs(po))
+    def score(old):                                   # TRUE 2D distance to the exact dust cloud
+        if not dP:                                    # dust-free seam: legacy perp-column fallback
+            return abs(seam.perp(old))
+        return _dust_dist(dP, dA, seam.along(old), seam.perp(old))
+
+    # m2 crawl family: full + every DISTINCT delivered partial over the documented msd knob band
+    # (see the docstring; dedup by delivered stick, so the family size is octagon-derived).
+    m2fam, _seen2 = [], set()
+    for m in ([1.0] + [j / 1000.0 for j in range(960, 519, -40)] if m2s is None else m2s):
+        stk = full if m >= 1.0 else C.dtm_stick(stick_for_bearing(seam.F, _cs, m))
+        if stk not in _seen2:
+            _seen2.add(stk)
+            m2fam.append((m, stk))
 
     if verbose:
-        print('focused: %d genuine perp cols in band [%s]; A_projs=%s (%.0fs)' % (
-              len(gperps), ('%.3f..%.3f' % (gperps[0], gperps[-1])) if gperps else '-',
+        print('focused: %d exact dust pts (%d perp cols); m2 family %d; A_projs=%s (%.0fs)' % (
+              len(dP), len(gperps), len(m2fam),
               [round(a, 1) for a in A_projs[:8]], time.time() - t0), flush=True)
 
-    # --- Phase A: arc gross-perp brackets, ranked by nearest genuine perp column ---
-    brackets, n_arc, hints = [], 0, {}
-    for off in range(-off_span, off_span + 1, off_step):
-        if off == 0:
-            continue
-        arc = C.dtm_stick(stick_for_bearing((seam.F + off) & 0xFFFF, _cs, 1.0))
-        for dur in (2, 3, 4, 5):
-            for lead in (4, 5, 6, 7):
-                for A in A_projs[:6]:
-                    n_arc += 1
-                    r = run(anchor, [(lead, arc, dur)], A_proj=A, dtm_seed=dtm_seed, seam=seam,
-                            cross_hint=hints.get(A))
-                    if not (r and r.get('fired') and r.get('old') and r.get('spF_at_A') == 17.0):
-                        continue
-                    hints[A] = r.get('cross')
-                    brackets.append((score(r['old']), off, dur, lead, A))
-    brackets.sort(key=lambda b: b[0])
-    brackets = brackets[:kbr]
-    if verbose:
-        print('Phase A: %d arcs -> %d brackets, best score=%.5f (%.0fs)' % (
-              n_arc, len(brackets), brackets[0][0] if brackets else -1,
-              time.time() - t0), flush=True)
-
-    # --- Phase B + C: low-speed byte-nudge densifier on each bracket ---
     hits, seen = [], set()
     pool = None
     if procs is None:
@@ -602,7 +668,7 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
                                    initargs=(anchor, (seam.geo, seam.csangle, seam.roll_speedf,
                                                       seam.aim_deg), dtm_seed))
         if verbose:
-            print('Phase B: %d workers' % procs, flush=True)
+            print('workers: %d' % procs, flush=True)
     else:
         global _PB
         _PB = (anchor, seam, int(dtm_seed))          # serial path: _pb_eval reads the same global
@@ -624,13 +690,11 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
     def _c3(dx, dz):
         return C.dtm_stick((min(254, max(1, c3raw[0] + dx)), min(254, max(1, c3raw[1] + dz))))
 
-    def _dcol(old):
-        po = seam.perp(old)
-        return min((abs(po - g) for g in gperps), default=abs(po))
+    near = []                     # fired non-hits: (d_true, moves, A, start, tag, cross)
 
     def _sweep(jobs, tags):
         """Evaluate exact candidate jobs (pooled or serial), routing full hits through _accept and
-        collecting fired near-misses into `near` (ranked later for the Phase-B2 fine drill)."""
+        collecting fired near-misses into `near` (ranked by TRUE dust distance for Phase B2)."""
         if pool is not None:
             results = pool.map(_pb_eval, jobs, chunksize=max(1, len(jobs) // (procs * 4)))
         else:
@@ -638,42 +702,75 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
         for job, tag, r in zip(jobs, tags, results):
             if r is None:
                 continue
-            if isinstance(r, tuple):                    # ('near', old_x, old_z)
-                near.append((_dcol((r[1], r[2])), job[0], job[1], job[2], tag))
+            if isinstance(r, tuple):                    # ('near', old_x, old_z, cross)
+                near.append((score((r[1], r[2])), job[0], job[1], job[2], tag, r[3]))
                 continue
             _accept(r, tag, list(job[0]), job[1], job[2])
 
-    near = []
     try:
-        # --- Phase B proper: the c3 byte-nudge grid per (bracket, m2) ---
-        for (pr0, off, dur, lead, A) in brackets:
+        # --- Phase A': crawl-included centers (arc x A_proj x m2), ranked by TRUE dust distance ---
+        n_ctr = 0
+        ctrs = []                 # fired centers: (d_true, off, moves, A, start, tag, cross)
+        for off in [o for o in range(-off_span, off_span + 1, off_step) if o != 0]:
             if time.time() - t0 > budget or len(hits) >= want:
                 break
             arc = C.dtm_stick(stick_for_bearing((seam.F + off) & 0xFFFF, _cs, 1.0))
-            arcmv = (lead, arc, dur)
-            for m2 in m2s:
-                if time.time() - t0 > budget or len(hits) >= want:
-                    break
-                f2 = full if m2 >= 1.0 else C.dtm_stick(stick_for_bearing(seam.F, _cs, m2))
-                # One serial center run measures the grid's shared cross (the fixpoint hint);
-                # the sweep then evaluates the full grid exactly (same run + gates either path).
-                rc = run(anchor, [arcmv], A_proj=A, start=(full, f2, _c3(0, 0)),
-                         dtm_seed=dtm_seed, seam=seam)
-                hint = rc.get('cross') if rc else None
-                jobs, tags = [], []
-                for dx in range(-nudge, nudge + 1):
-                    for dz in range(-nudge, nudge + 1):
-                        jobs.append(((arcmv,), A, (full, f2, _c3(dx, dz)), hint))
-                        tags.append('off=%+d dur=%d lead=%d m2=%.2f nudge=(%+d,%+d)'
-                                    % (off, dur, lead, m2, dx, dz))
-                _sweep(jobs, tags)
-        # --- Phase B2: fine drill on the nearest-to-column near-misses (the freeze-solver drill
-        # pattern; rationale + the cloud-spread finding in the solve_focused docstring).
+            jobs, tags = [], []
+            for dur in (2, 3, 4, 5):
+                for lead in (4, 5, 6, 7):
+                    for A in A_projs[:6]:
+                        for (m2, f2) in m2fam:
+                            jobs.append((((lead, arc, dur),), A, (full, f2, c30), None))
+                            tags.append('off=%+d dur=%d lead=%d m2=%.2f center' % (off, dur, lead, m2))
+            n_ctr += len(jobs)
+            mark = len(near)
+            _sweep(jobs, tags)
+            ctrs += [(x[0], off) + x[1:] for x in near[mark:]]
+        ctrs.sort(key=lambda x: x[0])
+        # ROUND-ROBIN across arc families, best-d_true first within each (greedy over-concentrates;
+        # rationale in the docstring Phase-A' paragraph + dead-end #41).
+        fams, fam_order = {}, []
+        for x in ctrs:
+            if x[1] not in fams:
+                fams[x[1]] = []
+                fam_order.append(x[1])
+            fams[x[1]].append(x)
+        brackets = []
+        while len(brackets) < min(kbr, len(ctrs)) and any(fams.values()):
+            for off in fam_order:
+                if fams[off]:
+                    brackets.append(fams[off].pop(0))
+        if verbose:
+            print("Phase A': %d crawl-included centers -> %d fired (%d arc families), "
+                  "best d_true=%.5f (%.0fs)" % (n_ctr, len(ctrs), len(fam_order),
+                  ctrs[0][0] if ctrs else -1, time.time() - t0), flush=True)
+
+        # --- Phase B + C: the c3 byte-nudge grid per kept (bracket, m2) center ---
+        for (d0, off, moves0, A, start0, tag0, cross) in brackets:
+            if time.time() - t0 > budget or len(hits) >= want:
+                break
+            f2 = start0[1]
+            jobs, tags = [], []
+            for dx in range(-nudge, nudge + 1):
+                for dz in range(-nudge, nudge + 1):
+                    if dx == 0 and dz == 0:
+                        continue                       # the center itself ran in Phase A'
+                    jobs.append((tuple(moves0), A, (full, f2, _c3(dx, dz)), cross))
+                    tags.append('%s nudge=(%+d,%+d)' % (tag0.replace(' center', ''), dx, dz))
+            _sweep(jobs, tags)
+        if verbose:
+            nb = sum(1 for x in near if x[0] < 0.02)
+            print('Phase B: %d fired candidates, near-band(d_true<0.02)=%d, best d_true=%.5f (%.0fs)'
+                  % (len(near), nb, min((x[0] for x in near), default=-1), time.time() - t0),
+                  flush=True)
+
+        # --- Phase B2: fine drill on the near-misses nearest to REAL dust (fines are chaotic --
+        # extra independent draws around good families, not a last-mile closer; see docstring). ---
         if len(hits) < want and time.time() - t0 < budget:
             fam = fine_family(anchor, seam=seam)
             keepers = sorted(near, key=lambda x: x[0])   # snapshot: _sweep keeps appending to near
             n_drill = 0
-            for dcol0, moves0, A, start0, tag0 in keepers:
+            for dtrue0, moves0, A, start0, tag0, _cross in keepers:
                 if time.time() - t0 > budget or len(hits) >= want:
                     break
                 used = set()
@@ -689,7 +786,7 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
                 _sweep(jobs, tags)
                 n_drill += 1
             if verbose:
-                print('Phase B2: drilled %d near-misses (best dcol=%.6f) of %d (%.0fs)' % (
+                print('Phase B2: drilled %d near-misses (best d_true=%.6f) of %d (%.0fs)' % (
                       n_drill, keepers[0][0] if keepers else -1, len(keepers), time.time() - t0),
                       flush=True)
     finally:
@@ -738,7 +835,7 @@ if __name__ == '__main__':
         seam = SeamGeo(geo, load_seed(anchor)['csangle']) if geo else _KAZE_SEAM
         solve_focused(anchor, seam, dtm_seed=int(o.get('seed', 0)),
                       procs=(int(o['procs']) if 'procs' in o else None),
-                      budget=float(o.get('budget', 110.0)),
+                      budget=float(o.get('budget', 110.0)), c3m=float(o.get('c3m', 0.66)),
                       nudge=int(o.get('nudge', 10)), kbr=int(o.get('kbr', 40)))
     else:
         search(anchor, do_drill=('drill' in sys.argv))

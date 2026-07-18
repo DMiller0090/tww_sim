@@ -891,6 +891,43 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
     (bit-identical, `tests/test_solver_fastpose.py` + a full-grid pool-vs-serial mirror A/B finding
     the same single hit); it is necessary, just not sufficient here.
 
+## The B2 fine drill as a last-mile closer; rounded-column ranking; crawl-less Phase-A ranking (session 57)
+
+41. **The Phase-B2 fine drill can NEVER "close a last ~1e-3" on a chaotic-lattice seam -- a fine is
+    a fresh cloud resample, not a local refiner.** Measured (scratch mini-B2: the 200 near-misses
+    TRULY nearest to real dust x all 150 fines = 19,230 exact candidates, 0 genuine): a 1-frame
+    partial-magnitude fine displaces `old` by median ~3.5u ALONG / ~0.33u perp -- the same chaotic
+    propagation as the c3 byte-nudge. So ranking B2 better cannot make it a closer; it is only more
+    independent draws around good families. Two REAL bugs the same measurement exposed, both FIXED
+    (session 57, `solve_focused` restructure -- this is the overturn of how s55/s56 read the search):
+    - **`_dcol` ranked against a 1e-3-ROUNDED perp-column set with no along term**: the s56 drill's
+      top keepers sat 3-12u of along from ANY real dust (dcol=1e-5 with true distance 3.0; top-40
+      overlap with the true ranking 8/40) -- the drill budget was spent on phantoms. Fixed by the
+      EXACT sliver point cloud (`_dust2d`, 0.005 along x 2e-5 perp over the column band, disk-cached
+      ~30s/seam) + `_dust_dist` (perp x200, the legacy drill weighting).
+    - **Phase A ranked the CRAWL-LESS arc trajectory while Phase B always added the K=3 crawl**,
+      which displaces the center ~1.15u of perp on the 97m (the m2 magnitude family spans centers
+      -1.15..-3.2 smoothly -- a usable steering knob, not chaos). The s56 "cloud sprays median 1.86u
+      around a razor-close center" mystery was THIS: the razor-close score belonged to a family
+      Phase B never evaluated. Fixed: Phase A' ranks crawl-INCLUDED centers (arc x A_proj x the full
+      derived m2 family, pooled) by true 2D dust distance; Phase B nudges the kept (bracket, m2).
+    Result on the 97m: near-band yield (fired candidates with d_true < 0.02) went 0 -> ~4.5 per
+    110s draw, best child d_true 0.00121 -- but 4 knob-varied draws (crawl slot 0/1 x c3m 0.66/0.72,
+    kbr=300; ~474k exact candidates) still found 0 genuine. At this sliver thinness (~0.026-weighted
+    x ~0.001u rectangles) the expected hit rate is ~0.2-0.4 per draw: the restructure closes the
+    structural waste, and delivery needs a handful more independent draw families -- or the denser
+    corner -- not a different mechanism. Do NOT re-add an along-blind or rounded ranking, and do not
+    expect B2 to refine.
+    THIRD lesson (same session): pure ranked-GREEDY bracket consumption is ALSO wrong -- it lost the
+    152 re-solve (its winning family's crawl-included center sits 0.28u of perp off-band, d_true 56,
+    buried below the top-40 cutoff; the old crawl-less ranking had reached it by accident). A center
+    point is noise at the cloud's ~1-2u chaotic scale, so a DENSE seam is priced by family BREADTH,
+    a THIN seam by nearest-band-first order. The shipped consumption is ROUND-ROBIN across arc
+    families (families ordered by best center, each off's best m2 first), which serves both: 152
+    re-solves with 3 clips in 111s (old structure: 1 in 80s), mirror 2 in 112s (was 1 in 85s), all
+    5 via B2 fines -- the drill earns its budget on dense seams as extra draws around good families
+    even though it cannot refine.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.
