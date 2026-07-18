@@ -295,11 +295,99 @@ def mint_online(name, geo_path, d2s=580.0, base='kaze_r11_rollstab_idle13@twwgz'
     return seed
 
 
+def cam_screen(geo_path, targets=None, d2s=580.0, settle_est=420.0, nwalk=40,
+               base='kaze_r11_rollstab_idle13@twwgz'):
+    """Screen candidate pan `target_csangle`s for a novel seam BEFORE minting (session 60).
+
+    Some approach corridors carry a FIXED cam-trigger band (kaze r11 seam824: csangle dips ~-300
+    s16 over d2S ~588..384 and recovers -- ROAD-triggered, verified by a shifted-start walk), and
+    whether it fires depends on the CAM's track, i.e. on the frozen csangle the pan leaves. The
+    default aim-derived target can be the one track that clips the trigger while every other
+    candidate stays frozen. This probe replicates mint_novel's pre-mint sequence per target
+    (teleport-park -> C-stick pan -> settle-walk until csangle freezes -> idle), then walks the
+    corridor `nwalk` frames and reports any csangle deviation from the rest value. Pick a FROZEN
+    target whose rest lands nearest d2s and pass it as `mint_online(target_csangle=)` -- the value
+    is measured per seam, never tuned. Returns [(target, rest_cs, rest_d2S, deviations)]."""
+    from harness.rollstab.rest import dtm_stick
+    from tww_sim.land.plan_land import stick_for_bearing
+    from tww_sim.core.mathlib import deg_to_s16
+    import math
+    ENV.ensure_running()
+    geo = json.load(open(geo_path))
+    aim_deg = geo.get('aim_deg', geo['bisector_deg'])
+    ar = math.radians(float(aim_deg) % 360.0)
+    dx, dz = math.sin(ar), math.cos(ar)
+    Sx, Sz = geo['S'][0], geo['S'][2]
+    F = deg_to_s16(float(aim_deg) % 360.0)
+    park_x = Sx - (d2s + settle_est) * dx
+    park_z = Sz - (d2s + settle_est) * dz
+    if targets is None:
+        targets = [(F + off) & 0xFFFF for off in (0, -8000, 8000, -16384, 16384)]
+    src = os.path.join(ANCHOR_DIR, base + '.sav')
+    h, m = D.attach()
+
+    def cs():
+        return D.read_named(h, m, 'csangle') & 0xFFFF
+
+    out = []
+    for target in targets:
+        _load_paused(src)
+        D.cmd_teleport(['x=%r' % park_x, 'y=%r' % geo['link_y'], 'z=%r' % park_z,
+                        'facing=%d' % F, 'frames=2'])
+        time.sleep(0.3)
+        for _ in range(80):                       # mint_novel's pan loop
+            if abs(_sdiff(target, cs())) < 800:
+                break
+            sub = 255 if _sdiff(target, cs()) > 0 else 0
+            D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': sub,
+                                                 'substickY': 128, 'buttons': 0, 'frames': 1})
+            time.sleep(0.02)
+        walked, prev = 0, None                    # settle-until-frozen (chunked, ledger #42)
+        while walked < 42:
+            c0 = cs()
+            if prev is not None and c0 == prev:
+                break
+            prev = c0
+            sx, sy = dtm_stick(stick_for_bearing(F, c0, 1.0))
+            D.control_pipe_quiet('advancewith', {'stickX': sx, 'stickY': sy, 'substickX': 128,
+                                                 'substickY': 0, 'buttons': 0, 'frames': 7})
+            walked += 7
+            time.sleep(0.08)
+        D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128,
+                                             'substickY': 0, 'buttons': 0, 'frames': 20})
+        time.sleep(0.3)
+        rest_cs = cs()
+        x = D.read_named(h, m, 'link_x')
+        z = D.read_named(h, m, 'link_z')
+        rest_d2S = math.hypot(x - Sx, z - Sz)
+        dev = []
+        for _k in range(nwalk):                   # corridor walk: any csangle motion = trigger hit
+            sx, sy = dtm_stick(stick_for_bearing(F, cs(), 1.0))
+            D.control_pipe_quiet('advancewith', {'stickX': sx, 'stickY': sy, 'substickX': 128,
+                                                 'substickY': 0, 'buttons': 0, 'frames': 1})
+            time.sleep(0.04)
+            x = D.read_named(h, m, 'link_x')
+            z = D.read_named(h, m, 'link_z')
+            c1 = cs()
+            if c1 != rest_cs:
+                dev.append((round(math.hypot(x - Sx, z - Sz)), c1))
+        print('cam_screen target=%5d  rest_cs=%5d  rest_d2S=%.1f  frozen=%s  dev=%s' % (
+              target, rest_cs, rest_d2S, 'YES' if not dev else 'no', dev[:8] or '-'), flush=True)
+        out.append((target, rest_cs, rest_d2S, dev))
+    return out
+
+
 if __name__ == '__main__':
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
-    if 'online' in o:                     # on-line pan mint for a NOVEL seam (session-54 procedure)
+    if 'camscreen' in o:                  # screen pan targets for a novel seam (session-60 procedure)
+        cam_screen(o['camscreen'], d2s=float(o.get('d2s', 580.0)),
+                   settle_est=float(o.get('settle_est', 420.0)),
+                   base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
+    elif 'online' in o:                   # on-line pan mint for a NOVEL seam (session-54 procedure)
         mint_online(o['online'], o['geo'], d2s=float(o.get('d2s', 580.0)),
                     max_iter=int(o.get('max_iter', 3)),
+                    settle_est=float(o.get('settle_est', 160.0)),
+                    target_csangle=(int(o['target_csangle'], 0) if 'target_csangle' in o else None),
                     base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
     elif 'novel' in o:                    # camera-behind mint for a NOVEL seam (session-50 procedure)
         mint_novel(o['novel'], float(o['x']), float(o['z']), int(o['facing'], 0),

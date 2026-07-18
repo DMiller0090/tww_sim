@@ -168,6 +168,7 @@ def main(anchor, seam=None, dtm_seed=1):
         for kk, off in (('d_frame', 0x2F64), ('w_frame', 0x2F78), ('d_rate', 0x2F60),
                         ('m3598', 0x34C0), ('m359C', 0x34C4), ('m35B4', 0x34DC)):
             d[kk] = struct.unpack('>f', D.read_bytes(h, m, Pp + off, 4))[0]
+        d['csangle'] = D.read_named(h, m, 'csangle') & 0xFFFF
         return d
     R._read_frame = rich
 
@@ -187,7 +188,8 @@ def main(anchor, seam=None, dtm_seed=1):
                               facing=f['facing'] & 0xFFFF, proc=f['proc'],
                               d_frame=f.get('d_frame'), w_frame=f.get('w_frame'),
                               d_rate=f.get('d_rate'), m3598=f.get('m3598'),
-                              m359C=f.get('m359C'), m35B4=f.get('m35B4')) for f in frames])
+                              m359C=f.get('m359C'), m35B4=f.get('m35B4'),
+                              csangle=f.get('csangle')) for f in frames])
     os.makedirs(os.path.dirname(CALIB_PATH), exist_ok=True)
     json.dump(calib, open(CALIB_PATH, 'w'))
     print('wrote %s (%d frames)' % (CALIB_PATH, len(frames)), flush=True)

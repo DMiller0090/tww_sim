@@ -10,6 +10,7 @@ sim's predicted cut (kaze r11, idle13 anchor) and threaded the seam. Regression:
 findings (2026-07-17), and the session-58 room-wide density screen + 157-corner delivery
 (2026-07-18), `_notes/seam-clip-live-validation-handoff-*.md`;
 the session-59 152m delivery + band_dense screen caveat (2026-07-18);
+the session-60 824 delivery + floor/cam-track screen gaps (2026-07-18, dead-ends #43/#44);
 run protocol + model term list in `harness/rollstab/README.md`;
 collision model [`mechanics/collision.md`](../mechanics/collision.md) (CrrPos, Force25Bit);
 cut mechanics in [`mechanics/land-movement.md`](../mechanics/land-movement.md) (roll stab);
@@ -143,6 +144,20 @@ rows, **0.33u band**, corridor 1400u), went mint -> REST BIT-EXACT -> **2 wall-f
 one default 112s draw** -> live 0-ULP clean-DTM clip, same session -- while the 97m (84 samples,
 0.018u band) sat at 0 across ~15 cumulative draws. A WIDE perp band is the strongest single
 predictor: the chaotic crawl cloud lands near-band candidates cheaply when the band is ~0.3u.
+
+**Two screen gaps the 467/824 picks exposed (session 60) -- check both live before minting.**
+The screen's `corridor` measures WALL clearance along the aim line, NOT floor coverage: the
+467-corner read 1020u "clear" over a pit edge (floor ends d2S ~1050; parks beyond it fall OOB),
+and its settle needed the full 42-frame cap (~722u, csangle never froze), so park = rest(580) +
+settle had no floor -- unmintable (dead-end #43; settle travel is per-seam, budget the measured
+value). And an approach corridor can carry a fixed, ROAD-triggered camera-trigger band (the 824
+corner: csangle dips ~-300 s16 over d2S 588..384 and recovers) that fires or not depending on
+the CAM's track: the default aim-derived pan target was the one track that clipped it, while
+every probed alternate stayed frozen. Fix = `mint.cam_screen` (probe alternate `target_csangle`s
+at the park, pick a frozen one, pass `mint_online(target_csangle=)`) -- measured per seam, never
+tuned (dead-end #44). With it the 824 delivered in one default draw. Also learned there: the
+~580u rest envelope is mostly PHYSICS for the roll (A-press runway ~506u + cap walk ~74u), so a
+short-corridor seam is not fixable by a smaller A_proj.
 
 **Read the DENSE band, not the raw span (session 59).** The screen's `band` = full perp-column
 span, which a single outlier column inflates: the 152m (the 152's z-mirror, polys 465x474)

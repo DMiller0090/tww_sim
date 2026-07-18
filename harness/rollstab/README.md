@@ -76,13 +76,51 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-18, session 59)
+## Status (2026-07-18, session 60)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-18, session 59): ROADMAP Phase A step 1, first queued pick DELIVERED --
+> **CURRENT THREAD (2026-07-18, session 60): Phase A step 1's queue is CLOSED -- seam_0824_0826
+> ("824", S=(9689.1406, 123.4604), polys 824x826, interior 157.33) is DELIVERED LIVE 0-ULP (7th
+> seam; one default 112s draw, 2 wall-faithful clips, top margin 27; first shipped stream worked):
+> `old=(9731.271484375, 138.69970703125) -> new=(9684.986328125, 121.95780944824219)`, CUT_F then
+> OOB, drift (0,0). seam_0467_0468 is RULED unmintable (ledger #43: aim-line FLOOR ends d2S ~1050
+> while its settle needs ~722u -- park space is floor, and `seam_screen.corridor` only measures
+> wall clearance). Both picks were band_dense re-checked first (467: 0.031u honest; 824: 0.024u).**
+> - **The 824 needed a NEW screen + mint knob (ledger #44): its corridor carries a fixed,
+>   ROAD-triggered camera-trigger band (csangle dips ~-300 s16 over d2S 588..384 and recovers;
+>   proven road-triggered by a shifted-start probe) that fires only on the DEFAULT pan target's
+>   cam track.** Fix shipped first-class: `mint.cam_screen` (CLI `camscreen=<geo>`) probes
+>   alternate `target_csangle`s at the park and reports frozen-vs-deviating corridors; all four
+>   alternates (F+-8000/+-16384) stayed frozen. Minted with the screened 37512 (csangle 41530
+>   frozen) -> `mint_online` converged in 2 iters (rest d2S 580.0, baseline |old perp| 0.114) ->
+>   REST BIT-EXACT every row. `mint_online` CLI also gained `settle_est=`/`target_csangle=`
+>   (touch-list item 2 closed) and the rest verification calib now logs per-frame `csangle` (the
+>   diagnostic that found the band).
+> - **ROADMAP step-3 correction (from the 467/824 measurements): the ~580u rest envelope is
+>   mostly PHYSICS for the standard roll** -- the A press fires ~506u out (derived A_projs ~-507,
+>   roll travel A->cut ~463u) + ~74u cap walk -- so step 3's exit "a ~300u-rest anchor solves"
+>   cannot be met by the roll path. Short-corridor/short-floor seams (163, 467) need a different
+>   technique (walk-stab tier? camera-in-the-loop?), not a smaller A_proj. Surfaced for re-scoping.
+> - **Locked live-data-backed:** anchor `kaze_r11_rollstab_seam824@twwgz` (seed tracked); goldens
+>   `fixtures/seam824_rest_golden.json` (REST BIT-EXACT) + `fixtures/seam824_roll_ship_golden.json`
+>   (the clean-DTM ship). Gates `tests/test_seam824_clip.py::test_seam824_rest_bitexact` +
+>   `test_seam824_clip_delivered` GREEN. Suite **392 passed, 1 skipped, 4 xfailed** (+2). NO
+>   `sim.py`/`land.py`/`solver.py` change (mint/rest tooling only), so the live regression and all
+>   shipped-hit recompositions are unaffected. seam467 geo kept (`fixtures/kaze_r11_seam467_geo.
+>   json`); its non-REST anchor deleted (163 precedent).
+>
+> **NEXT (Phase A step 2, the queue being closed): fold the touch-list into a one-shot
+> `novel_deliver`** -- now including the two session-60 screens (park-FLOOR probe; `cam_screen`
+> when REST diverges with the csangle-wobble signature -- or run it up front). Step 3 needs
+> RE-SCOPING with Dereck first (the envelope is physics; the honest unblockers for short seams
+> are the walk-stab tier or camera-in-the-loop). Then step 4 (second room). The 97m lottery keeps
+> running in spare cycles. Every other thread (proven/mirror/sheathed/152/157/152m/824 clips DONE,
+> walk-stab, Tetra push-aside/turnaround STANDALONE, 97+493 push-steer-only) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-18, session 59): ROADMAP Phase A step 1, first queued pick DELIVERED --
 > the 152m corner (the 152's z-mirror, S=(10555.1904, -190.6696), polys 465x474, interior 151.68)
 > went make_seam_geo -> `mint_online` -> REST BIT-EXACT (28+ rows) -> `solve_focused` **6
 > wall-faithful clips in one c3m=0.78 111s draw** (top margin 8) -> **LIVE 0-ULP clean-DTM clip at

@@ -952,6 +952,41 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
       (clamped; 1:1 on the first step) -- `mint_online` then converged in 1-2 iterations at both
       corners tried.
 
+## Park space is FLOOR, not wall clearance; the default pan target can be the one bad cam track (session 60)
+
+43. **seam_0467_0468 (kaze r11, S=(10762.53,-273.26), n=2285): NOT mintable by the current
+    pipeline -- the aim-line FLOOR ends at d2S ~1050-1100 while this seam's settle needs the full
+    42-frame cap (~722u, csangle never froze), so park = d2s(580) + settle(~720) ~ 1300u has no
+    floor.** Parks beyond d2S~1050 teleport-slide off the edge and Link falls OOB (live-probed:
+    FLOOR at d=1050, OFF-FLOOR at 1100+); reachable parks give rest d2S <= ~340, under the roll's
+    rest envelope, so the baseline never fires (the s59 mint_online guard correctly refuses). Two
+    lessons: (a) `seam_screen.py`'s `corridor` measures WALL clearance along the aim line, NOT
+    floor coverage -- it read 1020 "clear" over a pit edge; screen the park FLOOR (live teleport
+    probe, or the ground mesh) before minting. (b) The settle travel is per-seam (~324u at the
+    824 corner vs ~722+ here, cam never frozen at the cap) -- park space must budget the MEASURED
+    settle, not a constant. Geo kept: `fixtures/kaze_r11_seam467_geo.json` (the seam itself is
+    dense, n=2285/0.031u band, and stays a candidate for a shorter-envelope solver -- but note the
+    roll's ~580u rest floor is mostly PHYSICS: A-press runway ~506u + cap walk ~74u, see #44).
+
+44. **Minting seam_0824_0826 at the DEFAULT aim-derived pan target: REST diverges at the first
+    aim row -- the approach corridor carries a FIXED, ROAD-triggered camera-trigger band, and
+    whether it fires depends on which cam track the pan leaves.** At the default target (aim
+    45542 -> frozen csangle 50266) the verification walk's csangle dips ~-300 s16 over d2S
+    ~588..384 and RECOVERS to exactly 50266 (facing tracks it one frame behind; same stick bytes
+    all stream) -- not the monotone #42 leash creep, and not a per-walk pull (the five delivered
+    anchors' verifications never wobble). Road-trigger proven by a shifted-start probe: a walk
+    started 150u further along wobbles at the SAME WORLD band and re-freezes at the same x~10050.
+    **Fix (shipped, `mint.cam_screen`): screen alternate `target_csangle` pan targets at the park
+    -- all four probed alternates (F +-8000, +-16384) stayed FROZEN through the whole corridor --
+    and mint with a frozen one (`mint_online(target_csangle=)`; here 37512 -> csangle 41530).**
+    The value is measured per seam (a mint-time live screen, like the mint itself), never tuned.
+    With it the 824 anchor minted at rest d2S 580.0, REST BIT-EXACT, and the clip DELIVERED live
+    0-ULP in one default draw. Corollary noted for ROADMAP step 3: the ~580u rest envelope is
+    mostly irreducible for the STANDARD roll -- the A press fires ~506u out (derived A_projs
+    ~-507; roll travel A->cut ~463u) plus ~74u of cap walk -- so "a ~300u-rest anchor solves"
+    cannot be met by the roll path; short-corridor seams need a different technique (walk-stab
+    tier) or camera-in-the-loop, not a smaller A_proj.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.
