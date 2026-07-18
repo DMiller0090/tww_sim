@@ -115,14 +115,16 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   change; `solver.py` changed ONLY additively (`m2s`/`c3m` params, m2=1.0-first order preserves the
 >   original lattice per bracket), all seam-param/bands/mirror/152 gates green.
 >
-> **NEXT (Dereck's pick -- the scaling paths for thin-dust seams, #39):** (a) run() THROUGHPUT: ~4ms
-> per candidate caps a 2-min draw at ~28k; a faster from-rest walk (native core under the rest-exact
-> foot) multiplies search density directly and honors the budget rule; (b) bracket DIVERSITY: a
-> walkstab-style K=2-crawl Phase A (today's Phase A is deterministic -- every draw hangs off the same
-> 40 bracket centers); (c) pick a DENSER novel corner instead (74 clippable in the room scan; screen
-> dust density first -- the new strategy-page rule). Every other thread (proven/mirror/sheathed/152
-> clips DONE, walk-stab, Tetra push-aside/turnaround STANDALONE, 97-corner +493 push-steer-only)
-> UNCHANGED.
+> **NEXT (DECIDED -- Dereck picked run() THROUGHPUT, end of s55):** make the from-rest candidate sim
+> faster so a 2-minute `solve_focused` draw covers ~4x+ more candidates (~4ms/candidate caps a draw at
+> ~28k today; the 97m needs ~4x the mirror's density). Profile run() first; any speedup must be
+> BIT-IDENTICAL (the rest blend / turn lean / deferred draw live on the Python foot -- that is WHY
+> `rest_state` is foot_native=False; gate = shipped kaze/mirror/152 hits recompose byte-identical + a
+> fast-vs-slow A/B on candidate streams). Then re-run the 97m draws (anchor + REST golden are READY,
+> nothing to re-mint) -> deliver -> flip `test_seam97m_clip_delivered` GREEN. Deferred alternatives:
+> K=2-crawl Phase-A diversity; a denser corner (screen dust density first). Every other thread
+> (proven/mirror/sheathed/152 clips DONE, walk-stab, Tetra push-aside/turnaround STANDALONE, 97-corner
+> +493 push-steer-only) UNCHANGED.
 
 > **PRIOR THREAD (2026-07-17, session 54): a SECOND novel corner is DELIVERED LIVE, 0-ULP, pure-sim --
 > the 152-deg corner S=(10555.1904, 190.6696) (interior 151.68, walls 840x845), picked by the session-53
