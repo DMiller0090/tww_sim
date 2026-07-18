@@ -1004,6 +1004,51 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
     With it the same seam minted at rest d2S 580.0, baseline |old perp| 0.001, REST BIT-EXACT,
     and delivered live 0-ULP.
 
+## Open-terrain rooms: the screen's link_y is not proof of a mintable corridor (session 62, second room)
+
+46. **Picking a second-room (flooded Hyrule) corner by density + corridor alone: three NEW floor
+    failure classes the kaze screen never saw, each ruled out live by `mint.floor_probe` ladders.**
+    Kaze r11's walls all stand on one flat floor, so `link_y` + wall-clearance `corridor` implied a
+    mintable approach; open terrain breaks that three ways. (a) **SLOPED approach**: the top screen
+    pick seam_0185_0193 (n=70098, band 0.059u, corridor 1400) has walkable floor the whole way --
+    but it RAMPS (y -15 -> -135 over d2S 580..1100; likewise the -1853 region: -1782 -> -1872),
+    and the rest model is flat-floor; REST can never hold. (b) **PHANTOM LEDGE**: seam_0202_0203's
+    walls' bottom verts sit at y 199.12 with NO ground at that height (Link probes fall to the 0.16
+    plain 199u below; walls based above Link's collision band are not even a barrier there) -- the
+    geo's `link_y` = the wall-bottom vertex, which proves nothing about standable ground. (c)
+    **OUTWARD MOUTHS on man-made floors**: all 8 castle-footing corners share a perfectly flat
+    link_y -1267.71, but every mouth opens OFF the structure (bisector parks land in voids at
+    y -2800..-5300); no aim keeps the ~1000u approach on the floor. Consequence: on a novel room,
+    floor-ladder the pick's aim line (`floor_probe` at 200..1100) BEFORE the cam screen, and treat
+    "FLOOR at every d" as necessary but not sufficient -- the ladder must also be FLAT (constant y
+    == link_y), since fall_tol accepts +-60u of slope. The one Hyrule corner that passes everything
+    (seam_2709_2919, ON the proven Tetra plain, grazing aim_deg=344 hugging the 300u flat strip
+    along wall 2919) is dust-THIN (band_dense 0.011-0.014u, near-band yield 0-4/draw): an honest
+    97m-class lottery, REST BIT-EXACT anchor ready.
+
+47. **Minting from a savestate where Link is at LOW HEALTH: the idle is ANM_WAITB ("breathing
+    heavily", `checkRestHPAnime`, d_a_player_main.cpp:3148 -- fires at life <= threshold), and the
+    WAIT(4) rest-blend model (steady WAITS + procWait per-frame re-init) does not cover it: REST
+    diverges at row 1 (live w ctrl frozen, then a 0-reset a few rows in).** The Tetra-session base
+    savestate had life=1 (all the OOB falls). Fix is mint-time SETUP, not modeling: heal Link
+    (write life @0x803B810B) in the base anchor (`hyrule_plain_base@twwgz` = healed
+    tetra_pushaside). Two mint hardenings shipped with it (both general, `mint.py`): (a)
+    `mint_novel` now PROBES for steady WAITS before minting (in the stop-transition tail the w
+    ctrl holds frozen across a 1-frame advance; idle in chunks until it moves -- the first Hyrule
+    mint's 20-frame settle_idle ended inside the stop anim: d_rate 0.6/0.4 vs steady 1.1); (b) a
+    healthy-WAITS anchor reads d_rate 1.1 -- if a fresh mint's seed shows a different idle rate,
+    suspect the idle arm before anything else.
+
+48. **Trusting run_dtm's per-frame log INSIDE the REST gate on a slower-loading stage: the log can
+    DOUBLE a row (the known [[run-dtm 1-frame jitter]]), and the index-aligned diff then fails
+    every row after the duplicate while live physics is bit-exact.** On Hyrule the verification
+    calib carried one byte-identical duplicate row (d frozen at 26.296 twice); logging the RAW PAD
+    per row (g_mDoCPd_cpadInfo[0]@0x80398308, the jitter-immune probe) proved the walk entry
+    structure matched kaze exactly. Fix shipped in the shared gate (`rest._dedup_log`): once
+    d_frame leaves the rest value every real frame advances d/w/pos (procWait re-inits the blend
+    each idle frame), so a byte-identical consecutive row is necessarily a log duplicate and is
+    dropped before the diff. Kaze captures (no duplicates) are unaffected.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

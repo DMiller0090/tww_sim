@@ -206,6 +206,20 @@ def mint_novel(name, rest_x, rest_z, facing, target_csangle, floor_y, base='kaze
     # stop + idle (C-down) to a clean WAITS rest at the frozen camera
     D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128, 'substickY': 0, 'buttons': 0, 'frames': settle_idle})
     time.sleep(0.3)
+    # ... and PROVE steady WAITS before minting: idle in chunks until a 1-frame advance moves the
+    # w ctrl (frozen = stop-transition tail, never REST bit-exact -- dead-end ledger #47).
+    Pp = _player(h, m)
+    for _probe in range(8):
+        w0 = _f32_at(h, m, Pp + 0x2F78)
+        D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128, 'substickY': 0, 'buttons': 0, 'frames': 1})
+        time.sleep(0.15)
+        if _f32_at(h, m, Pp + 0x2F78) != w0:
+            break
+        D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128, 'substickY': 0, 'buttons': 0, 'frames': 10})
+        time.sleep(0.2)
+    else:
+        print('mint_novel: WARNING idle never reached steady WAITS (w ctrl frozen after %d probes)'
+              % 8, flush=True)
     # NOTE do NOT teleport-to-rest after the settle: a teleport resets the cam-Link leash and the
     # next from-rest walk re-pulls the cam, so the settle must END at the rest spot (ledger #42).
     print('pre-mint: csangle=%d (target %d) state=%d' % (cs(), int(target_csangle) & 0xFFFF, D.read_named(h, m, 'link_state')), flush=True)

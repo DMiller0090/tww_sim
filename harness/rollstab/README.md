@@ -85,11 +85,51 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-18, session 61)
+## Status (2026-07-18, session 62)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+> **CURRENT THREAD (2026-07-18, session 62): ROADMAP Phase A step 4 (second room) -- the pipeline
+> is ROOM-AGNOSTIC and the from-rest model is BIT-EXACT OUTSIDE KAZE. Dereck picked step 4;
+> flooded Hyrule is the second room (its ordered wall mesh already existed from Phase C). The
+> `mesh=`/`prefix=`/`base=` knobs are threaded through `make_seam_geo`/`seam_screen`/
+> `novel_deliver` (geo fixtures now carry their mesh path; kaze defaults byte-identical), the
+> room screened 284 seams / 100 rows (`_generated/seam_screen_hyrule.json`), and the one
+> all-gates-green corner (seam_2709_2919, S=(-1744.197, 752.903), interior 107.4, ON the proven
+> Tetra plain, grazing `aim_deg=344` so the ~1200u corridor hugs wall 2919's 300u flat strip) went
+> floor -> cam (3/5 frozen, smallest settle 310) -> `mint_online` (2 iters, |old perp| 0.000, d2S
+> 580.0) -> **REST BIT-EXACT (first 0-ULP from-rest verification outside kaze r11)**. The CLIP is
+> NOT yet delivered: the corner's dust is 97m-class thin (band_dense 0.011-0.014u) and 8 documented
+> knob-family draws (4 one-shot + kbr=300 / c3m=0.84/0.90 / nudge=16, ~300k exact candidates,
+> near-band yield 0-4/draw, best d_true 0.00875) found 0 genuine -- an honest lottery with the
+> anchor + rest golden READY (`hyrule_rollstab_hseam2709@twwgz`, `fixtures/hseam2709_rest_golden.
+> json` auto-written).**
+> - **Three NEW mint-time blockers found + fixed/ruled live (ledger #46-#48):** (a) open terrain
+>   is mostly SLOPED -- floor-LADDER the aim line and require constant y (top pick seam_0185_0193
+>   n=70098 ramps -15..-135; the -1853 region likewise; castle-footing corners all open OFF their
+>   flat slab into voids); (b) a LOW-HP base savestate idles in ANM_WAITB (`checkRestHPAnime`,
+>   life=1 from the Tetra sessions' falls) which the rest blend does not model -- healed base
+>   `hyrule_plain_base@twwgz` + `mint_novel` now PROBES for steady WAITS (w ctrl moves on a
+>   1-frame advance; d_rate 1.1) before minting; (c) run_dtm's log DOUBLED a row inside the REST
+>   gate on this slower-loading stage -- proven physics-clean by reading the RAW PAD per row, and
+>   the shared gate now drops byte-identical consecutive rows (`rest._dedup_log`).
+> - **Locked live-data-backed:** anchor `hyrule_rollstab_hseam2709@twwgz` (seed tracked, healed
+>   base) + `fixtures/hseam2709_rest_golden.json` (REST BIT-EXACT, dedup 1 row). No per-seam clip
+>   test yet (nothing shipped); the solve stage FAILs honestly at 0 hits.
+> - **Step-4 exit judgment: the room-generalization is PROVEN through REST (mesh capture path,
+>   screen, floor/cam/mint recipes, DTM contract, from-rest model -- every kaze assumption
+>   removed); the "deliver one corner" tail is blocked on Hyrule's dust geometry, not on any
+>   room assumption.** Options: keep the hseam2709 lottery running in spare cycles (97m
+>   precedent), or capture a third room's mesh (a DUNGEON room with man-made flat floors screens
+>   better than open terrain -- the actual lesson of this room).
+>
+> **NEXT: Dereck's call -- (a) spare-cycle lottery draws on hseam2709 (anchor ready, ~2 min/draw
+> offline), (b) a third room with man-made floors (one `capture_walls.py` run + the same one-shot),
+> or (c) back to ROADMAP step 3 re-scope / step 5 (camera-in-the-loop). Every other thread
+> (proven/mirror/sheathed/152/157/152m/824/915 kaze clips DONE, walk-stab, Tetra push-aside/
+> turnaround STANDALONE, 97m lottery, 467/163 blocked) UNCHANGED.**
 
 > **CURRENT THREAD (2026-07-18, session 61): ROADMAP Phase A step 2 is DELIVERED -- the whole
 > touch-list is folded into the ONE-SHOT `novel_deliver.py` (10 gated stages: geo -> recheck ->

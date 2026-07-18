@@ -22,7 +22,8 @@ PICKING RULES (all three matter):
     at the ~580u rest (teleport-to-rest resets the cam leash -- dead-end #42), so the park needs
     d2s + settle of clear line.
 
-    python -m harness.rollstab.seam_screen [out=<json>]         # full screen (~10 min cold)
+    python -m harness.rollstab.seam_screen [out=<json>] [mesh=<walls_ordered.json>]
+        # full screen (~10 min cold on the kaze mesh; scales with poly count)
 """
 import os, sys, json, math, time
 
@@ -39,7 +40,13 @@ from tww_sim.core.fp import f32 as _F
 MESH = os.path.join(_rb, 'fixtures', 'kaze_r11_walls_ordered.json')
 OUT_DEFAULT = os.path.join(_rb, '_generated', 'seam_screen.json')
 
-# delivered / already-worked seams (S in XZ), excluded from a novel-target screen
+
+def _mesh_abs(mesh_path):
+    p = mesh_path.replace('\\', '/')
+    return p if os.path.isabs(mesh_path) else os.path.join(_rb, *p.split('/'))
+
+# delivered / already-worked KAZE-R11 seams (S in XZ), excluded from a novel-target screen --
+# applied only when the mesh's stage is kaze (a coincidental XZ match must not hide a candidate).
 KNOWN = [
     ('proven', 9069.9043, 259.1986), ('mirror', 9069.9043, -265.9138),
     ('152', 10555.1904, 190.6696), ('157', 9689.1406, -150.3137),
@@ -151,13 +158,14 @@ def recheck(geo):
         row.update(density_scan(seam, gp))
     else:
         row['n'] = 0
-    mesh = json.load(open(MESH))
+    mesh = json.load(open(_mesh_abs(geo.get('mesh') or MESH)))
     row['corridor'] = corridor_len(mesh['polys'], geo)
     return row
 
 
-def screen(out_path=OUT_DEFAULT, verbose=True):
-    mesh = json.load(open(MESH))
+def screen(out_path=OUT_DEFAULT, verbose=True, mesh_path=MESH):
+    mesh_path = _mesh_abs(mesh_path)
+    mesh = json.load(open(mesh_path))
     by = {p['poly']: p for p in mesh['polys']}
     region = [dict(poly=p['poly'], v=p['v'], n=p['n']) for p in mesh['polys']]
     xs = [v[0] for t in region for v in t['v']]
@@ -167,10 +175,11 @@ def screen(out_path=OUT_DEFAULT, verbose=True):
     if verbose:
         print('%d seams enumerated' % len(seams))
     out = []
+    known = KNOWN if mesh.get('stage', 'kaze') == 'kaze' else []
     import tempfile
     for s in seams:
         Sx, Sz = s['S'][0], s['S'][2]
-        if next((k for k, x, z in KNOWN if math.hypot(Sx - x, Sz - z) < 5.0), None):
+        if next((k for k, x, z in known if math.hypot(Sx - x, Sz - z) < 5.0), None):
             continue
         if s['coplanar'] or s['interior'] > MAX_INTERIOR or s['floor'] > REACH:
             continue
@@ -186,7 +195,7 @@ def screen(out_path=OUT_DEFAULT, verbose=True):
         try:
             with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as tf:
                 gpath = tf.name
-            geo = build(wallA_poly=wa, wallB_poly=wb, out=gpath)
+            geo = build(wallA_poly=wa, wallB_poly=wb, out=gpath, mesh_path=mesh_path)
             os.unlink(gpath)
             seam = SeamGeo(geo, deg_to_s16(geo.get('aim_deg', geo['bisector_deg'])))
             row = dict(name=name, polys=[wa, wb], S=[round(seam.S[0], 4), round(seam.S[1], 4)],
@@ -214,4 +223,4 @@ def screen(out_path=OUT_DEFAULT, verbose=True):
 
 if __name__ == '__main__':
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
-    screen(out_path=o.get('out', OUT_DEFAULT))
+    screen(out_path=o.get('out', OUT_DEFAULT), mesh_path=o.get('mesh', MESH))

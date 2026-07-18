@@ -22,6 +22,7 @@ extends +z, away from the into-corner roll dir, so the roll exits both finite wa
 
     python -m harness.rollstab.make_seam_geo               # regenerate the default (mirror) fixture
     python -m harness.rollstab.make_seam_geo wallA=871 wallB=899 out=<path>   # the ruled-out 97-deg corner
+    python -m harness.rollstab.make_seam_geo mesh=fixtures/<room>_walls_ordered.json wallA=.. wallB=..
 """
 import os, sys, json, math
 
@@ -44,8 +45,11 @@ def _tri(p):
     return dict(poly=p['poly'], v=p['v'], n=p['n'], d=p['d'])
 
 
-def build(wallA_poly=WALLA_POLY, wallB_poly=WALLB_POLY, out=OUT_DEFAULT):
-    mesh = json.load(open(MESH))
+def build(wallA_poly=WALLA_POLY, wallB_poly=WALLB_POLY, out=OUT_DEFAULT, mesh_path=MESH):
+    if not os.path.isabs(mesh_path):
+        mesh_path = os.path.join(_rb, *mesh_path.replace('\\', '/').split('/'))
+    mesh_rel = os.path.relpath(mesh_path, _rb).replace('\\', '/')
+    mesh = json.load(open(mesh_path))
     by = {p['poly']: p for p in mesh['polys']}
     wallA, wallB = by[wallA_poly], by[wallB_poly]
 
@@ -84,10 +88,10 @@ def build(wallA_poly=WALLA_POLY, wallB_poly=WALLB_POLY, out=OUT_DEFAULT):
             tris.append(_tri(p))
 
     out_geo = dict(
-        stage=mesh.get('stage', 'kaze'), room=11,
-        source='fixtures/kaze_r11_walls_ordered.json (block-grid ordered DZB mesh); '
+        stage=mesh.get('stage', 'kaze'), room=mesh.get('room'), mesh=mesh_rel,
+        source='%s (block-grid ordered DZB mesh); '
                'walls %d x %d; barrier auto-gathered (GATHER_R=%.0f, band-overlap, ordered)'
-               % (wallA_poly, wallB_poly, GATHER_R),
+               % (mesh_rel, wallA_poly, wallB_poly, GATHER_R),
         S=list(S), interior=round(interior, 3), bisector_deg=bis_deg, link_y=link_y,
         wallA=_tri(wallA), wallB=_tri(wallB),
         barrier=tris, tris=tris)
@@ -105,4 +109,5 @@ if __name__ == '__main__':
     kw = dict(a.split('=', 1) for a in sys.argv[1:] if '=' in a)
     build(wallA_poly=int(kw.get('wallA', WALLA_POLY)),
           wallB_poly=int(kw.get('wallB', WALLB_POLY)),
-          out=kw.get('out', OUT_DEFAULT))
+          out=kw.get('out', OUT_DEFAULT),
+          mesh_path=kw.get('mesh', MESH))

@@ -24,6 +24,13 @@ Run from the repo root (fixture/golden paths are stored repo-relative):
 
     python -m harness.rollstab.novel_deliver wallA=<pid> wallB=<pid> [name=seam<pid>]
         [aim_deg=<deg>] [d2s=580] [budget=110] [start=<stage>] [stop=<stage>]
+        [mesh=<walls_ordered.json>] [prefix=kaze_r11] [base=<mint base anchor>]
+
+Second-room knobs (ROADMAP Phase A step 4): `mesh=` names the room's block-grid ordered wall
+mesh (capture_walls.py), `prefix=` names the room in anchor/fixture/test paths (default
+kaze_r11), `base=` names the mint-base anchor savestate IN that room (the teleport source for
+floor/cam/mint -- any settled idle anchor in the stage works; mint_current re-captures the full
+seed). All three default to the kaze r11 values, byte-identical for every existing seam.
 """
 import os, sys, json, math, time
 
@@ -80,24 +87,29 @@ def _seam_for(geo, anchor=None):
     return SeamGeo(geo, deg_to_s16(geo.get('aim_deg', geo['bisector_deg'])))
 
 
+KAZE_BASE = 'kaze_r11_rollstab_idle13@twwgz'
+
+
 def deliver_novel(wallA, wallB, name=None, aim_deg=None, d2s=580.0, budget=110.0,
-                  start='geo', stop='test'):
+                  start='geo', stop='test', mesh=None, prefix='kaze_r11', base=KAZE_BASE):
     name = name or ('seam%d' % wallA)
-    anchor = 'kaze_r11_rollstab_%s@twwgz' % name
-    geo_rel = 'fixtures/kaze_r11_%s_geo.json' % name
+    anchor = '%s_rollstab_%s@twwgz' % (prefix, name)
+    geo_rel = 'fixtures/%s_%s_geo.json' % (prefix, name)
     geo_abs = os.path.join(_rb, *geo_rel.split('/'))
     rest_golden = os.path.join(_rb, 'fixtures', '%s_rest_golden.json' % name)
     ship_golden = os.path.join(_rb, 'fixtures', '%s_roll_ship_golden.json' % name)
     test_path = os.path.join(_rb, 'tests', 'test_%s_clip.py' % name)
     st = _load_state(name)
-    st.update(name=name, anchor=anchor, geo=geo_rel, wallA=wallA, wallB=wallB)
+    st.update(name=name, anchor=anchor, geo=geo_rel, wallA=wallA, wallB=wallB,
+              prefix=prefix, base=base, **({'mesh': mesh} if mesh else {}))
     run = {s: (STAGES.index(start) <= i <= STAGES.index(stop)) for i, s in enumerate(STAGES)}
 
     # --- 1. geo ---------------------------------------------------------------------------
     if run['geo']:
         _banner('geo', '%s walls %d x %d -> %s' % (name, wallA, wallB, geo_rel))
-        from harness.rollstab.make_seam_geo import build
-        geo = build(wallA_poly=wallA, wallB_poly=wallB, out=geo_abs)
+        from harness.rollstab.make_seam_geo import build, MESH as _KAZE_MESH
+        geo = build(wallA_poly=wallA, wallB_poly=wallB, out=geo_abs,
+                    mesh_path=(mesh or _KAZE_MESH))
         if aim_deg is not None:
             geo['aim_deg'] = float(aim_deg)
             json.dump(geo, open(geo_abs, 'w'), indent=1)
@@ -126,7 +138,7 @@ def deliver_novel(wallA, wallB, name=None, aim_deg=None, d2s=580.0, budget=110.0
         _banner('floor', 'park-floor probe at d2S %.0f / %.0f (ledger #43)'
                 % (park, park + FLOOR_MARGIN))
         from harness.rollstab.mint import floor_probe
-        fl = floor_probe(geo_abs, [park, park + FLOOR_MARGIN])
+        fl = floor_probe(geo_abs, [park, park + FLOOR_MARGIN], base=base)
         st['floor'] = {str(k): v for k, v in fl.items()}
         _save_state(name, st)
         if not fl[park]:
@@ -138,7 +150,7 @@ def deliver_novel(wallA, wallB, name=None, aim_deg=None, d2s=580.0, budget=110.0
     if run['cam']:
         _banner('cam', 'cam-target screen (ledger #44)')
         from harness.rollstab.mint import cam_screen
-        res = cam_screen(geo_abs, d2s=d2s, settle_est=SETTLE_EST0)
+        res = cam_screen(geo_abs, d2s=d2s, settle_est=SETTLE_EST0, base=base)
         frozen = [r for r in res if not r[3]]
         if not frozen:
             return _fail('cam', 'no frozen pan target -- every probed track hits a cam '
@@ -159,7 +171,7 @@ def deliver_novel(wallA, wallB, name=None, aim_deg=None, d2s=580.0, budget=110.0
         floored = [float(k) for k, v in st.get('floor', {}).items() if v]
         if not floored or park > max(floored) + 1e-9:
             from harness.rollstab.mint import floor_probe
-            fl = floor_probe(geo_abs, [park])
+            fl = floor_probe(geo_abs, [park], base=base)
             st.setdefault('floor', {})[str(park)] = fl[park]
             _save_state(name, st)
             if not fl[park]:
@@ -174,7 +186,7 @@ def deliver_novel(wallA, wallB, name=None, aim_deg=None, d2s=580.0, budget=110.0
                 % (anchor, st['cam']['target'], st['cam']['settle']))
         from harness.rollstab.mint import mint_online
         mint_online(anchor, geo_abs, d2s=d2s, settle_est=st['cam']['settle'],
-                    target_csangle=st['cam']['target'])
+                    target_csangle=st['cam']['target'], base=base)
         import harness.rollstab.solver as SV
         for _c in (SV._BASE, SV._BASE_WALLED):
             for _k in [k for k in _c if k[0] == anchor]:
@@ -358,4 +370,6 @@ if __name__ == '__main__':
     sys.exit(deliver_novel(int(o['wallA']), int(o['wallB']), name=o.get('name'),
                            aim_deg=(float(o['aim_deg']) if 'aim_deg' in o else None),
                            d2s=float(o.get('d2s', 580.0)), budget=float(o.get('budget', 110.0)),
-                           start=o.get('start', 'geo'), stop=o.get('stop', 'test')))
+                           start=o.get('start', 'geo'), stop=o.get('stop', 'test'),
+                           mesh=o.get('mesh'), prefix=o.get('prefix', 'kaze_r11'),
+                           base=o.get('base', KAZE_BASE)))

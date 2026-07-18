@@ -167,6 +167,26 @@ def write_golden(anchor, path, calib=None, seam=None, dtm_seed=1, geo=None):
     print('rest golden -> %s (%d frames)' % (path, len(calib['frames'])), flush=True)
 
 
+def _dedup_log(frames, rest_d):
+    """Drop run_dtm DOUBLE-LOGGED rows from a verification capture (the known +-1-frame log
+    jitter -- [[run-dtm 1-frame jitter]] -- first seen INSIDE the REST gate on the Hyrule stage,
+    where a duplicated row shifted every later row and failed the index-aligned diff while the
+    live physics matched kaze exactly; proven by logging the RAW PAD per row). Once d_frame has
+    left the rest value, every real frame advances d/w/pos (procWait re-inits the blend each idle
+    frame; the walk advances pos), so a byte-identical consecutive row is necessarily a log
+    duplicate. Rows still AT rest_d are kept (legit alignment no-ops are covered by rest_noops)."""
+    if not frames:
+        return frames
+    keys = ('pos_x', 'pos_z', 'facing', 'proc', 'd_frame', 'w_frame', 'm3598', 'm359C', 'm35B4')
+    out = [frames[0]]
+    for f in frames[1:]:
+        prev = out[-1]
+        if f.get('d_frame') != rest_d and all(f.get(k) == prev.get(k) for k in keys):
+            continue
+        out.append(f)
+    return out
+
+
 def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None):
     """The per-anchor LIVE gate: one clean-DTM run of the verification stream, logging the anim
     fields per frame, then the offline from-rest diff. A new anchor must print REST BIT-EXACT
@@ -190,7 +210,7 @@ def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None):
         return d
     R._read_frame = rich
 
-    _, straight, aim = sticks_of(anchor, seam=seam)
+    aseed, straight, aim = sticks_of(anchor, seam=seam)
     # csy=0 (C-down, free-cam pin) for a NOVEL mint_current anchor whose camera would else drift as Link
     # walks (session 50); csy=128 (neutral) is byte-identical to the legacy proven-anchor goldens.
     csy = 0 if (seam is not None or dtm_seed == 0) else 128
@@ -200,7 +220,10 @@ def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None):
                                               substickY=csy, buttons=0)] * 20
     end = run_dtm(sticks, anchor=anchor, ready=land_ready, relaunch_dolphin=True,
                   log_frames=len(stream) + 2, verbose=True, seed=dtm_seed)
-    frames = end['log']
+    frames = _dedup_log(end['log'], aseed.get('rest_d_frame'))
+    if len(frames) != len(end['log']):
+        print('dedup: dropped %d double-logged row(s) (run_dtm log jitter)'
+              % (len(end['log']) - len(frames)), flush=True)
     calib = dict(anchor=anchor, NPREF=NPREF,
                  frames=[dict(pos_x=f['pos_x'], pos_z=f['pos_z'],
                               facing=f['facing'] & 0xFFFF, proc=f['proc'],
