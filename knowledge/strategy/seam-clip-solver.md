@@ -6,7 +6,8 @@ exact geometry instead of a fitted window? What made the sim bit-exact from rest
 **Status:** LIVE-DELIVERED (2026-07-10): a solver hit shipped as a clean DTM landed 0-ULP on the
 sim's predicted cut (kaze r11, idle13 anchor) and threaded the seam. Regression:
 `tests/test_rollstab_rest.py` (live goldens).
-**Source:** sessions 7-10 (2026-07-09/10), `_notes/seam-clip-live-validation-handoff-*.md`;
+**Source:** sessions 7-10 (2026-07-09/10) + the session-56 throughput/cloud-spread findings
+(2026-07-17), `_notes/seam-clip-live-validation-handoff-*.md`;
 run protocol + model term list in `harness/rollstab/README.md`;
 collision model [`mechanics/collision.md`](../mechanics/collision.md) (CrrPos, Force25Bit);
 cut mechanics in [`mechanics/land-movement.md`](../mechanics/land-movement.md) (roll stab);
@@ -96,14 +97,22 @@ geometry, but the tip pin looks geometric, so expectations are low.
 ## Dust DENSITY prices the search -- screen it before minting (2026-07-17)
 
 Reachability (`SeamGeo.roll_reachable`) says a clip EXISTS from a standable `old`; it does not say
-the focused search can FIND one inside its 2-minute budget. The search's chaotic crawl lattice has
-local perp spacing ~0.008u, so the expected hits per draw scale with the seam's genuine-dust
-measure. Fine-scan it (0.02 along x 0.0002 perp over the reach band, `pred_genuine`) and compare:
-the delivered 152-corner counted **1409** samples (70% of along rows, 0.41u perp band -- one ~80s
-draw), the delivered mirror **360** (17% rows, 0.021u band), while the z-mirror 97-corner's **84**
-(13% rows, slivers <=0.0006u) defeated 8 independent knob-family draws (dead-end #39). Pick novel
-targets by density, not reachability alone; a thin-dust seam needs a throughput/diversity upgrade
-first (run() speed, or a K=2-crawl Phase A).
+the focused search can FIND one inside its 2-minute budget. Fine-scan the dust (0.02 along x
+0.0002 perp over the reach band, `pred_genuine`) and compare: the delivered 152-corner counted
+**1409** samples (70% of along rows, 0.41u perp band -- one ~80s draw), the delivered mirror
+**360** (17% rows, 0.021u band), while the z-mirror 97-corner's **84** (13% rows, slivers
+<=0.0006u) defeated 8 independent knob-family draws (dead-end #39). Pick novel targets by density,
+not reachability alone.
+
+**Density is necessary but NOT sufficient (session 56, dead-end #40): the cost driver is the
+chaotic crawl cloud's PERP SPREAD, not the dust count alone.** A ~7x run()-throughput upgrade
+(lazy cruise-pose defer + fixpoint cross-hint + a Phase-B worker pool, all bit-identical -- gate
+`tests/test_solver_fastpose.py`) bought ~1.2M exact 97m candidates across 7 draws, still 0 hits.
+Measured on the top bracket: the byte-nudge cloud around a razor-close center (score 5.4e-4) lands
+median **~1.9u** in perp from the nearest genuine column -- ~99.8% of candidates never enter the
+razor band. So price a target by expected NEAR-BAND YIELD (candidates within ~1e-3 perp of a
+column per draw), and close a thin seam by putting candidates IN the band (fresh Phase-A bracket
+families, a 2D-exact dust ranking for the B2 fine drill), not by buying more same-family draws.
 
 ## The sim is bit-exact FROM REST -- plan sequences need no live calibration
 

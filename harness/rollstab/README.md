@@ -82,7 +82,57 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-17, session 55): the z-mirror 97-corner S=(13539.2393,-493.3560) is
+> **CURRENT THREAD (2026-07-17, session 56): the s55 NEXT (run() THROUGHPUT) is DELIVERED and GATED --
+> a 2-minute `solve_focused` draw now covers ~7x the candidates (~1.7k/s pooled vs s55's ~255/s) with
+> every output bit identical -- and ~1.2M exact candidates were drawn on the 97m at the new density
+> (7 draws: default grid, nudge=16, m2-dense, c3m=0.72/0.6, kbr=60, + the new Phase-B2 fine drill):
+> STILL 0 hits. The session's diagnostic OVERTURNS the s55 pricing: the search cost is not the seam's
+> dust density alone but the chaotic crawl CLOUD's PERP SPREAD -- a bracket's 441-nudge cloud lands
+> median ~1.86u from the nearest genuine perp column (p10 0.33u), so ~99.8% of Phase-B candidates are
+> never even in the razor band. Frontier = put candidates IN the band (Phase-A bracket diversity /
+> 2D-exact dust ranking / a denser corner), not more of the same draws. Surfaced to Dereck.**
+> - **Throughput, 3 mechanisms (all BIT-IDENTICAL, gated by the new `tests/test_solver_fastpose.py` +
+>   all shipped-hit recomposition gates green + a full-grid pool-vs-serial mirror A/B finding the SAME
+>   single hit):** (1) **lazy cruise-pose defer** -- `FootSpeedF.skip_cruise_pose` upgraded from
+>   walkstab's drop-outright shortcut to a defer+replay backlog (`_drain_skipped`): at m3598==0 speedF
+>   ==nspeed exactly, so cruise/roll poses defer and REPLAY IN ORDER on the first consumer (an
+>   m3598!=0 compose or a stop) -- exact for EVERY stream incl. mid-cruise fines, ~1.9x; solver.run/
+>   wall_faithful enable it via `solver.FAST_POSE` (walkstab callers inherit the safer semantics).
+>   (2) **fixpoint `cross_hint`** -- run() seeds its placement fixpoint with a neighbour's cross frame
+>   (the accept invariant want==placed on the SIMULATED trajectory is unchanged), ~1.3x. (3)
+>   **`solve_focused(procs=)`** -- Phase B fans the nudge grid to worker processes (default cpu-2 cap
+>   10) which evaluate the SAME exact run+wall_faithful gates; full default grid 35s (was over-budget).
+> - **Phase B2 NEW (the freeze-solver drill in the focused path):** every fired near-miss is ranked by
+>   perp distance to a genuine column; the nearest are extended with one documented 1-frame
+>   partial-magnitude FINE (`fine_family`) and tested exactly, until the wall-clock budget. On the 97m
+>   it drilled 1169 keepers (best dcol 1e-5) -- 0 genuine; NOTE `fine_family` octagon-collapses to 30
+>   distinct sticks here (the known #29/#32 collapse), so the fine lattice is coarse.
+> - **The overturning diagnostic (scratchpad `diag97m.py`, finding in the strategy page):** the s55
+>   "dust density prices the search" model predicted ~1 hit per ~30-130k candidates at 97m density;
+>   ~1.4M cumulative exact candidates (s55's 200k + s56's 1.2M) found 0. Measured on the top bracket
+>   (score 5.4e-4): the Phase-B cloud's perp-to-column distances are median 1.86u / p10 0.33u / min
+>   1.4e-3 over 2.6k fired candidates. The bracket CENTER is razor-close but the nudge cloud sprays
+>   units-wide in perp; hits require the (rare) near-column tail AND the f32 z-sliver. Density screens
+>   remain necessary but NOT sufficient -- the deliverable metric is near-band candidate yield.
+> - **Locked live-data-backed:** nothing new live this session (no Dolphin run needed -- the anchor +
+>   REST golden were ready and unchanged; no sim.py/land.py change, live regression unaffected;
+>   `foot_speedf.py` changed only behind the default-OFF `skip_cruise_pose` flag). Suite **383 passed,
+>   1 skipped, 4 xfailed** (+2 = the fast-path A/B gates). `test_seam97m_clip_delivered` stays
+>   strict-xfail RED (honest).
+>
+> **NEXT (pick one, Dereck's call):** (a) **Phase-A bracket DIVERSITY** (the s55 deferred option b,
+> now the evidence-backed frontier): today every draw hangs off the same deterministic ~40 bracket
+> centers; a walkstab-style K=2 start-crawl inside Phase A (crawl frame BEFORE the ranking) mints
+> fresh independent center families whose clouds populate different perp bands. (b) **2D-exact dust
+> ranking for B2**: `_genuine_perps` rounds columns to 1e-3 -- scan the exact sliver point cloud once
+> (0.005 along x 2e-5 perp over the band) and rank near-misses/drills by TRUE (along, perp) distance
+> to real dust (the drill's x200 perp weighting), so the drill spends its 30-stick fine lattice only
+> on candidates a fine can actually close. (c) **a denser corner** (the room scan lists 74 clippable
+> seams; screen dust density AND expected near-band yield first). Every other thread (proven/mirror/
+> sheathed/152 clips DONE, walk-stab, Tetra push-aside/turnaround STANDALONE, 97-corner +493
+> push-steer-only) UNCHANGED.
+
+> **PRIOR THREAD (2026-07-17, session 55): the z-mirror 97-corner S=(13539.2393,-493.3560) is
 > PAN-MINTED + REST BIT-EXACT -- the s54 camera recipe GENERALIZES (the s53/s54 candidate's blocker is
 > CLOSED) -- but the CLIP is NOT delivered: the corner's genuine dust is ~4x thinner than the mirror's
 > and `solve_focused` at the 2-minute budget gives < 1 expected hit per draw (8 independent draws, 0

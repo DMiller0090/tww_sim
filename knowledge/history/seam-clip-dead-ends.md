@@ -870,6 +870,27 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
     page). LESSON: before minting a novel corner, fine-scan its dust and compare to the delivered
     seams' counts; reachability alone does not price the search.
 
+## Throughput-scaled same-family draws on a thin-dust seam (session 56, z-mirror 97-corner)
+
+40. **Scaling the SAME knob-family draws ~7x (run() throughput: lazy cruise-pose defer + fixpoint
+    cross-hint + Phase-B worker pool, all bit-identical and gated) does NOT close the 97m: ~1.2M
+    exact candidates across 7 draws (default grid, nudge=16, m2-dense 6-value sweep, c3m=0.72/0.6,
+    kbr=60, and the new Phase-B2 fine drill on the 1169 nearest-to-column near-misses) found 0
+    genuine.** Root cause, measured (the diagnostic that OVERTURNS the s55 "dust density prices the
+    search" model, which predicted ~1 hit per ~30-130k candidates here): a bracket's byte-nudge
+    cloud is NOT concentrated near its razor-close center -- over 2.6k fired candidates on the top
+    bracket (center score 5.4e-4) the perp distance to the nearest genuine column is median
+    **1.86u**, p10 0.33u, min 1.4e-3. ~99.8% of Phase-B candidates are never in the razor band, so
+    the effective near-band sample count per draw is ~hundreds, not tens of thousands, and each
+    near-band sample still needs the f32 z-sliver. Also re-confirmed: `fine_family` octagon-collapses
+    to ~30 distinct sticks (#29/#32), so the B2 fine drill's perp lattice is coarse. Do NOT buy more
+    of the same draws; the frontier is putting candidates IN the band: fresh Phase-A bracket
+    families (a K=2 start-crawl inside Phase A), a 2D-exact dust ranking for the drill
+    (`_genuine_perps` rounds to 1e-3 -- rank against the real sliver point cloud), or a denser
+    corner screened for near-band YIELD, not raw dust count. The throughput work itself is KEPT
+    (bit-identical, `tests/test_solver_fastpose.py` + a full-grid pool-vs-serial mirror A/B finding
+    the same single hit); it is necessary, just not sufficient here.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

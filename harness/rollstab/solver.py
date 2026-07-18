@@ -38,6 +38,8 @@ from harness.rollstab import rest as C
 
 HITS_PATH = os.path.join(_rb, '_generated', 'rollstab_hits.json')
 START_KMAX = 3                 # start-crawl window (K<=3: low-speed micro-moves, 1D approach)
+FAST_POSE = True               # lazy cruise-pose defer in run()/wall_faithful (bit-exact; see
+#                                FootSpeedF._drain_skipped). Off only for the test_solver_fastpose A/B.
 _BASE = {}
 _BASE_WALLED = {}
 
@@ -73,6 +75,8 @@ def wall_faithful(anchor, stream, old_ref, seam, dtm_seed=1):
     rejected if any frame before the CUT flags `wall_hit`, or if the walled `old` differs from the
     wall-less `old` (the wall subtly diverted the approach)."""
     s = walled_base(anchor, seam, dtm_seed=dtm_seed)
+    if FAST_POSE and s._foot is not None:
+        s._foot.skip_cruise_pose = True    # lazy cruise-pose defer (bit-exact; drains on any consumer)
     rows = []
     hit_before_cut = False
     cut_i = None
@@ -91,7 +95,8 @@ def wall_faithful(anchor, stream, old_ref, seam, dtm_seed=1):
     return _f(wold[0]) == _f(old_ref[0]) and _f(wold[1]) == _f(old_ref[1])
 
 
-def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None, dtm_seed=1, seam=None):
+def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None, dtm_seed=1, seam=None,
+        cross_hint=None):
     """One exact run from REST. `start` = sticks for stream rows 0..len-1 (the acceleration
     micro-crawl; the entry acts them with the 2-frame delay). `moves` = [(lead, stick[, dur]),
     ...] placed lead frames before the A press (fixpoint placement: the press frame is
@@ -100,8 +105,15 @@ def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None, dtm_seed=1
     pull-out). With `rest_state`'s model_draw ON (auto for a sheathed anchor), the sword draw
     completes DRAW_DELAY acted-frames later and sets `sword_drawn` before the A press, so the
     roll routes to a CUT. draw_at MUST land before the A press with margin (the draw + rebuild to
-    cap in the sword set). Returns an info dict (old/new/rho/z/genuine/clear/spF_at_A/stream) or
-    None."""
+    cap in the sword set). Returns an info dict (old/new/rho/z/genuine/clear/spF_at_A/cross/stream)
+    or None.
+
+    `cross_hint` (session 56, throughput): a caller-supplied guess of the A-press cross frame,
+    used only to SEED the placement fixpoint (placed built from the hint instead of an empty first
+    pass). The acceptance invariant is unchanged -- a run is only returned once want == placed on
+    the SIMULATED trajectory -- so a right hint saves one full approach sim and a wrong one just
+    falls back to the normal iteration. Neighbouring candidates (a nudge grid on one bracket)
+    share their cross, so sweeps thread the previous run's `cross` back in."""
     seam = _KAZE_SEAM if seam is None else seam
     # Aim the approach at THIS seam's F (generalization Phase 5): C.sticks_of hardcodes geometry.F,
     # which walks a NOVEL seam's approach the wrong way. Byte-identical for the kaze seam (seam.F==G.F).
@@ -112,8 +124,25 @@ def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None, dtm_seed=1
     # silently eat start[0] (dead-end #35; a full frame preserves seed-0's poll phase). seed=1 => 0.
     n_absorb = max(0, 1 - int(dtm_seed))
     placed = None
+    if cross_hint is not None and moves:
+        want0, ok = {}, True
+        for mv in moves:
+            ld, stk = mv[0], mv[1]
+            dur = mv[2] if len(mv) > 2 else 1
+            for d in range(dur):
+                idx = cross_hint - ld + d
+                if idx < len(start) or idx >= cross_hint or idx in want0:
+                    ok = False
+                    break
+                want0[idx] = stk
+            if not ok:
+                break
+        if ok:
+            placed = want0
     for _ in range(4):
         s = base(anchor, dtm_seed=dtm_seed)
+        if FAST_POSE and s._foot is not None:
+            s._foot.skip_cruise_pose = True  # lazy cruise-pose defer (bit-exact; drains on any consumer)
         suffix = []
         for _ in range(n_absorb):
             s.step(128, 128)
@@ -161,7 +190,7 @@ def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None, dtm_seed=1
             do(aim[0], aim[1])
         cut_i = next((i for i, rr in enumerate(rows) if rr[0] in (CUT_F, CUT_A)), None)
         if cut_i is None or cut_i == 0:
-            return dict(fired=False, spF_at_A=spF_at_A)
+            return dict(fired=False, spF_at_A=spF_at_A, cross=cross)
         old = (rows[cut_i - 1][1], rows[cut_i - 1][2])
         new = (rows[cut_i][1], rows[cut_i][2])
         roll_pts = [(rr[1], rr[2]) for rr in rows if rr[0] == FRONT_ROLL]
@@ -169,7 +198,7 @@ def run(anchor, moves, A_proj=-506.0, tail=8, start=(), draw_at=None, dtm_seed=1
         clear = gen and not any(seam.seg_blocked(roll_pts[i], roll_pts[i + 1])
                                 for i in range(len(roll_pts) - 1))
         return dict(fired=True, old=old, new=new, rho=seam.perp(old), z=old[1],
-                    genuine=gen, clear=clear, spF_at_A=spF_at_A,
+                    genuine=gen, clear=clear, spF_at_A=spF_at_A, cross=cross,
                     facing=rows[cut_i][3], cut_proc=rows[cut_i][0],
                     disp=math.hypot(new[0] - old[0], new[1] - old[1]),
                     n_roll=len(roll_pts), stream=suffix)
@@ -415,6 +444,37 @@ def search(anchor, nhits=4, do_drill=False, K=60, levels=2, draw_at=None, dtm_se
 NUDGE_SPMAX = 14.0             # nudge only start-crawl frames acted below this speedF (the octagon INTERIOR;
                                # above it sticks CLAMP + the fine lattice collapses -- see solve_focused doc).
 
+# solve_focused Phase-B workers: each owns a from-rest sim cache and evaluates EXACT candidates
+# (the same run + wall_faithful path as the serial loop) -- parallelism never changes results.
+_PB = None
+
+
+def _pb_init(anchor, seam_args, dtm_seed):
+    global _PB
+    from harness.rollstab.seamgeo import SeamGeo
+    seam = SeamGeo(*seam_args)                   # (geo, csangle, roll_speedf, aim_deg): exact rebuild
+    _PB = (anchor, seam, int(dtm_seed))
+
+
+def _pb_eval(job):
+    """Evaluate one Phase-B/B2 candidate exactly. Returns None (did not fire / off-gate), a full
+    hit dict (genuine + clear + wall-faithful, with margin -- the fields the parent records), or a
+    compact `('near', old_x, old_z)` for a fired on-gate non-hit (the parent ranks these by perp
+    distance to a genuine column for the Phase-B2 fine drill)."""
+    moves, A, start, hint = job
+    anchor, seam, dtm_seed = _PB
+    r = run(anchor, [tuple(m) for m in moves], A_proj=A, start=start,
+            dtm_seed=dtm_seed, seam=seam, cross_hint=hint)
+    if not (r and r.get('fired')):
+        return None
+    if not (r['facing'] == seam.F and r['spF_at_A'] == 17.0):
+        return None
+    if (r['genuine'] and r['clear']
+            and wall_faithful(anchor, r['stream'], r['old'], seam, dtm_seed)):
+        r['margin'] = _perp_margin(seam, r['old'], r['new'])
+        return r
+    return ('near', r['old'][0], r['old'][1])
+
 
 def _genuine_perps(seam, samples=None):
     """The perp offsets of the genuine dust columns inside the seam's reach band -- a PURE-GEOMETRY
@@ -440,7 +500,7 @@ def _genuine_perps(seam, samples=None):
 
 def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
                   off_step=120, nudge=10, kbr=40, m2s=(1.0, 0.72, 0.6), c3m=0.66,
-                  verbose=True):
+                  verbose=True, procs=None):
     """Focused roll-stab dust search (the walkstab.solve_focused pattern in the roll `run` form): an ARC
     gross-perp bracket + a LOW-SPEED byte-nudge densifier + the wall_faithful gate. Pure sim, no
     calibration. This is the objective-compliant one-shot for a NOVEL seam whose reachable roll line sits
@@ -472,10 +532,22 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
     Phase C (walled confirm): `wall_faithful` re-sim -- accept only cuts whose approach reaches `old` past
       the wall (dead-end #3). Rank by the perp sliver margin (delivery robustness). Records to HITS_PATH
       (same schema as `search`, carrying the explicit `start`/`moves`/`A_proj`/`dtm_seed`) for `deliver`.
+    Phase B2 (fine drill, session 56 -- the freeze-solver drill in the focused path): the nudge cloud's
+      perp spread is ~units (a 97m diagnostic: median 1.86u to the nearest genuine column), so Phase B's
+      yield is its few nearest-to-column candidates, not its bulk. B2 ranks every fired near-miss by perp
+      distance to a genuine column and extends the nearest ones with one documented 1-frame
+      partial-magnitude FINE (`fine_family` -- discrete small perp steps + dense along fill, the knob
+      class that threaded the original kaze razor), tested exactly, until the budget.
 
     Every knob is derived or a documented physical regime (NUDGE_SPMAX, the octagon-interior magnitude
     0.66, the general symmetric arc span, the geometry-derived genuine-perp target) -- no per-seam tuned
-    constants ([[no-overtuned-constants]])."""
+    constants ([[no-overtuned-constants]]).
+
+    `procs` (session 56 throughput): Phase-B worker processes (None = cpu_count-2 capped at 10; 1 =
+    the serial loop). Workers evaluate the SAME exact candidates through the SAME `run` +
+    `wall_faithful` gates -- parallelism multiplies how much of the grid a wall-clock budget covers,
+    never what a candidate evaluates to. With the lazy cruise-pose defer + the fixpoint cross hint
+    (also session 56) a 2-min draw covers ~25x the session-55 candidate count."""
     t0 = time.time()
     _cs = load_seed(anchor)['csangle'] & 0xFFFF
     full = C.dtm_stick(stick_for_bearing(seam.F, _cs, 1.0))
@@ -496,7 +568,7 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
               [round(a, 1) for a in A_projs[:8]], time.time() - t0), flush=True)
 
     # --- Phase A: arc gross-perp brackets, ranked by nearest genuine perp column ---
-    brackets, n_arc = [], 0
+    brackets, n_arc, hints = [], 0, {}
     for off in range(-off_span, off_span + 1, off_step):
         if off == 0:
             continue
@@ -505,9 +577,11 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
             for lead in (4, 5, 6, 7):
                 for A in A_projs[:6]:
                     n_arc += 1
-                    r = run(anchor, [(lead, arc, dur)], A_proj=A, dtm_seed=dtm_seed, seam=seam)
+                    r = run(anchor, [(lead, arc, dur)], A_proj=A, dtm_seed=dtm_seed, seam=seam,
+                            cross_hint=hints.get(A))
                     if not (r and r.get('fired') and r.get('old') and r.get('spF_at_A') == 17.0):
                         continue
+                    hints[A] = r.get('cross')
                     brackets.append((score(r['old']), off, dur, lead, A))
     brackets.sort(key=lambda b: b[0])
     brackets = brackets[:kbr]
@@ -518,43 +592,109 @@ def solve_focused(anchor, seam, dtm_seed=0, budget=110.0, want=8, off_span=1800,
 
     # --- Phase B + C: low-speed byte-nudge densifier on each bracket ---
     hits, seen = [], set()
-    for (pr0, off, dur, lead, A) in brackets:
-        if time.time() - t0 > budget or len(hits) >= want:
-            break
-        arc = C.dtm_stick(stick_for_bearing((seam.F + off) & 0xFFFF, _cs, 1.0))
-        for m2 in m2s:
+    pool = None
+    if procs is None:
+        import multiprocessing
+        procs = max(1, min(10, multiprocessing.cpu_count() - 2))
+    if procs > 1:
+        from concurrent.futures import ProcessPoolExecutor
+        pool = ProcessPoolExecutor(max_workers=procs, initializer=_pb_init,
+                                   initargs=(anchor, (seam.geo, seam.csangle, seam.roll_speedf,
+                                                      seam.aim_deg), dtm_seed))
+        if verbose:
+            print('Phase B: %d workers' % procs, flush=True)
+    else:
+        global _PB
+        _PB = (anchor, seam, int(dtm_seed))          # serial path: _pb_eval reads the same global
+
+    def _accept(r, tag, moves, A, start):
+        key = (round(r['old'][0], 5), round(r['old'][1], 5))
+        if key in seen:
+            return
+        seen.add(key)
+        _record(hits, r, moves, A, start, anchor, dtm_seed=dtm_seed)
+        hits[-1]['margin'] = r['margin']
+        json.dump(hits, open(HITS_PATH, 'w'))
+        if verbose:
+            print('  CLIP margin=%d %s A=%.1f old=(%.7f,%.7f) perp_ray=%+.6f d2S=%.3f (%.0fs)' % (
+                  r['margin'], tag, A, r['old'][0], r['old'][1],
+                  seam.perp_to_ray(r['old'], r['new']), seam.d2S(r['old']),
+                  time.time() - t0), flush=True)
+
+    def _c3(dx, dz):
+        return C.dtm_stick((min(254, max(1, c3raw[0] + dx)), min(254, max(1, c3raw[1] + dz))))
+
+    def _dcol(old):
+        po = seam.perp(old)
+        return min((abs(po - g) for g in gperps), default=abs(po))
+
+    def _sweep(jobs, tags):
+        """Evaluate exact candidate jobs (pooled or serial), routing full hits through _accept and
+        collecting fired near-misses into `near` (ranked later for the Phase-B2 fine drill)."""
+        if pool is not None:
+            results = pool.map(_pb_eval, jobs, chunksize=max(1, len(jobs) // (procs * 4)))
+        else:
+            results = map(_pb_eval, jobs)
+        for job, tag, r in zip(jobs, tags, results):
+            if r is None:
+                continue
+            if isinstance(r, tuple):                    # ('near', old_x, old_z)
+                near.append((_dcol((r[1], r[2])), job[0], job[1], job[2], tag))
+                continue
+            _accept(r, tag, list(job[0]), job[1], job[2])
+
+    near = []
+    try:
+        # --- Phase B proper: the c3 byte-nudge grid per (bracket, m2) ---
+        for (pr0, off, dur, lead, A) in brackets:
             if time.time() - t0 > budget or len(hits) >= want:
                 break
-            f2 = full if m2 >= 1.0 else C.dtm_stick(stick_for_bearing(seam.F, _cs, m2))
-            for dx in range(-nudge, nudge + 1):
-                for dz in range(-nudge, nudge + 1):
-                    c3d = C.dtm_stick((min(254, max(1, c3raw[0] + dx)),
-                                       min(254, max(1, c3raw[1] + dz))))
-                    start = (full, f2, c3d)
-                    r = run(anchor, [(lead, arc, dur)], A_proj=A, start=start,
-                            dtm_seed=dtm_seed, seam=seam)
-                    if not (r and r.get('fired') and r['facing'] == seam.F
-                            and r['spF_at_A'] == 17.0):
+            arc = C.dtm_stick(stick_for_bearing((seam.F + off) & 0xFFFF, _cs, 1.0))
+            arcmv = (lead, arc, dur)
+            for m2 in m2s:
+                if time.time() - t0 > budget or len(hits) >= want:
+                    break
+                f2 = full if m2 >= 1.0 else C.dtm_stick(stick_for_bearing(seam.F, _cs, m2))
+                # One serial center run measures the grid's shared cross (the fixpoint hint);
+                # the sweep then evaluates the full grid exactly (same run + gates either path).
+                rc = run(anchor, [arcmv], A_proj=A, start=(full, f2, _c3(0, 0)),
+                         dtm_seed=dtm_seed, seam=seam)
+                hint = rc.get('cross') if rc else None
+                jobs, tags = [], []
+                for dx in range(-nudge, nudge + 1):
+                    for dz in range(-nudge, nudge + 1):
+                        jobs.append(((arcmv,), A, (full, f2, _c3(dx, dz)), hint))
+                        tags.append('off=%+d dur=%d lead=%d m2=%.2f nudge=(%+d,%+d)'
+                                    % (off, dur, lead, m2, dx, dz))
+                _sweep(jobs, tags)
+        # --- Phase B2: fine drill on the nearest-to-column near-misses (the freeze-solver drill
+        # pattern; rationale + the cloud-spread finding in the solve_focused docstring).
+        if len(hits) < want and time.time() - t0 < budget:
+            fam = fine_family(anchor, seam=seam)
+            keepers = sorted(near, key=lambda x: x[0])   # snapshot: _sweep keeps appending to near
+            n_drill = 0
+            for dcol0, moves0, A, start0, tag0 in keepers:
+                if time.time() - t0 > budget or len(hits) >= want:
+                    break
+                used = set()
+                for m in moves0:
+                    dur0 = m[2] if len(m) > 2 else 1
+                    used |= set(range(m[0] - dur0 + 1, m[0] + 1))
+                jobs, tags = [], []
+                for mv in fam:
+                    if mv[0] in used:
                         continue
-                    if not (r['genuine'] and r['clear']):
-                        continue
-                    if not wall_faithful(anchor, r['stream'], r['old'], seam, dtm_seed):
-                        continue
-                    key = (round(r['old'][0], 5), round(r['old'][1], 5))
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    margin = _perp_margin(seam, r['old'], r['new'])
-                    moves = [(lead, arc, dur)]
-                    _record(hits, r, moves, A, start, anchor, dtm_seed=dtm_seed)
-                    hits[-1]['margin'] = margin
-                    json.dump(hits, open(HITS_PATH, 'w'))
-                    if verbose:
-                        print('  CLIP margin=%d off=%+d dur=%d lead=%d A=%.1f m2=%.2f nudge=(%+d,%+d) '
-                              'old=(%.7f,%.7f) perp_ray=%+.6f d2S=%.3f (%.0fs)' % (
-                              margin, off, dur, lead, A, m2, dx, dz, r['old'][0], r['old'][1],
-                              seam.perp_to_ray(r['old'], r['new']), seam.d2S(r['old']),
-                              time.time() - t0), flush=True)
+                    jobs.append((tuple(moves0) + (mv,), A, start0, None))
+                    tags.append('%s +fine(ld=%d stk=%s)' % (tag0, mv[0], list(mv[1])))
+                _sweep(jobs, tags)
+                n_drill += 1
+            if verbose:
+                print('Phase B2: drilled %d near-misses (best dcol=%.6f) of %d (%.0fs)' % (
+                      n_drill, keepers[0][0] if keepers else -1, len(keepers), time.time() - t0),
+                      flush=True)
+    finally:
+        if pool is not None:
+            pool.shutdown()
     hits.sort(key=lambda h: -h.get('margin', 0))
     json.dump(hits, open(HITS_PATH, 'w'))
     if verbose:
@@ -596,6 +736,9 @@ if __name__ == '__main__':
         from harness.rollstab.seamgeo import SeamGeo
         geo = json.load(open(o['geo'])) if 'geo' in o else None
         seam = SeamGeo(geo, load_seed(anchor)['csangle']) if geo else _KAZE_SEAM
-        solve_focused(anchor, seam, dtm_seed=int(o.get('seed', 0)))
+        solve_focused(anchor, seam, dtm_seed=int(o.get('seed', 0)),
+                      procs=(int(o['procs']) if 'procs' in o else None),
+                      budget=float(o.get('budget', 110.0)),
+                      nudge=int(o.get('nudge', 10)), kbr=int(o.get('kbr', 40)))
     else:
         search(anchor, do_drill=('drill' in sys.argv))

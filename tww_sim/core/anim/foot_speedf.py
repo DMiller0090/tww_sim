@@ -145,9 +145,10 @@ class FootSpeedF:
         # finish_draw docstring). Off by default: legacy pre-integration draw, byte-identical.
         self.defer_draw = False
         self._pending_draw = None
-        # Opt-in fast path (default OFF -- would break stop-then-rewalk): at m3598==0 (cruise) speedF
-        # ==nspeed and the pose only feeds the next frame, so a walk-THEN-cut never consumes it. See finish_draw.
+        # Opt-in fast path (default OFF): cruise (m3598==0) poses defer into _skipped and replay on
+        # the first consumer -- bit-exact for EVERY stream. See finish_draw/_drain_skipped.
         self.skip_cruise_pose = False
+        self._skipped = []
         # Seed the FootFK old pose + delayed toe stream (t1=draw_{N-1}, t2=draw_{N-2}) with the
         # idle rest pose. Pre-walk seeds only feed m3598==0 frames (speedF==0), so they're immaterial.
         self.ff.seed(idle_anim, self.idle_frame)
@@ -196,6 +197,7 @@ class FootSpeedF:
         c.defer_draw = self.defer_draw
         c._pending_draw = self._pending_draw
         c.skip_cruise_pose = self.skip_cruise_pose
+        c._skipped = list(self._skipped)
         c.st = self.st.clone()
         c.ff = self.ff.clone()
         c._core = c.ff._engine                 # fused engine lives on the cloned FootFK (None in Py mode)
@@ -479,6 +481,8 @@ class FootSpeedF:
         elif abs(nspeed) <= 0.001:
             # MOVE exit (speed bled to ~0 -> WAIT): speedF = 0. Gate on |nspeed| not sign -- the EBS runs
             # MOVE at a large NEGATIVE mNormalSpeed and must still integrate the composition below.
+            if self._skipped:
+                self._drain_skipped()  # the stop writes m35B4 (consumed by the re-walk): sync first
             self.stopped = True
             self.m35B4 = msd
             return 0.0
@@ -501,6 +505,8 @@ class FootSpeedF:
         defer_draw: the compose consumes only t1/t2, so speedF is exact BEFORE the draw; the game
         actually draws at frame END (post-integration pos), so the draw is stashed for
         finish_draw() after the caller moves."""
+        if self._skipped and state['m3598'] != 0.0:
+            self._drain_skipped()      # this compose consumes the toe stream: replay the deferred poses
         compose = _N.foot_compose if _N is not None else _py_foot_compose
         speedF, f312 = compose(self.t1, self.t2, nspeed, msd, state['m3598'],
                                self.prev_f312, self.m35B4)
@@ -523,13 +529,36 @@ class FootSpeedF:
         state, morf, f312, msd = self._pending_draw
         self._pending_draw = None
         if self.skip_cruise_pose and state['m3598'] == 0.0:
-            # Cruise frame: speedF was already nspeed (m3598==0), and this pose only feeds the next
-            # frame's compose -- also cruise, so it is never consumed. Skip the FK (the search hot path).
+            # Cruise frame (speedF==nspeed exactly): DEFER the pose with its draw base; the first
+            # consumer drains in order, so every stream stays bit-exact. See _drain_skipped.
+            self._skipped.append((state, morf, msd,
+                                  (self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean)))
             return
+        if self._skipped:
+            self._drain_skipped()
         self._apply_base()
         cur = self.ff.step_feet(state['move0'], state['move1'], state['f0'], state['f1'],
                                 state['ratio'], i_morf=morf)
         self._shift(cur, f312, msd)
+
+    def _drain_skipped(self):
+        """Replay the deferred cruise poses in order (each at its own stashed draw base), rebuilding
+        the exact toe stream t1/t2 + the m359C recursion a consumer is about to read. Each frame's
+        f312 is recomputed here with the progressively-correct t1/t2/prev_f312/m35B4 (the value
+        stashed at skip time was computed against a stale stream and is discarded); its speedF term
+        was nspeed exactly (m3598==0), so nothing else about the frame needs re-running."""
+        compose = _N.foot_compose if _N is not None else _py_foot_compose
+        base0 = (self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean)
+        for state, morf, msd, base in self._skipped:
+            self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean = base
+            self._apply_base()
+            _, f312 = compose(self.t1, self.t2, 0.0, msd, state['m3598'],
+                              self.prev_f312, self.m35B4)
+            cur = self.ff.step_feet(state['move0'], state['move1'], state['f0'], state['f1'],
+                                    state['ratio'], i_morf=morf)
+            self._shift(cur, f312, msd)
+        self._skipped = []
+        self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean = base0
 
     def draw_sword(self):
         """Mid-walk sword pull-out: flip the foot anim set base -> sword (WALK/DASH -> WALKS/DASHS) at
