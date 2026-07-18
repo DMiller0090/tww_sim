@@ -9,6 +9,7 @@ sim's predicted cut (kaze r11, idle13 anchor) and threaded the seam. Regression:
 **Source:** sessions 7-10 (2026-07-09/10), the session-56/57 throughput/cloud-spread/ranking
 findings (2026-07-17), and the session-58 room-wide density screen + 157-corner delivery
 (2026-07-18), `_notes/seam-clip-live-validation-handoff-*.md`;
+the session-59 152m delivery + band_dense screen caveat (2026-07-18);
 run protocol + model term list in `harness/rollstab/README.md`;
 collision model [`mechanics/collision.md`](../mechanics/collision.md) (CrrPos, Force25Bit);
 cut mechanics in [`mechanics/land-movement.md`](../mechanics/land-movement.md) (roll stab);
@@ -142,6 +143,16 @@ rows, **0.33u band**, corridor 1400u), went mint -> REST BIT-EXACT -> **2 wall-f
 one default 112s draw** -> live 0-ULP clean-DTM clip, same session -- while the 97m (84 samples,
 0.018u band) sat at 0 across ~15 cumulative draws. A WIDE perp band is the strongest single
 predictor: the chaotic crawl cloud lands near-band candidates cheaply when the band is ~0.3u.
+
+**Read the DENSE band, not the raw span (session 59).** The screen's `band` = full perp-column
+span, which a single outlier column inflates: the 152m (the 152's z-mirror, polys 465x474)
+screened `band` 0.458u but its dense cluster is **0.026u** (mirror-class) plus one stray column
+at +0.322 -- and the default-knob `solve_focused` draw found 0 there. The screen now also reports
+`band_dense` (largest contiguous column cluster's span); price a pick by THAT. A mirror-class
+dense band is still deliverable, just not always on the first knob family: the documented
+`c3m=0.78` start-crawl family gave the 152m **6 wall-faithful clips in one 111s draw** (delivered
+live 0-ULP same session) after two 0-hit default draws -- when a thin-dense-band seam draws 0,
+vary the documented knob families before concluding anything.
 
 ## The sim is bit-exact FROM REST -- plan sequences need no live calibration
 

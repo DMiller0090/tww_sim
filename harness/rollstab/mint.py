@@ -267,12 +267,20 @@ def mint_online(name, geo_path, d2s=580.0, base='kaze_r11_rollstab_idle13@twwgz'
               'csangle=%d F=%d facing=%d' % (
               it, perp, seam.perp(rest), old, seam.d2S(rest),
               seed['csangle'], seam.F, seed['shape_angle_y']), flush=True)
-        if abs(perp) <= perp_tol:
+        if old is None:
+            # unfired baseline = rest outside the ~580u envelope (ledger #42); never accept on
+            # the rest-perp fallback -- re-park on the along error and retry
+            print('mint_online iter %d: baseline roll did NOT fire (d2S %.1f vs d2s %.1f) -- '
+                  're-parking on along error' % (it, seam.d2S(rest), d2s), flush=True)
+        elif abs(perp) <= perp_tol:
             print('mint_online: ON-LINE (baseline |old perp| %.3f <= %.1f)' % (abs(perp), perp_tol),
                   flush=True)
             return seed
         # re-park by a SECANT-gain step (clamped; 1:1 on the first iteration) -- the perp response
         # per unit shift is ~1.8 at a large settle misaim, so a 1:1 step oscillates (ledger #42).
+        # A rest-perp fallback (old=None) measures a DIFFERENT quantity: drop the secant history.
+        if old is None:
+            prev_perp = prev_shift = None
         if prev_shift and prev_perp is not None:
             gain = (perp - prev_perp) / prev_shift
             gain = max(0.4, min(2.5, gain))

@@ -76,13 +76,53 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-18, session 58)
+## Status (2026-07-18, session 59)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-18, session 58): Dereck's pick (b) is DELIVERED -- the room-wide density
+> **CURRENT THREAD (2026-07-18, session 59): ROADMAP Phase A step 1, first queued pick DELIVERED --
+> the 152m corner (the 152's z-mirror, S=(10555.1904, -190.6696), polys 465x474, interior 151.68)
+> went make_seam_geo -> `mint_online` -> REST BIT-EXACT (28+ rows) -> `solve_focused` **6
+> wall-faithful clips in one c3m=0.78 111s draw** (top margin 8) -> **LIVE 0-ULP clean-DTM clip at
+> seed=0**: `old=(10519.09375,-223.71536254882812) -> new=(10555.3984375,-190.47947692871094)`,
+> CUT_F then OOB, drift (0,0). Sixth delivered seam; first shipped stream worked live.**
+> - **Screen caveat found (fixed in `seam_screen.py`): the `band` metric is outlier-inflatable.**
+>   The 152m screened 0.458u but its DENSE cluster is 0.026u (mirror-class) + one stray column at
+>   +0.322; the default c3m=0.66 draw found 0 (near-band 0) twice, then the documented c3m=0.78
+>   family delivered 6 in one draw. The screen now also reports `band_dense` (largest contiguous
+>   column cluster) -- price picks by that; strategy page updated.
+> - **`mint_online` hardened (general, ledger-#42 corollary): never accept on the rest-perp
+>   fallback while the pure-sim baseline roll does not fire.** The first 152m mint accepted
+>   ON-LINE at rest d2S 460.9 where NO spF-17 baseline exists (old=None -- the short-rest
+>   envelope symptom); the fix re-parks on the along error (and drops the secant history across
+>   the fallback) until the baseline fires. Converged in 3 iters: rest d2S 576.8, |old perp|
+>   0.547, facing==F==8685, csangle 3683 frozen.
+> - **Phase-A step-1 TOUCH-LIST (the step's exit metric -- what `novel_deliver` must fold in):**
+>   (1) seam naming + geo-fixture rename by hand (make_seam_geo names by polys); (2) mint_online
+>   called via Python API (CLI lacks `settle_est=`); (3) anchor files renamed to `@twwgz` by hand;
+>   (4) the rest golden assembled by hand from `_generated/rollstab_calib.json` (rest.py has no
+>   `golden=` writer); (5) a knob-family retry decision when the default draw hit 0; (6) the
+>   per-seam test file authored by hand (copy of the 157's). Plus the standing per-delivery runs
+>   (screen numbers re-check, REST verify, 2-3 draws, ship).
+> - **Locked live-data-backed:** anchor `kaze_r11_rollstab_seam152m@twwgz` (seed tracked); goldens
+>   `fixtures/seam152m_rest_golden.json` (REST BIT-EXACT) + `fixtures/seam152m_roll_ship_golden.json`
+>   (the clean-DTM ship). Gates `tests/test_seam152m_clip.py::test_seam152m_rest_bitexact` +
+>   `test_seam152m_clip_delivered` GREEN. Suite **390 passed, 1 skipped, 4 xfailed** (+2). NO
+>   `sim.py`/`land.py`/`solver.py` change (mint acceptance + screen metric only), so the live
+>   regression and all shipped-hit recompositions are unaffected.
+>
+> **NEXT (Phase A step 1 continues): deliver the remaining queued screen picks verbatim, counting
+> touches** -- `seam_0467_0468` (10762.53,-273.26; n=2285 but thin 0.031u band -- expect knob-family
+> draws) and `seam_0824_0826` (9689.14,123.46; n=725; re-check its band_dense first). Then step 2
+> (fold the touch-list above into a one-shot `novel_deliver`), step 3 (kill the ~580u rest envelope
+> in `_derive_a_projs` -- also unblocks the 163-corner), step 4 (second room), then the expansions.
+> The 97m lottery keeps running in spare cycles. Every other thread (proven/mirror/sheathed/152/157/
+> 152m clips DONE, walk-stab, Tetra push-aside/turnaround STANDALONE, 97+493 push-steer-only)
+> UNCHANGED.
+
+> **PRIOR THREAD (2026-07-18, session 58): Dereck's pick (b) is DELIVERED -- the room-wide density
 > SCREEN is now first-class tooling (`seam_screen.py`) and its first pick, the NOVEL 157-deg corner
 > S=(9689.1406, -150.3137) (polys 456x459, walkable floor, corridor 1400u), went screen -> `mint_online`
 > -> REST BIT-EXACT -> `solve_focused` **2 wall-faithful clips in one default 112s draw** (top margin

@@ -99,8 +99,21 @@ def density_scan(seam, gp, astep=0.02, pstep=0.0002, pmargin=0.02):
             rows_hit += 1
             n += hit
         a += astep
+    # band = full span (outlier-inflatable, see strategy page); band_dense = largest contiguous
+    # column cluster's span (gap <= 3x the 0.001 column pitch), the honest width predictor
+
+    best_lo = best_hi = gp[0]
+    lo = hi = gp[0]
+    for p in gp[1:]:
+        if p - hi <= 0.003:
+            hi = p
+        else:
+            lo = hi = p
+        if hi - lo > best_hi - best_lo:
+            best_lo, best_hi = lo, hi
     return dict(n=n, rows=rows, rows_hit=rows_hit, frac=round(rows_hit / max(1, rows), 3),
-                band=round(gp[-1] - gp[0], 4), ncols=len(gp))
+                band=round(gp[-1] - gp[0], 4), band_dense=round(best_hi - best_lo, 4),
+                ncols=len(gp))
 
 
 def corridor_len(walls, geo, clear=CORRIDOR_CLEAR, max_d=1400):
