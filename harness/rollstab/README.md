@@ -69,6 +69,15 @@ deleted). The terms that made it exact (each decomp-grounded, found by per-frame
    sliver z-margin robustness check), then the clean DTM with a 120-frame watch-tail, per-frame
    live confirmation. NEVER advancewith.
 
+**One-shot for a NOVEL screened corner: `novel_deliver.py`** (session 61) chains the whole recipe
+-- geo -> band_dense re-check -> park-floor probe -> cam-target screen -> `mint_online` -> the
+REST gate (abort on DIFF; auto-writes the rest golden) -> dust2d prebuild -> `solve_focused`
+(+ the documented knob-family retries on a 0-hit draw) -> `deliver ship` (auto-writes the ship
+golden) -> the per-seam test scaffold -- aborting at the first RED stage, with per-seam resume
+state in `_generated/novel_<name>.json` (`start=`/`stop=` re-enter at any stage):
+
+    python -m harness.rollstab.novel_deliver wallA=<pid> wallB=<pid> name=seam<pid>
+
 **The Tetra push-aside clip has its own shipped pipeline: `pushaside.py`** (`mint` / `deliver` / `diff`
 / `search`). Read its docstring before ANY Tetra-clip delivery work -- it encodes the four delivery
 truths (walkable Tetra floor; NEUTRAL roll stick; B one step later in the DTM than in the sim; seed the
@@ -76,13 +85,56 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-18, session 60)
+## Status (2026-07-18, session 61)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-18, session 60): Phase A step 1's queue is CLOSED -- seam_0824_0826
+> **CURRENT THREAD (2026-07-18, session 61): ROADMAP Phase A step 2 is DELIVERED -- the whole
+> touch-list is folded into the ONE-SHOT `novel_deliver.py` (10 gated stages: geo -> recheck ->
+> floor -> cam -> mint -> rest -> dust -> solve -> ship -> test scaffold; per-seam resume state in
+> `_generated/novel_<name>.json`), and its first run delivered a fresh screened corner end-to-end:
+> the NOVEL 151-corner seam_0915_0918 (S=(13049.7656, 1368.0778), polys 915x918, interior 151.08,
+> n=658 / band_dense 0.027u / corridor 1080u -- the best remaining walkable pick) went one command ->
+> LIVE 0-ULP clean-DTM clip at seed=0 (8th delivered seam; first shipped stream worked):
+> `old=(13026.662109375, 1324.813720703125) -> new=(13049.8466796875, 1368.2310791015625)`, CUT_F
+> then OOB, drift (0,0). Draw pricing behaved as documented: default draw 0 hits (near-band 0),
+> the c3m=0.78 family (the built-in documented retry) delivered 1 clip (margin 6, via a B2 fine).
+> `mint_online` converged in 2 iters (rest d2S 580.0, baseline |old perp| **0.001**), REST
+> BIT-EXACT every row.**
+> - **The one lesson the validation forced (ledger #45): the cam screen's settle travel is
+>   TARGET-dependent (rest_d2S 332..688 from the same 1000u park across seam915's five frozen
+>   targets), so preferring the default aim-derived target is WRONG** -- its 668u settle parked the
+>   mint at d2S 1248, past the floor edge (the floor stage had probed 1000/1100 FLOOR), Link
+>   teleport-slid and fell OOB before minting, and the baseline could never fire. Fix shipped in
+>   `novel_deliver`: choose the frozen target with the SMALLEST measured settle (deepest park
+>   inside the probed floor) and floor-probe the implied park when it lies beyond what the floor
+>   stage checked. The gates did their job: every failure aborted cleanly at its stage.
+> - **New first-class pieces (all folded from touch-list items / scratch scripts):**
+>   `mint.floor_probe` (+ CLI `floorprobe=`, the ledger-#43 park-floor screen),
+>   `seam_screen.recheck` (the step-0 honest band_dense re-check), `rest.write_golden` (+
+>   `golden=` on the rest CLI -- the REST golden assembles itself on a BIT-EXACT pass), the
+>   generated per-seam test scaffold (never overwrites an existing locked test), and the
+>   documented knob-family retry (`DRAW_FAMILIES`: default, c3m 0.78/0.72/0.56) on a 0-hit draw.
+>   `seam_screen.KNOWN` now also excludes 152m/824/467/163.
+> - **Locked live-data-backed:** anchor `kaze_r11_rollstab_seam915@twwgz` (seed tracked); goldens
+>   `fixtures/seam915_rest_golden.json` (REST BIT-EXACT, auto-written) +
+>   `fixtures/seam915_roll_ship_golden.json` (the clean-DTM ship). Gates (scaffold-generated)
+>   `tests/test_seam915_clip.py::test_seam915_rest_bitexact` + `test_seam915_clip_delivered`
+>   GREEN. Suite **394 passed, 1 skipped, 4 xfailed** (+2). NO `sim.py`/`land.py`/`solver.py`
+>   change (orchestration + mint/rest/screen tooling only), so the live regression and all
+>   shipped-hit recompositions are unaffected.
+>
+> **NEXT: ROADMAP step 3 needs the RE-SCOPE decision from Dereck first (the ~580u rest envelope is
+> roll PHYSICS -- s60 finding -- so short-corridor seams want the walk-stab tier or
+> camera-in-the-loop, not a smaller A_proj). Then step 4 (second room): `novel_deliver` is ready
+> except the kaze-specific mesh paths (`seam_screen.MESH`, `make_seam_geo.MESH`) -- capturing the
+> second room's ordered mesh is the actual work. The 97m lottery keeps running in spare cycles.
+> Every other thread (proven/mirror/sheathed/152/157/152m/824/915 clips DONE, walk-stab, Tetra
+> push-aside/turnaround STANDALONE, 97+493 push-steer-only) UNCHANGED.**
+
+> **PRIOR THREAD (2026-07-18, session 60): Phase A step 1's queue is CLOSED -- seam_0824_0826
 > ("824", S=(9689.1406, 123.4604), polys 824x826, interior 157.33) is DELIVERED LIVE 0-ULP (7th
 > seam; one default 112s draw, 2 wall-faithful clips, top margin 27; first shipped stream worked):
 > `old=(9731.271484375, 138.69970703125) -> new=(9684.986328125, 121.95780944824219)`, CUT_F then

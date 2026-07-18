@@ -44,6 +44,8 @@ KNOWN = [
     ('proven', 9069.9043, 259.1986), ('mirror', 9069.9043, -265.9138),
     ('152', 10555.1904, 190.6696), ('157', 9689.1406, -150.3137),
     ('97+493', 13539.2393, 493.3560), ('97m', 13539.2393, -493.3560),
+    ('152m', 10555.1904, -190.6696), ('824', 9689.1406, 123.4604),
+    ('467-floorblocked', 10762.5254, -273.2637), ('163-corridorblocked', 9709.58, -13.43),
 ]
 REACH = 49.2202          # the full-cap roll-stab displacement (reference/constants.md)
 MAX_INTERIOR = 165.0     # corner filter: past this the seam is walk-stab (grazing) territory
@@ -133,6 +135,25 @@ def corridor_len(walls, geo, clear=CORRIDOR_CLEAR, max_d=1400):
                 return length
         length = d
     return length
+
+
+def recheck(geo):
+    """Re-measure ONE pick's reachability + honest density from its freshly built geo (the
+    session-59 'step 0' -- always re-check `band_dense` before minting; the screen's stored row
+    may predate a metric fix or carry an outlier-inflated `band`). Returns the same density/
+    corridor fields as a screen row."""
+    seam = SeamGeo(geo, deg_to_s16(geo.get('aim_deg', geo['bisector_deg'])))
+    row = dict(reachable=seam.roll_reachable() is not None)
+    if not row['reachable']:
+        return row
+    gp = genuine_perps(seam)
+    if gp:
+        row.update(density_scan(seam, gp))
+    else:
+        row['n'] = 0
+    mesh = json.load(open(MESH))
+    row['corridor'] = corridor_len(mesh['polys'], geo)
+    return row
 
 
 def screen(out_path=OUT_DEFAULT, verbose=True):

@@ -151,12 +151,30 @@ def verify_rest(anchor, calib=None, seam=None, dtm_seed=1):
     return nbad
 
 
-def main(anchor, seam=None, dtm_seed=1):
+def write_golden(anchor, path, calib=None, seam=None, dtm_seed=1, geo=None):
+    """Assemble the tracked REST golden (the `fixtures/seam*_rest_golden.json` schema the per-seam
+    gates replay) from a verification calib -- the step every delivery used to hand-author from
+    `_generated/rollstab_calib.json` (Phase-A touch-list item 4). Call ONLY after verify_rest
+    printed REST BIT-EXACT: the golden is live-captured data and immutable once written."""
+    if calib is None:
+        calib = json.load(open(CALIB_PATH))
+        assert calib['anchor'] == anchor, (calib['anchor'], anchor)
+    _, straight, aim = sticks_of(anchor, seam=seam)
+    gd = dict(anchor=anchor, seed=int(dtm_seed), geo=geo, straight=list(straight),
+              aim=list(aim), NPREF=NPREF, NCRUISE=NCRUISE, frames=calib['frames'])
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    json.dump(gd, open(path, 'w'), indent=1)
+    print('rest golden -> %s (%d frames)' % (path, len(calib['frames'])), flush=True)
+
+
+def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None):
     """The per-anchor LIVE gate: one clean-DTM run of the verification stream, logging the anim
     fields per frame, then the offline from-rest diff. A new anchor must print REST BIT-EXACT
     before its solver hits are trusted. `seam` (a SeamGeo, or built from a `geo=` fixture) aims the
     cruise at a NOVEL seam's F; `dtm_seed` picks the make_dtm leading-poll layout (0 for the seed-0
-    delivery a mint_current anchor needs -- noops = rest_noops + (1-dtm_seed))."""
+    delivery a mint_current anchor needs -- noops = rest_noops + (1-dtm_seed)). `golden=` writes the
+    tracked REST golden (schema of `fixtures/seam824_rest_golden.json`) on a BIT-EXACT pass --
+    `geo` is the fixture path recorded inside it."""
     from harness.dtm.run_dtm import run_dtm, land_ready
     import harness.dtm.run_dtm as R
     import dolphin_mem as D
@@ -193,7 +211,10 @@ def main(anchor, seam=None, dtm_seed=1):
     os.makedirs(os.path.dirname(CALIB_PATH), exist_ok=True)
     json.dump(calib, open(CALIB_PATH, 'w'))
     print('wrote %s (%d frames)' % (CALIB_PATH, len(frames)), flush=True)
-    return 0 if verify_rest(anchor, calib, seam=seam, dtm_seed=dtm_seed) == 0 else 1
+    nbad = verify_rest(anchor, calib, seam=seam, dtm_seed=dtm_seed)
+    if nbad == 0 and golden:
+        write_golden(anchor, golden, calib=calib, seam=seam, dtm_seed=dtm_seed, geo=geo)
+    return 0 if nbad == 0 else 1
 
 
 if __name__ == '__main__':
@@ -204,4 +225,5 @@ if __name__ == '__main__':
         _a = o.get('anchor', 'kaze_r11_rollstab_idle2@twwgz')
         _seam = SeamGeo(json.load(open(o['geo'])), csangle=G.load_seed(_a)['csangle'] & 0xFFFF)
     sys.exit(main(o.get('anchor', 'kaze_r11_rollstab_idle2@twwgz'),
-                  seam=_seam, dtm_seed=int(o.get('seed', 1))))
+                  seam=_seam, dtm_seed=int(o.get('seed', 1)),
+                  golden=o.get('golden'), geo=o.get('geo')))

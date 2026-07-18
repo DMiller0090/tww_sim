@@ -987,6 +987,23 @@ perp step reads 0 even for the PROVEN/mirror seams, so resolution is load-bearin
     cannot be met by the roll path; short-corridor seams need a different technique (walk-stab
     tier) or camera-in-the-loop, not a smaller A_proj.
 
+## Preferring the default pan target in the cam screen; assuming settle travel is per-seam (session 61)
+
+45. **Choosing the DEFAULT aim-derived pan target from the cam screen's frozen set (the
+    novel_deliver first cut): the settle travel is TARGET-dependent, and a large-settle target
+    parks the mint past the floor.** Measured at seam_0915_0918 (kaze r11, S=(13049.77, 1368.08)):
+    from the SAME 1000u park, the five frozen targets' settle-until-frozen walks ended at rest_d2S
+    332 / 332 / 526 / 382 / 688 -- a 356u spread, so "settle travel is per-seam" (ledger #43's
+    lesson) under-states it: it is per-(seam, target) leash geometry. The default target's 668u
+    settle implied a mint park at d2S 1248 -- past the floor edge (the probe had passed at
+    1000/1100) -- so Link teleport-slid (dy -2.5) and fell OOB (state 39) before minting; the
+    "minted" rest fields were falling-state garbage and the baseline roll could never fire
+    (mint_online refused, correctly, 3 iters). Fix (shipped in `novel_deliver`): among FROZEN
+    targets choose the one with the SMALLEST measured settle (deepest park inside the probed
+    floor), and floor-probe the implied park whenever it lies beyond what the floor stage checked.
+    With it the same seam minted at rest d2S 580.0, baseline |old perp| 0.001, REST BIT-EXACT,
+    and delivered live 0-ULP.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

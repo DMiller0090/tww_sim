@@ -11,6 +11,7 @@ findings (2026-07-17), and the session-58 room-wide density screen + 157-corner 
 (2026-07-18), `_notes/seam-clip-live-validation-handoff-*.md`;
 the session-59 152m delivery + band_dense screen caveat (2026-07-18);
 the session-60 824 delivery + floor/cam-track screen gaps (2026-07-18, dead-ends #43/#44);
+the session-61 one-shot `novel_deliver` + cam-target settle lesson (2026-07-18, dead-end #45);
 run protocol + model term list in `harness/rollstab/README.md`;
 collision model [`mechanics/collision.md`](../mechanics/collision.md) (CrrPos, Force25Bit);
 cut mechanics in [`mechanics/land-movement.md`](../mechanics/land-movement.md) (roll stab);
@@ -158,6 +159,16 @@ at the park, pick a frozen one, pass `mint_online(target_csangle=)`) -- measured
 tuned (dead-end #44). With it the 824 delivered in one default draw. Also learned there: the
 ~580u rest envelope is mostly PHYSICS for the roll (A-press runway ~506u + cap walk ~74u), so a
 short-corridor seam is not fixable by a smaller A_proj.
+
+**The whole recipe is ONE COMMAND now (session 61): `harness/rollstab/novel_deliver.py`** chains
+geo -> band_dense re-check -> park-floor probe -> cam-target screen -> `mint_online` -> the REST
+gate -> dust2d prebuild -> `solve_focused` (with the documented c3m knob-family retries on a
+0-hit draw) -> `deliver ship` -> the per-seam test scaffold, aborting at the first RED stage
+(per-seam resume state under `_generated/`). Its first run delivered the 151-corner
+seam_0915_0918 live 0-ULP (default draw 0 hits, the c3m=0.78 family 1 clip -- the 152m pricing
+repeated). The cam-target lesson it forced (dead-end #45): the settle travel is per-(seam,
+TARGET) leash geometry (332..688u across one seam's five frozen targets), so pick the frozen
+target with the SMALLEST measured settle -- a large-settle target parks the mint past the floor.
 
 **Read the DENSE band, not the raw span (session 59).** The screen's `band` = full perp-column
 span, which a single outlier column inflates: the 152m (the 152's z-mirror, polys 465x474)

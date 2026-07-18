@@ -295,6 +295,43 @@ def mint_online(name, geo_path, d2s=580.0, base='kaze_r11_rollstab_idle13@twwgz'
     return seed
 
 
+def floor_probe(geo_path, dists, settle_frames=30, base='kaze_r11_rollstab_idle13@twwgz',
+                fall_tol=60.0):
+    """Live park-FLOOR probe (session 60, dead-end #43): does the aim line still have walkable
+    FLOOR at each candidate park distance? `seam_screen.corridor` measures WALL clearance only --
+    the 467-corner read 1020u "clear" over a pit edge, and a park past the floor edge
+    teleport-slides off and falls OOB, so the mint is impossible there. Teleport to each d2S in
+    `dists` along the aim line, idle `settle_frames`, and flag FLOOR if Link's Y held (within
+    `fall_tol` of the seam's link_y). Returns {d: bool}. Run BEFORE cam screen + mint."""
+    import math
+    ENV.ensure_running()
+    geo = json.load(open(geo_path))
+    aim_deg = geo.get('aim_deg', geo['bisector_deg'])
+    ar = math.radians(float(aim_deg) % 360.0)
+    dx, dz = math.sin(ar), math.cos(ar)
+    Sx, Sz = geo['S'][0], geo['S'][2]
+    from tww_sim.core.mathlib import deg_to_s16
+    F = deg_to_s16(float(aim_deg) % 360.0)
+    src = os.path.join(ANCHOR_DIR, base + '.sav')
+    h, m = D.attach()
+    out = {}
+    for d in dists:
+        _load_paused(src)
+        D.cmd_teleport(['x=%r' % (Sx - d * dx), 'y=%r' % geo['link_y'], 'z=%r' % (Sz - d * dz),
+                        'facing=%d' % F, 'frames=2'])
+        time.sleep(0.3)
+        D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128,
+                                             'substickY': 0, 'buttons': 0,
+                                             'frames': settle_frames})
+        time.sleep(0.4)
+        Pp = _player(h, m)
+        y = _f32_at(h, m, Pp + 0x124)
+        out[d] = abs(y - geo['link_y']) <= fall_tol
+        print('floor_probe d2S=%-6.0f y=%.2f (floor %.2f)  %s' % (
+              d, y, geo['link_y'], 'FLOOR' if out[d] else 'OFF-FLOOR'), flush=True)
+    return out
+
+
 def cam_screen(geo_path, targets=None, d2s=580.0, settle_est=420.0, nwalk=40,
                base='kaze_r11_rollstab_idle13@twwgz'):
     """Screen candidate pan `target_csangle`s for a novel seam BEFORE minting (session 60).
@@ -379,7 +416,11 @@ def cam_screen(geo_path, targets=None, d2s=580.0, settle_est=420.0, nwalk=40,
 
 if __name__ == '__main__':
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
-    if 'camscreen' in o:                  # screen pan targets for a novel seam (session-60 procedure)
+    if 'floorprobe' in o:                 # park-floor probe along the aim line (ledger #43)
+        floor_probe(o['floorprobe'],
+                    [float(x) for x in o.get('dists', '1000,1100,1200').split(',')],
+                    base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
+    elif 'camscreen' in o:                # screen pan targets for a novel seam (session-60 procedure)
         cam_screen(o['camscreen'], d2s=float(o.get('d2s', 580.0)),
                    settle_est=float(o.get('settle_est', 420.0)),
                    base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
