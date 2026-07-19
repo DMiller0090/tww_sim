@@ -77,7 +77,15 @@ diverges. Golden + `tests/test_rollstab_corner.py`. wallA(705) before wallB(713)
 - NEW non-wall gap found by the grind gate: mid-run stop -> re-walk blend is not bit-exact
   (see README Status); becomes load-bearing for any plan that fully stops mid-run.
 
-## Phase G -- GROUND collision (DONE 2026-07-10: the Tetra floor is FLAT -> no-op)
+## Phase G -- GROUND collision (DONE 2026-07-10 as a flat-floor no-op -- **now LOAD-BEARING, 2026-07-19**)
+
+> **Slope is no longer hypothetical: the GanonA r0 TAS corner (seam_0255_0256,
+> S=(615.5078, 948.859436035, -2383.9854), Dereck's named target, session 64) has a
+> +0.00039 u/u micro-incline across the whole ~580u rest envelope and a ~10-deg ramp where
+> the mint would park.** The flat-floor closure below no longer covers the frontier: promote
+> ground into the stepper (per-frame floor-following pos_y, getGroundAngle's r3 slope term
+> incl. the x0.85 downhill branch, m35B8 per-foot lift), decomp-first, gated by a REST
+> BIT-EXACT run on that corridor. See the session-64 handoff for the measured profile + plan.
 
 Measured first, as planned: the walkable floor Link's roll crosses at the (-1727,-990) Tetra corner
 is PERFECTLY FLAT. `harness/rollstab/capture_ground.py` (self-contained, `dolphin_mem` only) samples

@@ -125,12 +125,16 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   `sim.py`/`land.py`/`solver.py` change (novel_deliver max_iter plumbing only), so the live
 >   regression and all shipped-hit recompositions are unaffected.
 >
-> **NEXT: ROADMAP step 3 re-scope / step 5 (camera-in-the-loop) now need Dereck's call -- steps 1,
-> 2, and 4 are closed (one-shot proven end-to-end in a third room; no kaze assumption anywhere in
-> the chain). The hseam2709 lottery (Hyrule) can also re-roll cheaply now via the ledger-#51
-> frozen-cam-target trick instead of more same-anchor draws. Every other thread (proven/mirror/
-> sheathed/152/157/152m/824/915/cseam4002 clips DONE, walk-stab, Tetra push-aside/turnaround
-> STANDALONE, 97m lottery, 467/163 blocked) UNCHANGED.**
+> **NEXT (RE-STEERED 2026-07-19, session 64 -- Dereck named a TAS target): the GanonA r0 corner
+> seam_0255_0256 (S=(615.5078, 948.859436035, -2383.9854), interior 159.2, dust thin 0.002u,
+> fixtures captured) has the first LOAD-BEARING floor slope -- a 0.022-deg micro-incline across
+> the whole rest envelope + a ~10-deg ramp at the mint park -- so the next work is the Phase G
+> promotion (floor-following pos_y + getGroundAngle r3 + m35B8 lift in the stepper), gated by
+> REST BIT-EXACT on that corridor. See ROADMAP Phase G + the session-64 handoff. The step 3
+> re-scope / step 5 fork folds into it (the >630u ramp park needs one of them). The hseam2709
+> lottery can still re-roll cheaply via the ledger-#51 frozen-cam-target trick. Every other
+> thread (proven/mirror/sheathed/152/157/152m/824/915/cseam4002 clips DONE, walk-stab, Tetra
+> push-aside/turnaround STANDALONE, 97m lottery, 467/163 blocked) UNCHANGED.**
 
 > **PRIOR THREAD (2026-07-18, session 62): ROADMAP Phase A step 4 (second room) -- the pipeline
 > is ROOM-AGNOSTIC and the from-rest model is BIT-EXACT OUTSIDE KAZE. Dereck picked step 4;
