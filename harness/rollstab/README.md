@@ -85,13 +85,55 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-20, session 70)
+## Status (2026-07-20, session 71)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-20, session 70): the s69 `cam_clean` detector is FOLDED INTO the mint
+> **CURRENT THREAD (2026-07-20, session 71): an in-situ shakeout ran the s70 `cam_clean` gate
+> END-TO-END on a FRESH kaze corner for the first time -- and it exposed + fixed a REGRESSION the
+> s70 rewrite introduced (ledger #57). The corner did not deliver (a corridor CC actor + the
+> walk-stab tier boundary), but the cam-gate fix is the session's verified deliverable.**
+> - **The regression (ledger #57):** s70 rewired `novel_deliver` stage 4 to "accept the DEFAULT aim
+>   target if CLEAN, fall back to alternates only if DIRTY, take the first CLEAN one" -- which
+>   DROPPED the session-61 / dead-end-#45 rule (pick the frozen target whose MEASURED settle parks
+>   the mint ON the floor, smallest settle first). CLEAN/DIRTY (the `bumpCheck` invariant) is
+>   ORTHOGONAL to settle magnitude: on `seam_0352_0353` (S=(9344.82,-373.61), interior 155.4) the
+>   default target 65503 screened CLEAN (max|drift|=0) but its settle 607 parked the mint at d2S
+>   1187, past the floor edge (~1050) -- stage aborted, never trying alternates -- while CLEAN
+>   alternate 16351 (settle 253.6, park 833.6) fits. s70 was only verified on kaze-157 (default
+>   both CLEAN and floored), so the gap hid.
+> - **The fix (`novel_deliver` stage 4):** fast-path the default when CLEAN *and* floored; else
+>   sweep the #44 alternates and take the SMALLEST-SETTLE clean+floored one (the floor re-probe is
+>   folded into the selection loop). The abort now distinguishes "all CLEAN but off-floor"
+>   (467/#43-class floor-block) from "all DIRTY" (bumpCheck). With it the cam gate auto-selected
+>   16351 and the corner minted **ON-LINE (|old perp| 0.004)** -- the s70 gate is now shaken out
+>   in situ.
+> - **The corner did NOT deliver, for two reasons unrelated to the cam gate:** (a) the ROLL REST
+>   gate went RED at a corridor CC actor (ledger #52 class -- a lateral bump-and-release ~35u at
+>   d2S ~366, csangle/facing frozen, no wall in the mesh there); (b) Dereck's steer was to move
+>   Link PAST the actor and WALK-stab, but that is INFEASIBLE (ledger #58, the walk-stab / roll TIER
+>   BOUNDARY): a walk's disp-40.2 lunge needs `old` at d2S ~35, but the 155-deg corner walls block
+>   the approach at d2S ~69 and a wall-touch BRAKES the walk (speedF < 17), shrinking the lunge so
+>   the cut misses -- the roll tolerates the wall brake and still lunges, the walk cannot. A K=3
+>   `solve_focused` and a session-71 K=4-crawl extension both found 0 wall-faithful hits; the K=4
+>   code + the close-anchor mint were REVERTED (they address lattice density, the wrong constraint).
+> - **Locked deliverable:** the cam-gate #45 fix in `harness/rollstab/novel_deliver.py`, verified in
+>   situ. NO `sim.py`/`land.py`/`solver.py`/`mint_online`/`deliver`/`walkstab.py` behavior change
+>   (`walkstab.py` is PRISTINE), so the live regression and every shipped-hit recomposition are
+>   unaffected. Suite **424 passed, 1 skipped, 5 xfailed** (unchanged). KB: dead-ends #57/#58. Every
+>   seam thread UNCHANGED (ten delivered seams, walk-stab, Tetra STANDALONE, 97m/hseam2709
+>   lotteries, 467/163 blocked). `seam_0352_0353` stays open as a ROLL target IF the corridor CC
+>   actor is removed (the #52 mint-time-setup recipe).
+>
+> **NEXT (session 72): the remaining exp5 items -- (b) the auto-flip envelope (the fast-move camera
+> FLIP, distinct from the follow) and (c) whether an arbitrary state's starting csangle offset needs
+> handling beyond being a sim input -- then exp6 (arbitrary mid-walk entry states). A fresh
+> `novel_deliver` run now exercises the FIXED cam gate (smallest-settle floored pick) end-to-end.
+> The s64 leftovers re-scope-or-drop and the 97m/hseam2709 lotteries still stand.**
+
+> **PRIOR THREAD (2026-07-20, session 70): the s69 `cam_clean` detector is FOLDED INTO the mint
 > pipeline -- the camera is now screened by the csangle-INVARIANT probe (ROADMAP Phase A exp.5
 > item (a) DONE), replacing the empirical `cam_screen` trial-pan hunt.**
 > - **New `mint.cam_clean_screen(geo, target_csangle=None, ...)`:** at a candidate park it replicates

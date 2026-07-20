@@ -151,47 +151,61 @@ def deliver_novel(wallA, wallB, name=None, aim_deg=None, d2s=580.0, budget=110.0
 
     # --- 4. cam (session-69 INVARIANT camera screen -> a CLEAN frozen csangle + settle) ----
     if run['cam']:
-        _banner('cam', 'invariant csangle screen (ledger #56, replaces the trial-pan hunt)')
-        from harness.rollstab.mint import cam_clean_screen
-        # Probe the DEFAULT aim target first (not a trial-pan sweep); CLEAN = the corridor keeps
-        # the arm off walls. Fall back to the #44 alternates only if DIRTY (README ## Status s70).
+        _banner('cam', 'invariant csangle screen (ledger #56) + smallest-settle floored pick (#45)')
+        from harness.rollstab.mint import cam_clean_screen, floor_probe
+        # CLEAN (#56) is orthogonal to the settle, so a CLEAN off-floor park is unmintable: keep #45
+        # -- default if CLEAN+floored, else the smallest-settle CLEAN+floored #44 alternate (#57).
         F = deg_to_s16(float(geo.get('aim_deg', geo['bisector_deg'])) % 360.0)
         cands = [F] + [(F + off) & 0xFFFF for off in (-8000, 8000, -16384, 16384)]
-        probes, chosen = [], None
-        for target in cands:
+        floored_edge = max([float(k) for k, fv in st.get('floor', {}).items() if fv],
+                           default=d2s + SETTLE_EST0)   # the floor stage's deepest FLOOR probe
+
+        def _park_floored(park):
+            """park is floored if within the probed floor edge, else one live floor probe."""
+            if park <= floored_edge + 1e-9:
+                return True
+            fl = floor_probe(geo_abs, [park], base=base)
+            st.setdefault('floor', {})[str(park)] = fl[park]
+            _save_state(name, st)
+            return fl[park]
+
+        probes, chosen, clean_offfloor = [], None, []
+        for i, target in enumerate(cands):
             v = cam_clean_screen(geo_abs, target_csangle=target, d2s=d2s,
                                  settle_est=SETTLE_EST0, base=base)
             probes.append((target, v))
-            if v['clean']:
-                chosen = (target, v)
+            if not v['clean']:
+                continue
+            settle = max(0.0, (d2s + SETTLE_EST0) - v['rest_d2S'])   # park - rest = MEASURED settle
+            park = d2s + settle
+            if not _park_floored(park):
+                clean_offfloor.append((target, park))
+                continue
+            cand = (target, v, settle, park)
+            if i == 0:
+                chosen = cand          # default fast-path: CLEAN + floored, accept (s70 intent)
                 break
+            if chosen is None or settle < chosen[2]:
+                chosen = cand          # smallest-settle among CLEAN+floored alternates (#45)
         if chosen is None:
+            if clean_offfloor:         # CLEAN but every park is off the floor (467/#43 class)
+                t, pk = min(clean_offfloor, key=lambda x: x[1])
+                return _fail('cam', 'every CLEAN target parks off-floor (nearest %d @ d2S %.0f, '
+                             'floor edge ~%.0f) -- floor-blocked corridor (467 class); needs the '
+                             'walk-stab tier or a shorter-settle technique' % (t, pk, floored_edge))
             t0, v0 = probes[0]
             fd = v0.get('first_drift')
             loc = ('f%d pos=(%.1f,%.1f)' % (fd['f'], fd['lx'], fd['lz'])) if fd else '(no frame)'
             return _fail('cam', 'every probed csangle is DIRTY (bumpCheck camera-wall push). '
                          'default target=%d first drift %s -- the corridor pushes the arm off a '
                          'wall; widen the aim or rule the corner out' % (t0, loc))
-        target, v = chosen
-        settle = max(0.0, (d2s + SETTLE_EST0) - v['rest_d2S'])   # park - rest = MEASURED settle
+        target, v, settle, park = chosen
         st['cam'] = dict(target=target, rest_cs=v['rest_cs'], rest_d2S=v['rest_d2S'],
-                         settle=settle, clean=True, max_dcs=v['max_dcs'],
+                         settle=settle, park=park, clean=True, max_dcs=v['max_dcs'],
                          nprobed=len(probes))
         _save_state(name, st)
-        print('  CLEAN target=%d (rest_cs=%d rest_d2S=%.1f) measured settle=%.1f'
-              % (target, v['rest_cs'], v['rest_d2S'], settle), flush=True)
-        # the mint park implied by this settle must itself be FLOORED (ledger #43); the floor
-        # stage probed d2s+SETTLE_EST0 -- if this park lies deeper, probe it before minting
-        park = d2s + settle
-        floored = [float(k) for k, v in st.get('floor', {}).items() if v]
-        if not floored or park > max(floored) + 1e-9:
-            from harness.rollstab.mint import floor_probe
-            fl = floor_probe(geo_abs, [park], base=base)
-            st.setdefault('floor', {})[str(park)] = fl[park]
-            _save_state(name, st)
-            if not fl[park]:
-                return _fail('cam', 'the chosen target parks at d2S %.0f -- no floor there; '
-                             'no frozen target fits the floored corridor' % park)
+        print('  CLEAN+FLOORED target=%d (rest_cs=%d rest_d2S=%.1f) settle=%.1f park=%.1f [%d probed]'
+              % (target, v['rest_cs'], v['rest_d2S'], settle, park, len(probes)), flush=True)
 
     # --- 5. mint (mint_online at the screened target/settle; verify ON-LINE) ---------------
     if run['mint']:

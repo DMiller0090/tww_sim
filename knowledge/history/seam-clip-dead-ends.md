@@ -1176,6 +1176,46 @@ probe built on it.
     main stick, but it disengages for a normal walking approach (:897), so it does not affect the
     from-rest model.
 
+## The s70 cam-clean gate dropped the smallest-settle-floored pick; walk-stab can't clip a sharp corner (session 71, in-situ shakeout)
+
+57. **The session-70 `cam_clean` fold-in regressed dead-end #45 (fixed session 71).** s70 rewired
+    `novel_deliver` stage 4 to "probe the DEFAULT aim target first, accept it if CLEAN, fall back to
+    the alternates only if DIRTY, take the first CLEAN one." But the invariant CLEAN/DIRTY signal
+    (`bumpCheck` arm-wall contamination) is ORTHOGONAL to the target's MEASURED SETTLE, and #45's
+    rule is that the settle is per-(seam,target) leash geometry -- you must pick the frozen target
+    whose settle-implied mint park (`d2s + settle`) stays ON the floor, smallest settle first. An
+    in-situ shakeout on a FRESH kaze corner (seam_0352_0353, S=(9344.82,-373.61), interior 155.4)
+    exposed it: the DEFAULT target 65503 screened CLEAN (max|drift|=0) but its settle 607 parked the
+    mint at d2S 1187, past the floor edge (~1050) -> stage aborted, never trying alternates -- while
+    CLEAN alternate 16351 (settle 253.6, park 833.6) fits the floor. s70 was only verified on
+    kaze-157, where the default was BOTH clean and floored, so the gap hid. Fix (session 71): stage 4
+    fast-paths the default when CLEAN *and* floored, else sweeps the #44 alternates and takes the
+    SMALLEST-SETTLE clean+floored one (folds the floor re-probe into the selection); distinguishes
+    "all CLEAN but off-floor" (467/#43-class floor-block) from "all DIRTY" (bumpCheck) in the abort.
+    With it seam_0352_0353 minted ON-LINE (|old perp| 0.004) at 16351. Lesson: an invariant screen
+    (CLEAN) is necessary but not sufficient -- a mint target must also FIT the floored corridor, and
+    the #45 selection survives the s69/s70 invariant re-scope.
+
+58. **A WALK-stab cannot clip a SHARP corner -- getting `old` close enough forces a wall-touch that
+    drops the walk speedF (Dereck, session 71). Roll-only territory.** seam_0352_0353's roll REST
+    gate went RED at a CC actor on the corridor (ledger #52 class: a lateral bump-and-release ~35u
+    at d2S ~366, csangle/facing frozen, no wall in the mesh there); the steer was to move Link PAST
+    the actor (rest at d2S 210, minted clean) and WALK-stab from there. It is INFEASIBLE, and the
+    reason is structural, not a lottery: a walk-stab's lunge is only disp 40.2 (speedF 17 + the 23.22
+    CUT_F root translate) vs the roll's 49.2, so `old` must sit at d2S ~35 -- but at a 155-deg corner
+    the seam walls' CrrPos barrier crosses the approach at d2S ~69, so a walk cannot reach d2S 35
+    WITHOUT touching the wall, and **a wall-touch brakes the walk (speedF < 17), shrinking the lunge
+    so the cut misses** (the `_wall_faithful` gate's exact rationale -- it re-sims with walls and
+    rejects any `wall_hit` walk). Both `solve_focused` (K=3) and a session-71 K=4-crawl extension
+    found 0 wall-faithful hits; a wall-LESS scan floored at |perp| 6e-4 (3x the ~2e-4 razor) too, but
+    the wall-touch is the deeper block -- unlike a ROLL, which tolerates the wall brake and still
+    lunges (why the roll clips this corner and the walk can't). This is the walk-stab / roll TIER
+    BOUNDARY: sharp corners (old near a wall) need the roll; the walk-stab tier is for flat/grazing
+    seams (168.97-deg delivered seam: old sits away from any wall, no touch). The K=4 extension +
+    the close-anchor mint were reverted (they address lattice density, the wrong constraint); the
+    finding is the keep. Corridor-actor removal for a ROLL delivery of this corner (the #52 recipe)
+    remains the open path if the corner is wanted.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.
