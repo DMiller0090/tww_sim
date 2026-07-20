@@ -85,13 +85,46 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-19, session 66)
+## Status (2026-07-19, session 67)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-19, session 66): the GanonA seam255 REST gate is GREEN, 28/28 rows
+> **CURRENT THREAD (2026-07-19, session 67): the GanonA seam255 clip is DELIVERED LIVE 0-ULP --
+> Dereck's named TAS corner is HIT. Tenth delivered seam; fourth room; the FIRST clip on a
+> SLOPED (micro-incline) corridor:**
+> `old=(620.3892822265625, -2340.420166015625) -> new=(614.9080810546875, -2389.334228515625)`,
+> CUT_F at f31, drift (0,0), threads=True. One default-family `solve_focused` draw (112s,
+> 2201 exact dust pts in 4 perp columns), the hit via a B2 fine, margin 1.
+> - **The blocker was the SHEATHED base (new ledger #55):** `ganona_r0_base@twwgz` rests with
+>   the sword sheathed (equip 0x100), so the pure-sim baseline roll could never CUT and
+>   `mint_online` reported old=None forever -- the true cause of s65's "perp never converged".
+>   Fix = mint-time setup: `ganona_r0_base_drawn@twwgz` (one-time B-press draw + steady-WAITS
+>   probe, live-verified 0x103). Check `sword_drawn` in a novel base's seed BEFORE mint_online.
+> - **The ON-LINE re-mint then accepted at iter 1:** baseline |old perp| 1.783 (tol 2.0), rest
+>   d2S 584.5, facing == F == 33960, cam frozen at csangle 22577 (target 25951, #54 rule),
+>   settle_walk=21 now a first-class `mint_online`/CLI knob. REST gate re-run on the new anchor:
+>   **REST BIT-EXACT 30/30 rows 0-ULP incl. m359C + pos_y**, golden re-written.
+> - **The flat-model solve is exact on this corridor by the zero-cell fact** (getGroundAngle==0
+>   under ~0.056 deg): A/B-verified -- the shipped 38-row stream is byte-identical in x/z + procs
+>   with and without floors mode. solve_focused needed NO floors threading for this tier.
+> - **Locked live-data-backed:** anchor `ganona_r0_rollstab_seam255@twwgz` (re-minted drawn +
+>   on-line, seed tracked) + base `ganona_r0_base_drawn@twwgz`; goldens
+>   `fixtures/seam255_rest_golden.json` (re-captured) + `fixtures/seam255_roll_ship_golden.json`
+>   (the clean-DTM ship). Gates `tests/test_ganona_rest.py::test_seam255_rest_bitexact` +
+>   `test_seam255_clip_delivered` GREEN. Suite **404 passed, 1 skipped, 5 xfailed** (+1).
+>   Original base `ganona_r0_base@twwgz` unchanged, stone INTACT (avoidance line held: the
+>   solve + ship never touched it).
+>
+> **NEXT (session 68): the s64 leftovers now unblocked-or-moot -- the mint floor-ladder relax and
+> the step-3/step-5 fork were for a >630u ramp park this delivery never needed; re-scope or drop
+> them. Otherwise the ROADMAP Phase A expansions (camera-in-the-loop first) or the standing
+> lotteries (97m, hseam2709). Dereck's post-s66 steer also stands: port the live land playback
+> tests to offline recorded-golden tests. Every other thread (nine prior seams, walk-stab, Tetra
+> push-aside/turnaround STANDALONE, 467/163 blocked) UNCHANGED.**
+
+> **PRIOR THREAD (2026-07-19, session 66): the GanonA seam255 REST gate is GREEN, 28/28 rows
 > 0-ULP incl. m359C + pos_y (`tests/test_ganona_rest.py` un-redded, golden
 > `fixtures/seam255_rest_golden.json`), WITHOUT touching the corridor stone (Dereck's steer:
 > avoid, don't break).** Three things delivered it:

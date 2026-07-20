@@ -1128,6 +1128,22 @@ mCurrAttributeCode -> +0x34AC, speed -> +0x148, mpCLModel -> +0x254); reading th
 offset raw returns plausible-looking garbage, so validate any new field live before trusting a
 probe built on it.
 
+## The SHEATHED mint base silently blocks mint_online's baseline (session 67, GanonA)
+
+55. **Minting from a base whose rest is sword-SHEATHED (equip 0x100, `sword_drawn` false):
+    the pure-sim baseline roll can never fire a CUT** -- `solver.run(anchor, [])` presses B
+    mid-roll with no `draw_at`, and the roll->CUT gate needs the sword out -- so `mint_online`
+    reports `old=None` on EVERY iteration and can never accept ON-LINE (it correctly refuses
+    the rest-perp fallback, ledger #42). This was the real cause of s65's "perp never
+    converged" on GanonA (misread then as cam/settle trouble): spF_at_A hits 17.0, the roll
+    runs (proc 0x1e), then exits to MOVE with no cut. Every previously delivered seam's base
+    happened to rest DRAWN (0x103), so nine mints never exercised the path. The tell: baseline
+    `old=None` while `spF_at_A == 17.0`. Fix is mint-time SETUP, not solver surgery (the
+    sheathed `draw_at` path exists in `run`/`search` but is NOT threaded through
+    `solve_focused`): one-time B-press draw in the base + steady-WAITS re-probe, saved as
+    `ganona_r0_base_drawn@twwgz`; the re-mint accepted at iter 1 (|old perp| 1.783).
+    Check `sword_drawn` in the base's minted seed BEFORE any mint_online loop.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

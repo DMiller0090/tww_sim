@@ -23,7 +23,11 @@ mostly SLOPED (the flat-floor rest model needs a genuinely flat ~1200u corridor 
 the aim line before minting and require constant y, not just fall_tol "FLOOR"), a wall-bottom
 `link_y` can be a phantom ledge with no ground, and a LOW-HEALTH base savestate idles in
 ANM_WAITB which the rest blend model does not cover (heal Link at mint; probe for steady WAITS --
-d_rate 1.1 -- before `mint_current`). A grazing `aim_deg` can trade dust density for a flat
+d_rate 1.1 -- before `mint_current`). The base must also rest with the sword DRAWN (equip 0x103,
+`sword_drawn` true in the seed): a SHEATHED base's baseline roll can never CUT (no `draw_at` in
+the baseline `run`), so `mint_online` never accepts -- old=None on every iteration is the tell
+(dead-end #55; fix = a one-time B-press draw + steady-WAITS re-probe saved as a `_drawn` base,
+the #47/#49 setup pattern). A grazing `aim_deg` can trade dust density for a flat
 corridor (the delivered-aim corridor must live on the flat strip; seam_2709_2919 hugs its wall's
 300u strip at aim 344). Hyrule's one all-gates-green corner is dust-thin (band_dense
 0.011-0.014u) -- an honest lottery with a REST-verified anchor ready; density and floor quality

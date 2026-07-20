@@ -252,7 +252,8 @@ def mint_novel(name, rest_x, rest_z, facing, target_csangle, floor_y, base='kaze
 
 
 def mint_online(name, geo_path, d2s=580.0, base='kaze_r11_rollstab_idle13@twwgz',
-                perp_tol=2.0, max_iter=3, settle_est=160.0, target_csangle=None):
+                perp_tol=2.0, max_iter=3, settle_est=160.0, target_csangle=None,
+                settle_walk=42):
     """Mint an ON-LINE pan-camera anchor for a novel seam, first-class (session-54 procedure,
     dead-ends #36/#37). The two constraints a novel-seam anchor must satisfy:
       * the camera must be FROZEN (the mint_novel C-stick pan arms the MANUAL cam; anywhere the
@@ -291,7 +292,8 @@ def mint_online(name, geo_path, d2s=580.0, base='kaze_r11_rollstab_idle13@twwgz'
     seed = None
     prev_perp, prev_shift = None, None
     for it in range(max_iter):
-        seed = mint_novel(name, park_x, park_z, facing, target_csangle, geo['link_y'], base=base)
+        seed = mint_novel(name, park_x, park_z, facing, target_csangle, geo['link_y'], base=base,
+                          settle_walk=settle_walk)
         seam = SeamGeo(geo, seed['csangle'])
         rest = (seed['link_x'], seed['link_z'])
         # the load-bearing perp = the PURE-SIM baseline roll old's (rest perp + the turn drift)
@@ -468,6 +470,7 @@ if __name__ == '__main__':
                     max_iter=int(o.get('max_iter', 3)),
                     settle_est=float(o.get('settle_est', 160.0)),
                     target_csangle=(int(o['target_csangle'], 0) if 'target_csangle' in o else None),
+                    settle_walk=int(o.get('settle_walk', 42)),
                     base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
     elif 'novel' in o:                    # camera-behind mint for a NOVEL seam (session-50 procedure)
         mint_novel(o['novel'], float(o['x']), float(o['z']), int(o['facing'], 0),
