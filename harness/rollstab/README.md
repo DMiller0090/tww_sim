@@ -112,20 +112,27 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   in situ.
 > - **The corner did NOT deliver, for two reasons unrelated to the cam gate:** (a) the ROLL REST
 >   gate went RED at a corridor CC actor (ledger #52 class -- a lateral bump-and-release ~35u at
->   d2S ~366, csangle/facing frozen, no wall in the mesh there); (b) Dereck's steer was to move
->   Link PAST the actor and WALK-stab, but that is INFEASIBLE (ledger #58, the walk-stab / roll TIER
->   BOUNDARY): a walk's disp-40.2 lunge needs `old` at d2S ~35, but the 155-deg corner walls block
->   the approach at d2S ~69 and a wall-touch BRAKES the walk (speedF < 17), shrinking the lunge so
->   the cut misses -- the roll tolerates the wall brake and still lunges, the walk cannot. A K=3
->   `solve_focused` and a session-71 K=4-crawl extension both found 0 wall-faithful hits; the K=4
->   code + the close-anchor mint were REVERTED (they address lattice density, the wrong constraint).
+>   d2S ~366, csangle/facing frozen, no wall in the mesh there); (b) the steer was to move Link PAST
+>   the actor and WALK-stab from there. That is FEASIBLE (ledger #58) -- disp <= 40.2 clips this
+>   corner (569 genuine `old`s; ~300 at d2S 36-40 with wall clearance > 35u, no touch), and a K=4
+>   start-crawl + grazing cruise found a ROBUST wall-faithful hit (`old` d2S 38, speedF 17.0 full
+>   cap, margin 24) offline. (My first-take "infeasible/wall-touch" call was WRONG -- Dereck
+>   corrected it; the walk keeps ~40u clearance, and I had conflated the CUT-ray razor with a walk
+>   wall-touch.) The LIVE clip missed only because the FRESHLY-MINTED novel anchor is not
+>   REST-bit-exact: a per-frame diff showed a 1-frame walk-start delay (`rest_noops`) + ~300 s16
+>   facing drift (the `settle_walk=0` mint never settled/screened the camera). Delivering a novel
+>   walk-stab needs the machinery the ROLL pipeline has (`mint_online` cam-settle + `cam_clean`
+>   screen + the REST-BIT-EXACT gate) and the walk-stab tier LACKS (`walkstab.py` is hardcoded to the
+>   one session-32 anchor) -- that is the real open work. The K=4 solver + close-anchor mint were
+>   done in scratch and reverted (proven-feasible, not yet a shippable tool).
 > - **Locked deliverable:** the cam-gate #45 fix in `harness/rollstab/novel_deliver.py`, verified in
 >   situ. NO `sim.py`/`land.py`/`solver.py`/`mint_online`/`deliver`/`walkstab.py` behavior change
 >   (`walkstab.py` is PRISTINE), so the live regression and every shipped-hit recomposition are
 >   unaffected. Suite **424 passed, 1 skipped, 5 xfailed** (unchanged). KB: dead-ends #57/#58. Every
 >   seam thread UNCHANGED (ten delivered seams, walk-stab, Tetra STANDALONE, 97m/hseam2709
->   lotteries, 467/163 blocked). `seam_0352_0353` stays open as a ROLL target IF the corridor CC
->   actor is removed (the #52 mint-time-setup recipe).
+>   lotteries, 467/163 blocked). `seam_0352_0353` is a NEW OPEN target: deliverable as a WALK-stab
+>   once the walk-stab tier gets a novel-anchor REST-bit-exact mint, or as a ROLL if the corridor CC
+>   actor is removed (the #52 recipe).
 >
 > **NEXT (session 72): the remaining exp5 items -- (b) the auto-flip envelope (the fast-move camera
 > FLIP, distinct from the follow) and (c) whether an arbitrary state's starting csangle offset needs

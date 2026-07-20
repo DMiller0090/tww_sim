@@ -1176,7 +1176,7 @@ probe built on it.
     main stick, but it disengages for a normal walking approach (:897), so it does not affect the
     from-rest model.
 
-## The s70 cam-clean gate dropped the smallest-settle-floored pick; walk-stab can't clip a sharp corner (session 71, in-situ shakeout)
+## The s70 cam-clean gate dropped the smallest-settle-floored pick; a novel walk-stab needs the roll pipeline's from-rest machinery (session 71, in-situ shakeout)
 
 57. **The session-70 `cam_clean` fold-in regressed dead-end #45 (fixed session 71).** s70 rewired
     `novel_deliver` stage 4 to "probe the DEFAULT aim target first, accept it if CLEAN, fall back to
@@ -1196,25 +1196,36 @@ probe built on it.
     (CLEAN) is necessary but not sufficient -- a mint target must also FIT the floored corridor, and
     the #45 selection survives the s69/s70 invariant re-scope.
 
-58. **A WALK-stab cannot clip a SHARP corner -- getting `old` close enough forces a wall-touch that
-    drops the walk speedF (Dereck, session 71). Roll-only territory.** seam_0352_0353's roll REST
-    gate went RED at a CC actor on the corridor (ledger #52 class: a lateral bump-and-release ~35u
-    at d2S ~366, csangle/facing frozen, no wall in the mesh there); the steer was to move Link PAST
-    the actor (rest at d2S 210, minted clean) and WALK-stab from there. It is INFEASIBLE, and the
-    reason is structural, not a lottery: a walk-stab's lunge is only disp 40.2 (speedF 17 + the 23.22
-    CUT_F root translate) vs the roll's 49.2, so `old` must sit at d2S ~35 -- but at a 155-deg corner
-    the seam walls' CrrPos barrier crosses the approach at d2S ~69, so a walk cannot reach d2S 35
-    WITHOUT touching the wall, and **a wall-touch brakes the walk (speedF < 17), shrinking the lunge
-    so the cut misses** (the `_wall_faithful` gate's exact rationale -- it re-sims with walls and
-    rejects any `wall_hit` walk). Both `solve_focused` (K=3) and a session-71 K=4-crawl extension
-    found 0 wall-faithful hits; a wall-LESS scan floored at |perp| 6e-4 (3x the ~2e-4 razor) too, but
-    the wall-touch is the deeper block -- unlike a ROLL, which tolerates the wall brake and still
-    lunges (why the roll clips this corner and the walk can't). This is the walk-stab / roll TIER
-    BOUNDARY: sharp corners (old near a wall) need the roll; the walk-stab tier is for flat/grazing
-    seams (168.97-deg delivered seam: old sits away from any wall, no touch). The K=4 extension +
-    the close-anchor mint were reverted (they address lattice density, the wrong constraint); the
-    finding is the keep. Corridor-actor removal for a ROLL delivery of this corner (the #52 recipe)
-    remains the open path if the corner is wanted.
+58. **A NOVEL walk-stab corner IS deliverable in principle but is blocked by INFRASTRUCTURE the
+    walk-stab tier lacks -- a from-rest REST-bit-exact mint (cam-settle + rest_noops). NOT the seam,
+    NOT wall-touch (my first-take "infeasible" was WRONG; Dereck corrected it, session 71).**
+    seam_0352_0353's ROLL REST gate went RED at a corridor CC actor (ledger #52 class: a lateral
+    bump-and-release ~35u at d2S ~366, csangle/facing frozen, no wall in the mesh); the steer was to
+    move Link PAST the actor (rest d2S 210) and WALK-stab. I first concluded infeasible on a
+    wall-touch argument -- WRONG on two counts:
+    - **The corner clips at disp <= 40.2 (the walk cap lunge = speedF 17 + the 23.22 CUT_F root
+      translate), so it is FEASIBLE.** 569 genuine `old`s exist; ~300 sit at d2S 36-40 with wall
+      CLEARANCE > 35u (Link's ~35u WallCorrect radius) -- clearance is ~40u at d2S 41 and only drops
+      below 35 at d2S < 36. A K=4 start-crawl + a grazing cruise (~3deg off bisector, cruise_off +540)
+      found a ROBUST wall-faithful hit: `old` d2S 38, speedF **17.0 (full cap, NO wall brake)**, margin
+      **24** (the session-32 delivered walk-stab was margin 5), genuine bit-confirmed offline.
+    - **The wall-touch claim conflated two things:** "the cut RAY is CrrPos-blocked at most rho" (the
+      razor -- true, it is dust) vs "the WALK touches the wall" (false -- the approach keeps ~40u
+      clearance). A walk-stab does NOT need `old` at d2S ~35; d2S 36-41 clips with safe clearance.
+    The real block to the LIVE clip: the FRESHLY-MINTED novel anchor is not REST-bit-exact. A
+    per-frame sim-vs-live diff showed (a) a 1-frame walk-START delay (a `rest_noops` alignment
+    offset) and (b) facing drifting ~300 s16 and growing (the mint used `settle_walk=0`, so the
+    camera was never pre-settled/screened -- the sim holds csangle frozen but live's decode drifts),
+    so `old` landed ~20u off and missed. This is exactly the machinery the ROLL pipeline has
+    (`mint_online` cam-settle + `cam_clean` screen + the REST-BIT-EXACT gate) and the WALK-stab tier
+    LACKS: `walkstab.py` is hardcoded to the one hand-crafted session-32 anchor with no novel-anchor
+    mint/REST path. Delivering a novel walk-stab = build that (and a re-mint changes csangle, so the
+    found hit must be re-solved on the settled anchor). The K=4 solver + close-anchor mint were done
+    in scratch and reverted (proven-feasible, not yet a shippable tool). **LESSON: never call a seam
+    infeasible from a search/mint failure -- if disp <= the technique's max lunge clips it (dust
+    exists), it is feasible; the blocker is the SEARCH (lattice density) or the MINT (from-rest
+    bit-exactness), both fixable.** Corridor-actor removal for a ROLL delivery (the #52 recipe) also
+    remains open.
 
 ## Pointers
 
