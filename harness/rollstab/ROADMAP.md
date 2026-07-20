@@ -27,10 +27,24 @@ physics), 5-6 are the expansion and wait until 1-4 are boring:
    solves; unblocks short-corridor corners (the 163, 5221 samples) without camera work.
 4. **Prove it out-of-room** -- capture a second room's ordered wall mesh, screen it, deliver one
    corner there. Exit: no kaze-r11 assumption (flat floor Y, cam regime, mesh path) survives.
-5. **Camera-in-the-loop (the old Phase R residual, promoted)** -- model the auto-cam per frame so
-   the constant-csangle precondition (and with it the pan mint, the settle dance, and the
-   corridor constraint) disappears. This is the single biggest idealization left; an arbitrary
-   state will not have a pan-frozen manual cam. Do FIRST of the expansions.
+5. **Camera-in-the-loop (the old Phase R residual, promoted)** -- RE-SCOPED session 69 after live
+   RE. The premise was a free-space behind-Link auto-cam FOLLOW that creeps csangle and needs a
+   per-frame model. **Live RE DISPROVED it for the MANUAL / no-L cam the approach uses (dead-end
+   #56):** with a centered C-stick and no L, csangle (`mAngleY`) is bit-frozen while Link
+   walks/turns/arcs (5 experiments); `dCamera_c::Run` derives csangle from `bearing(eye->center)`
+   and `followCamera`'s behind-follow moves the VIEW, not the controlled csangle. (The L-target /
+   recenter AUTO cam -- `lockonCamera`, `getDMCAngle` -- IS a distinct mode that moves csangle; it
+   is not used by the roll-stab approach and is not characterized here.) So the sim's `CameraManual`
+   is already free-space-complete and the
+   constant-csangle precondition ALREADY holds in open space. The only csangle contamination is
+   `bumpCheck` camera-WALL collision (a lateral eye push in tight corridors), which per steer is
+   DETECTED not modeled: `harness/rollstab/cam_clean.py` (csangle-invariance probe along the
+   intended approach bearing). REMAINING under this step: (a) fold `cam_clean` into
+   `novel_deliver`/`mint` as a principled replacement for the empirical `cam_screen` frozen-target
+   hunt; (b) the auto-flip envelope (the fast-move camera FLIP, still open, distinct from the
+   follow); (c) whether an arbitrary state's starting csangle offset needs any handling beyond
+   being a sim input (it does not, for a clean corridor). The "settle dance / pan mint / corridor
+   constraint" exist to keep the arm OFF walls (avoid bumpCheck), not to fight a follow.
 6. **Arbitrary entry states (mid-walk etc.)** -- a mid-walk mint/seed (in-flight frame ctrls,
    foot-pose delay buffer, m351C lean, travel/speedF), a mid-walk verification gate replacing
    REST BIT-EXACT, and the DTM row-alignment contract from a mid-anim savestate. Depends on 5

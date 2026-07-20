@@ -1145,6 +1145,37 @@ probe built on it.
     First-class: `python -m harness.rollstab.mint drawbase=<sheathed_base> name=<base>_drawn`.
     Check `sword_drawn` in the base's minted seed BEFORE any mint_online loop.
 
+## The "free-space auto-cam follow needs modeling" premise was FALSE (session 69, Phase A exp.5)
+
+56. **Expansion 5 ("camera-in-the-loop") assumed a free-space behind-Link auto-camera FOLLOW
+    that creeps csangle as Link walks, needing a per-frame model. Live RE DISPROVED it (for the
+    MANUAL / no-L cam the approach uses).** SCOPE: this is the manual free-behind cam with no L
+    pressed; the L-target / recenter AUTO cam (`lockonCamera` :3348, `getDMCAngle` :902) is a
+    distinct mode that DOES move csangle and is not used by the roll-stab approach (pressing L
+    would lock a target and rotate the camera) - do not generalize the frozen result to it.
+    Walking Link from a settled idle in the OPEN flat arena (`land_flatwalk@twwgz`) with a centered
+    C-stick (csx=128 -> `omega_cmd`=0, no L) left csangle (`mAngleY`) BIT-FROZEN across every config
+    tried: straight walk 764->2027z, a full 90deg perpendicular turn, a big continuous arc
+    (facing swept 532->21854 while csangle held), and a sustained main-stick-X=160 walk -- 5
+    experiments, ZERO csangle motion. Decomp-grounded: `dCamera_c::Run` writes
+    `mAngleY = mDirection.U().Inv()` (:905) and csangle == the horizontal `bearing(eye->center)`
+    EXACTLY (verified live, diff 0); `followCamera`'s behind-follow (blend `m3B8` gated on
+    `mStickMainPosXLast`, :3082-3089) updates the VIEW direction / center, not the controlled
+    csangle the stick decode reads. So the sim's `CameraManual` (C-stick pan azimuth) is already
+    FREE-SPACE-COMPLETE; there is nothing to add to the sim camera model. The ONLY thing that
+    shifts csangle without a C-stick input is `bumpCheck` (:893, runs every frame just before the
+    mAngleY write): the camera-arm WALL collision that pushes the eye LATERALLY. Per Dereck's
+    steer that collision is NOT modeled -- it is DETECTED (`harness/rollstab/cam_clean.py`, the
+    csangle-invariance probe: a centered-C-stick approach walk must hold csangle; any drift =
+    bumpCheck contamination). Live-validated: open arena CLEAN (0 drift), GanonA straight-corridor
+    DIRTY (+20 hw at f11, arm UNCHANGED at 483.2 -> the push is lateral, so arm-compression alone
+    misses it and csangle-drift is the correct primary signal). The shipped GanonA clip's real
+    approach walks the aim=186.5 line (not straight down-corridor), which the mint's cam screen
+    kept clean (REST BIT-EXACT 30/30) -- so probe the INTENDED approach bearing, not just forward.
+    Corollary: DMC mode (`mAngleY = getDMCAngle(mMainStickAngle)`, :902) drives csangle off the
+    main stick, but it disengages for a normal walking approach (:897), so it does not affect the
+    from-rest model.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

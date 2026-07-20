@@ -17,7 +17,7 @@ The stick is camera-relative, so rotating the camera rotates Link's entire trave
 world_travel_angle = stick_angle + csangle + 0x8000          (halfword, 0x10000 = 360°)
 ```
 
-`csangle` is the camera yaw. It is a **fine lateral-steering lever** — [ESS](ess.md) gives only
+`csangle` is the camera yaw. It is a **fine lateral-steering lever** - [ESS](ess.md) gives only
 coarse ~45° [snap](turnaround.md) control; the camera gives sub-degree control. Live chain:
 `0x803AD380 → +0x34 → +0x2B0` (u16); named `csangle` in `dolphin_mem`.
 
@@ -44,17 +44,17 @@ yaw    += int((s16)(target − yaw) / 2)   # C integer divide, truncates toward 
 csangle = (yaw + 0x8000) & 0xFFFF
 ```
 - `omega_cmd` is a **live 65536-cell lookup** of the full (csx 0..255, csy 0..255) grid,
-  **speed-independent** (verified) and genuinely **2-D** — csy modulates the horizontal rate (e.g.
+  **speed-independent** (verified) and genuinely **2-D** - csy modulates the horizontal rate (e.g.
   csx=255: csy 32..220 → +546, but csy=255 → 199, csy=0 → 173). No off-grid gaps. The integer
-  truncating divide reproduces both the build ramp and the release tail — a `round(omega)` model cannot.
+  truncating divide reproduces both the build ramp and the release tail - a `round(omega)` model cannot.
 - **Rest state:** with neutral C-stick, `target == yaw − 1` (a fixed −1 offset holds yaw still, since
   `int(−1/2) == 0`).
 - `omega_cmd` is **asymmetric**: saturation `csx ≥ 175 → +546`, `csx ≤ 81 → −547` (= ±3.0°/frame,
   |d| ≥ 47). E.g. csx 160 (+32) → +18 but csx 96 (−32) → −19. The true low-side deadzone (→ 0)
-  begins at **csx 113** (csx 109..112 give −1) — `camera_exact.py`'s "109..148 → 0" comment is a
+  begins at **csx 113** (csx 109..112 give −1) - `camera_exact.py`'s "109..148 → 0" comment is a
   ±1 edge approximation; the 2-D table carries the exact values.
 
-## omega_cmd(substickX) — the steering band
+## omega_cmd(substickX) - the steering band
 
 | substickX | Δ from 128 | omega_cmd (hw/fr) | deg/fr |
 |-----------|-----------|-------------------|--------|
@@ -64,16 +64,47 @@ csangle = (yaw + 0x8000) & 0xFFFF
 | 170 | 42 | 105 | 0.577 |
 | ≥ 176 | ≥ 48 | 546 (saturated) | 3.0 |
 
-**Fine-control band = substickX ~150–170** (0.01–0.58°/frame) — where deliberate steering lives.
+**Fine-control band = substickX ~150–170** (0.01–0.58°/frame) - where deliberate steering lives.
 Wide deadzone to ~149, then a steep ~doubling-every-4-units ramp, fully saturated by ~176.
 
 ## The steering primitive
 
 Tap the C-stick a few frames, then return to neutral: net axis rotation = **∫ω**, and there is **no
-snapback** — Link locks onto the rotated axis and continues with steady lateral drift. The release
+snapback** - Link locks onto the rotated axis and continues with steady lateral drift. The release
 tail adds ≈ (last ω) of extra rotation (Σ ω·0.5ⁿ). A 5-frame `sx=166` tap then neutral → +253 hw =
 +1.39°, locked. This holds *during* a swim (rotation law identical standing or moving); Link's
 facing follows csangle with a lag.
+
+## The MANUAL (no-L) cam does NOT move csangle - only C-stick pan + wall collision do
+
+**Scope: this is the MANUAL / free-behind cam with NO L pressed** (the regime the seam-clip
+approach walks in). The L-target / recenter **auto cam** is a DISTINCT mode (`lockonCamera`
+d_camera.cpp:3348; the DMC recenter `mAngleY = getDMCAngle(mMainStickAngle)` :902) that **DOES
+change csangle** - it swings/recenters the camera behind Link. That mode is NOT characterized here
+and is not used by the roll-stab approach (pressing L would lock a target and rotate the camera).
+Do not read the "frozen" result below as applying to auto-cam / L-target.
+
+Live-proven (session 69, 5 experiments in the open flat arena, centered C-stick, **no L**): walking
+Link straight, through a full 90° turn, around a big continuous arc, or with a sustained
+main-stick-X deflection leaves **csangle (`mAngleY`) bit-frozen** every time. There is **no
+free-space behind-Link facing/position follow that feeds csangle in the manual cam.** Decomp
+grounding: `dCamera_c::Run` sets
+`mAngleY = mDirection.U().Inv()` (d_camera.cpp:905) and **csangle == the horizontal
+`bearing(eye → center)` exactly** (verified live, diff 0 hw). `followCamera`'s behind-follow (blend
+weight `m3B8`, gated on `mStickMainPosXLast`, :3082) moves the **view** direction/center, not the
+controlled csangle the [stick decode](turnaround.md) reads. ⇒ the sim's `CameraManual` is
+**free-space-complete**; nothing more to model there.
+
+The **one** thing that shifts csangle with no C-stick input is `bumpCheck` (:893, every frame right
+before the mAngleY write): the camera-arm **wall collision** that pushes the eye *laterally*
+(changing the eye→center bearing). This is environmental and per project steer is **detected, not
+modeled** - `harness/rollstab/cam_clean.py` probes it (a centered-C-stick approach walk must hold
+csangle; any drift = contamination). Live: open arena CLEAN (0 drift); a GanonA straight-corridor
+walk DIRTY (+20 hw at f11) with the arm length *unchanged* - the push is lateral, so csangle-drift
+is the primary signal and arm-compression only a secondary "arm touching a wall" warning. Probe the
+**intended approach bearing**, not just "forward" (the shipped GanonA clip's aim line stays clean
+where the straight-down-corridor path does not). `getDMCAngle` (:902) can drive csangle off the
+main stick in DMC mode, but it disengages for a normal walking approach (:897).
 
 ## Plugging into planning
 
@@ -84,10 +115,10 @@ substickX = 128 (centered) ⇒ omega_cmd = 0 ⇒ csangle constant ⇒ zero regre
 `LandState` DRIVES `csangle` per-frame from the LAND camera (`tww_sim/core/camera/__init__.py` `CameraManual`
 = a bit-exact port of `dCamera_c::manualCamera`): `LandState.step(sx,sy,buttons,triggerL,csx,csy)`
 advances it and sets `self.csangle` before the stick target; a centered C-stick holds it frozen
-(regression bit-exact — 13/13 live land tests). `SwimState` still holds `self.cam` constant (the
+(regression bit-exact - 13/13 live land tests). `SwimState` still holds `self.cam` constant (the
 SWIM subject cam is a different engine; swim steering not yet wired).
 
-### The C-stick → yaw-rate law is per-camera-STYLE — LAND is a full analytic port (bit-exact)
+### The C-stick → yaw-rate law is per-camera-STYLE - LAND is a full analytic port (bit-exact)
 The two cameras use *different* engines. The **swim** (subject) cam's rate is the live-captured
 `omega_table_full.csv`. The **land** free/behind cam is `dCamera_c::manualCamera`, and its rate is
 NOT a scalar multiple of the swim table (truncation: swim `(166,0)=3` but land `=8`, not
@@ -113,21 +144,21 @@ NOT a scalar multiple of the swim table (truncation: swim `(166,0)=3` but land `
 
 ## Decomp grounding (JP/GZLJ01)
 
-`dCamera_c::Run` @ 0x80160260 (writer at +0x7ac, a Write16 = s16 — our u16 reads are exact);
+`dCamera_c::Run` @ 0x80160260 (writer at +0x7ac, a Write16 = s16 - our u16 reads are exact);
 `dCamera_c::CalcSubjectAngle` @ 0x8016cf54; `dCamera_c::subjectCamera` @ 0x8016d3a4;
-`dCamMath::rationalBezierRatio` @ 0x800aca94 (the omega_cmd S-curve, Nonmatching in the decomp — hence
+`dCamMath::rationalBezierRatio` @ 0x800aca94 (the omega_cmd S-curve, Nonmatching in the decomp - hence
 RE'd live, not decompiled). Full address list: [reference/addresses](../reference/addresses.md).
 
 ## Open
 
-- **PLANNED — port the SWIM (subject) camera to analytic, like land.** The land free/behind cam is
+- **PLANNED - port the SWIM (subject) camera to analytic, like land.** The land free/behind cam is
   now a full bit-exact port, but the SWIM camera is a *different engine* (`dCamera_c::CalcSubjectAngle`
   @ 0x8016cf54, a BOUNDED angle offset, not this rate law), still served by the captured
   `omega_table_full.csv` (off-grid cells raise, not universal; steering not wired into `SwimState`).
   Porting `CalcSubjectAngle` would make swim C-stick fully analytic for any `(csx,csy)`. Scoped for a
   later session.
 - **F32 precision** of the internal ω velocity (we read the s16 *output* exactly; ω is upstream).
-- **Auto-flip envelope** — the speed/hold-length that triggers the auto-camera flip (the "hold
+- **Auto-flip envelope** - the speed/hold-length that triggers the auto-camera flip (the "hold
   C-stick down" convention guards against it); steering must stay in a non-flipping band.
 - Negative fine-band symmetry sweep.
 

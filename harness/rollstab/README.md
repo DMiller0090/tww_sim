@@ -85,13 +85,62 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-20, session 68)
+## Status (2026-07-20, session 69)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-20, session 68): Dereck's standing post-s66 steer is DELIVERED -- the
+> **CURRENT THREAD (2026-07-20, session 69): ROADMAP Phase A expansion 5 ("camera-in-the-loop")
+> is RE-SCOPED by live RE -- there is NO free-space auto-camera follow to model, and a live
+> camera-wall-collision DETECTOR is delivered (Dereck's steer: detect collision, don't model it).**
+> - **The premise was FALSE (dead-end #56), for the MANUAL / no-L cam the approach uses.** SCOPE:
+>   this is the manual free-behind cam with no L pressed; the L-target / recenter AUTO cam
+>   (`lockonCamera`, `getDMCAngle` :902) is a DISTINCT mode that DOES move csangle and is not used
+>   by the roll-stab approach (L would lock a target and rotate the camera) -- not generalized here.
+>   Walking Link in the open flat arena with a centered C-stick (`csx=128` -> `omega_cmd` 0, no L)
+>   leaves csangle (`mAngleY`) BIT-FROZEN across every config
+>   tried: straight walk, a full 90deg turn, a big continuous arc (facing swept 532->21854 while
+>   csangle held), a sustained main-stick-X=160 walk -- 5 live experiments, ZERO csangle motion.
+>   Decomp confirms it: `dCamera_c::Run` sets `mAngleY = mDirection.U().Inv()` (:905) and csangle
+>   == the horizontal `bearing(eye->center)` EXACTLY (verified live, diff 0); `followCamera`'s
+>   behind-follow (blend `m3B8` gated on `mStickMainPosXLast`, :3082) moves the VIEW direction, not
+>   the controlled csangle the stick decode reads. **So the sim's `CameraManual` is already
+>   free-space-complete; nothing is added to the sim camera model.**
+> - **The only csangle contamination is `bumpCheck` camera-WALL collision (:893, every frame just
+>   before the mAngleY write): a LATERAL eye push in tight corridors.** Live-demonstrated: a GanonA
+>   straight-corridor walk creeps csangle +20 hw at f11 while the arm length is UNCHANGED (so the
+>   push is lateral -> csangle-drift is the primary signal, arm-compression only secondary). This
+>   is what the mint's pan/settle/corridor machinery has always been avoiding -- keeping the arm
+>   off walls -- NOT fighting a follow.
+> - **Detector delivered: `harness/rollstab/cam_clean.py`** (`probe`/`evaluate`, CLI). Invariant:
+>   under a centered C-stick csangle is provably constant, so any drift during a probe walk along
+>   the INTENDED approach bearing = bumpCheck contamination. Reads csangle + the eye/center arm off
+>   the csangle pointer chain (mCenter@inst+0x10, mEye@inst+0x1C; csangle == bearing(eye->center)
+>   verified live). Live-validated: open arena CLEAN (0 drift), GanonA straight DIRTY (+20@f11).
+>   The next-step wiring is to fold it into `novel_deliver`/`mint` as the principled replacement for
+>   the empirical `cam_screen` frozen-target hunt.
+> - **Locked live-data-backed:** goldens `fixtures/cam_clean_open_golden.json` (csangle frozen every
+>   frame = the invariant) + `fixtures/cam_clean_ganona_straight_golden.json` (+20@f11 = DIRTY),
+>   both live captures; offline gate `tests/test_cam_clean.py` (3 tests) GREEN. Suite **423 passed,
+>   1 skipped, 5 xfailed** (+3). KB: `knowledge/mechanics/camera.md` (the no-follow finding + the
+>   detector), ROADMAP Phase A step 5 re-scoped, dead-end #56. NO `sim.py`/`land.py`/`solver.py`
+>   change, so the live regression and all shipped-hit recompositions are unaffected. Every seam
+>   thread UNCHANGED (ten delivered seams, walk-stab, Tetra STANDALONE, 97m/hseam2709 lotteries,
+>   467/163 blocked).
+> - **GOTCHA hit this session: `savestate loadfile <path>` (path load) can silently no-op on a
+>   long-running Dolphin instance while `savestate load <slot>` still works** (loads ACK `ok:true`
+>   but state is unchanged; deterministic, not a clearing race). It worked for ~6 loads then wedged.
+>   The goldens were built from the live per-frame CSVs already captured before it wedged. Recover
+>   with a slot load or a Dolphin relaunch; suspect the path-load code path, not physics.
+>
+> **NEXT (session 70): fold `cam_clean` into the mint/novel_deliver pipeline (replace the empirical
+> `cam_screen` frozen-target hunt with the csangle-invariance probe along the aim bearing); then the
+> remaining exp5 items (the auto-flip envelope, distinct from the follow) and exp6 (arbitrary
+> mid-walk entry states). The s64 leftovers re-scope-or-drop and the 97m/hseam2709 lotteries still
+> stand.**
+
+> **PRIOR THREAD (2026-07-20, session 68): Dereck's standing post-s66 steer is DELIVERED -- the
 > live land playback suite is PORTED to offline recorded-golden tests.** No seam-clip behavior
 > changed (no `harness/rollstab` code touched); this closes handoff item (a):
 > - **The standing land gate is OFFLINE now:** `tests/test_land_goldens.py` compares the sim PER
