@@ -85,13 +85,60 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-20, session 72)
+## Status (2026-07-20, session 73)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-20, session 72): the WALK-stab tier is GENERALIZED to a novel anchor
+> **CURRENT THREAD (2026-07-20, session 73): the s72 seam352 "perp-resolution gap" was a SEARCH-
+> STRUCTURE bug, not physics -- `solve_focused` now finds seam352 walk-stab clips OFFLINE (top perp
+> margin 24, well inside the razor). The LIVE clip is still NOT delivered: it is blocked on the
+> Wind-Waker-in-hand CUT (a mechanic already solved days ago that walk-stab's solve/deliver do not
+> yet apply), and the next session must GROUND THAT IN DECOMP -- do NOT sweep, do NOT alter the
+> anchor (Dereck's hard steers, [[decomp-first-not-brute-force]]/[[oneshot-no-manual-tweaking]]).**
+> - **The fix (`solve_focused`, `walkstab.py`):** the s72 handoff blamed a physics "perp washout"
+>   (auto-graze floored perp at 0.0016 ~= 16x the razor). WRONG. A dense exact-genuine sweep of the
+>   SAME knobs on the deliverable seed=0 trajectory found genuine clips at |perp| 1.4e-4 (inside the
+>   razor). The old solver missed them because Phase A kept only the top-16 brackets by a cheap
+>   centered-perp key and Phase B **hill-descended a1/a2 to the perp-MINIMUM** -- which lands on the
+>   `gen=False` perp-min f32 cell and steers OFF the genuine dust one lattice cell over (the dead-end
+>   #41 greedy trap, now #61). Replaced the hill-descent with a **BREADTH exact-genuine c4-drill at
+>   each bracket's OWN aims**, consuming brackets in cheap-perp order until `want`/budget; `_refine_aim`
+>   deleted. Self-adaptive, no per-seam args. seam352 -> **4 wall-faithful clips, top margin 24,
+>   speedF 17.0**; kaze -> margin 5 (unchanged); both in the 110s budget. Suite **425 passed, 1
+>   skipped, 6 xfailed** (unchanged -- `test_seam352_clip_delivered` stays strict-xfail until the live
+>   clip ships).
+> - **The LIVE blocker (handed off, NOT the perp problem):** a clean-DTM delivery got the WALK
+>   BIT-EXACT frame-by-frame (`old`, facing 64946, speedF 17 at the cut all match the sim 0-ULP), but
+>   the live CUT_F lunged only ~6u to Link's RIGHT (then recovered, proc 0x5a) instead of the sim's
+>   ~40u forward toward S (which would go OOB, proc 0x24). Same old/facing/speedF/aim (aim 0.2deg off
+>   facing = CUT_F, not a side dispatch), and the drawn/undrawn foot set does NOT change `enter_cut`
+>   (all sim paths give 40u). The anchor holds the **Wind Waker in hand (equip 0x22)**; the walk-stab's
+>   single B puts it away then cuts, and that WW-in-hand cut is where the sim and live diverge. Dereck:
+>   this was **solved days ago** -- find the existing decomp-grounded handling and apply it in
+>   walkstab's solve+`fast_cut`/`enter_cut` so the modeled cut matches the real WW-in-hand cut. Do NOT
+>   sweep b_frame; do NOT re-mint the anchor sword-drawn (that changes the given initial state, which
+>   violates the objective). KB dead-ends #61 (greedy trap overturns the s72 "perp washout") + #62 (the
+>   forbidden delivery-diagnosis anti-patterns).
+> - **Locked live-data-backed:** anchor `kaze_r11_walkstab_seam352@twwgz` + golden
+>   `fixtures/seam352_rest_golden.json` (REST BIT-EXACT, unchanged) + geo. Gate
+>   `tests/test_seam352_walkstab.py`: `test_seam352_rest_bitexact` GREEN, `test_seam352_clip_delivered`
+>   strict-xfail (flips when the clip ships). NO behavior change to `sim.py`/`land.py`/`deliver`/
+>   `mint_online`/any shipped roll seam (only `solve_focused` search structure), so the live regression
+>   and every shipped-hit recomposition are unaffected. Every other thread UNCHANGED (ten delivered roll
+>   seams, kaze walk-stab, Tetra STANDALONE, 97m/hseam2709 lotteries, 467/163 blocked).
+>
+> **NEXT (session 74): deliver the seam352 walk-stab clip by GROUNDING THE WIND-WAKER-IN-HAND CUT IN
+> DECOMP.** The offline solver already produces margin-24 hits; the walk is bit-exact; only the modeled
+> CUT disagrees with the live WW-in-hand cut. Find the existing (days-ago) WW-in-hand cut handling, read
+> `d_a_player_sword.inc` (procCutF / changeCutProc) + `d_a_player_main.cpp` (checkNextActionFromButton /
+> equip-anime completion) for why the real cut lunges as it does from a WW-in-hand walk, model it in
+> `fast_cut`/`enter_cut` so the solver searches the ACTUAL deliverable cut, re-solve, deliver. HARD
+> RULES: ground in decomp (never sweep b_frame/inputs), never alter the given anchor. Then ROADMAP
+> exp5(b)/(c)+exp6 and the lotteries.
+
+> **PRIOR THREAD (2026-07-20, session 72): the WALK-stab tier is GENERALIZED to a novel anchor
 > and made SELF-ADAPTIVE (Dereck's steer: one-shot from any viable corner, NO per-seam manual
 > tweaking -- [[oneshot-no-manual-tweaking]]). The tooling ships regression-clean; the seam352 live
 > clip is NOT yet delivered (a solver perp-resolution gap on the bit-exact trajectory, handed off).**

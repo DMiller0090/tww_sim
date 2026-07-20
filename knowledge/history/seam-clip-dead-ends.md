@@ -1262,6 +1262,44 @@ probe built on it.
     frame, or the bearing-arc knob (a full-mag off-aim hold for a few frames near the cut) -- to
     thread the razor on the true trajectory. NOT a per-seam constant: the same knob family, searched.
 
+## The session-72 "perp washout is physics" was a SEARCH-STRUCTURE bug (session 73, OVERTURNS the entry above)
+
+The session-72 entry called the seam352 perp floor (~0.0016, ~16x the razor) a physics limit of the
+start-crawl and proposed a "finer WALK-reachable perp knob" as the fix. That was WRONG. A dense
+exact-genuine sweep of the SAME existing knobs (crawl aims a1/a2 x mags x the c4 byte) on the
+deliverable seed=0 trajectory found genuine clips at |perp| 1.4e-4, INSIDE the razor. So the razor was
+always reachable on the bit-exact trajectory; the solver just never tested those candidates.
+
+Root cause (the dead-end #41 greedy trap, restated for walk-stab): `solve_focused` Phase A kept only the
+top-16 brackets by a cheap CENTERED-c4 perp key, and Phase B `_refine_aim`-hill-descended a1/a2 to
+MINIMIZE that cheap perp. The perp-minimum f32 cell is `gen=False` (CrrPos/in-front gating), and the
+genuine dust sits one lattice cell over at slightly larger perp; minimizing the predictor steers you
+straight off it. No new knob was needed. FIX: delete the hill-descent, drill c4 (breadth) at each
+bracket's OWN aims, test the EXACT genuine_clip, consume brackets in cheap-perp order until want/budget.
+seam352 -> 4 wall-faithful clips (margin 24); kaze -> margin 5 (unchanged); < 2 min. LESSON: a cheap
+predictor is a PRE-FILTER, never an objective to minimize; the accept is always the exact test, and
+greedy-on-the-predictor is the recurring trap (see #41). The perp-knob search proposed at s72 is moot.
+
+## Forbidden delivery-diagnosis anti-patterns + the real seam352 live blocker is the WW-in-hand CUT (session 73)
+
+The seam352 walk-stab delivers the WALK bit-exact (live `old`/facing/speedF match the sim 0-ULP through
+the cut entry) but the live CUT_F lunges only ~6u to Link's RIGHT (then recovers, proc 0x5a) instead of
+the sim's ~40u forward toward S (OOB, proc 0x24). The anchor holds the **Wind Waker in hand (equip
+0x22)**; the single B puts it away then cuts, and the sim's `enter_cut` (which models a clean sword cut,
+foot term = speedF, always 40u) does not match that WW-in-hand cut. This WW-in-hand cut was already
+solved days ago; the fix is to find and apply that decomp-grounded handling, NOT to re-derive it.
+
+RULED-OUT (Dereck's hard steers, [[decomp-first-not-brute-force]]/[[oneshot-no-manual-tweaking]]):
+- **Sweeping b_frame (or any input) live to find what clips is FORBIDDEN.** "NEVER sweep. always ground
+  in decomp." The cut behavior is in `d_a_player_sword.inc` (procCutF/changeCutProc) + `d_a_player_main.
+  cpp` (checkNextActionFromButton / equip-anime completion); read it.
+- **Re-minting the anchor sword-drawn (the ganona `mint.draw_base` trick) to dodge the WW is FORBIDDEN.**
+  It changes the GIVEN initial state, which is the opposite of the objective ("you MUST use the initial
+  state given to you"). The draw-base tier is for the ROLL pipeline's own bases, not a delivery fix here.
+- Not the drawn/undrawn foot set: `enter_cut` ignores it (all sim paths give 40u). Not the aim (0.2deg
+  off facing = CUT_F, not a side dispatch). Not b_frame timing per se (the cut fired at N from the
+  bit-exact `old`). The divergence is intrinsic to the WW-in-hand cut, still to be modeled from decomp.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

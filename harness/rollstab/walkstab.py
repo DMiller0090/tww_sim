@@ -594,28 +594,6 @@ def _graze_aim(verbose=False):
     return best_cb & 0xFFFF
 
 
-def _refine_aim(a0, m, cs, mk_stream, span, step):
-    """Hill-descend one crawl-frame aim (a0) to MINIMIZE the band |perp_ray| -- the auto perp knob.
-    `mk_stream(a)` builds the full stream with this frame aimed at `a`. Returns (best_a, best_perp,
-    best_N). a1/a2 change the settled facing -> the ray direction -> perp (the razor); the along-track
-    d2S is set separately by the c4 nudge, which keeps facing fixed (so it does NOT disturb perp)."""
-    best_a, (best_p, best_N, _) = a0, _band_perp(mk_stream(a0))
-    lo, hi = a0 - span, a0 + span
-    for a in range(lo, hi + 1, step):
-        p, N, _ = _band_perp(mk_stream(a))
-        if p < best_p:
-            best_p, best_a, best_N = p, a, N
-    for st in (max(1, step // 2), max(1, step // 4), 1):        # local descent to the s16
-        moved = True
-        while moved:
-            moved = False
-            for a in (best_a - st, best_a + st):
-                p, N, _ = _band_perp(mk_stream(a))
-                if p < best_p:
-                    best_p, best_a, best_N, moved = p, a, N, True
-    return best_a, best_p, best_N
-
-
 def solve_focused(budget=110.0, want=30, verbose=True, ks=(3, 4)):
     """SELF-ADAPTIVE one-shot walk-stab dust search (pure sim, no calibration, NO per-seam tuning --
     [[oneshot-no-manual-tweaking]]). The freeze-solver pattern (cheap perp predictor + bracket + exact
@@ -623,14 +601,17 @@ def solve_focused(budget=110.0, want=30, verbose=True, ks=(3, 4)):
 
       0. AUTO-GRAZE (`_graze_aim`): 1D-minimize the cruise-walk's cut-ray |perp to S| over the walk
          azimuth -> the grazing aim, no hand-picked `cruise_off`/sign.
-      A. Coarse brackets: at the grazed aim, sweep the 2 crawl-frame aims (a1,a2)x mags x N, rank by
-         |perp_ray| (the cheap predictor). Keep the top brackets.
-      B. Per bracket, AUTO-DECOMPOSE the two independent knobs and drive each to the razor:
-           * PERP  = the crawl aim (a1,a2) -> `_refine_aim` hill-descends it to |perp| < PERP_GATE.
-           * ALONG = the last crawl frame's byte nudge (c4) -> shifts d2S into the reach band at FIXED
-             facing (so it does not disturb the refined perp). Drill it, test the EXACT genuine_clip.
-      C. Walled confirm: re-sim with walls, accept only wall_hit==False (old is the true pre-brake
-         position, speedF still capped -> the >35u WallCorrect clearance the safe window needs).
+      A. Coarse brackets: at the grazed aim, sweep the 2 crawl-frame aims (a1,a2)x mags, rank each by
+         its centered-c4 band |perp_ray| (the cheap predictor). ALL brackets are kept, sorted.
+      B/C. BREADTH exact-genuine drill (session 73): per bracket, IN cheap-perp order until `want` hits
+         or the budget, drill the last crawl frame's byte (c4) over its 2D range AT THE BRACKET'S OWN
+         AIMS and test the EXACT genuine_clip, then the walled re-sim (accept only wall_hit==False --
+         old is the true pre-brake position, speedF still capped -> the >35u WallCorrect clearance).
+         NO hill-descent: minimizing the cheap perp predictor lands on the perp-MIN f32 cell, which is
+         NOT genuine, and steers off the genuine dust one lattice cell over (the dead-end #41 greedy
+         trap; #61) -- breadth over brackets + the exact test threads the razor where greedy floors it.
+         The c4 2D lattice's perp swing is several u, so its incommensurate byte steps fill the reach
+         to the ~1e-4 razor at a good bracket ([[no-overtuned-constants]]).
       * AUTO crawl-length retry: try each k in `ks` until hits (K=3 base; K=4 adds along phase for a
         rest whose walk is long -- the k-3 middle frames held at the 0.66-mag grazed crawl).
 
@@ -665,41 +646,33 @@ def solve_focused(budget=110.0, want=30, verbose=True, ks=(3, 4)):
         if clips or time.time() - t0 > budget:
             break
         mid = [c3base_d] * max(0, k - 3)
-        # --- Phase A: coarse perp brackets at the grazed aim ---
+        # --- Phase A: enumerate crawl-aim brackets, ranked by centered-c4 band |perp_ray| ---
         brackets = []
-        for a1 in range(cb - 1200, cb + 1200, 160):
+        for a1 in range(cb - 1600, cb + 1601, 160):
             for m1 in (0.6, 0.66, 0.72):
                 c1 = _sfbd(a1, cs, m1)
-                for a2 in range(cb - 1200, cb + 1200, 160):
+                for a2 in range(cb - 1600, cb + 1601, 160):
                     for m2 in (0.6, 0.72):
                         c2 = _sfbd(a2, cs, m2)
                         pr, N, _ = _band_perp(_stream_k([c1, c2], mid, c3base_d, cruise))
                         if N is not None:
-                            brackets.append((pr, a1, m1, a2, m2, N))
+                            brackets.append((pr, a1, m1, a2, m2))
         brackets.sort(key=lambda b: b[0])
-        brackets = brackets[:16]
         if verbose:
-            print('Phase A (k=%d, cb=%d): %d brackets, best |perp|=%.6f (%.1fs)'
+            print('Phase A (k=%d, cb=%d): %d brackets, best centered|perp|=%.6f (%.1fs)'
                   % (k, cb, len(brackets), brackets[0][0] if brackets else -1,
                      time.time() - t0), flush=True)
-        # --- Phase B/C: per bracket, refine perp (a1,a2) then drill along (c4) + wall-faithful ---
-        for (pr0, a1, m1, a2, m2, N0) in brackets:
+        # --- Phase B/C: BREADTH exact-genuine c4 drill at EACH bracket's OWN aims (no hill-descent
+        #     -- see the docstring: greedy perp-min lands on the non-genuine perp-min cell). ---
+        for (pc, a1, m1, a2, m2) in brackets:
             if time.time() - t0 > budget or len(clips) >= want:
                 break
-            # PERP: hill-descend a1 then a2 (fixed c4) to minimize band |perp|.
-            a1r, pr1, Nr = _refine_aim(a1, m1, cs,
-                                       lambda a: _stream_k([_sfbd(a, cs, m1), _sfbd(a2, cs, m2)],
-                                                           mid, c3base_d, cruise), 160, 8)
-            a2r, pr2, Nr = _refine_aim(a2, m2, cs,
-                                       lambda a: _stream_k([_sfbd(a1r, cs, m1), _sfbd(a, cs, m2)],
-                                                           mid, c3base_d, cruise), 120, 8)
-            if pr2 >= B['PERP_GATE'] * 6:      # aim can't thread S at this bracket -- skip the drill
-                continue
-            c1 = _sfbd(a1r, cs, m1)
-            c2 = _sfbd(a2r, cs, m2)
-            # ALONG: drill the last crawl frame's byte (shifts d2S at fixed facing -> preserves perp).
-            for dz in range(-13, 14):
-                for dx in range(-6, 7):
+            c1 = _sfbd(a1, cs, m1)
+            c2 = _sfbd(a2, cs, m2)
+            # ALONG: drill the last crawl frame's byte over its 2D range; the incommensurate perp
+            # steps fill the reach to the razor, and the EXACT genuine_clip is the accept.
+            for dz in range(-14, 15):
+                for dx in range(-7, 8):
                     if time.time() - t0 > budget or len(clips) >= want:
                         break
                     c4 = _dtm((min(254, max(1, c3base[0] + dx)), min(254, max(1, c3base[1] + dz))))
@@ -722,7 +695,7 @@ def solve_focused(budget=110.0, want=30, verbose=True, ks=(3, 4)):
                         continue
                     seen.add(key)
                     clips.append(dict(sticks=[list(sk) for sk in sticks[:18]], N=N,
-                                      a1=a1r, m1=m1, a2=a2r, m2=m2, c3dx=dx, c3dz=dz, k=k,
+                                      a1=a1, m1=m1, a2=a2, m2=m2, c3dx=dx, c3dz=dz, k=k,
                                       cruise_beta=cb, old=[wox, woz], new=[wnx, wnz],
                                       facing=wfac, speedF=wsp,
                                       margin=perp_margin((wox, woz), (wnx, wnz)),
