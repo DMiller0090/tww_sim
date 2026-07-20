@@ -30,8 +30,10 @@ _tb = os.path.join(os.path.dirname(_rb), 'tools')
 if _tb not in sys.path: sys.path.append(_tb)
 import dolphin_mem as dm
 
-READS = ["csangle", "facing", "link_state", "potential_speed", "anim_frame", "air",
-         "link_x", "link_z"]
+READS = ["csangle", "cam_yaw", "cam_target", "facing", "shape_angle_y", "travel_angle",
+         "link_state", "potential_speed", "anim_frame", "air", "link_x", "link_z"]
+# cam_yaw/cam_target = dCamera_c manual-cam internals (csangle == (cam_yaw+0x8000)&0xFFFF); with
+# travel_angle/shape_angle_y this shows a csangle move as C-stick pan vs bumpCheck wall collision.
 
 
 def parse_seq(path):
