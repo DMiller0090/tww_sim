@@ -159,6 +159,9 @@ class FootSpeedF:
         self._skipped = []
         # Phase G: per-frame slope angle r3 (speedF scale) + footBgCheck's m35B8 foot lift
         # (baked into every _apply_base); 0 / 0.0 = the byte-identical flat fast path.
+        # m35c4 = the setStepsOffset walk lift (draw base y = pos.y + m35C4, :9561);
+        # floors mode sets it per frame, 0.0 = byte-identical flat.
+        self.m35c4 = 0.0
         self.gnd_r3 = 0
         self.m35b8 = 0.0
         # Seed the FootFK old pose + delayed toe stream (t1=draw_{N-1}, t2=draw_{N-2}) with the
@@ -212,6 +215,7 @@ class FootSpeedF:
         c._skipped = list(self._skipped)
         c.gnd_r3 = self.gnd_r3
         c.m35b8 = self.m35b8
+        c.m35c4 = self.m35c4
         c.st = self.st.clone()
         c.ff = self.ff.clone()
         c._core = c.ff._engine                 # fused engine lives on the cloned FootFK (None in Py mode)
@@ -259,7 +263,8 @@ class FootSpeedF:
             self._core.set_pos(self.pos_x, self.pos_y, self.pos_z, self.facing)
 
     def _apply_base(self):
-        self.ff.set_pos(self.pos_x, self.pos_z, py=self.pos_y, facing=self.facing, lean=self.lean,
+        py = fp.fadds(_f32(self.pos_y), self.m35c4) if self.m35c4 else self.pos_y
+        self.ff.set_pos(self.pos_x, self.pos_z, py=py, facing=self.facing, lean=self.lean,
                         m35b8=self.m35b8)
 
     def seed_rest_blend(self, d_frame, w_frame, d_rate, w_rate, m359C, m35B4=0.0, noops=0,
@@ -553,7 +558,8 @@ class FootSpeedF:
             # Cruise frame (speedF==nspeed exactly): DEFER the pose with its draw base; the first
             # consumer drains in order, so every stream stays bit-exact. See _drain_skipped.
             self._skipped.append((state, morf, msd,
-                                  (self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean)))
+                                  (self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean,
+                                   self.m35c4)))
             return
         if self._skipped:
             self._drain_skipped()
@@ -569,9 +575,10 @@ class FootSpeedF:
         stashed at skip time was computed against a stale stream and is discarded); its speedF term
         was nspeed exactly (m3598==0), so nothing else about the frame needs re-running."""
         compose = _N.foot_compose if _N is not None else _py_foot_compose
-        base0 = (self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean)
+        base0 = (self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean, self.m35c4)
         for state, morf, msd, base in self._skipped:
-            self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean = base
+            (self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean,
+             self.m35c4) = base
             self._apply_base()
             _, f312 = compose(self.t1, self.t2, 0.0, msd, state['m3598'],
                               self.prev_f312, self.m35B4)
@@ -579,7 +586,7 @@ class FootSpeedF:
                                     state['ratio'], i_morf=morf)
             self._shift(cur, f312, msd)
         self._skipped = []
-        self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean = base0
+        self.pos_x, self.pos_z, self.pos_y, self.facing, self.lean, self.m35c4 = base0
 
     def draw_sword(self):
         """Mid-walk sword pull-out: flip the foot anim set base -> sword (WALK/DASH -> WALKS/DASHS) at

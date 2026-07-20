@@ -85,13 +85,56 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-18, session 63)
+## Status (2026-07-19, session 66)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-19, session 65): ROADMAP Phase G is PROMOTED into the stepper and
+> **CURRENT THREAD (2026-07-19, session 66): the GanonA seam255 REST gate is GREEN, 28/28 rows
+> 0-ULP incl. m359C + pos_y (`tests/test_ganona_rest.py` un-redded, golden
+> `fixtures/seam255_rest_golden.json`), WITHOUT touching the corridor stone (Dereck's steer:
+> avoid, don't break).** Three things delivered it:
+> - **The stone is AVOIDED by aim geometry.** The geo fixture now declares `aim_deg=186.5` (the
+>   hseam2709 grazing-aim mechanism): the PROC_STONE sits 16u off the interior-bisector line but
+>   77.8u off the 186.5 line, the 949-plateau micro-incline holds to d2S~600 with 250u+ wall
+>   clearance, and the minted rest's actual walk track clears it by 124.6u. A SECOND prop
+>   (pid 459) sits ON the line down the ramp at along 918 - park at ~815 (settle_est=285) so
+>   the settle never reaches it. Screen a corridor's ACTORS along the line (the ledger-#52
+>   actor-list walk), not just walls/floor/cam, before parking.
+> - **The cam-leash creep is beaten by `mint.cam_screen` (the #44 pattern generalizes):** on the
+>   186.5 line the default aim-derived pan target CREEPS ~4 s16/row through the whole approach
+>   (the row-5+ pure-bearing REST diff signature - stick decode is csangle-relative); two
+>   alternates stay FROZEN and the smallest-settle one (target 25951, csangle 21121) minted the
+>   REST-exact anchor at d2S 513.6, steady WAITS, plateau y 949.04.
+> - **Two missing decomp ground terms found by the per-frame foot diff and modeled (the s66 sim
+>   change, `knowledge/model/ground-model.md`):** (1) **setStepsOffset's m35C4 walk base-Y lift**
+>   (:9524/:9561) - on a downhill walk the draw base (and footBgCheck's r30[1][3]) rides
+>   ~0.7 x one frame's dy above pos.y (~4.9e-3 at cruise; exactly 0 on flat), plus the uphill
+>   `pos.y = dVar5` snap-ahead branch; seeded `rest_m35C4` (mint captures JP +0x34EC, 0.0 at a
+>   settled rest). (2) **footBgCheck's non-plant `field_0x030` CLOTCH leg lift** (:8816) -
+>   `0.3f * ground clearance`, UNGATED (the 0.1 floor is only inside setLegAngle, which zeroes
+>   the leg ANGLES), consumed by jointBeforeCB as `mTranslate.x -= field_0x030` at R/LCLOTCH
+>   (:276/:282); it moves the drawn foot ~1e-3 on the incline and feeds m359C. Both were
+>   invisible on flat (identically zero), which is why 9 flat seams gated clean without them.
+> - **Locked live-data-backed:** anchor `ganona_r0_rollstab_seam255@twwgz` (re-minted on the
+>   186.5 line, frozen cam, seed tracked incl. rest_m35C4) + golden
+>   `fixtures/seam255_rest_golden.json` (REST BIT-EXACT). Gate `test_seam255_rest_bitexact`
+>   GREEN. Suite **403 passed, 1 skipped, 5 xfailed** (the ganona xfail marker removed; the
+>   uphill micro-incline offline gate updated to the setStepsOffset ahead-cross semantics).
+>   Flat paths byte-identical (foot030=None / m35c4=0.0 fast paths; all shipped-hit goldens
+>   recompose green). Base `ganona_r0_base@twwgz` unchanged, stone INTACT.
+>
+> **NEXT (session 67): the solve.** The REST anchor is off the nominal line (old perp +47.9,
+> the cam-leash oscillation documented s65) and the solve needs an ON-LINE anchor with the
+> ~580u envelope - re-run `mint_online` with `target_csangle=25951` iterating on the BASELINE
+> old perp (the frozen cam should stop the oscillation), or accept the arc-bracket absorbing
+> the offset. Then the s64 items (mint floor-ladder relax; step-3/step-5 fork for the >630u
+> ramp park) and the 0.002u-dense dust lottery. Every other thread (nine delivered seams,
+> walk-stab, Tetra push-aside/turnaround STANDALONE, 97m/hseam2709 lotteries, 467/163 blocked)
+> UNCHANGED.**
+
+> **PRIOR THREAD (2026-07-19, session 65): ROADMAP Phase G is PROMOTED into the stepper and
 > live-validated THROUGH the GanonA incline walk.** Floors mode (`LandState(floors=, gnd_seed=)`,
 > new `tww_sim/land/floors.py`) models ground per frame, decomp-first: the gravity dip +
 > GroundCross snap (pos_y follows the floor plane; d_bg_s_acch.cpp:122, probe pos.y+60, MAX

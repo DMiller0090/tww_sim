@@ -37,7 +37,7 @@ import json
 
 from ..core.fp import f32, fadds, fsubs, fmuls, fmadds
 from ..core.collision import Tri, Plane, ground_cross_y, cross_y_tri_front, fsqrt
-from ..core.mathlib import cM_atan2s, cM_scos_s16, s16_signed, cLib_addCalc
+from ..core.mathlib import cM_atan2s, cM_ssin_s16, cM_scos_s16, s16_signed, cLib_addCalc
 from ..core.anim.fk import mtx_mult_vec
 from .constants import (cLib_addCalcAngleS, WAIT, FREE_WAIT, WAIT_TURN,
                         SUBJECTIVITY, SIDE_STEP_LAND, BACK_JUMP_LAND, FRONT_ROLL,
@@ -81,21 +81,31 @@ def gnd_frame_end(st):
     engine's ``m35b8`` attribute."""
     from ..core.anim import fk as _fk
     foot = st._foot
+    # setStepsOffset (:11528): walk anim modes only; WAIT freezes m35C4. May SNAP pos.y
+    # up to the ahead-floor (uphill branch).
+    if foot.st.m34C3 in (1, 4, 9, 10):
+        st.pos_y = st._gnd.steps_offset(st.pos_x, st.pos_y, st.pos_z, st.speedF,
+                                        st.travel, st._gnd.y_old)
     # setWaistAngle (:9530): target 0 in the flag-1/MIDAIR/0x8000 modes; chases toward
     # 0.7 * m34E2 * |nspeed/max| otherwise. Micro-incline tier: raises if it leaves 0.
     excluded = st.state in GND_IDLE_STATES or st.state in GND_R23_EXCLUDED
     st._gnd.update_m34e0(st.nspeed, st.max_nspeed, excluded=excluded)
-    # footBgCheck (:8712): the stored feet (= the toe stream's last-drawn t1), last draw's
-    # WAIST world translate, and the fresh base at the post-integration pos + draw-time lean.
+    # footBgCheck (:8712): stored feet t1 + last draw's WAIST vs the fresh base, whose
+    # translate y = pos.y + m35C4 (setWorldMatrix :9561; m3608 == 0 on this tier).
     waist = foot.ff.last_waist
     if waist is None:
         waist = foot.ff.waist_from_old()
         foot.ff.last_waist = waist
-    base, inv = _fk.world_base(st.pos_x, st.pos_y, st.pos_z, st.facing, st._draw_lean)
+    base_y = fadds(f32(st.pos_y), st._gnd.m35c4)
+    base, inv = _fk.world_base(st.pos_x, base_y, st.pos_z, st.facing, st._draw_lean)
     r23_excluded = (not st.ground_hit) or st.state in GND_R23_EXCLUDED
     foot.m35b8 = st._gnd.foot_bg_check(foot.t1, waist, base, inv, st.pos_y,
                                        r29_idle=st.state in GND_IDLE_STATES,
                                        r23_excluded=r23_excluded)
+    # The deferred draw consumes THIS frame's field_0x030 (jointBeforeCB :276/:282) and
+    # rides THIS frame's m35C4 (FootSpeedF._apply_base) -- same timing as the m35B8 bake.
+    foot.ff.foot030 = (st._gnd.foot030[0], st._gnd.foot030[1])
+    foot.m35c4 = st._gnd.m35c4
 
 
 def _mk_tri(t):
@@ -149,10 +159,11 @@ class GroundState:
     history-dependent (the probe freeze latches 5 frames after the feet last moved 10u)."""
 
     __slots__ = ("tris", "gnd_pla", "gnd_idx", "ground_hit", "ground_h",
-                 "m35b8", "m34e0", "m34e2", "foot024", "foot001")
+                 "m35b8", "m34e0", "m34e2", "foot024", "foot001", "foot030",
+                 "m35c4", "y_old")
 
     def __init__(self, tris, m35b8=0.0, m34e0=0, m34e2=0, foot024=None, foot001=(5, 5),
-                 gnd_pla=None, ground_hit=True):
+                 gnd_pla=None, ground_hit=True, m35c4=0.0):
         self.tris = tris
         self.gnd_pla = gnd_pla             # mAcch.m_gnd plane (previous CrrPos best poly)
         self.gnd_idx = None
@@ -165,6 +176,13 @@ class GroundState:
         # None => lazy-seed from the first frame's feet (minted anchors must pass captures).
         self.foot024 = [tuple(map(f32, p)) for p in foot024] if foot024 is not None else None
         self.foot001 = list(foot001)
+        # mFootData[i].field_0x030, the non-plant CLOTCH lift (:8816) -- fresh each frame,
+        # never chased, no seed field. See knowledge/model/ground-model.md.
+        self.foot030 = [f32(0.0), f32(0.0)]
+        # m35C4, the setStepsOffset walk base-Y lift (:9524): ~0.7*|dy| at cruise, 0.0 on
+        # flat, FROZEN during WAIT -> seeded (rest_m35C4). See knowledge/model/ground-model.md.
+        self.m35c4 = f32(m35c4)
+        self.y_old = None                  # old.pos.y (start-of-frame), set per step by LandState
 
     def clone(self):
         c = GroundState.__new__(GroundState)
@@ -178,7 +196,39 @@ class GroundState:
         c.m34e2 = self.m34e2
         c.foot024 = list(self.foot024) if self.foot024 is not None else None
         c.foot001 = list(self.foot001)
+        c.foot030 = list(self.foot030)
+        c.m35c4 = self.m35c4
+        c.y_old = self.y_old
         return c
+
+    # ---------------------------------------------------------------- setStepsOffset (m35C4)
+    def steps_offset(self, px, py, pz, speedF, travel, y_old):
+        """daPy_lk_c::setStepsOffset (:9524, called at :11528 when m34C3 in (1,4,9,10)): the
+        walk-step base-Y lift. Chases m35C4 to 0 (cLib_addCalc min step 5.0 == exact 0 at walk
+        magnitudes), probes the floor ONE speedF ahead of pos, then (a) ahead-floor HIGHER:
+        SNAPS current.pos.y up to it and m35C4 -= 0.7*rise; (b) else: m35C4 += 0.7*(this
+        frame's y drop, old.pos.y - pos.y) when >= 0. setWorldMatrix builds the draw base at
+        pos.y + m35C4 + m3608 (m3608 == 0 here), so the drawn pose AND footBgCheck's
+        r30[1][3] ride m35C4 above pos.y -- the missing term behind the s66 GanonA foot030
+        residual (0.7 * one frame's dy, ~4.9e-3 at cruise). The m34E2 tan terms are exactly
+        +-0.0 on the zero-atan tier, and x - (+-0.0) == x in f32, so they are dropped.
+        Returns the (possibly snapped) pos.y."""
+        self.m35c4 = cLib_addCalc(self.m35c4, f32(0.0), f32(0.5), f32(25.0), f32(5.0))
+        if self.m34e2 != 0:
+            raise SlopeNotModeled("setStepsOffset with m34E2 != 0 -- ramp tier not ported")
+        probe_x = fadds(f32(px), fmuls(f32(speedF), cM_ssin_s16(travel)))
+        probe_z = fadds(f32(pz), fmuls(f32(speedF), cM_scos_s16(travel)))
+        probe_y = fadds(f32(py), FOOT_PROBE_UP)
+        d5, _ = ground_cross(self.tris, probe_x, probe_y, probe_z)
+        fv = fsubs(d5, f32(py)) if d5 != NEG_INF else NEG_INF
+        if fv > 0.0:
+            py = d5                                      # current.pos.y = dVar5 (:9545)
+            self.m35c4 = fsubs(self.m35c4, fmuls(fv, f32(0.7)))
+        else:
+            fv = fsubs(f32(y_old), f32(py))              # (old.pos - current.pos).y (:9548)
+            if fv >= 0.0:
+                self.m35c4 = fadds(self.m35c4, fmuls(fv, f32(0.7)))
+        return py
 
     # ---------------------------------------------------------------- speedF slope scale
     def speedf_r3(self, travel, gcode_8=False):
@@ -323,13 +373,28 @@ class GroundState:
         else:
             f1t = fsubs(sp18[1] if sp18[0] > sp18[1] else sp18[0], f32(py))
         self.m35b8 = cLib_addCalc(self.m35b8, f1t, f32(0.5), f32(7.5), f32(2.5))
-        if not r23_excluded:
-            # setLegAngle runs AFTER base += m35B8 (:8794-8825); its |x| < 0.1 early-return
-            # keeps the leg IK exactly zero on this tier -- raise if it would fire.
-            base_y = fadds(f32(py), self.m35b8)
-            lo = sp18[1] if sp18[0] > sp18[1] else sp18[0]
-            hi = sp18[0] if sp18[0] > sp18[1] else sp18[1]
-            if abs(fsubs(lo, base_y)) >= 0.1 or abs(fmuls(f32(0.7), fsubs(hi, base_y))) >= 0.1:
-                raise SlopeNotModeled("setLegAngle would engage (foot drops %.4f / %.4f)"
-                                      % (fsubs(lo, base_y), fsubs(hi, base_y)))
+        # The per-foot CLOTCH lift + leg IK block (:8794-8825): leg ANGLES stay 0 on this
+        # tier (guarded), the field_0x030 lift is UNGATED. See knowledge/model/ground-model.md.
+        if r23_excluded:
+            self.foot030[0] = f32(0.0)
+            self.foot030[1] = f32(0.0)
+        else:
+            plant = 1 if sp18[0] > sp18[1] else 0     # r23: the LOWER foot
+            other = 1 - plant                          # r28
+            # r30[1][3] after += m35B8 (:8795): the base TRANSLATE y (pos.y + m35C4), not
+            # raw pos.y.
+            base_y = fadds(base[1][3], self.m35b8)
+            if abs(fsubs(sp18[plant], base_y)) >= 0.1:
+                raise SlopeNotModeled("setLegAngle would engage on the plant foot (drop %.4f)"
+                                      % fsubs(sp18[plant], base_y))
+            self.foot030[plant] = f32(0.0)
+            f1 = fsubs(sp18[other], base_y)
+            if f1 > 0.0 or r29_idle:
+                # :8816, ungated -- only the leg ANGLES have the setLegAngle 0.1 early-return
+                self.foot030[other] = fmuls(f32(0.3), f1)
+                if abs(fmuls(f32(0.7), f1)) >= 0.1:
+                    raise SlopeNotModeled("setLegAngle would engage on the free foot "
+                                          "(0.7*f1 %.4f)" % fmuls(f32(0.7), f1))
+            else:
+                self.foot030[other] = f32(0.0)
         return self.m35b8

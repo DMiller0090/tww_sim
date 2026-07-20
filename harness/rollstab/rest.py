@@ -107,7 +107,8 @@ def rest_state(anchor, walls=None, model_draw=None, dtm_seed=1, noops=None, floo
         gnd_seed = dict(m35b8=seed.get('rest_m35B8', 0.0),
                         foot024=seed.get('rest_foot024'),
                         foot001=tuple(seed.get('rest_foot001', (5, 5))),
-                        waist=seed.get('rest_waist'))
+                        waist=seed.get('rest_waist'),
+                        m35c4=seed.get('rest_m35C4', 0.0))
     s = LandState(pos_x=seed['link_x'], pos_z=seed['link_z'], pos_y=seed.get('link_y', 0.0),
                   facing=seed['shape_angle_y'] & 0xFFFF, travel=seed['travel_angle'] & 0xFFFF,
                   csangle=seed['csangle'] & 0xFFFF, state=seed['link_state'], nspeed=0.0,

@@ -133,6 +133,9 @@ class FootFK:
         # Phase G: record the WAIST (30) world translate per drawn pose (footBgCheck's r31
         # consumes LAST frame's value). Off by default -- zero cost on the flat paths.
         self.track_waist = False
+        # Phase G: mFootData[i].field_0x030, the CLOTCH leg lift consumed at jnt 36 (i=0)
+        # / 31 (i=1) (jointBeforeCB :276/:282). None = off (flat paths).
+        self.foot030 = None
         self.last_waist = None
 
     def clone(self):
@@ -159,6 +162,7 @@ class FootFK:
         c.m37b4 = self.m37b4
         c.track_waist = self.track_waist
         c.last_waist = self.last_waist
+        c.foot030 = self.foot030                     # immutable tuple (or None): assign ok
         return c
 
     def set_pos(self, px, pz, py=0.0, facing=0, lean=0, m35b8=0.0):
@@ -233,6 +237,7 @@ class FootFK:
                     oq.get(jnt), ot.get(jnt), os_.get(jnt))
                 oq[jnt] = q3; ot[jnt] = trans; os_[jnt] = scale
                 local[jnt] = m
+            self._apply_foot030(local)
             return local
         for jnt in CHAIN_JOINTS:
             q3, trans, scale = self._blend_joint(move0, move1, f0, f1, ratio, jnt, rate)
@@ -243,7 +248,22 @@ class FootFK:
                 m[i][2] = fp.fmuls(m[i][2], scale[2])
             m[0][3] = fp.f32(trans[0]); m[1][3] = fp.f32(trans[1]); m[2][3] = fp.f32(trans[2])
             local[jnt] = m
+        self._apply_foot030(local)
         return local
+
+    def _apply_foot030(self, local):
+        """jointBeforeCB's per-leg CLOTCH lift (d_a_player_main.cpp:276/:282): the local
+        translate.x -= mFootData[i].field_0x030, applied to the built joint matrix (rotation and
+        scale never touch column 3, so the post-adjust is bit-identical to the game's pre-build
+        TransformInfo edit). The stored old pose (morf source) keeps the UN-adjusted translate --
+        the game saves the original into m3668 and the anim history never sees the callback."""
+        f30 = self.foot030
+        if f30 is None:
+            return
+        if f30[0]:
+            local[36][0][3] = fp.fsubs(local[36][0][3], f30[0])   # RCLOTCH <- mFootData[0]
+        if f30[1]:
+            local[31][0][3] = fp.fsubs(local[31][0][3], f30[1])   # LCLOTCH <- mFootData[1]
 
     def _chain_mtx(self, local, foot_jnt):
         """The accumulated FK matrix for one foot's chain (shared by that foot's toe AND heel).

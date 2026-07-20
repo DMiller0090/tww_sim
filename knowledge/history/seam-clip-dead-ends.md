@@ -1101,6 +1101,26 @@ mint needs -- a non-roll technique's target, not a roll pick.
     (mint_online never converged here) and the aim stick ran a 226-tread mid-cruise turn --
     the first big turn any REST stream ever exercised; near-zero-turn streams on the other nine
     seams could never have flushed this out.
+    RESOLVED s66 by AVOIDANCE, not the break recipe (Dereck's steer): declare `aim_deg` in the
+    geo fixture so the whole approach line misses the prop (186.5 clears it by 77.8u where the
+    bisector passed 16u), and actor-scan the NEW line before parking (a second prop sat ON it
+    at along 918 - parked short of it). The base keeps the stone INTACT.
+
+53. **Parking the rest PAST an on-line obstacle (d2S < ~440) fails the REST gate on stream
+    length, not physics.** The verification stream is NPREF 10 + NCRUISE 18 = 28 walk rows
+    (~430u of travel), so a rest minted past the GanonA stone (the stone sits ~300u from S,
+    forcing rest d2S <= ~240u) walks into the corner walls mid-stream, and walls are outside
+    the REST model. A REST anchor needs d2S >= ~450 regardless of how clean the line is; below
+    that, fix the LINE (aim_deg) or the obstacle, not the park.
+
+54. **Trusting the default aim-derived pan target off the bisector line: the GanonA cam leash
+    CREEPS position-dependently on the 186.5 line** (~+4 s16 per row through the WHOLE
+    approach, +125 near the corner; the s65 28401 "freeze" was a bisector-line property, not a
+    corridor property). Signature: REST rows go pure-bearing-off (~0.08 deg) from the first
+    cruise row while d/w frame ctrls stay exact. Fix is the ledger-#44 tool, generalized:
+    `mint.cam_screen` at the actual park found two FROZEN alternates (25951/17567); mint with
+    the smallest-settle one (#45 rule). A settle that hits the `settle_walk` frame cap without
+    the csangle-freeze break is the tell that the default target never froze.
 
 Also learned (same session, documented in `harness/rollstab/mint.py`): the decomp's US
 field-name offsets shift **-0xD8 on JP** in BOTH daPy and fopAc space (m35B8 -> +0x34E0,

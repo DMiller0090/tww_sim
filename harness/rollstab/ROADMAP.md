@@ -90,6 +90,13 @@ diverges. Golden + `tests/test_rollstab_corner.py`. wallA(705) before wallB(713)
 > BIT-EXACT is blocked only by the corridor STONE prop's CC push (ledger #52 -- mint-time
 > setup, not a ground gap). Status + next steps: README ## Status (session 65).
 
+> **Session 66: the full-corridor REST gate is GREEN (28/28 rows 0-ULP incl. m359C + pos_y,
+> `tests/test_ganona_rest.py`).** The stone is AVOIDED by geometry (geo `aim_deg=186.5` + a
+> cam-screened frozen pan target), never consumed; and rows 12+ exposed the last two ground
+> terms, now modeled: setStepsOffset's m35C4 walk base-Y lift (:9524/:9561) and footBgCheck's
+> non-plant field_0x030 CLOTCH leg lift (:8816) -- both exactly 0 on flat. Model doc:
+> `knowledge/model/ground-model.md`. Ramp tier still UNPORTED (SlopeNotModeled).
+
 Measured first, as planned: the walkable floor Link's roll crosses at the (-1727,-990) Tetra corner
 is PERFECTLY FLAT. `harness/rollstab/capture_ground.py` (self-contained, `dolphin_mem` only) samples
 the DZB ground along the whole roll footprint old->seam (flooded Hyrule, savestate slot 3): a single

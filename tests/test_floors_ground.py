@@ -82,9 +82,14 @@ def test_micro_incline_follows_floor():
     assert rows[-1][1] > rows[0][1]
     for i, r in enumerate(rows):
         assert r[4], f"ground_hit dropped at frame {i}"
-        # pos_y == the exact plane cross at (x, z): re-derive via the module's own primitive
+        # UPHILL frames: setStepsOffset (:9545) snaps pos.y to the cross ONE speedF ahead
+        # (travel == 0 -> z + speedF); stopped rows sit at the local cross. Never below it.
         h, idx = ground_cross(tris, r[0], f32(r[1] + 60.0), r[2])
-        assert h == r[1], f"pos_y is not the plane cross at frame {i}: {r[1]} vs {h}"
+        ha, _ = ground_cross(tris, r[0], f32(r[1] + 60.0), f32(r[2] + r[3]))
+        assert r[1] in (h, ha), \
+            f"pos_y is neither the local nor the ahead plane cross at frame {i}: " \
+            f"{r[1]} vs {h} / {ha}"
+        assert r[1] >= h, f"pos_y sits below the floor at frame {i}: {r[1]} < {h}"
     # the whole corridor sits inside the zero atan cell
     for t in tris:
         assert get_ground_angle(t.pla, 0) == 0

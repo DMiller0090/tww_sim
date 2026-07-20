@@ -698,6 +698,7 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         # below. The ballistic/crash branches above already integrate their own y.
         if self._gnd is not None and self.state != FRONT_ROLL_CRASH:
             gnd_y0 = self.pos_y
+            self._gnd.y_old = gnd_y0       # old.pos.y (start-of-frame; setStepsOffset :9548)
             self.speed_y = f32(self.speed_y + walls_GRAVITY)
             if self.speed_y < self.MAX_FALL:
                 self.speed_y = f32(self.MAX_FALL)

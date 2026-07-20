@@ -36,6 +36,7 @@ _FOOT_OFF = dict(rtoe=0x3CF8, ltoe=0x3E10, rheel=0x3CEC, lheel=0x3E04)  # JP mFo
 # Phase G rest seed offsets. JP = the decomp's US field-name offsets - 0xD8 (live-validated
 # s65; full table in knowledge/history/seam-clip-dead-ends.md ledger #52).
 _M35B8_OFF = 0x34E0
+_M35C4_OFF = 0x34EC   # m35C4, the setStepsOffset walk base-Y lift (frozen during WAIT)
 _CLMODEL_OFF = 0x254
 _FOOT024_OFF = (0x3D04, 0x3E1C)   # mFootData[i].field_0x024 (frozen probe midpoint, cXyz)
 _FOOT001_OFF = (0x3CE1, 0x3DF9)   # mFootData[i].field_0x001 (freeze countdown, u8)
@@ -88,6 +89,7 @@ def capture_rest(src):
                 rest_t2=_foot_tuple(h, m, Pp),
                 # Phase G ground rest state (harmless extras on a flat anchor)
                 rest_m35B8=_f32_at(h, m, Pp + _M35B8_OFF),
+                rest_m35C4=_f32_at(h, m, Pp + _M35C4_OFF),
                 rest_foot024=[list(struct.unpack('>3f', D.read_bytes(h, m, Pp + o, 12)))
                               for o in _FOOT024_OFF],
                 rest_foot001=[D.read_bytes(h, m, Pp + o, 1)[0] for o in _FOOT001_OFF],

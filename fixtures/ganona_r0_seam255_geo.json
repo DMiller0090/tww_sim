@@ -2,7 +2,7 @@
  "stage": "GanonA",
  "room": null,
  "mesh": "fixtures/ganona_r0_walls_ordered.json",
- "source": "fixtures/ganona_r0_walls_ordered.json (block-grid ordered DZB mesh); walls 255 x 256; barrier auto-gathered (GATHER_R=60, band-overlap, ordered)",
+ "source": "fixtures/ganona_r0_walls_ordered.json (block-grid ordered DZB mesh); walls 255 x 256; barrier auto-gathered (GATHER_R=60, band-overlap, ordered); aim_deg=186.5 declared s66: bisector line passes 16u from the corridor PROC_STONE prop (ledger #52), the 186.5 line clears it by 79.9u with the 949-plateau micro-incline intact to d2S~600 and 250u+ wall clearance through the rest envelope",
  "S": [
   615.5078125,
   948.8594360351562,
@@ -274,5 +274,6 @@
    ],
    "d": 2461.312744140625
   }
- ]
+ ],
+ "aim_deg": 186.5
 }

@@ -2,13 +2,17 @@
 named target) -- the Phase G FLOORS-MODE REST gate: the from-rest walk on the micro-incline
 corridor must be bit-exact INCLUDING pos_y following the floor.
 
-strict-xfail RED until the REST golden ships: the session-65 live gate was BIT-EXACT rows 0-11
-(the ground model validated live) but rows 12+ take a CC push around the PROC_STONE skull prop
-standing ON the corridor at (569.72, 948.94, -2080.17) (ledger #52). Un-red by consuming the
-stone in the base (mint-time setup, the #47/#49 pattern), re-minting, re-running
-`python -m harness.rollstab.rest anchor=<a> geo=<g> seed=0 floors=<f> golden=fixtures/
-seam255_rest_golden.json`, then REMOVING the xfail marker. Goldens are live-captured, never
-edited to make the sim pass (SESSION_PROMPT hard rule).
+GREEN as of session 66: the corridor PROC_STONE (ledger #52) is AVOIDED, never touched -- the
+geo fixture declares aim_deg=186.5 (the stone sits 16u off the interior-bisector line but
+77.8u off this one; the minted rest track clears it by 124.6u) -- and the anchor re-minted at
+the cam-screened frozen pan target 25951 (csangle 21121 frozen through the whole approach; the
+default aim target's cam leash CREEPS on this corridor and breaks the stick decode). The last
+two ground terms were then modeled decomp-first: setStepsOffset's m35C4 walk base-Y lift
+(0.7 * per-frame downhill dy rides the draw base, d_a_player_main.cpp:9524/:9561) and
+footBgCheck's non-plant field_0x030 CLOTCH leg lift (0.3f * ground clearance, :8816, consumed
+by jointBeforeCB :276/:282). Golden = the live clean-DTM capture, 28/28 rows 0-ULP incl.
+m359C + pos_y. Goldens are live-captured, never edited to make the sim pass (SESSION_PROMPT
+hard rule).
 """
 import json
 import os
@@ -36,9 +40,6 @@ def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
 
-@pytest.mark.xfail(strict=True,
-                   reason="GanonA REST golden not yet shipped: the corridor STONE prop must be "
-                          "consumed in the base, then re-mint + re-gate (ledger #52, s65 handoff)")
 def test_seam255_rest_bitexact():
     """Floors-mode from-rest 0-ULP on the GanonA incline corridor, pos_y included."""
     assert os.path.exists(_GOLD), "REST golden not shipped (stone prop, ledger #52)"

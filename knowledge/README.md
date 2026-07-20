@@ -94,6 +94,7 @@ you can triage in one glance.
 
 ### Model - land
 - **How does the land sim accumulate position (f32) / the `Y171` partial regime / the 7 red ULP tests?** → [model/land-sim.md](model/land-sim.md)
+- **How does floors mode follow a sloped floor (Phase G) / the zero atan cell / m35B8 / m35C4 (setStepsOffset) / field_0x030 / what does a floors anchor seed carry?** → [model/ground-model.md](model/ground-model.md)
 - **How does the land planner reach a target (x,z) / the live-valid stick set / the C-up freeze to z=2000 / seam-clip vs RTA bars?** → [model/land-planner.md](model/land-planner.md)
 - **How does the land SETUP FINDER work (human-consistent discrete moves → ranked input seqs) / why re-simulate instead of summing displacements / which moves are "blocks" / why isn't walking one?** → [model/land-setup-finder.md](model/land-setup-finder.md)
 - **What are the targeted ballistic hops (sidehop / backflip) / the A=roll vs L+A=sidehop/backflip input mapping?** → [mechanics/ballistic-hops.md](mechanics/ballistic-hops.md)
