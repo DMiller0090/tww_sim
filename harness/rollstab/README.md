@@ -91,7 +91,58 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-18, session 63): ROADMAP Phase A step 4's "deliver one corner
+> **CURRENT THREAD (2026-07-19, session 65): ROADMAP Phase G is PROMOTED into the stepper and
+> live-validated THROUGH the GanonA incline walk.** Floors mode (`LandState(floors=, gnd_seed=)`,
+> new `tww_sim/land/floors.py`) models ground per frame, decomp-first: the gravity dip +
+> GroundCross snap (pos_y follows the floor plane; d_bg_s_acch.cpp:122, probe pos.y+60, MAX
+> cross-y over ground-list polys + walls ny>=0.014), the posMoveFromFootPos speedF slope scale
+> (r3 = getGroundAngle(prev CrrPos poly, travel) incl. the r3<0 UPHILL x0.85 branch, :2408-2417),
+> and the m35B8 foot ground-lift (footBgCheck :8712: per-delayed-foot GroundCross + the 10u/5-frame
+> probe-freeze hysteresis + the waist r31 term, chased addCalc(0.5, 7.5, 2.5), baked base y += /
+> m37B4 y -= at the draw). Flat paths are byte-identical (floors=None untouched; suite **402
+> passed, 1 skipped, 6 xfailed** incl. +5 floors gates `tests/test_floors_ground.py`: flat-mesh
+> step-identical equivalence, micro-incline plane-cross following, ramp REFUSES).
+> - **The tier fact that shaped the model: `cM_atan2s` truncates `ratio*1024`, so any slope under
+>   ~1/1024 (~0.056 deg) has getGroundAngle EXACTLY 0.** The GanonA 0.022-deg micro-incline is a
+>   zero cell -- every angle term (speedF cos, x0.85, m34E2 anim-rate cos, m34E0 waist tilt, leg
+>   IK) is exactly zero there; only pos_y + m35B8 are load-bearing. The ~10-deg ramp is NOT ported:
+>   floors mode raises `SlopeNotModeled` rather than approximating (refuse-don't-guess).
+> - **The LIVE gate reached rows 0-11 BIT-EXACT -- pos, frame ctrls, m359C AND pos_y tracking the
+>   incline (949.0138 -> 948.966) -- so the ground model is live-validated.** Rows 12+ diverge for
+>   a NON-ground cause, root-caused live (ledger #52): a **PROC_STONE skull prop stands ON the
+>   corridor at (569.72, 948.94, -2080.17)** and the live walk takes a CC push around it (measured:
+>   live speed == 17*dir(travel) exactly while position gains a 4-frame decaying push; no wall/bg/
+>   posMove term -- an actor CC cylinder). Fix = mint-time SETUP (the #47/#49 pattern): break the
+>   stone in the base -> `ganona_r0_base2@twwgz` -> re-mint -> re-gate. Screen a novel corridor for
+>   CC-capable PROPS (stones/pots line dungeon corridors), not just walls/floor/cam.
+> - **New JP RAM truths (mint.py header): the decomp's US field-name offsets shift -0xD8 on JP** in
+>   both daPy and fopAc space (m35B8 +0x34E0, mCurrAttributeCode +0x34AC, m34DC +0x3404, speed
+>   +0x148, speedF +0x17C, mpCLModel +0x254 -> J3DModel +0x8C mpNodeMtx) -- each live-validated.
+>   Mint now captures the Phase G rest seed (rest_m35B8 / rest_foot024 / rest_foot001 / rest_waist);
+>   `rest.py` threads `floors=` (CLI too) and the verification compares pos_y per row.
+> - **mint_online on this corridor:** the cam leashes to csangle 28401 (never reaches the aim
+>   target -- fixed-cam-like) and the settle varies 217-330u across the ramp junction, so the along
+>   loop oscillated (rest d2S 411/690/483) and the perp never converged (22.9u off-line; retry with
+>   `settle_est=320` after the stone). An off-line anchor is FINE for the REST gate, not the solve.
+>   The 226-tread mid-cruise aim turn this caused is what flushed the stone out (first big turn any
+>   REST stream ever ran).
+> - **Locked live-data-backed:** floors mesh `fixtures/ganona_r0_floors.json` (capture_walls
+>   `floors=1`, GroundCross candidate set in visit order); anchors `ganona_r0_base@twwgz` (healed,
+>   steady WAITS, A-probe CLEAN -- no armed event) + `ganona_r0_rollstab_seam255@twwgz` (seed
+>   tracked, d2S 483 ON the incline); gate `tests/test_ganona_rest.py::test_seam255_rest_bitexact`
+>   **strict-xfail RED** (flips by removing the marker once the golden ships). NO shipped-hit
+>   behavior change (flat paths byte-identical; all nine seams' goldens recompose).
+>
+> **NEXT (session 66): run the stone-break recipe (s65 handoff), save `ganona_r0_base2@twwgz`,
+> re-mint with `settle_est=320`, re-run `python -m harness.rollstab.rest anchor=... geo=fixtures/
+> ganona_r0_seam255_geo.json seed=0 floors=fixtures/ganona_r0_floors.json golden=fixtures/
+> seam255_rest_golden.json` -> expect REST BIT-EXACT end-to-end -> un-red the test. Then the mint
+> floor-ladder relax + the step-3/step-5 fork for the >630u ramp park (s64 handoff items 4-5); the
+> clip itself is a 0.002u-dense lottery after that. Every other thread (nine delivered seams,
+> walk-stab, Tetra push-aside/turnaround STANDALONE, 97m/hseam2709 lotteries, 467/163 blocked)
+> UNCHANGED.**
+
+> **PRIOR THREAD (2026-07-18, session 63): ROADMAP Phase A step 4's "deliver one corner
 > out-of-kaze" tail is CLOSED -- the THIRD room (Hyrule Castle interior `Hyroom` r0, picked by
 > Dereck's option (b): man-made flat floors) delivered a novel corner LIVE 0-ULP via the one-shot:
 > seam_4002_4004 ("cseam4002", S=(-1210.3112, 207.8036), polys 4002x4004, interior 93.03, basement

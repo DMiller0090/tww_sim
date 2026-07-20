@@ -1084,6 +1084,30 @@ hexagonal Master-Sword-chamber corners screen at n~2.6M / band ~1u (a visibly op
 dust) but their corridors are 460-700u, under the ~900u+ (rest 580 + settle) the standard roll
 mint needs -- a non-roll technique's target, not a roll pick.
 
+## Corridor props and the JP offset shift (session 65, GanonA / Phase G)
+
+52. **Assuming a wall/floor/cam-screened corridor is CLEAR: dungeon corridors carry CC-capable
+    PROPS (d_a_stone skulls, tsubo pots) that WallCorrect/GroundCross screening cannot see.**
+    The GanonA r0 REST gate was BIT-EXACT rows 0-11 (the Phase G ground model validated live,
+    pos_y tracking the incline) then diverged on a 4-frame decaying position push -- measured
+    live: `speed` stayed exactly 17*dir(travel) while the position gained (+6.4, +7.3)u/frame
+    rotating 41->85 deg, with NO wall hit, NO bg registration near the path, and every posMove
+    additive term (cc/m3644/m36A0/m36B8/m3730) zero in the log -- the pusher was a **PROC_STONE
+    (460) skull prop standing ON the corridor** at (569.72, 948.94, -2080.17), found by walking
+    the live actor list. The sim runs no actor there. Fix is mint-time SETUP (the #47/#49
+    consumed-base pattern): break the prop in the BASE savestate and mint from the consumed
+    state. Screen a novel corridor by ACTOR SCAN (props within ~70u of the aim line), not
+    geometry alone. Corollary: the divergence only fired because the anchor was 22.9u off-line
+    (mint_online never converged here) and the aim stick ran a 226-tread mid-cruise turn --
+    the first big turn any REST stream ever exercised; near-zero-turn streams on the other nine
+    seams could never have flushed this out.
+
+Also learned (same session, documented in `harness/rollstab/mint.py`): the decomp's US
+field-name offsets shift **-0xD8 on JP** in BOTH daPy and fopAc space (m35B8 -> +0x34E0,
+mCurrAttributeCode -> +0x34AC, speed -> +0x148, mpCLModel -> +0x254); reading the US-name
+offset raw returns plausible-looking garbage, so validate any new field live before trusting a
+probe built on it.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

@@ -70,7 +70,7 @@ def sticks_of(anchor, seam=None):
     return seed, straight, aim
 
 
-def rest_state(anchor, walls=None, model_draw=None, dtm_seed=1, noops=None):
+def rest_state(anchor, walls=None, model_draw=None, dtm_seed=1, noops=None, floors=None):
     """The bit-exact-from-REST sim state -- NO live calibration run. Seeds the WAIT(4) rest blend
     (both frame ctrls + rates, the stored rest toe stream, m359C/m35B4) from the anchor's seed
     json rest_* fields and models the 2 alignment no-ops, so ANY input stream from row 0 --
@@ -88,19 +88,32 @@ def rest_state(anchor, walls=None, model_draw=None, dtm_seed=1, noops=None):
     not guessed (session 43, capture_walkentry seed=0 vs the seed-1 golden, d_frame-aligned): seed=1
     => noops=1 (28/0 bit-exact, byte-identical to before), seed=0 => noops=2 (28/0 bit-exact -- the
     seed-0 delivery fix; FEWER leading neutral polls => the game's rest blend advances one MORE frame
-    before the plan takes hold, so the sim needs one MORE leading no-op). `noops` overrides outright."""
+    before the plan takes hold, so the sim needs one MORE leading no-op). `noops` overrides outright.
+    `floors` (Phase G): the room's GroundCross mesh (a `*_floors.json` path or a Tri list) --
+    pos_y follows the floor, the speedF slope scale + m35B8 run per frame; the GroundState is
+    seeded from the anchor's rest_m35B8/rest_foot024/rest_foot001/rest_waist captures (mint
+    captures them since Phase G; a flat anchor without them seeds the flat defaults)."""
     seed, straight, aim = sticks_of(anchor)
     # Sword state picks the walk/dash anim SET (WALKS/DASHS vs base WALK/DASH -- different legs; see
     # KB mechanics/walk-stab.md). From the anchor's captured equip; default True (roll-stab idle anchors).
     sword_drawn = bool(seed.get('sword_drawn', seed.get('equip_item', 0x103) == 0x103))
     if model_draw is None:
         model_draw = not sword_drawn
+    gnd_seed = None
+    if floors is not None:
+        if isinstance(floors, str):
+            from tww_sim.land.floors import load_floor_mesh
+            floors = load_floor_mesh(floors)
+        gnd_seed = dict(m35b8=seed.get('rest_m35B8', 0.0),
+                        foot024=seed.get('rest_foot024'),
+                        foot001=tuple(seed.get('rest_foot001', (5, 5))),
+                        waist=seed.get('rest_waist'))
     s = LandState(pos_x=seed['link_x'], pos_z=seed['link_z'], pos_y=seed.get('link_y', 0.0),
                   facing=seed['shape_angle_y'] & 0xFFFF, travel=seed['travel_angle'] & 0xFFFF,
                   csangle=seed['csangle'] & 0xFFFF, state=seed['link_state'], nspeed=0.0,
                   speedF=0.0, idle_frame=seed['anim_frame'], use_anim=True, native=False,
                   foot_native=False, sword_drawn=sword_drawn, idle_anim='waits', walls=walls,
-                  model_draw=model_draw)
+                  model_draw=model_draw, floors=floors, gnd_seed=gnd_seed)
     # NO _pending_morf arming (the walk-entry frame triggers the oldframe-morf itself; arming it
     # too made the sim morf AGAIN one frame later -- caught by verify_rest row 4).
     # rest_noops = the anchor's savestate capture-phase DTM alignment, derived per-anchor by
@@ -118,17 +131,18 @@ def rest_state(anchor, walls=None, model_draw=None, dtm_seed=1, noops=None):
     return s
 
 
-def verify_rest(anchor, calib=None, seam=None, dtm_seed=1):
+def verify_rest(anchor, calib=None, seam=None, dtm_seed=1, floors=None):
     """Offline gate: replay the calibration stream FROM REST and diff every row vs the live
-    trace -- pos, d/w frames, m359C. Returns nbad (0 == REST BIT-EXACT). `seam`/`dtm_seed` for a
-    NOVEL seam (aim at seam.F) / a seed-0 delivery; defaults byte-identical to the kaze path."""
+    trace -- pos, d/w frames, m359C (+ pos_y when a Phase G floors mesh is in play). Returns
+    nbad (0 == REST BIT-EXACT). `seam`/`dtm_seed` for a NOVEL seam (aim at seam.F) / a seed-0
+    delivery; defaults byte-identical to the kaze path. `floors` = mesh path or Tri list."""
     def bits(x):
         return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
     if calib is None:
         calib = json.load(open(CALIB_PATH))
         assert calib['anchor'] == anchor, (calib['anchor'], anchor)
-    s = rest_state(anchor, dtm_seed=dtm_seed)
+    s = rest_state(anchor, dtm_seed=dtm_seed, floors=floors)
     _, straight, aim = sticks_of(anchor, seam=seam)
     stream = [straight] * NPREF + [aim] * NCRUISE
     nbad = 0
@@ -142,16 +156,21 @@ def verify_rest(anchor, calib=None, seam=None, dtm_seed=1):
               and bits(st.fc0.frame) == bits(lf['d_frame'])
               and bits(st.fc1.frame) == bits(lf['w_frame'])
               and bits(s._foot.prev_f312) == bits(lf['m359C']))
+        ytag = ''
+        if floors is not None and lf.get('pos_y') is not None:
+            ok = ok and bits(s.pos_y) == bits(lf['pos_y'])
+            ytag = ' y %.7f|%.7f' % (s.pos_y, lf['pos_y'])
         nbad += 0 if ok else 1
-        print('  k=%-2d %s pos(%.7f,%.7f)|(%.7f,%.7f) d %.6f|%.6f w %.6f|%.6f m359C %.8f|%.8f' % (
+        print('  k=%-2d %s pos(%.7f,%.7f)|(%.7f,%.7f) d %.6f|%.6f w %.6f|%.6f m359C %.8f|%.8f%s' % (
               k, 'ok  ' if ok else 'DIFF', s.pos_x, s.pos_z, lf['pos_x'], lf['pos_z'],
               st.fc0.frame, lf['d_frame'], st.fc1.frame, lf['w_frame'],
-              s._foot.prev_f312, lf['m359C']), flush=True)
+              s._foot.prev_f312, lf['m359C'], ytag), flush=True)
     print('\n%s' % ('REST BIT-EXACT' if nbad == 0 else 'REST DIVERGED (%d)' % nbad))
     return nbad
 
 
-def write_golden(anchor, path, calib=None, seam=None, dtm_seed=1, geo=None):
+def write_golden(anchor, path, calib=None, seam=None, dtm_seed=1, geo=None,
+                 floors=None):
     """Assemble the tracked REST golden (the `fixtures/seam*_rest_golden.json` schema the per-seam
     gates replay) from a verification calib -- the step every delivery used to hand-author from
     `_generated/rollstab_calib.json` (Phase-A touch-list item 4). Call ONLY after verify_rest
@@ -160,8 +179,9 @@ def write_golden(anchor, path, calib=None, seam=None, dtm_seed=1, geo=None):
         calib = json.load(open(CALIB_PATH))
         assert calib['anchor'] == anchor, (calib['anchor'], anchor)
     _, straight, aim = sticks_of(anchor, seam=seam)
-    gd = dict(anchor=anchor, seed=int(dtm_seed), geo=geo, straight=list(straight),
-              aim=list(aim), NPREF=NPREF, NCRUISE=NCRUISE, frames=calib['frames'])
+    gd = dict(anchor=anchor, seed=int(dtm_seed), geo=geo, floors=floors,
+              straight=list(straight), aim=list(aim), NPREF=NPREF, NCRUISE=NCRUISE,
+              frames=calib['frames'])
     os.makedirs(os.path.dirname(path), exist_ok=True)
     json.dump(gd, open(path, 'w'), indent=1)
     print('rest golden -> %s (%d frames)' % (path, len(calib['frames'])), flush=True)
@@ -187,7 +207,7 @@ def _dedup_log(frames, rest_d):
     return out
 
 
-def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None):
+def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None, floors=None):
     """The per-anchor LIVE gate: one clean-DTM run of the verification stream, logging the anim
     fields per frame, then the offline from-rest diff. A new anchor must print REST BIT-EXACT
     before its solver hits are trusted. `seam` (a SeamGeo, or built from a `geo=` fixture) aims the
@@ -204,7 +224,8 @@ def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None):
         d = _orig(h, m)
         Pp = struct.unpack('>I', D.read_bytes(h, m, 0x803AD860, 4))[0]
         for kk, off in (('d_frame', 0x2F64), ('w_frame', 0x2F78), ('d_rate', 0x2F60),
-                        ('m3598', 0x34C0), ('m359C', 0x34C4), ('m35B4', 0x34DC)):
+                        ('m3598', 0x34C0), ('m359C', 0x34C4), ('m35B4', 0x34DC),
+                        ('pos_y', 0x124), ('m35B8', 0x34E0)):
             d[kk] = struct.unpack('>f', D.read_bytes(h, m, Pp + off, 4))[0]
         d['csangle'] = D.read_named(h, m, 'csangle') & 0xFFFF
         return d
@@ -230,13 +251,15 @@ def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None):
                               d_frame=f.get('d_frame'), w_frame=f.get('w_frame'),
                               d_rate=f.get('d_rate'), m3598=f.get('m3598'),
                               m359C=f.get('m359C'), m35B4=f.get('m35B4'),
+                              pos_y=f.get('pos_y'), m35B8=f.get('m35B8'),
                               csangle=f.get('csangle')) for f in frames])
     os.makedirs(os.path.dirname(CALIB_PATH), exist_ok=True)
     json.dump(calib, open(CALIB_PATH, 'w'))
     print('wrote %s (%d frames)' % (CALIB_PATH, len(frames)), flush=True)
-    nbad = verify_rest(anchor, calib, seam=seam, dtm_seed=dtm_seed)
+    nbad = verify_rest(anchor, calib, seam=seam, dtm_seed=dtm_seed, floors=floors)
     if nbad == 0 and golden:
-        write_golden(anchor, golden, calib=calib, seam=seam, dtm_seed=dtm_seed, geo=geo)
+        write_golden(anchor, golden, calib=calib, seam=seam, dtm_seed=dtm_seed, geo=geo,
+                     floors=floors if isinstance(floors, str) else None)
     return 0 if nbad == 0 else 1
 
 
@@ -249,4 +272,4 @@ if __name__ == '__main__':
         _seam = SeamGeo(json.load(open(o['geo'])), csangle=G.load_seed(_a)['csangle'] & 0xFFFF)
     sys.exit(main(o.get('anchor', 'kaze_r11_rollstab_idle2@twwgz'),
                   seam=_seam, dtm_seed=int(o.get('seed', 1)),
-                  golden=o.get('golden'), geo=o.get('geo')))
+                  golden=o.get('golden'), geo=o.get('geo'), floors=o.get('floors')))

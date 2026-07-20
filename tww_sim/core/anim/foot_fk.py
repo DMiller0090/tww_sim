@@ -130,6 +130,10 @@ class FootFK:
             self._engine = _N.PoseEngine(data)
         self.base = None            # worldBase 3x4 (set each frame by set_pos)
         self.m37b4 = None           # PSMTXInverse(worldBase)
+        # Phase G: record the WAIST (30) world translate per drawn pose (footBgCheck's r31
+        # consumes LAST frame's value). Off by default -- zero cost on the flat paths.
+        self.track_waist = False
+        self.last_waist = None
 
     def clone(self):
         """State-copy clone (mid-walk-safe): shares the immutable anims/skeleton/chains (+ the shared
@@ -153,22 +157,33 @@ class FootFK:
         c.old_scale = dict(self.old_scale)
         c.base = self.base                           # replaced (not mutated) each set_pos -> share ok
         c.m37b4 = self.m37b4
+        c.track_waist = self.track_waist
+        c.last_waist = self.last_waist
         return c
 
-    def set_pos(self, px, pz, py=0.0, facing=0, lean=0):
+    def set_pos(self, px, pz, py=0.0, facing=0, lean=0, m35b8=0.0):
         """Set Link's world pose for the frame about to be posed. X, Z, facing AND Y all matter:
         the base is removed by the f32 inverse m37B4, and the cancellation rounding is magnitude-
         dependent in every axis (a y=-6534 floor perturbs pose Y coords by ULPs vs py=0 -- found
         live on kaze r11, 2026-07-10). Pass Link's real world Y. `lean` = shape_angle.z (the MOVE
         turn lean m351C>>1, setMoveSlantAngle) -- Python path only. No-op when world FK is
         disabled. With the engine, worldBase + m37B4 are built + kept in C (no per-frame Python
-        list round-trip)."""
+        list round-trip). `m35b8` = footBgCheck's ground foot-lift (Phase G, d_a_player_main.cpp
+        :8794-8796): applied the game's way -- base[1][3] += m35B8 and m37B4[1][3] -= m35B8 on
+        the ALREADY-BUILT matrices (never re-derived) -- Python path only; 0.0 skips (byte-
+        identical flat)."""
         if self._engine is not None:
-            if lean:
-                raise NotImplementedError("turn lean needs the pure-Python foot path (native=False)")
+            if lean or m35b8:
+                raise NotImplementedError("turn lean / m35B8 need the pure-Python foot path "
+                                          "(native=False)")
             self._engine.set_pos(px, py, pz, facing)
         elif self.world:
             self.base, self.m37b4 = fk.world_base(px, py, pz, facing, lean)
+            if m35b8:
+                self.base = [row[:] for row in self.base]
+                self.m37b4 = [row[:] for row in self.m37b4]
+                self.base[1][3] = fp.fadds(self.base[1][3], m35b8)
+                self.m37b4[1][3] = fp.fsubs(self.m37b4[1][3], m35b8)
 
     def _blend_joint(self, move0, move1, f0, f1, ratio, jnt, rate):
         """Blended (quat, trans, scale) for one joint, then oldframe-morf toward the stored old pose.
@@ -251,6 +266,37 @@ class FootFK:
     def _toe(self, local, foot_jnt, toe):
         return fk.mtx_mult_vec(self._chain_mtx(local, foot_jnt), toe)
 
+    def waist_from_old(self):
+        """Rebuild the WAIST world translate from the stored old pose (the per-joint quat/trans/
+        scale of the LAST posed frame) -- the cold-start seed when track_waist was enabled after
+        the constructor's rest pose. A minted (translated) anchor should seed the captured RAM
+        value instead (the stored pose carries the pre-mint position's rounding noise)."""
+        local = {}
+        for jnt in self._chains[34]:
+            m = self.quatfn(self.old_quat[jnt])
+            s = self.old_scale[jnt]
+            t = self.old_trans[jnt]
+            for i in range(3):
+                m[i][0] = fp.fmuls(m[i][0], s[0])
+                m[i][1] = fp.fmuls(m[i][1], s[1])
+                m[i][2] = fp.fmuls(m[i][2], s[2])
+            m[0][3] = fp.f32(t[0]); m[1][3] = fp.f32(t[1]); m[2][3] = fp.f32(t[2])
+            local[jnt] = m
+            if jnt == 30:
+                break
+        return self._waist_world(local)
+
+    def _waist_world(self, local):
+        """WORLD translate of the WAIST joint (30) for the pose being drawn: the base->waist
+        prefix of the foot chain accumulation (bit-identical to the game's getAnmMtx(WAIST)
+        column 3). Phase G / floors mode only (Python world path)."""
+        cur = self.base
+        for jnt in self._chains[34]:
+            cur = fk.mtx_concat(cur, local[jnt])
+            if jnt == 30:
+                return (cur[0][3], cur[1][3], cur[2][3])
+        raise AssertionError("WAIST joint 30 is not on the foot chain")
+
     def seed(self, move0, f0):
         """Populate old pose from a single anim (e.g. FREEB rest) before the first walk step."""
         if self._engine is not None:
@@ -282,6 +328,8 @@ class FootFK:
             self.morf.init_morf(i_morf)
         rate = self.morf.rate
         local = self._pose_frame(move0, move1, f0, f1, ratio, rate)
+        if self.track_waist:
+            self.last_waist = self._waist_world(local)
         # Accumulate each foot's chain matrix ONCE, then read both the toe and heel off it.
         cur39 = self._chain_mtx(local, 39)
         cur34 = self._chain_mtx(local, 34)

@@ -33,6 +33,13 @@ from harness.rollstab.geometry import ANCHOR_DIR
 from tww_sim.core.fp import f32 as _f
 
 _FOOT_OFF = dict(rtoe=0x3CF8, ltoe=0x3E10, rheel=0x3CEC, lheel=0x3E04)  # JP mFootData 018/00C
+# Phase G rest seed offsets. JP = the decomp's US field-name offsets - 0xD8 (live-validated
+# s65; full table in knowledge/history/seam-clip-dead-ends.md ledger #52).
+_M35B8_OFF = 0x34E0
+_CLMODEL_OFF = 0x254
+_FOOT024_OFF = (0x3D04, 0x3E1C)   # mFootData[i].field_0x024 (frozen probe midpoint, cXyz)
+_FOOT001_OFF = (0x3CE1, 0x3DF9)   # mFootData[i].field_0x001 (freeze countdown, u8)
+_WAIST_JNT = 30
 
 
 def _player(h, m):
@@ -57,6 +64,16 @@ def _load_paused(path):
     time.sleep(1.5)
 
 
+def _waist_world(h, m, Pp):
+    """The last drawn WAIST joint world translate (getAnmMtx(30) column 3) -- footBgCheck's r31
+    input; floors-mode anchors seed it (a translated anchor's re-posed waist carries the wrong
+    rounding noise, like rest_t1/t2)."""
+    model = struct.unpack('>I', D.read_bytes(h, m, Pp + _CLMODEL_OFF, 4))[0]
+    node_mtx = struct.unpack('>I', D.read_bytes(h, m, model + 0x8C, 4))[0]
+    a = node_mtx + _WAIST_JNT * 0x30
+    return [_f32_at(h, m, a + 0x0C), _f32_at(h, m, a + 0x1C), _f32_at(h, m, a + 0x2C)]
+
+
 def capture_rest(src):
     """Read the rest_* seed fields from an anchor savestate (leaves the anchor re-loaded)."""
     _load_paused(src)
@@ -68,7 +85,13 @@ def capture_rest(src):
                 rest_w_rate=_f32_at(h, m, Pp + 0x2F74),
                 rest_m359C=_f32_at(h, m, Pp + 0x34C4),
                 rest_m35B4=_f32_at(h, m, Pp + 0x34DC),
-                rest_t2=_foot_tuple(h, m, Pp))
+                rest_t2=_foot_tuple(h, m, Pp),
+                # Phase G ground rest state (harmless extras on a flat anchor)
+                rest_m35B8=_f32_at(h, m, Pp + _M35B8_OFF),
+                rest_foot024=[list(struct.unpack('>3f', D.read_bytes(h, m, Pp + o, 12)))
+                              for o in _FOOT024_OFF],
+                rest_foot001=[D.read_bytes(h, m, Pp + o, 1)[0] for o in _FOOT001_OFF],
+                rest_waist=_waist_world(h, m, Pp))
     # ONE paused frame-advance stores the anchor's held pose into mFootData (t1). rest_noops =
     # advances-until-d-changes = the anchor's DTM-alignment / savestate capture phase (see #30).
     d0 = rest['rest_d_frame']

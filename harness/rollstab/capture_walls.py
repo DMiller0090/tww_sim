@@ -8,6 +8,13 @@ full ordered wall mesh (stored planes, bit-exact) to a fixture the sim loads via
 
     python -m harness.rollstab.capture_walls                 # room Link stands on -> default fixture
     python -m harness.rollstab.capture_walls out=<path> bg=<n>
+    python -m harness.rollstab.capture_walls floors=1 out=<path>   # Phase G GROUND mesh instead
+
+`floors=1` emits the room's GroundCross CANDIDATE set instead (ROADMAP Phase G, loaded via
+`land.floors.load_floor_mesh`): per block-grid leaf, the GROUND-list polys (ny >= 0.5,
+cBgW_CheckBGround) then the WALL-list polys with ny >= 0.014 (cBgW::RwgGroundCheckGnd/Wall,
+c_bg_w.cpp:470-512), groups/octree walked in GroundCrossRp's child order. GroundCross takes the
+MAX cross y so order only breaks exact coplanar ties -- kept faithful anyway.
 
 Live-only (needs Dolphin up; see ../tools/DOLPHIN_CONTROL.md). Reads RAM via `dolphin_mem`
 (../tools/) only -- self-contained, no dependency on any sibling repo.
@@ -99,6 +106,56 @@ def _is_wall(n):
     return -0.8 <= n[1] < 0.5                           # not roof (ny<-0.8), not ground (ny>=0.5)
 
 
+def _ground_traversal_order(r, pm_bgd, planes):
+    """cBgW::GroundCross's candidate visitation: group DFS -> octree DFS in GroundCrossRp's
+    child order (2,3,6,7,0,1,4,5) -> at a leaf, the GROUND polys (ny >= 0.5) ascending, then the
+    WALL polys with ny >= 0.014 ascending (RwgGroundCheckGnd/RwgGroundCheckWall)."""
+    t_num = r.s32(pm_bgd + 0x08)
+    b_num = r.s32(pm_bgd + 0x10); b_tbl = r.u32(pm_bgd + 0x14)
+    tree_tbl = r.u32(pm_bgd + 0x1C)
+    g_num = r.s32(pm_bgd + 0x20); g_tbl = r.u32(pm_bgd + 0x24)
+    starts = [r.u16(b_tbl + i * 2) for i in range(b_num)]
+    order = []
+
+    def block_polys(bi):
+        lo = starts[bi]
+        hi = starts[bi + 1] - 1 if bi != b_num - 1 else t_num - 1
+        rng = range(lo, hi + 1)
+        for j in rng:                                   # ground list (ClassifyPlane ny >= 0.5)
+            n = planes[j]
+            if not all(abs(c) < PLANE_ABS_MIN for c in n[:3]) and n[1] >= 0.5:
+                order.append(j)
+        for j in rng:                                   # wall list, RwgGroundCheckWall ny gate
+            if _is_wall(planes[j]) and planes[j][1] >= 0.014:
+                order.append(j)
+
+    def tree_rp(i):
+        a = tree_tbl + i * 0x14
+        if r.u16(a) & 1:
+            blk = r.u16(a + 0x04)
+            if blk != 0xFFFF:
+                block_polys(blk)
+        else:
+            kids = struct.unpack('>8H', r.block(a + 0x04, 16))
+            for ci in (2, 3, 6, 7, 0, 1, 4, 5):         # GroundCrossRp child order
+                if kids[ci] != 0xFFFF:
+                    tree_rp(kids[ci])
+
+    def grp_rp(gi):
+        a = g_tbl + gi * 0x34
+        tree_idx = r.u16(a + 0x2E)
+        if tree_idx != 0xFFFF:
+            tree_rp(tree_idx)
+        c = r.u16(a + 0x28)
+        while c != 0xFFFF:
+            grp_rp(c)
+            c = r.u16(g_tbl + c * 0x34 + 0x26)
+
+    root = next(gi for gi in range(g_num) if r.u16(g_tbl + gi * 0x34 + 0x24) == 0xFFFF)
+    grp_rp(root)
+    return order
+
+
 def _traversal_order(r, pm_bgd, planes):
     """Reconstruct dBgW::WallCorrect's WALL-poly visitation order from the DZB header tables:
     group tree DFS (m_tree_idx first, then m_first_child/m_next_sibling) -> octree DFS (mChild[0..7])
@@ -143,7 +200,7 @@ def _traversal_order(r, pm_bgd, planes):
     return order
 
 
-def capture(out=DEFAULT_OUT, bg=None):
+def capture(out=DEFAULT_OUT, bg=None, floors=False):
     r = _reader()
     if bg is None:
         bg = _room_bg(r)
@@ -159,7 +216,7 @@ def capture(out=DEFAULT_OUT, bg=None):
     tris = [struct.unpack_from('>3H', tbytes, i * 10) for i in range(t_num)]   # vtx0,vtx1,vtx2
     pbytes = r.block(pm_tri, t_num * 0x18)
     planes = [struct.unpack_from('>4f', pbytes, i * 0x18) for i in range(t_num)]
-    order = _traversal_order(r, pm_bgd, planes)
+    order = (_ground_traversal_order if floors else _traversal_order)(r, pm_bgd, planes)
     polys = []
     for j in order:
         a, b, c = tris[j]
@@ -171,12 +228,14 @@ def capture(out=DEFAULT_OUT, bg=None):
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, 'w') as f:
         json.dump(mesh, f)
-    print('wrote %d ordered wall polys (stage=%s bg=%d) -> %s'
-          % (len(polys), mesh['stage'], bg, out), flush=True)
+    print('wrote %d ordered %s polys (stage=%s bg=%d) -> %s'
+          % (len(polys), 'ground-candidate' if floors else 'wall', mesh['stage'], bg, out),
+          flush=True)
     return 0
 
 
 if __name__ == '__main__':
     kw = dict(a.split('=', 1) for a in sys.argv[1:] if '=' in a)
     sys.exit(capture(out=kw.get('out', DEFAULT_OUT),
-                     bg=int(kw['bg']) if 'bg' in kw else None))
+                     bg=int(kw['bg']) if 'bg' in kw else None,
+                     floors=bool(int(kw.get('floors', '0')))))

@@ -40,7 +40,8 @@ from ..core.mathlib import f32, cLib_addCalc, cM_scos_s16, s16_signed, main_stic
 from ..core.camera import CameraManual, LAND_SCALE
 from .constants import *  # noqa: F401,F403  (proc enums, DIR_*, gates -- also re-exported by land.py)
 from .constants import _STATE_TAG, _cM_ssin_s16
-from .walls import wall_pass, sidle_blocks_roll
+from .walls import wall_pass, sidle_blocks_roll, GRAVITY as walls_GRAVITY
+from .floors import gnd_spz as _gnd_spz_fn, gnd_frame_end as _gnd_frame_end_fn
 from .procs.move import _MoveMixin
 from .procs.atn import _AtnMixin
 from .procs.roll import _RollMixin
@@ -188,12 +189,25 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
                  use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True, foot_native=True,
-                 sword_drawn=False, idle_anim=None, walls=None, model_draw=False):
+                 sword_drawn=False, idle_anim=None, walls=None, model_draw=False,
+                 floors=None, gnd_seed=None):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
         # Phase W: `walls` = WALL tris in game traversal order -> the per-frame CrrPos wall
         # pass (land/walls.py). None => byte-identical wall-free. See mechanics/wall-response.md.
         self._walls = walls
+        # Phase G: `floors` = GroundCross candidate tris (land/floors.py, the per-frame ground
+        # pass); None => byte-identical flat. `gnd_seed` = anchor-RAM GroundState seed kwargs.
+        self._gnd = None
+        if floors is not None:
+            from .floors import GroundState
+            seed = dict(gnd_seed or {})
+            self._gnd_waist_seed = seed.pop('waist', None)
+            self._gnd = GroundState(floors, **seed)
+            if not use_anim:
+                raise ValueError("floors= requires the anim foot engine (use_anim=True)")
+            native = False                 # the C twin has no ground response
+            foot_native = False            # m35B8 / waist tracking need the Python foot path
         self.wall_hit = False                    # mAcch.ChkWallHit() (aggregate, 1-frame late)
         self.wall_cir_hit = (False, False, False)  # mAcchCir[i].ChkWallHit()
         self.wall_angle = (0, 0, 0)              # mAcchCir[i].GetWallAngleY() (s16)
@@ -281,6 +295,12 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
                                         native=foot_native, sword=self.sword_drawn, **kw)
             except (FileNotFoundError, OSError, ImportError):
                 self._foot = None
+        if self._gnd is not None:
+            if self._foot is None:
+                raise ValueError("floors= requires the anim keyframe data (FootSpeedF)")
+            self._foot.ff.track_waist = True
+            if self._gnd_waist_seed is not None:
+                self._foot.ff.last_waist = tuple(f32(v) for v in self._gnd_waist_seed)
         # Native land physics: fused C engine present -> the whole per-frame step is one LandCore call;
         # absent (or native=False, REQUIRED for the ballistic hops the C twin lacks) -> bit-identical Python.
         # A walls mesh forces the Python path too (the C twin has no wall response).
@@ -304,6 +324,8 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         s.__dict__.update(self.__dict__)
         s._inbuf = list(self._inbuf)
         s._cam = self._cam.clone()          # s16-integer camera: clone so A* nodes never alias one
+        if self._gnd is not None:
+            s._gnd = self._gnd.clone()      # ground bookkeeping (m35B8 chase, probe hysteresis)
         # State-copy the stateful anim engine so the clone continues BIT-EXACTLY even MID-WALK (the
         # old path rebuilt fresh at rest, valid only pre-walk). FootSpeedF.clone carries the toe stream.
         if self._foot is not None:
@@ -439,6 +461,10 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         posy = self._cstick_posy(acsx, acsy)
         cup_now = (self.msd < CUP_MAIN_MAX and posy > CUP_POSY)   # C-up still requested this frame
         if self._subj_arm:                       # armed last frame by the C-up gesture -> init the freeze
+            if self._gnd is not None:
+                from .floors import SlopeNotModeled
+                raise SlopeNotModeled("SUBJECTIVITY freeze is not wired into floors mode "
+                                      "(its hold frames bypass the ground pass)")
             self._subj_arm = False
             self.state = SUBJECTIVITY
             self.nspeed = 0.0
@@ -561,9 +587,24 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         # from worldBase(pos) to carry world-magnitude quantization. See knowledge/model/sim.md.
         if self._foot is not None:
             self._foot.set_pos(self.pos_x, self.pos_z, facing=self.facing, py=self.pos_y)
+        # Phase G: this frame's speedF slope angle r3 = prev CrrPos poly at THIS travel
+        # (:2408-2413; 0 on the micro-incline tier -- see land/floors.py).
+        if self._gnd is not None:
+            if self._foot.skip_cruise_pose:
+                raise RuntimeError("floors mode is incompatible with skip_cruise_pose "
+                                   "(deferred poses would replay without the per-frame m35B8)")
+            if self._gnd.m34e2 != 0:
+                from .floors import SlopeNotModeled
+                raise SlopeNotModeled("nonzero m34E2 (%d): the anim-rate cos / ATN f31 slope "
+                                      "terms are not wired" % self._gnd.m34e2)
+            self._foot.gnd_r3 = self._gnd.speedf_r3(self.travel)
         # speedF -> position. ROLL/SLIP = momentum; WAIT_TURN frozen; MOVE + MOVE_TURN tail + ATN_MOVE use
         # the anim engine (only the SLIP tail keeps the fallback); single-anim procs pose to warm the stream.
         if self.state in (SIDE_STEP, BACK_JUMP):
+            if self._gnd is not None:
+                from .floors import SlopeNotModeled
+                raise SlopeNotModeled("ballistic hops still snap to the flat ground_y -- "
+                                      "not wired into floors mode")
             # Airborne ballistic: horizontal momentum (shared bottom advances pos.x/z); vertical integrates
             # speed.y by gravity, then CrrPos snaps to the floor + flags GROUND_HIT. See land-movement.md.
             self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
@@ -595,11 +636,11 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
                 self._foot.step_single_anim(self.nspeed, self.msd)   # warm the toe stream
             # m3598==0 here so speedF == mNormalSpeed, but posMoveFromFootPos still snaps |speedF|<0.05
             # to 0 (d_a_player_main.cpp:2418) -- the slip decel tail. See land-sim.md (slip-skid tail).
-            self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
+            self.speedF = _gnd_spz_fn(self, self.nspeed)
         elif self.state == FRONT_ROLL_CRASH:
             # Roll-bonk bounce: reversed momentum + gravity arc; the ground snap runs AFTER
             # the wall pass below (game order). Pose stream caveat: procs/crash.py.
-            self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
+            self.speedF = _gnd_spz_fn(self, self.nspeed)
             crash_y0 = self.pos_y
             self.speed_y = f32(self.speed_y + self.gravity)
             if self.speed_y < self.MAX_FALL:
@@ -608,7 +649,7 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         elif self.state in (CUT_F, CUT_A):
             # Sword-thrust lunge: speedF (==nspeed, m3598==0) + posMove m34C2==1 root-translate delta
             # (rotated by shape); entry frame m3700_prev==0 -> full root translate stacks (~49.22). See KB.
-            self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
+            self.speedF = _gnd_spz_fn(self, self.nspeed)
             m3700 = self._cut_m3700_at(self.state, self.cut_frame)
             sp5c = (f32(m3700[0] - self._cut_m3700[0]), f32(m3700[1] - self._cut_m3700[1]),
                     f32(m3700[2] - self._cut_m3700[2]))
@@ -653,6 +694,14 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         if self.state in (CUT_F, CUT_A):
             self.pos_x = f32(self.pos_x + self._cut_add[0])
             self.pos_z = f32(self.pos_z + self._cut_add[1])
+        # Phase G grounded gravity dip (posMoveFromFootPos :2464-2479); CrrPos snaps it back
+        # below. The ballistic/crash branches above already integrate their own y.
+        if self._gnd is not None and self.state != FRONT_ROLL_CRASH:
+            gnd_y0 = self.pos_y
+            self.speed_y = f32(self.speed_y + walls_GRAVITY)
+            if self.speed_y < self.MAX_FALL:
+                self.speed_y = f32(self.MAX_FALL)
+            self.pos_y = f32(self.pos_y + self.speed_y)
         # mAcch.CrrPos wall pass: after integration, before the deferred draw (the game's
         # order; scope + caveats in mechanics/wall-response.md).
         if self._walls is not None and self.state not in (SIDE_STEP, BACK_JUMP,
@@ -660,9 +709,21 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
             if self.state == FRONT_ROLL_CRASH:
                 wall_pass(self, px0, pz0, y_old=crash_y0, y_mid=self.pos_y,
                           sy=self.speed_y, snap=False)
+            elif self._gnd is not None:
+                # floors mode: pos_y already carries the dip -- pass the real y pair.
+                wall_pass(self, px0, pz0, y_old=gnd_y0, y_mid=self.pos_y,
+                          sy=self.speed_y, snap=False)
             else:
                 wall_pass(self, px0, pz0)
-        if self.state == FRONT_ROLL_CRASH:
+        if self._gnd is not None:
+            # dBgS_Acch GroundCheck (d_bg_s_acch.cpp:122): probe at pos.y+60, snap to the max
+            # plane-cross iff above the dipped y; then m34E2 (execute :11498, post-CrrPos).
+            self.pos_y, _sy = self._gnd.crrpos_ground(self.pos_x, self.pos_y, self.pos_z)
+            if _sy is not None:
+                self.speed_y = _sy
+            self.ground_hit = self._gnd.ground_hit
+            self._gnd.update_m34e2(self.facing)
+        elif self.state == FRONT_ROLL_CRASH:
             # GroundCheck after the wall pass: snap iff ground_h > the dipped y (strict).
             if self.ground_y > self.pos_y:
                 self.pos_y = f32(self.ground_y)
@@ -673,6 +734,8 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         # Deferred foot draw at post-integration pos with LAST frame's lean (setWorldMatrix runs before
         # setMoveSlantAngle, 11551); expose that draw-time lean (body_cyl reads it) + evolve m351C always.
         self._draw_lean = s16_signed(self.m351C) >> 1
+        if self._gnd is not None:
+            _gnd_frame_end_fn(self)
         if self._foot is not None and self._foot.defer_draw:
             self._foot.set_pos(self.pos_x, self.pos_z, facing=self.facing, py=self.pos_y,
                                lean=self._draw_lean)

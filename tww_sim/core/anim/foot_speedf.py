@@ -81,9 +81,12 @@ def _plant_of(feet):
     return 0 if m0 < m1 else 1
 
 
-def _py_foot_compose(t1, t2, nspeed, msd, m3598, prev_f312, m35B4):
+def _py_foot_compose(t1, t2, nspeed, msd, m3598, prev_f312, m35B4, gnd_r3=0):
     """Pure-Python posMoveFromFootPos toe->speedF (fallback for _anmc.foot_compose). t1/t2 are the
-    flat 12-tuples of the last two DRAWN frames. Returns (speedF, f312)."""
+    flat 12-tuples of the last two DRAWN frames. Returns (speedF, f312). `gnd_r3` = the ground
+    slope angle (getGroundAngle at the previous CrrPos poly, Phase G floors mode): the scale
+    ``sp7C.z *= cM_scos(r3); if (r3 < 0) *= 0.85`` (d_a_player_main.cpp:2414-2417) applies between
+    the blend and the 0.05 snap; 0 skips it (== fmuls by 1.0, byte-identical flat)."""
     plant = _plant_of(t1)
     o = plant * 3
     dx = _f32(t1[o + 0] - t2[o + 0])
@@ -93,6 +96,11 @@ def _py_foot_compose(t1, t2, nspeed, msd, m3598, prev_f312, m35B4):
         f312 = fp.fadds(fp.fmuls(f312, _F0_3), fp.fmuls(_F0_7, prev_f312))
     spz = _f32(nspeed * _f32(1.0 - m3598))
     spz = _f32(spz + _f32(f312 * m3598)) if nspeed >= 0.0 else _f32(spz - _f32(f312 * m3598))
+    if gnd_r3:
+        from ..mathlib import cM_scos_s16
+        spz = fp.fmuls(spz, cM_scos_s16(gnd_r3))
+        if gnd_r3 < 0:
+            spz = fp.fmuls(spz, _f32(0.85))
     speedF = 0.0 if abs(spz) < 0.05 else spz
     return speedF, f312
 
@@ -149,6 +157,10 @@ class FootSpeedF:
         # the first consumer -- bit-exact for EVERY stream. See finish_draw/_drain_skipped.
         self.skip_cruise_pose = False
         self._skipped = []
+        # Phase G: per-frame slope angle r3 (speedF scale) + footBgCheck's m35B8 foot lift
+        # (baked into every _apply_base); 0 / 0.0 = the byte-identical flat fast path.
+        self.gnd_r3 = 0
+        self.m35b8 = 0.0
         # Seed the FootFK old pose + delayed toe stream (t1=draw_{N-1}, t2=draw_{N-2}) with the
         # idle rest pose. Pre-walk seeds only feed m3598==0 frames (speedF==0), so they're immaterial.
         self.ff.seed(idle_anim, self.idle_frame)
@@ -198,6 +210,8 @@ class FootSpeedF:
         c._pending_draw = self._pending_draw
         c.skip_cruise_pose = self.skip_cruise_pose
         c._skipped = list(self._skipped)
+        c.gnd_r3 = self.gnd_r3
+        c.m35b8 = self.m35b8
         c.st = self.st.clone()
         c.ff = self.ff.clone()
         c._core = c.ff._engine                 # fused engine lives on the cloned FootFK (None in Py mode)
@@ -245,7 +259,8 @@ class FootSpeedF:
             self._core.set_pos(self.pos_x, self.pos_y, self.pos_z, self.facing)
 
     def _apply_base(self):
-        self.ff.set_pos(self.pos_x, self.pos_z, py=self.pos_y, facing=self.facing, lean=self.lean)
+        self.ff.set_pos(self.pos_x, self.pos_z, py=self.pos_y, facing=self.facing, lean=self.lean,
+                        m35b8=self.m35b8)
 
     def seed_rest_blend(self, d_frame, w_frame, d_rate, w_rate, m359C, m35B4=0.0, noops=0,
                         t1=None, t2=None):
@@ -507,9 +522,15 @@ class FootSpeedF:
         finish_draw() after the caller moves."""
         if self._skipped and state['m3598'] != 0.0:
             self._drain_skipped()      # this compose consumes the toe stream: replay the deferred poses
-        compose = _N.foot_compose if _N is not None else _py_foot_compose
-        speedF, f312 = compose(self.t1, self.t2, nspeed, msd, state['m3598'],
-                               self.prev_f312, self.m35B4)
+        if self.gnd_r3:
+            # Phase G slope scale (floors mode, nonzero cell): Python compose carries the exact
+            # cM_scos(r3)/x0.85 terms. r3 == 0 stays on the (bit-identical) fast path below.
+            speedF, f312 = _py_foot_compose(self.t1, self.t2, nspeed, msd, state['m3598'],
+                                            self.prev_f312, self.m35B4, self.gnd_r3)
+        else:
+            compose = _N.foot_compose if _N is not None else _py_foot_compose
+            speedF, f312 = compose(self.t1, self.t2, nspeed, msd, state['m3598'],
+                                   self.prev_f312, self.m35B4)
         if self.defer_draw:
             self._pending_draw = (state, morf, f312, msd)
             return speedF
