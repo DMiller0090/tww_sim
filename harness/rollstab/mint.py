@@ -155,6 +155,53 @@ def mint_current(name):
     return seed
 
 
+def draw_base(base, name):
+    """Make a sword-DRAWN base savestate from a SHEATHED one (ledger #55, session 67).
+
+    A base whose rest is sheathed (equip 0x100, `sword_drawn` false) makes `mint_online`
+    structurally unable to accept: the pure-sim baseline roll presses B mid-roll with no
+    `draw_at`, the roll->CUT gate needs the sword out, so the baseline reports old=None on
+    every iteration (the tell: old=None while spF_at_A == 17.0). Fix is mint-time setup, not
+    solver surgery: one-time B-press draw + idle + the steady-WAITS probe, saved as a new
+    `_drawn` base. Check `sword_drawn` in a novel base's seed BEFORE any mint_online loop."""
+    ENV.ensure_running()
+    src = os.path.join(ANCHOR_DIR, base + '.sav')
+    _load_paused(src)
+    h, m = D.attach()
+    Pp = _player(h, m)
+    D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128,
+                                         'substickY': 0, 'buttons': 0x200, 'frames': 2})
+    time.sleep(0.2)
+    D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128,
+                                         'substickY': 0, 'buttons': 0, 'frames': 120})
+    time.sleep(0.5)
+    # prove steady WAITS before saving (the mint_novel probe; ledger #47)
+    for _probe in range(8):
+        w0 = _f32_at(h, m, Pp + 0x2F78)
+        D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128,
+                                             'substickY': 0, 'buttons': 0, 'frames': 1})
+        time.sleep(0.15)
+        if _f32_at(h, m, Pp + 0x2F78) != w0:
+            break
+        D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128,
+                                             'substickY': 0, 'buttons': 0, 'frames': 10})
+        time.sleep(0.2)
+    else:
+        print('draw_base: WARNING idle never reached steady WAITS', flush=True)
+    eq = struct.unpack('>H', D.read_bytes(h, m, Pp + 0x3488, 2))[0]
+    st = D.read_named(h, m, 'link_state')
+    print('draw_base: equip=0x%X state=%d anim=%.3f' % (eq, st, _f32_at(h, m, Pp + 0x2F64)),
+          flush=True)
+    if eq != 0x103 or st != 4:
+        raise RuntimeError('draw_base: not a drawn steady idle (equip=0x%X state=%d) -- does '
+                           'this save have the sword?' % (eq, st))
+    dst = os.path.join(ANCHOR_DIR, name + '.sav')
+    D.control_pipe_quiet('savestate', {'action': 'save', 'path': dst.replace('\\', '/')})
+    time.sleep(1.0)
+    print('saved %s (%d bytes)' % (dst, os.path.getsize(dst)), flush=True)
+    return dst
+
+
 def mint(base, name, dx, dz):
     ENV.ensure_running()
     src = os.path.join(ANCHOR_DIR, base + '.sav')
@@ -475,6 +522,8 @@ if __name__ == '__main__':
     elif 'novel' in o:                    # camera-behind mint for a NOVEL seam (session-50 procedure)
         mint_novel(o['novel'], float(o['x']), float(o['z']), int(o['facing'], 0),
                    int(o['csangle'], 0), float(o['y']), base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
+    elif 'drawbase' in o:                 # sword-drawn base from a sheathed one (ledger #55)
+        draw_base(o['drawbase'], o['name'])
     elif 'current' in o:                  # mint the live paused state as a fresh full-seed anchor
         ENV.ensure_running()
         mint_current(o['current'])

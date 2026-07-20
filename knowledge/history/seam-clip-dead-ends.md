@@ -1142,6 +1142,7 @@ probe built on it.
     sheathed `draw_at` path exists in `run`/`search` but is NOT threaded through
     `solve_focused`): one-time B-press draw in the base + steady-WAITS re-probe, saved as
     `ganona_r0_base_drawn@twwgz`; the re-mint accepted at iter 1 (|old perp| 1.783).
+    First-class: `python -m harness.rollstab.mint drawbase=<sheathed_base> name=<base>_drawn`.
     Check `sword_drawn` in the base's minted seed BEFORE any mint_online loop.
 
 ## Pointers

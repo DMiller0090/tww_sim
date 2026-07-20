@@ -101,7 +101,9 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 >   the sword sheathed (equip 0x100), so the pure-sim baseline roll could never CUT and
 >   `mint_online` reported old=None forever -- the true cause of s65's "perp never converged".
 >   Fix = mint-time setup: `ganona_r0_base_drawn@twwgz` (one-time B-press draw + steady-WAITS
->   probe, live-verified 0x103). Check `sword_drawn` in a novel base's seed BEFORE mint_online.
+>   probe, live-verified 0x103), now first-class as `mint.draw_base` (CLI
+>   `python -m harness.rollstab.mint drawbase=<base> name=<base>_drawn`). Check `sword_drawn`
+>   in a novel base's seed BEFORE mint_online.
 > - **The ON-LINE re-mint then accepted at iter 1:** baseline |old perp| 1.783 (tol 2.0), rest
 >   d2S 584.5, facing == F == 33960, cam frozen at csangle 22577 (target 25951, #54 rule),
 >   settle_walk=21 now a first-class `mint_online`/CLI knob. REST gate re-run on the new anchor:
