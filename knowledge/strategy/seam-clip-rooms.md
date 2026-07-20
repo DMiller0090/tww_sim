@@ -5,9 +5,10 @@ the NEXT room worth capturing? What room-level hazards block a delivery that the
 screen numbers cannot see?
 **Status:** LIVE-DELIVERED in three rooms (2026-07-18): kaze r11 (8 seams), flooded Hyrule
 (REST bit-exact; clip an honest lottery), Hyrule Castle interior `Hyroom` r0 (clip live 0-ULP,
-session 63). Regressions: the per-seam `tests/test_*_clip.py` gates.
-**Source:** sessions 62-63 (2026-07-18), `_notes/seam-clip-live-validation-handoff-*.md`;
-dead-ends #46-#51 in [history/seam-clip-dead-ends.md](../history/seam-clip-dead-ends.md);
+session 63); a fourth (GanonA r0, sloped corridor) is REST-validated rows 0-11 behind the
+corridor-prop hazard below (session 65). Regressions: the per-seam `tests/test_*_clip.py` gates.
+**Source:** sessions 62-63 (2026-07-18) + 65 (2026-07-19), `_notes/seam-clip-live-validation-handoff-*.md`;
+dead-ends #46-#52 in [history/seam-clip-dead-ends.md](../history/seam-clip-dead-ends.md);
 methodology in [seam-clip-solver.md](seam-clip-solver.md); run protocol in
 `harness/rollstab/README.md`.
 
@@ -27,6 +28,14 @@ corridor (the delivered-aim corridor must live on the flat strip; seam_2709_2919
 300u strip at aim 344). Hyrule's one all-gates-green corner is dust-thin (band_dense
 0.011-0.014u) -- an honest lottery with a REST-verified anchor ready; density and floor quality
 trade off room by room.
+
+A fourth room-level hazard the geometry screens cannot see (session 65, dead-end #52):
+**corridor PROPS**. Dungeon corridors carry CC-capable actors (d_a_stone skulls, tsubo pots)
+that push Link's cylinder off the approach line -- the GanonA r0 REST gate diverged mid-walk on
+a stone standing 57u off the aim line while every wall/floor/cam screen was green. Screen a
+candidate corridor by walking the live ACTOR LIST (props within ~70u of the aim line), and
+consume any offender in the mint BASE (break it, the #47/#49 consumed-base pattern) before
+minting.
 
 ## Man-made floors DO screen better -- and rooms carry EVENTS (session 63)
 

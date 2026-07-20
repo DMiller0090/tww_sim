@@ -189,7 +189,7 @@ vary the documented knob families before concluding anything.
 The pipeline is room-agnostic (`mesh=`/`prefix=`/`base=`), three rooms are live-proven, and the
 room-level screening axes (floor quality, armed one-shot auto-events, boat/tidal non-rooms, the
 anchor-lattice re-roll via frozen cam targets) have their own page:
-[seam-clip-rooms.md](seam-clip-rooms.md) (dead-ends #46-#51).
+[seam-clip-rooms.md](seam-clip-rooms.md) (dead-ends #46-#52).
 
 ## The sim is bit-exact FROM REST -- plan sequences need no live calibration
 
