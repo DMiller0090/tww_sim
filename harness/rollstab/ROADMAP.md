@@ -39,12 +39,16 @@ physics), 5-6 are the expansion and wait until 1-4 are boring:
    constant-csangle precondition ALREADY holds in open space. The only csangle contamination is
    `bumpCheck` camera-WALL collision (a lateral eye push in tight corridors), which per steer is
    DETECTED not modeled: `harness/rollstab/cam_clean.py` (csangle-invariance probe along the
-   intended approach bearing). REMAINING under this step: (a) fold `cam_clean` into
-   `novel_deliver`/`mint` as a principled replacement for the empirical `cam_screen` frozen-target
-   hunt; (b) the auto-flip envelope (the fast-move camera FLIP, still open, distinct from the
-   follow); (c) whether an arbitrary state's starting csangle offset needs any handling beyond
-   being a sim input (it does not, for a clean corridor). The "settle dance / pan mint / corridor
-   constraint" exist to keep the arm OFF walls (avoid bumpCheck), not to fight a follow.
+   intended approach bearing). REMAINING under this step: (a) **DONE (session 70): `cam_clean` is
+   folded into `mint`/`novel_deliver` as `mint.cam_clean_screen`** -- the invariant probe (fixed
+   stick + centered horizontal C-stick down the seam bearing, scored by `cam_clean.evaluate`) is now
+   `novel_deliver` stage 4, probing the DEFAULT aim target first and flagging a DIRTY corridor with
+   its first-drift frame/pos; `cam_screen` is demoted to a legacy diagnostic. Live-verified CLEAN on
+   the kaze 157 corridor; gate `tests/test_cam_clean.py::test_park_screen_kaze157_clean`. (b) the
+   auto-flip envelope (the fast-move camera FLIP, still open, distinct from the follow); (c) whether
+   an arbitrary state's starting csangle offset needs any handling beyond being a sim input (it does
+   not, for a clean corridor). The "settle dance / pan mint / corridor constraint" exist to keep the
+   arm OFF walls (avoid bumpCheck), not to fight a follow.
 6. **Arbitrary entry states (mid-walk etc.)** -- a mid-walk mint/seed (in-flight frame ctrls,
    foot-pose delay buffer, m351C lean, travel/speedF), a mid-walk verification gate replacing
    REST BIT-EXACT, and the DTM row-alignment contract from a mid-anim savestate. Depends on 5

@@ -85,13 +85,49 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-20, session 69)
+## Status (2026-07-20, session 70)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-20, session 69): ROADMAP Phase A expansion 5 ("camera-in-the-loop")
+> **CURRENT THREAD (2026-07-20, session 70): the s69 `cam_clean` detector is FOLDED INTO the mint
+> pipeline -- the camera is now screened by the csangle-INVARIANT probe (ROADMAP Phase A exp.5
+> item (a) DONE), replacing the empirical `cam_screen` trial-pan hunt.**
+> - **New `mint.cam_clean_screen(geo, target_csangle=None, ...)`:** at a candidate park it replicates
+>   the mint's pre-mint teleport-park + C-stick pan to `target_csangle` (default = the aim F) + settle,
+>   then walks `n=40` frames DOWN the seam bearing with a **FIXED stick** (computed ONCE from the
+>   frozen csangle -- re-aiming each frame, `cam_screen`'s flaw, chases a drift and confounds the
+>   signal) and a **centered horizontal C-stick**, and scores csangle drift + arm pull-in via
+>   `cam_clean.evaluate`. CLEAN => the corridor keeps the camera arm off walls, so the park+csangle is
+>   mintable and the from-rest constant-csangle model stays bit-exact; DIRTY => `first_drift` names the
+>   frame/pos where `bumpCheck` first pushes the arm. Shares `_park_pan_settle`/`_aim_line` with
+>   `cam_screen` (now demoted to a legacy diagnostic) so both park the cam identically.
+> - **`novel_deliver` stage 4 rewired (ledger #56 replaces the #44 trial-pan gate):** probe the
+>   DEFAULT aim target FIRST (not a 5-way sweep); accept it if CLEAN; fall back to the same #44
+>   alternates (F +-8000/+-16384) only if the default corridor is DIRTY, taking the first CLEAN one;
+>   abort with the default's first-drift frame/pos if every csangle is DIRTY. Measured settle
+>   (park - rest_d2S) + the ledger-#43 floor re-probe are unchanged.
+> - **Live-verified the invariant holds for the C-DOWN approach the delivery actually walks** (s69 used
+>   a centered `csy=128`; the pipeline walks `csy=0`): a kaze walk creeps then recovers to the EXACT
+>   start csangle -- C-down is azimuth-neutral, only `bumpCheck` moves csangle transiently. And the
+>   screen ran LIVE on the delivered kaze-r11 157 corridor: **CLEAN, max|drift|=0 hw, arm 514.4->514.4
+>   (0% pull-in), rest_d2S 703.8**.
+> - **Locked live-data-backed:** golden `fixtures/cam_clean_kaze157_screen_golden.json` (the live
+>   park-screen capture, arm-inclusive) + offline gate `tests/test_cam_clean.py::
+>   test_park_screen_kaze157_clean`. Suite **424 passed, 1 skipped, 5 xfailed** (+1). NO
+>   `sim.py`/`land.py`/`solver.py`/`mint_online`/`deliver` behavior change (camera SCREEN + a
+>   mechanical `cam_screen` helper extraction only), so the live regression and every shipped-hit
+>   recomposition are unaffected. Every seam thread UNCHANGED (ten delivered seams, walk-stab, Tetra
+>   STANDALONE, 97m/hseam2709 lotteries, 467/163 blocked).
+>
+> **NEXT (session 71): the remaining exp5 items -- (b) the auto-flip envelope (the fast-move camera
+> FLIP, distinct from the follow) and (c) whether an arbitrary state's starting csangle offset needs
+> handling beyond being a sim input -- then exp6 (arbitrary mid-walk entry states). The s64 leftovers
+> re-scope-or-drop and the 97m/hseam2709 lotteries still stand. A end-to-end `novel_deliver` run on a
+> fresh corner would exercise the new cam gate in situ (the 157 was screened, not re-delivered).**
+
+> **PRIOR THREAD (2026-07-20, session 69): ROADMAP Phase A expansion 5 ("camera-in-the-loop")
 > is RE-SCOPED by live RE -- there is NO free-space auto-camera follow to model, and a live
 > camera-wall-collision DETECTOR is delivered (Dereck's steer: detect collision, don't model it).**
 > - **The premise was FALSE (dead-end #56), for the MANUAL / no-L cam the approach uses.** SCOPE:

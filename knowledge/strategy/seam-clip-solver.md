@@ -158,11 +158,20 @@ settle had no floor -- unmintable (dead-end #43; settle travel is per-seam, budg
 value). And an approach corridor can carry a fixed, ROAD-triggered camera-trigger band (the 824
 corner: csangle dips ~-300 s16 over d2S 588..384 and recovers) that fires or not depending on
 the CAM's track: the default aim-derived pan target was the one track that clipped it, while
-every probed alternate stayed frozen. Fix = `mint.cam_screen` (probe alternate `target_csangle`s
-at the park, pick a frozen one, pass `mint_online(target_csangle=)`) -- measured per seam, never
-tuned (dead-end #44). With it the 824 delivered in one default draw. Also learned there: the
-~580u rest envelope is mostly PHYSICS for the roll (A-press runway ~506u + cap walk ~74u), so a
-short-corridor seam is not fixable by a smaller A_proj.
+every probed alternate stayed frozen. The original fix was `mint.cam_screen` (probe alternate
+`target_csangle`s at the park, pick a frozen one, pass `mint_online(target_csangle=)`) -- measured
+per seam, never tuned (dead-end #44). With it the 824 delivered in one default draw. Also learned
+there: the ~580u rest envelope is mostly PHYSICS for the roll (A-press runway ~506u + cap walk
+~74u), so a short-corridor seam is not fixable by a smaller A_proj.
+
+**The cam gate is now the csangle-INVARIANT probe (session 70, `mint.cam_clean_screen`), not the
+trial-pan hunt (dead-end #56).** Live RE proved csangle is bit-frozen in free space under a centered
+horizontal C-stick; the only mover is `bumpCheck` camera-arm wall collision. So a park is screened
+by an invariant -- walk the seam bearing with a fixed stick + centered horizontal C-stick and assert
+csangle holds -- rather than trial-and-error over pan tracks (which re-aimed each frame and
+confounded a drift with the chase it induced). `novel_deliver` stage 4 probes the DEFAULT aim target
+first, accepts it if CLEAN, and flags a DIRTY corridor with its first-drift frame/pos; the ROAD-band
+alternates remain the fallback. See [`mechanics/camera.md`](../mechanics/camera.md).
 
 **The whole recipe is ONE COMMAND now (session 61): `harness/rollstab/novel_deliver.py`** chains
 geo -> band_dense re-check -> park-floor probe -> cam-target screen -> `mint_online` -> the REST

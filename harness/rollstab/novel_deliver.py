@@ -149,25 +149,37 @@ def deliver_novel(wallA, wallB, name=None, aim_deg=None, d2s=580.0, budget=110.0
                          'pipeline (467 precedent); needs the walk-stab tier or '
                          'camera-in-the-loop' % park)
 
-    # --- 4. cam (LIVE cam-target screen -> frozen target + MEASURED settle) ----------------
+    # --- 4. cam (session-69 INVARIANT camera screen -> a CLEAN frozen csangle + settle) ----
     if run['cam']:
-        _banner('cam', 'cam-target screen (ledger #44)')
-        from harness.rollstab.mint import cam_screen
-        res = cam_screen(geo_abs, d2s=d2s, settle_est=SETTLE_EST0, base=base)
-        frozen = [r for r in res if not r[3]]
-        if not frozen:
-            return _fail('cam', 'no frozen pan target -- every probed track hits a cam '
-                         'trigger; widen targets= by hand or rule the corridor out')
-        # SMALLEST measured settle wins: a large-settle target parks the mint past the floor
-        # (settle is per-(seam, target) leash geometry -- dead-end ledger #45).
-        tgt = max(frozen, key=lambda r: r[2])
-        settle = max(0.0, (d2s + SETTLE_EST0) - tgt[2])   # park - rest = MEASURED settle travel
-        st['cam'] = dict(target=tgt[0], rest_cs=tgt[1], rest_d2S=tgt[2], settle=settle,
-                         nfrozen=len(frozen),
-                         results=[[r[0], r[1], r[2], len(r[3])] for r in res])
+        _banner('cam', 'invariant csangle screen (ledger #56, replaces the trial-pan hunt)')
+        from harness.rollstab.mint import cam_clean_screen
+        # Probe the DEFAULT aim target first (not a trial-pan sweep); CLEAN = the corridor keeps
+        # the arm off walls. Fall back to the #44 alternates only if DIRTY (README ## Status s70).
+        F = deg_to_s16(float(geo.get('aim_deg', geo['bisector_deg'])) % 360.0)
+        cands = [F] + [(F + off) & 0xFFFF for off in (-8000, 8000, -16384, 16384)]
+        probes, chosen = [], None
+        for target in cands:
+            v = cam_clean_screen(geo_abs, target_csangle=target, d2s=d2s,
+                                 settle_est=SETTLE_EST0, base=base)
+            probes.append((target, v))
+            if v['clean']:
+                chosen = (target, v)
+                break
+        if chosen is None:
+            t0, v0 = probes[0]
+            fd = v0.get('first_drift')
+            loc = ('f%d pos=(%.1f,%.1f)' % (fd['f'], fd['lx'], fd['lz'])) if fd else '(no frame)'
+            return _fail('cam', 'every probed csangle is DIRTY (bumpCheck camera-wall push). '
+                         'default target=%d first drift %s -- the corridor pushes the arm off a '
+                         'wall; widen the aim or rule the corner out' % (t0, loc))
+        target, v = chosen
+        settle = max(0.0, (d2s + SETTLE_EST0) - v['rest_d2S'])   # park - rest = MEASURED settle
+        st['cam'] = dict(target=target, rest_cs=v['rest_cs'], rest_d2S=v['rest_d2S'],
+                         settle=settle, clean=True, max_dcs=v['max_dcs'],
+                         nprobed=len(probes))
         _save_state(name, st)
-        print('  chose target=%d (rest_cs=%d rest_d2S=%.1f) measured settle=%.1f'
-              % (tgt[0], tgt[1], tgt[2], settle), flush=True)
+        print('  CLEAN target=%d (rest_cs=%d rest_d2S=%.1f) measured settle=%.1f'
+              % (target, v['rest_cs'], v['rest_d2S'], settle), flush=True)
         # the mint park implied by this settle must itself be FLOORED (ledger #43); the floor
         # stage probed d2s+SETTLE_EST0 -- if this park lies deeper, probe it before minting
         park = d2s + settle

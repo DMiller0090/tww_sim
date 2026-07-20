@@ -420,35 +420,140 @@ def floor_probe(geo_path, dists, settle_frames=30, base='kaze_r11_rollstab_idle1
     return out
 
 
-def cam_screen(geo_path, targets=None, d2s=580.0, settle_est=420.0, nwalk=40,
-               base='kaze_r11_rollstab_idle13@twwgz'):
-    """Screen candidate pan `target_csangle`s for a novel seam BEFORE minting (session 60).
+def _aim_line(geo):
+    """(F, dx, dz, Sx, Sz) for a geo fixture's approach aim line (the interior bisector unless the
+    fixture declares an `aim_deg`). Shared by every park-based live probe (floor/cam screens)."""
+    import math
+    from tww_sim.core.mathlib import deg_to_s16
+    aim_deg = geo.get('aim_deg', geo['bisector_deg'])
+    ar = math.radians(float(aim_deg) % 360.0)
+    return (deg_to_s16(float(aim_deg) % 360.0), math.sin(ar), math.cos(ar), geo['S'][0], geo['S'][2])
 
-    Some approach corridors carry a FIXED cam-trigger band (kaze r11 seam824: csangle dips ~-300
-    s16 over d2S ~588..384 and recovers -- ROAD-triggered, verified by a shifted-start walk), and
-    whether it fires depends on the CAM's track, i.e. on the frozen csangle the pan leaves. The
-    default aim-derived target can be the one track that clips the trigger while every other
-    candidate stays frozen. This probe replicates mint_novel's pre-mint sequence per target
-    (teleport-park -> C-stick pan -> settle-walk until csangle freezes -> idle), then walks the
-    corridor `nwalk` frames and reports any csangle deviation from the rest value. Pick a FROZEN
-    target whose rest lands nearest d2s and pass it as `mint_online(target_csangle=)` -- the value
-    is measured per seam, never tuned. Returns [(target, rest_cs, rest_d2S, deviations)]."""
+
+def _park_pan_settle(h, m, geo, target, d2s, settle_est, base, F, dx, dz, Sx, Sz):
+    """Replicate mint_novel's pre-mint camera setup at a candidate park, then leave Dolphin at the
+    settled rest spot: teleport `base` to the aim-line park (d2s+settle_est out), pan the free cam
+    to `target` csangle (C-stick), settle-walk (C-down, re-aim toward F) until csangle FREEZES, and
+    idle to a clean rest. Returns (rest_cs, rest_d2S). Shared by cam_screen (legacy multi-target
+    dev sweep) and cam_clean_screen (the session-69 csangle-invariance probe) so they park the cam
+    identically -- the screen must measure the SAME frozen csangle the mint will land on."""
     from harness.rollstab.rest import dtm_stick
     from tww_sim.land.plan_land import stick_for_bearing
-    from tww_sim.core.mathlib import deg_to_s16
+    import math
+    park_x = Sx - (d2s + settle_est) * dx
+    park_z = Sz - (d2s + settle_est) * dz
+    _load_paused(os.path.join(ANCHOR_DIR, base + '.sav'))
+    D.cmd_teleport(['x=%r' % park_x, 'y=%r' % geo['link_y'], 'z=%r' % park_z,
+                    'facing=%d' % F, 'frames=2'])
+    time.sleep(0.3)
+
+    def cs():
+        return D.read_named(h, m, 'csangle') & 0xFFFF
+
+    for _ in range(80):                           # mint_novel's pan loop
+        if abs(_sdiff(target, cs())) < 800:
+            break
+        sub = 255 if _sdiff(target, cs()) > 0 else 0
+        D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': sub,
+                                             'substickY': 128, 'buttons': 0, 'frames': 1})
+        time.sleep(0.02)
+    walked, prev = 0, None                        # settle-until-frozen (chunked, ledger #42)
+    while walked < 42:
+        c0 = cs()
+        if prev is not None and c0 == prev:
+            break
+        prev = c0
+        sx, sy = dtm_stick(stick_for_bearing(F, c0, 1.0))
+        D.control_pipe_quiet('advancewith', {'stickX': sx, 'stickY': sy, 'substickX': 128,
+                                             'substickY': 0, 'buttons': 0, 'frames': 7})
+        walked += 7
+        time.sleep(0.08)
+    D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128,
+                                         'substickY': 0, 'buttons': 0, 'frames': 20})
+    time.sleep(0.3)
+    x = D.read_named(h, m, 'link_x')
+    z = D.read_named(h, m, 'link_z')
+    return cs(), math.hypot(x - Sx, z - Sz)
+
+
+def cam_clean_screen(geo_path, target_csangle=None, d2s=580.0, settle_est=420.0, n=40,
+                     base='kaze_r11_rollstab_idle13@twwgz', tol=0, armdrop=0.15, out=None):
+    """The INVARIANT camera screen (session 69, ROADMAP Phase A exp.5, ledger #56) -- the
+    principled replacement for cam_screen's empirical trial-pan hunt.
+
+    Live RE proved csangle (mAngleY) is BIT-FROZEN in free space under a centered HORIZONTAL
+    C-stick (no L); the only mover is `bumpCheck` camera-arm wall collision (a lateral eye push in
+    a tight corridor). So the camera is screened by an INVARIANT, not by trial-and-error over pan
+    tracks: park on the seam's aim line, freeze the cam at `target_csangle` (default = the aim F),
+    then walk `n` frames DOWN the seam bearing with a FIXED stick (computed ONCE from the frozen
+    csangle -- re-aiming each frame would chase a drift and confound the signal; cam_screen's flaw)
+    and a centered horizontal C-stick, and assert csangle holds. CLEAN => the corridor keeps the
+    arm off walls, so this park+csangle is mintable and the from-rest constant-csangle model stays
+    bit-exact; DIRTY => `first_drift` names the frame/pos where the arm first hits a wall. Reads
+    csangle + the eye/center arm via cam_clean.cam_geom and scores with cam_clean.evaluate (the
+    same offline-gated verdict as the anchor-based probe). C-down (substickY=0) matches the
+    delivered walk and is azimuth-neutral (verified live: it leaves csangle frozen in clean space).
+
+    Returns cam_clean.evaluate()'s dict augmented with target/rest_cs/rest_d2S/rows. `out=<path>`
+    dumps a golden JSON (meta + rows) for the offline regression."""
+    from harness.rollstab import cam_clean
+    from harness.rollstab.rest import dtm_stick
+    from tww_sim.land.plan_land import stick_for_bearing
+    ENV.ensure_running()
+    geo = json.load(open(geo_path))
+    F, dx, dz, Sx, Sz = _aim_line(geo)
+    if target_csangle is None:
+        target_csangle = F
+    target_csangle &= 0xFFFF
+    h, m = D.attach()
+    rest_cs, rest_d2S = _park_pan_settle(h, m, geo, target_csangle, d2s, settle_est, base,
+                                         F, dx, dz, Sx, Sz)
+    # FIXED stick down the seam bearing at the now-frozen csangle: with a centered horizontal
+    # C-stick the csangle azimuth is inert, so any drift below is bumpCheck (session-69 invariant).
+    sx, sy = dtm_stick(stick_for_bearing(F, rest_cs, 1.0))
+    cs0, c, e, arm0 = cam_clean.cam_geom(h, m)
+    rows = [{"f": 0, "cs": cs0, "dcs": 0, "arm": round(arm0, 3),
+             "lx": round(c[0], 2), "lz": round(c[2], 2)}]
+    for i in range(1, n + 1):
+        D.control_pipe_quiet('advancewith', {'stickX': sx, 'stickY': sy, 'substickX': 128,
+                                             'substickY': 0, 'buttons': 0, 'frames': 1})
+        time.sleep(0.04)
+        cs, c, e, arm = cam_clean.cam_geom(h, m)
+        rows.append({"f": i, "cs": cs, "dcs": cam_clean._sdiff(cs, cs0), "arm": round(arm, 3),
+                     "lx": round(c[0], 2), "lz": round(c[2], 2)})
+    res = cam_clean.evaluate(rows, tol=tol, armdrop=armdrop)
+    res.update(target=target_csangle, rest_cs=rest_cs, rest_d2S=rest_d2S, rows=rows)
+    if out:
+        json.dump({"geo": os.path.basename(geo_path), "target": target_csangle, "base": base,
+                   "d2s": d2s, "settle_est": settle_est, "n": n, "rows": rows},
+                  open(out, 'w'), indent=1)
+        print('  wrote golden %s' % out, flush=True)
+    fd = res['first_drift']
+    verdict = ('CLEAN' if res['clean'] else
+               ('DIRTY @f%d pos=(%.1f,%.1f)' % (fd['f'], fd['lx'], fd['lz']) if fd else 'DIRTY'))
+    print('cam_clean_screen target=%5d  rest_cs=%5d  rest_d2S=%.1f  max|drift|=%d hw  '
+          'arm %.1f->%.1f  %s' % (target_csangle, rest_cs, rest_d2S, abs(res['max_dcs']),
+          res['arm0'] or 0.0, res['min_arm'] or 0.0, verdict), flush=True)
+    return res
+
+
+def cam_screen(geo_path, targets=None, d2s=580.0, settle_est=420.0, nwalk=40,
+               base='kaze_r11_rollstab_idle13@twwgz'):
+    """LEGACY multi-target cam-trigger sweep (session 60), superseded by cam_clean_screen as the
+    novel_deliver camera gate but kept as a diagnostic: for each candidate pan `target`, park the
+    cam (`_park_pan_settle`) then walk the corridor `nwalk` frames RE-AIMING toward F and report any
+    csangle deviation from the rest value. Some corridors carry a fixed ROAD-triggered cam band
+    (kaze r11 seam824: csangle dips ~-300 s16 over d2S ~588..384) that fires only on some tracks.
+    The re-aiming walk confounds a drift with the chase it induces -- cam_clean_screen's fixed-stick
+    invariant probe is the principled replacement. Returns [(target, rest_cs, rest_d2S, deviations)]."""
+    from harness.rollstab.rest import dtm_stick
+    from tww_sim.land.plan_land import stick_for_bearing
     import math
     ENV.ensure_running()
     geo = json.load(open(geo_path))
-    aim_deg = geo.get('aim_deg', geo['bisector_deg'])
-    ar = math.radians(float(aim_deg) % 360.0)
-    dx, dz = math.sin(ar), math.cos(ar)
-    Sx, Sz = geo['S'][0], geo['S'][2]
-    F = deg_to_s16(float(aim_deg) % 360.0)
-    park_x = Sx - (d2s + settle_est) * dx
-    park_z = Sz - (d2s + settle_est) * dz
+    F, dx, dz, Sx, Sz = _aim_line(geo)
     if targets is None:
         targets = [(F + off) & 0xFFFF for off in (0, -8000, 8000, -16384, 16384)]
-    src = os.path.join(ANCHOR_DIR, base + '.sav')
     h, m = D.attach()
 
     def cs():
@@ -456,35 +561,8 @@ def cam_screen(geo_path, targets=None, d2s=580.0, settle_est=420.0, nwalk=40,
 
     out = []
     for target in targets:
-        _load_paused(src)
-        D.cmd_teleport(['x=%r' % park_x, 'y=%r' % geo['link_y'], 'z=%r' % park_z,
-                        'facing=%d' % F, 'frames=2'])
-        time.sleep(0.3)
-        for _ in range(80):                       # mint_novel's pan loop
-            if abs(_sdiff(target, cs())) < 800:
-                break
-            sub = 255 if _sdiff(target, cs()) > 0 else 0
-            D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': sub,
-                                                 'substickY': 128, 'buttons': 0, 'frames': 1})
-            time.sleep(0.02)
-        walked, prev = 0, None                    # settle-until-frozen (chunked, ledger #42)
-        while walked < 42:
-            c0 = cs()
-            if prev is not None and c0 == prev:
-                break
-            prev = c0
-            sx, sy = dtm_stick(stick_for_bearing(F, c0, 1.0))
-            D.control_pipe_quiet('advancewith', {'stickX': sx, 'stickY': sy, 'substickX': 128,
-                                                 'substickY': 0, 'buttons': 0, 'frames': 7})
-            walked += 7
-            time.sleep(0.08)
-        D.control_pipe_quiet('advancewith', {'stickX': 128, 'stickY': 128, 'substickX': 128,
-                                             'substickY': 0, 'buttons': 0, 'frames': 20})
-        time.sleep(0.3)
-        rest_cs = cs()
-        x = D.read_named(h, m, 'link_x')
-        z = D.read_named(h, m, 'link_z')
-        rest_d2S = math.hypot(x - Sx, z - Sz)
+        rest_cs, rest_d2S = _park_pan_settle(h, m, geo, target, d2s, settle_est, base,
+                                             F, dx, dz, Sx, Sz)
         dev = []
         for _k in range(nwalk):                   # corridor walk: any csangle motion = trigger hit
             sx, sy = dtm_stick(stick_for_bearing(F, cs(), 1.0))
@@ -508,7 +586,13 @@ if __name__ == '__main__':
         floor_probe(o['floorprobe'],
                     [float(x) for x in o.get('dists', '1000,1100,1200').split(',')],
                     base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
-    elif 'camscreen' in o:                # screen pan targets for a novel seam (session-60 procedure)
+    elif 'camclean' in o:                 # INVARIANT camera screen for a novel seam (session-69)
+        cam_clean_screen(o['camclean'], d2s=float(o.get('d2s', 580.0)),
+                         settle_est=float(o.get('settle_est', 420.0)), n=int(o.get('n', 40)),
+                         target_csangle=(int(o['target_csangle'], 0) if 'target_csangle' in o else None),
+                         out=o.get('out'),
+                         base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
+    elif 'camscreen' in o:                # legacy multi-target cam-trigger sweep (session-60)
         cam_screen(o['camscreen'], d2s=float(o.get('d2s', 580.0)),
                    settle_est=float(o.get('settle_est', 420.0)),
                    base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))

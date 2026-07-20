@@ -12,6 +12,12 @@ the load-bearing signal, a lateral bumpCheck push that arm-compression alone mis
   * cam_clean_ganona_straight_golden.json -- a straight-down-corridor walk in GanonA: csangle
                                       creeps +20 hw at f11 (bumpCheck). DIRTY. (The shipped clip's
                                       real approach walks the aim line, which the mint keeps clean.)
+  * cam_clean_kaze157_screen_golden.json -- the mint.cam_clean_screen PARK-based probe (session 69
+                                      fold-in) on the delivered kaze-r11 157 corridor: park on the
+                                      aim line, freeze the cam at the aim csangle, walk 40 frames
+                                      down the bearing with a fixed stick + centered horizontal
+                                      C-stick. csangle drift == 0 AND the arm never pulls in. CLEAN
+                                      -- the same verdict the mint relies on to accept a park.
 
 Locked-test rules: a red row means the detector logic or the finding regressed; do NOT edit a
 golden to make it pass.
@@ -59,6 +65,23 @@ def test_corridor_straight_walk_flagged_dirty():
     assert res["clean"] is False
     assert res["max_dcs"] == 20
     assert res["first_drift"]["f"] == 11
+
+
+def test_park_screen_kaze157_clean():
+    """The park-based invariant screen (mint.cam_clean_screen) reports CLEAN on the delivered kaze
+    157 corridor: a live capture of the fixed-stick / centered-horizontal-C-stick approach walk.
+    csangle holds bit-frozen every frame AND the eye/center arm never pulls into a wall -- so the
+    mint accepts this park + frozen csangle. This is the arm-inclusive golden (the screen reads the
+    dCamera_c eye/center chain, unlike the csangle-only leash captures)."""
+    rows = _rows("cam_clean_kaze157_screen_golden.json")
+    assert len(rows) >= 40
+    assert all("arm" in r for r in rows)                    # screen reads the arm, not just csangle
+    assert all(r["cs"] == rows[0]["cs"] for r in rows)      # csangle bit-frozen, every frame
+    res = evaluate(rows, tol=0)
+    assert res["clean"] is True
+    assert res["max_dcs"] == 0
+    assert res["first_drift"] is None
+    assert (rows[0]["arm"] - min(r["arm"] for r in rows)) / rows[0]["arm"] <= 0.15  # arm holds
 
 
 def test_evaluate_tolerance_gate():

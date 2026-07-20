@@ -106,6 +106,12 @@ is the primary signal and arm-compression only a secondary "arm touching a wall"
 where the straight-down-corridor path does not). `getDMCAngle` (:902) can drive csangle off the
 main stick in DMC mode, but it disengages for a normal walking approach (:897).
 
+This invariant is now the mint's **primary camera gate** (session 70): `mint.cam_clean_screen`
+parks on the seam aim line, freezes the cam at the aim csangle, and walks the bearing with a fixed
+stick + centered horizontal C-stick, accepting a park only when the walk holds csangle. It replaces
+the empirical `cam_screen` trial-pan hunt (which re-aimed each frame and confounded a drift with the
+chase it induced) as `novel_deliver` stage 4.
+
 ## Plugging into planning
 
 To move ΔZ laterally over a cruise, apply a tap of size X at frame F; lateral displacement is the
