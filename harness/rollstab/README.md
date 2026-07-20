@@ -85,13 +85,49 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-20, session 73)
+## Status (2026-07-20, session 74)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-20, session 73): the s72 seam352 "perp-resolution gap" was a SEARCH-
+> **CURRENT THREAD (2026-07-20, session 74): s73's "Wind-Waker-in-hand CUT" diagnosis is OVERTURNED --
+> the WW cut fires FINE, the collision model is CORRECT, the 40.22 clip is REAL (live-verified), and the
+> walk is 0-ULP. seam352's ONLY blocker is a ~1-ULP gap in the sim's `enter_cut` CUT_F endpoint, fatal
+> because this sharp corner (interior 155) is a ~1-ULP ACCEPTANCE RAZOR (kaze walk-stab delivered only
+> because its near-flat 169 corner has a DENSE acceptance that tolerates a sub-ULP gap). No code shipped;
+> my travel-fix attempt was WRONG and is reverted.**
+> - **What was live-verified (via a new clean-sweep collision oracle, see the handoff):**
+>   (1) the live CUT_F fires at the bit-exact `old` (facing 64946, speedF 17.0 == sim 0-ULP); the
+>   CUT_REVERSE (0x5A) is a DOWNSTREAM symptom (the forward lunge wall-blocks, then the sword strikes the
+>   wall, `changeCutReverseProc`), NOT a weak WW cut. (2) A clean position-sweep `old -> sim_new` CLIPS
+>   LIVE (y drops below the floor, state 39 OOB) -- the collision `genuine_clip` is faithful; the s72/mid-
+>   s74 "collision false-positive" idea is WRONG. (3) The walk delivers `old` 0-ULP (live bits == sim every
+>   frame). So the ~1-ULP error is entirely in the CUT endpoint.
+> - **The game uses `travel == facing` for the cut foot-term** (confirmed live: the facing-based endpoint
+>   reproduces the live block bit-for-bit; a travel-based endpoint was a clip cell the game never used).
+>   `enter_cut`/`_cut_init` keeping `travel = facing` is CORRECT. The "foot-term uses the walk's travel"
+>   fix is RULED OUT (dead-end #64).
+> - **The likely gap (to confirm next):** the roll-stab `enter_cut` is 0-ULP because it dispatches from a
+>   FRESH state; the walk-stab cut fires after a 16-frame walk, so the game carries a decaying foot-engine
+>   residual (`m3598` / posMoveFromFootPos toe-stream) into the CUT init-frame position that `enter_cut`
+>   zeroes ("no foot pose"). At x=9344 that residual is ~1 ULP.
+> - **Locked live-data-backed (UNCHANGED, valid):** anchor `kaze_r11_walkstab_seam352@twwgz` + golden
+>   `fixtures/seam352_rest_golden.json` (REST BIT-EXACT) + geo. Gate `tests/test_seam352_walkstab.py`:
+>   `test_seam352_rest_bitexact` GREEN, `test_seam352_clip_delivered` strict-xfail. Suite unchanged
+>   (only `harness/dtm/run_dtm.py` gained a `travel_angle` log field; sim/solver reverted pristine). Every
+>   other thread UNCHANGED (ten delivered roll seams, kaze walk-stab DENSE, Tetra STANDALONE, lotteries).
+> - KB dead-ends #63 (s73 WW-cut misdiagnosis) + #64 (the travel!=facing foot-term fix ruled out).
+>
+> **NEXT (session 75): make `enter_cut`'s CUT_F endpoint 0-ULP for the walk-stab case, then deliver.**
+> Capture the LIVE RAW (pre-collision) cut endpoint via a MOVIE-faithful playback (advancewith desyncs the
+> buffered-B walk) halted by `bp 0x800a39a8` (positionWallCorrect, JP), reading Link's pm_pos
+> (deref 0x803AD860 + 0x120) before CrrPos corrects it; diff its bits vs `enter_cut`'s `new`. Model the
+> missing transition-frame foot term in `enter_cut` (decomp-grounded, must keep the roll-stab spotcheck
+> 0-ULP), re-solve, deliver. See the session-74 handoff for the exact recipe. HARD RULES: 0-ULP is
+> mandatory (not a tolerance), ground in decomp, never sweep, never alter the anchor.
+
+> **PRIOR THREAD (2026-07-20, session 73): the s72 seam352 "perp-resolution gap" was a SEARCH-
 > STRUCTURE bug, not physics -- `solve_focused` now finds seam352 walk-stab clips OFFLINE (top perp
 > margin 24, well inside the razor). The LIVE clip is still NOT delivered: it is blocked on the
 > Wind-Waker-in-hand CUT (a mechanic already solved days ago that walk-stab's solve/deliver do not

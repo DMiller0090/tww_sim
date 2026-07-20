@@ -207,6 +207,7 @@ def _read_frame(h, m):
         "pos_x": D.read_named(h, m, "link_x"), "pos_z": D.read_named(h, m, "link_z"),
         "pos_y": D.read_named(h, m, "link_y"),      # fall/OOB detector (drops below the floor Y)
         "facing": D.read_named(h, m, "facing") & 0xFFFF,
+        "travel_angle": D.read_named(h, m, "travel_angle") & 0xFFFF,   # current.angle.y (cut foot-term aim)
         "state": D.read_named(h, m, "link_state"),
         "proc": struct.unpack('>i', D.read_bytes(h, m, Pp + 0x3100, 4))[0],
         "speedF": struct.unpack('>f', D.read_bytes(h, m, Pp + 0x17C, 4))[0],

@@ -1300,6 +1300,49 @@ RULED-OUT (Dereck's hard steers, [[decomp-first-not-brute-force]]/[[oneshot-no-m
   off facing = CUT_F, not a side dispatch). Not b_frame timing per se (the cut fired at N from the
   bit-exact `old`). The divergence is intrinsic to the WW-in-hand cut, still to be modeled from decomp.
 
+## The s73 "WW-in-hand CUT" diagnosis was WRONG; seam352 is blocked by a ~1-ULP cut-endpoint gap (session 74, LIVE, OVERTURNS #62)
+
+s73 concluded the seam352 live blocker was "the Wind-Waker-in-hand CUT lunging weakly / firing CUT_REVERSE,
+a mechanic to model in fast_cut/enter_cut." Session 74 live-refuted every part of that:
+
+- **The CUT_F fires FINE at the bit-exact `old`** (facing 64946, speedF 17.0, all == sim 0-ULP). The
+  CUT_REVERSE (proc 0x5A, `changeCutReverseProc` d_a_player_sword.inc:469) is a DOWNSTREAM symptom: the
+  forward lunge gets CrrPos-wall-blocked, then the sword tip strikes the wall and bounces. There is no
+  "weak WW cut" to model. Do not chase a WW-specific cut lunge.
+- **The collision model is CORRECT and the 40.22 clip is REAL.** A clean position-sweep from the exact
+  `old` to the sim's `new` CLIPS LIVE (Link reaches `new`, world Y drops below the floor, state -> 39
+  fall/OOB). `genuine_clip`/`crr_pos_walls` is faithful here (a mid-s74 "collision false-positive" idea
+  was also wrong). Oracle: teleport to `old` (settle), writename link_x/link_z = `new`, advance, read
+  link_y/link_state (clip = y drops + state 39; block = y holds + state 4, slid along the wall). It is
+  razor-discriminating (exact clips, +0.001u blocks).
+- **The walk is 0-ULP** (movie-playback bit-diff: live `old` bits == sim bits every frame, N=11..16).
+- **So the ONLY error is a ~1-ULP gap in `enter_cut`'s CUT_F endpoint.** It is fatal only because
+  seam352's sharp corner (interior 155) has a ~1-ULP ACCEPTANCE RAZOR: the sim's `new` sits on a clip
+  cell, the live cut lands ~1 ULP over (at x=9344 one f32 ULP is ~0.00098u), so it blocks. kaze walk-stab
+  delivered because its near-flat 169 corner has a DENSE acceptance (walk-stab.md: "hundreds of clipping
+  f32 `new` in a small box") that swallows any sub-ULP gap. **Lesson: 0-ULP is not optional; a razor seam
+  makes a latent sub-ULP model gap fatal, and the gap was invisible on every dense-acceptance seam before.**
+- **Likely source (unconfirmed):** the roll-stab `enter_cut` is 0-ULP because it dispatches from a FRESH
+  state (the spotcheck seeds `state=FRONT_ROLL` directly). The walk-stab cut fires after a 16-frame walk,
+  so the game carries a decaying foot-engine residual (`m3598` / posMoveFromFootPos toe-stream) into the
+  CUT init-frame position that `enter_cut` zeroes ("no foot pose, m3598==0"). Confirm by capturing the
+  live RAW pre-collision cut endpoint (movie-faithful playback + `bp 0x800a39a8`, read pm_pos
+  deref(0x803AD860)+0x120 before CrrPos) and diffing bits vs `enter_cut`.
+
+## The walk-stab cut foot-term uses `travel`, not `facing`: WRONG (session 74, LIVE-refuted, REVERTED)
+
+Tempting fix for the above: since `procCutF_init` (d_a_player_sword.inc:660) does not reset
+`current.angle.y` (only `procCutF` frame 2+, :744, does `current.angle.y = shape_angle.y`), the init-frame
+FOOT-TERM should lunge along the CARRIED walk `travel`, not `facing` -- and at seam352 the walk left
+travel != facing by 115 s16. It was decomp-plausible and offline-safe (425 green; roll/kaze byte-identical
+since their travel==facing). **But LIVE-REFUTED:** the game snaps travel to facing on the cut frame and the
+foot-term uses FACING. Proof: the facing-based endpoint clean-sweeps to the block basin (9351.86,-407.895)
+BYTE-IDENTICAL to the live delivery block, while the travel-based endpoint was a clip cell the game never
+reached. `enter_cut`/`_cut_init` keeping `travel = facing` is CORRECT; the change was reverted. Do not
+re-open the travel/facing split. (Also ruled out this session: driving the delivery with `advancewith` to
+reach the cut frame with a breakpoint armed -- it DESYNCS the buffered-B walk, ~4.6u off; the faithful
+walk is only reproducible via the DTM MOVIE.)
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.
