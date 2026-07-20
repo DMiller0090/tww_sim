@@ -85,11 +85,35 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-19, session 67)
+## Status (2026-07-20, session 68)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
+
+> **CURRENT THREAD (2026-07-20, session 68): Dereck's standing post-s66 steer is DELIVERED -- the
+> live land playback suite is PORTED to offline recorded-golden tests.** No seam-clip behavior
+> changed (no `harness/rollstab` code touched); this closes handoff item (a):
+> - **The standing land gate is OFFLINE now:** `tests/test_land_goldens.py` compares the sim PER
+>   FRAME, 0-ULP (state/nspeed/facing/travel/pos_z, + pos_x where measured exact), against live
+>   recordings in `fixtures/land_goldens/` -- all 14 cases, no Dolphin. Recordings minted once by
+>   `tests/dolphin/record_land_goldens.py` (chunked capture cross-checked against the proven
+>   one-shot advanceseq delivery; a golden is written only if the locked live checks pass).
+>   `run_land_tests.py` remains the live diagnostic / re-record tool (14/14 live PASS).
+> - **The flaky `wiggle_ebs_roll` DTM-playback case is RETIRED and root-caused** (resolved-bugs.md):
+>   single-stepping a PLAYING movie slips 1-frame edges (bulk advance delivers the same movie
+>   faithfully), and its mid-recording savestate carried unseedable in-flight attention state. The
+>   chain's consumed inputs were read back per logic frame from `g_mDoCPd_cpadInfo[0]` and now run
+>   as a clean-rest PIPE case -- bit-exact per frame incl. pos_x (a real coverage upgrade over the
+>   old signature-only lock). Corollary re-measured: the pipe mis-injects near-full OFF-AXIS sticks
+>   by +-1 raw byte; use dead-zone-axis byte pairs (the sim's octagon clamp matches the decomp).
+> - Suite **420 passed, 1 skipped, 5 xfailed** (+16 = the 14 golden gates + presence + the wiggle
+>   chain-signature guard).
+>
+> **NEXT (session 69): unchanged from s67 -- ROADMAP Phase A expansion 5 (camera-in-the-loop) as
+> the biggest idealization left, the s64 leftovers re-scope-or-drop, or the standing lotteries
+> (97m, hseam2709). Every seam thread (ten delivered seams, walk-stab, Tetra push-aside/turnaround
+> STANDALONE, 467/163 blocked) UNCHANGED.**
 
 > **CURRENT THREAD (2026-07-19, session 67): the GanonA seam255 clip is DELIVERED LIVE 0-ULP --
 > Dereck's named TAS corner is HIT. Tenth delivered seam; fourth room; the FIRST clip on a

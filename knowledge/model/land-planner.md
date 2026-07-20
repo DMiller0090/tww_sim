@@ -221,7 +221,7 @@ if the win stays ~1–3 frames it may not be worth productionising into `plan_la
 
 - **Curved-walk chase residual (sub-2u).** A sustained gentle-curve walk (~15° heading over ~1900u)
   drifts 0.5–1.6u — the walk facing/travel chase (`cLib_addCalcAngleS`) in a continuously-turning
-  MOVE, a regime the [land tests](land-sim.md#enforced-to-the-byte-by-two-tests) don't stress (walk is
+  MOVE, a regime the [land tests](land-sim.md#enforced-to-the-byte-by-three-gates) don't stress (walk is
   dead-straight; turn tests are big reversals). NOT the camera (csangle stays 0). Fine for flavor B
   (unit-scale basins); must be closed before flavor-A clip planning.
 - **Wall/pillar collision (unported).** A diagonal target that crosses a pillar mispredicts by ~36u.

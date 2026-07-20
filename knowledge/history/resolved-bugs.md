@@ -230,3 +230,18 @@ The exit speed was computed off the wrong (last-ESS) anim frame; the game applie
 release frame (exit-frame physics + 1-frame lag), up to ~40% off when the offset lands a mid-cos
 frame. Fixed by advancing the exit-frame physics before `af_drag`. →
 [mechanics/neutral](../mechanics/neutral.md#ess--neutral-exit-release_ess_speed).
+
+## `wiggle_ebs_roll` DTM-playback flake - movie single-step slips edges (delivery, not physics)
+
+The land suite's one recurring FAIL (13/14, "the roll never fires", s66) was the DELIVERY layer:
+single-stepping a PLAYING movie (per-frame `advance` on the `.dtm.sav` fixture) can slip the movie's
+1-frame A edge, while a BULK `advance frames=N` from a clean load delivers the same movie faithfully
+(probed 2026-07-20: end == the locked state-4 stop). The fixture also resumed MID-recording, so its
+savestate carried in-flight attention state no clean-rest sim can seed. Resolution: the chain's exact
+consumed inputs were read back per logic frame from `g_mDoCPd_cpadInfo[0]` (buttons/trigL/decoded
+sticks, inverted to bytes through the sim's own `clamp_stick`), and the case now runs as a clean-rest
+PIPE case, bit-exact per frame - the DTM-playback path is retired. Corollary re-measured on the way:
+the pipe mis-injects near-full OFF-AXIS sticks by +-1 raw byte ((112,215) arrived as x 111: game
+clamp (-1,71) vs decomp/sim (0,71)), so pipe seqs should use dead-zone-axis byte pairs like the
+movie's own (130,247). -> the offline gate `tests/test_land_goldens.py`;
+[mechanics/brakeslide-ebs](../mechanics/brakeslide-ebs.md#wiggle-ebs--lup-cancel--chained-roll).

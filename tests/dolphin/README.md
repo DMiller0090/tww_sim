@@ -46,7 +46,9 @@ python tests/dolphin/run_tests.py            # full suite
 python tests/dolphin/run_tests.py dtm=1      # re-run the clean-DTM baselines LIVE (relaunches Dolphin)
 python tests/dolphin/run_tests.py quick=1    # skip the long 200k case
 python tests/dolphin/verify_state.py seq=... # per-frame divergence locator
-python tests/dolphin/run_land_tests.py       # LAND sim-vs-live (walk/ATN/roll/turns), 0-ULP pos_z gate
+python tests/dolphin/run_land_tests.py       # LAND sim-vs-live (walk/ATN/roll/turns/wiggle), 0-ULP live diagnostic
+python tests/dolphin/record_land_goldens.py  # mint the LAND per-frame goldens (the STANDING land gate is
+                                             # OFFLINE: pytest tests/test_land_goldens.py, no Dolphin)
 python tests/dolphin/spotcheck_freeze.py     # LAND C-up-cancel freeze: reach_freeze plans, 0-ULP live
 python tests/dolphin/spotcheck_roll_freeze.py # LAND ROLL-approach freeze: reach_freeze(roll=True), 0-ULP live
 python tests/dolphin/spotcheck_swordwalk.py  # SWORD-DRAWN dash: DASHS foot pose == live rtoe 0-ULP + anim data + selection

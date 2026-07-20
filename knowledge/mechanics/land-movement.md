@@ -5,7 +5,8 @@ proc state machine, the bit-exact status)?
 **Status:** validated live - the flat-ground walk, the ATN_MOVE tier (brakeslide/EBS), the forward
 roll + roll-stab, the ground-turn procs (WAIT_TURN/MOVE_TURN/SLIP), the ballistic hops, and the C-up
 freeze are all simulated in `tww_sim.land`; facing/travel/speed and position are **bit-exact** vs live
-(**14 locked cases: 13 sim-vs-live + the `wiggle_ebs_roll` DTM-playback lock**). Anchor
+(**14 sim-vs-live cases**, each also locked OFFLINE by a per-frame recorded golden -
+`tests/test_land_goldens.py`, recorded once by `tests/dolphin/record_land_goldens.py`). Anchor
 `land_flatwalk@twwgz.sav`.
 **Source:** decomp `d_a_player_main.cpp` proc enum + the per-proc functions; live captures
 (`harness/capture/land_capture.py`). Constants:
