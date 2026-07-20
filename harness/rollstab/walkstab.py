@@ -64,17 +64,43 @@ from tww_sim.core.fp import f32 as _f
 from harness.rollstab import rest as C
 from harness.rollstab.seamgeo import SeamGeo
 
-ANCHOR = 'kaze_r11_walkstab@twwgz'
 CDOWN = 0                       # substickY=0 = C-down = the free-cam pin (delivery MUST hold it)
 
-# The seam geometry + exact acceptance is the shared seamgeo.SeamGeo (see the module docstring); the
-# acceptance functions below delegate to it via sg(). SEAM/LINK_Y are the fixture's full-precision vertex.
-GEO_PATH = os.path.join(_rb, 'fixtures', 'kaze_r11_walkstab_geo.json')
-_GEO = json.load(open(GEO_PATH))
-SEAM = (_GEO['S'][0], _GEO['S'][2])     # the seam vertex (x, z), full f32 precision
-LINK_Y = _GEO['link_y']                 # the walkable floor Y at the seam
+# seam/anchor config (session 72: RETARGETABLE via configure() -- sets ANCHOR/GEO_PATH/_GEO/SEAM/
+# LINK_Y/HITS_PATH/GOLDEN_PATH/DTM_SEED; do NOT assign elsewhere; acceptance = shared seamgeo.SeamGeo).
+_KAZE_ANCHOR = 'kaze_r11_walkstab@twwgz'
+_KAZE_GEO = os.path.join(_rb, 'fixtures', 'kaze_r11_walkstab_geo.json')
 
+NAME = ANCHOR = GEO_PATH = _GEO = SEAM = LINK_Y = HITS_PATH = GOLDEN_PATH = None
+DTM_SEED = 1
 _SG = None
+
+
+def configure(anchor=_KAZE_ANCHOR, geo_path=_KAZE_GEO, name='walkstab'):
+    """Retarget the walk-stab tier to a NOVEL (anchor, seam-geo) -- session 72, the generalization
+    that unblocks novel walk-stab corners. Resets the seam/anchor globals (ANCHOR/GEO_PATH/_GEO/
+    SEAM/LINK_Y) and clears every anchor-or-seam-derived cache (the SeamGeo, the rest seeds, the
+    bearing, the bounds, and the stick caches -- which key on the anchor csangle). `name` namespaces
+    the hits/golden output paths so a novel seam never clobbers the kaze walkstab golden; the default
+    name 'walkstab' reproduces the exact legacy paths. Called once at import with the kaze defaults,
+    so the default behaviour + all existing goldens/tests are byte-identical."""
+    global ANCHOR, GEO_PATH, _GEO, SEAM, LINK_Y, HITS_PATH, GOLDEN_PATH, NAME, DTM_SEED
+    global _SG, _BASE, _BEAR_S, _BASE_WALLED, _BOUNDS
+    ANCHOR = anchor
+    # DTM_SEED = the leading-poll seed this anchor is REST-bit-exact at (noops==2): legacy kaze seed=1,
+    # a fresh novel mint seed=0. solve+deliver both use it (a mismatch delivers the walk 1 frame off).
+    DTM_SEED = 1 if name == 'walkstab' else 0
+    GEO_PATH = geo_path if os.path.isabs(geo_path) else os.path.join(_rb, geo_path)
+    _GEO = json.load(open(GEO_PATH))
+    SEAM = (_GEO['S'][0], _GEO['S'][2])     # the seam vertex (x, z), full f32 precision
+    LINK_Y = _GEO['link_y']                 # the walkable floor Y at the seam
+    NAME = name
+    _tag = '' if name == 'walkstab' else '_' + name
+    HITS_PATH = os.path.join(_rb, '_generated', 'walkstab_hits%s.json' % _tag)
+    GOLDEN_PATH = os.path.join(_rb, 'tests', 'golden', 'walkstab%s_deliver.json' % _tag)
+    _SG = _BASE = _BEAR_S = _BASE_WALLED = _BOUNDS = None
+    _SFB_CACHE.clear()
+    _SFBD_CACHE.clear()
 
 
 def sg():
@@ -124,7 +150,7 @@ def seed():
     Cached; clone per run."""
     global _BASE
     if _BASE is None:
-        _BASE = C.rest_state(ANCHOR)
+        _BASE = C.rest_state(ANCHOR, dtm_seed=DTM_SEED)
     return _BASE.clone()
 
 
@@ -221,7 +247,7 @@ _BEAR_S = None
 CRAWLS = ((0.72, 0.72), (0.6, 0.72), (0.72, 0.6), (0.66, 0.66), (0.6,))
 LEADS_DURS = ((5, 3), (4, 3), (5, 2), (4, 2))
 OFFS = (800, 900, 1000, 700, 600, 1100, 400, 0)
-HITS_PATH = os.path.join(_rb, '_generated', 'walkstab_hits.json')
+# HITS_PATH / GOLDEN_PATH are set by configure() (session 72) -- namespaced per seam `name`.
 
 _BOUNDS = None
 
@@ -265,6 +291,51 @@ def bear_to_S():
         _BEAR_S = int((math.atan2(SEAM[0] - s.pos_x, SEAM[1] - s.pos_z) % (2 * math.pi))
                       / (2 * math.pi) * 65536)
     return _BEAR_S
+
+
+def check_runway(verbose=True):
+    """MINT GUARD (session 72): does the freshly-minted anchor have enough runway to reach the walk
+    cap (speedF 17) BEFORE Link enters the cut/reach band? A walk-stab clips only from the FULL
+    ~40.22u reach -- speedF == 17 at the cut is the tier's hard gate -- so if the rest sits too close
+    to S the walk never caps and NO genuine clip exists (the 'too close to the seam, never enough
+    speed' failure). This runs the straight from-rest walk (aim = bear_to_S) offline and checks the
+    speedF at the frame Link first enters the reach band (d2S <= WIN_HI). DERIVED, no magic distance:
+    the requirement IS 'capped before the band' ([[no-overtuned-constants]]). Also reports the rest's
+    signed |perp| off the aim line (the arc knob reaches only ~9u, so a large perp is its own warning).
+    Returns (ok, msg, info). mint_walkstab calls it so a doomed anchor is flagged BEFORE a live
+    REST-gate run is wasted on it."""
+    B = bounds()
+    WIN_HI = B['WIN_HI']
+    g = sg()
+    s = seed()
+    s._foot.skip_cruise_pose = True
+    rest_perp = g.perp((s.pos_x, s.pos_z))
+    rest_d2S = math.hypot(SEAM[0] - s.pos_x, SEAM[1] - s.pos_z)
+    cruise = _sfbd(bear_to_S(), s.csangle, 1.0)
+    entry = None
+    for N in range(1, 24):
+        s.step(cruise[0], cruise[1], csx=128, csy=CDOWN)
+        if math.hypot(SEAM[0] - s.pos_x, SEAM[1] - s.pos_z) <= WIN_HI:
+            entry = (N, math.hypot(SEAM[0] - s.pos_x, SEAM[1] - s.pos_z), s.speedF)
+            break
+    if entry is None:
+        ok = False
+        msg = ('runway UNKNOWN: the straight from-rest walk never reached the reach band '
+               '(d2S<=%.1f) within 23 frames from rest d2S=%.1f -- mint CLOSER to S' % (WIN_HI, rest_d2S))
+    else:
+        N, d2s_e, spF = entry
+        ok = spF >= 16.99          # capped == the full ~40.22u reach available at the cut
+        if ok:
+            msg = ('rest OK: speedF=%.2f CAPPED at reach-band entry (d2S=%.1f<=%.1f, N=%d); '
+                   'rest d2S=%.1f perp=%+.1f' % (spF, d2s_e, WIN_HI, N, rest_d2S, rest_perp))
+        else:
+            msg = ('MINT GUARD FAILED -- REST TOO CLOSE TO S: speedF only %.2f at reach-band entry '
+                   '(d2S=%.1f<=%.1f, N=%d) -- the walk never caps to 17 before the cut zone, so NO '
+                   'clip is reachable. Mint FARTHER from S (current rest d2S=%.1f, perp=%+.1f).'
+                   % (spF, d2s_e, WIN_HI, N, rest_d2S, rest_perp))
+    if verbose:
+        print('[runway] %s' % msg, flush=True)
+    return ok, msg, dict(rest_d2S=rest_d2S, rest_perp=rest_perp, entry=entry, WIN_HI=WIN_HI)
 
 
 def _dtm(stk):
@@ -431,7 +502,7 @@ def seed_walled():
     is bit-identical to the wall-less walk, so the fast wall-less search is exact for accepted hits)."""
     global _BASE_WALLED
     if _BASE_WALLED is None:
-        _BASE_WALLED = C.rest_state(ANCHOR, walls=sg().TRIS)
+        _BASE_WALLED = C.rest_state(ANCHOR, walls=sg().TRIS, dtm_seed=DTM_SEED)
     return _BASE_WALLED.clone()
 
 
@@ -463,92 +534,200 @@ def _stream_k3(cs, c1, c2, c3d, cruise):
     return [c1, c2, c3d] + [cruise] * 30
 
 
-def solve_focused(budget=110.0, want=30, cruise_beta=None, verbose=True):
-    """One-shot walk-stab dust search (pure sim, no calibration), the freeze-solver pattern:
-    cheap monotone predictor (perp_ray, no CrrPos) + bracket + exact bit-confirm + wall-faithful gate.
+def _stream_k(coarse, mid, last, cruise):
+    """A K = len(coarse)+len(mid)+1 start-crawl stream (session 72 generalization of `_stream_k3`):
+    the two COARSE-swept crawl frames, then k-3 FIXED middle crawl frames (empty for k=3), then the
+    byte-NUDGED last crawl frame, then the cruise hold. Byte-identical to `_stream_k3` at k=3
+    (coarse=[c1,c2], mid=[], last=c3d)."""
+    return list(coarse) + list(mid) + [last] + [cruise] * 30
 
-    Phase A (coarse, wall-less): sweep K=2 crawl (a1,m1,a2,m2) x N, rank frames by |perp_ray| to
-      bracket where the cut ray passes near S (the razor). No genuine test yet -- perp is the cheap
-      predictor. Keeps the top brackets.
-    Phase B (fine, wall-less): for each bracket, add a byte-NUDGED 3rd crawl frame (octagon interior,
-      the fine perp fill), walk, and where |perp| < the derived perp gate (bounds()) test the EXACT
-      genuine_clip.
-    Phase C (walled confirm): re-sim each genuine hit with walls; accept only wall_hit==False (old is
-      the true pre-brake position; speedF still 17). Rank by perp_margin (delivery robustness).
 
-    `cruise_beta` is the crawl-window CENTER (the cruise aim). It DERIVES from bear_to_S (the bearing
-    from the anchor start to S) -- the flat-seam grazing direction -- not a pasted constant.
-
-    Writes ranked hits (each carries the explicit delivered `sticks` + N for deliver()) to HITS_PATH."""
-    t0 = time.time()
-    if cruise_beta is None:
-        cruise_beta = bear_to_S()
+def _band_perp(sticks, N_only=None):
+    """Walk `sticks` wall-less and return (min|perp_ray|, best_N, snap) over the reach-band frames
+    (d2S in [WIN_LO,WIN_HI], N in [NLO,NHI]); `snap`=(ox,oz,fac,nsp) at best_N. The cheap perp
+    predictor the auto-refine minimizes. (None,None,None) if no frame lands in the band."""
     B = bounds()
-    NLO_F, NHI_F, WIN_LO, WIN_HI = B['NLO'], B['NHI'], B['WIN_LO'], B['WIN_HI']
+    best = (1e18, None, None)
+    for (N, ox, oz, fac, nsp) in _walk_fast(sticks, B['NHI']):
+        if not (B['NLO'] <= N <= B['NHI']):
+            continue
+        if N_only is not None and N != N_only:
+            continue
+        if not (B['WIN_LO'] <= math.hypot(SEAM[0] - ox, SEAM[1] - oz) <= B['WIN_HI']):
+            continue
+        pr = abs(perp_ray((ox, oz), fast_cut(ox, oz, fac, nsp)))
+        if pr < best[0]:
+            best = (pr, N, (ox, oz, fac, nsp))
+    return best
+
+
+def _graze_aim(verbose=False):
+    """AUTO-find the grazing cruise aim (session 72) -- the piece that killed the per-seam manual
+    `cruise_off` hand-tuning ([[oneshot-no-manual-tweaking]]). The cut ray's |perp to S| is a smooth,
+    unimodal function of the cruise-walk azimuth near a corner (a near-flat seam grazes toward S; a
+    sharp corner aims into it), so a coarse sweep + hill-descent finds the perp-minimizing aim with NO
+    hand-picked offset or sign. Objective = the straight-cruise walk's min band |perp_ray| (no crawl,
+    cheap). Returns the best cruise_beta (s16)."""
     cs = seed().csangle
-    cruise = _sfbd(cruise_beta, cs, 1.0)
-    c3base = _sfb(cruise_beta, cs, 0.66)
-    c3base_d = _dtm(c3base)
-    # --- Phase A: coarse perp brackets ---
-    brackets = []
-    for a1 in range(cruise_beta - 1800, cruise_beta + 1800, 160):
-        for m1 in (0.6, 0.66, 0.72):
-            c1 = _sfbd(a1, cs, m1)
-            for a2 in range(cruise_beta - 1800, cruise_beta + 1800, 160):
-                for m2 in (0.6, 0.72):
-                    c2 = _sfbd(a2, cs, m2)
-                    sticks = _stream_k3(cs, c1, c2, c3base_d, cruise)
-                    for (N, ox, oz, fac, nsp) in _walk_fast(sticks, NHI_F):
-                        if not (NLO_F <= N <= NHI_F):
-                            continue
-                        d2S = math.hypot(SEAM[0] - ox, SEAM[1] - oz)
-                        if not (WIN_LO <= d2S <= WIN_HI):
-                            continue
-                        nx, nz = fast_cut(ox, oz, fac, nsp)
-                        pr = abs(perp_ray((ox, oz), (nx, nz)))
-                        brackets.append((pr, a1, m1, a2, m2, N))
-    brackets.sort(key=lambda b: b[0])
-    brackets = brackets[:60]
+    c0 = bear_to_S()
+
+    def obj(cb):
+        # the CENTERED k=3 crawl stream's band |perp| (a1=a2=cb, Phase A's center point) -- NOT bare
+        # cruise: the partial-mag crawl frames shift the trajectory, moving the perp-min aim.
+        cbm = int(cb) & 0xFFFF
+        return _band_perp(_stream_k([_sfbd(cbm, cs, 0.66), _sfbd(cbm, cs, 0.72)], [],
+                                    _dtm(_sfb(cbm, cs, 0.66)), _sfbd(cbm, cs, 1.0)))[0]
+
+    best_cb = min(range(c0 - 1600, c0 + 1601, 80), key=obj)     # coarse sweep (both signs)
+    best_p = obj(best_cb)
+    for st in (40, 16, 6, 2, 1):                                # hill-descent refine
+        moved = True
+        while moved:
+            moved = False
+            for cb in (best_cb - st, best_cb + st):
+                p = obj(cb)
+                if p < best_p:
+                    best_p, best_cb, moved = p, cb, True
     if verbose:
-        print('Phase A: %d brackets, best |perp|=%.6f (%.1fs)' % (len(brackets), brackets[0][0],
-              time.time() - t0), flush=True)
-    # --- Phase B + C: fine c3-nudge drill on each bracket, exact test, walled confirm ---
+        print('  auto-graze: cruise_beta=%d (%+d off bear_to_S) straight |perp|=%.6f'
+              % (best_cb, best_cb - c0, best_p), flush=True)
+    return best_cb & 0xFFFF
+
+
+def _refine_aim(a0, m, cs, mk_stream, span, step):
+    """Hill-descend one crawl-frame aim (a0) to MINIMIZE the band |perp_ray| -- the auto perp knob.
+    `mk_stream(a)` builds the full stream with this frame aimed at `a`. Returns (best_a, best_perp,
+    best_N). a1/a2 change the settled facing -> the ray direction -> perp (the razor); the along-track
+    d2S is set separately by the c4 nudge, which keeps facing fixed (so it does NOT disturb perp)."""
+    best_a, (best_p, best_N, _) = a0, _band_perp(mk_stream(a0))
+    lo, hi = a0 - span, a0 + span
+    for a in range(lo, hi + 1, step):
+        p, N, _ = _band_perp(mk_stream(a))
+        if p < best_p:
+            best_p, best_a, best_N = p, a, N
+    for st in (max(1, step // 2), max(1, step // 4), 1):        # local descent to the s16
+        moved = True
+        while moved:
+            moved = False
+            for a in (best_a - st, best_a + st):
+                p, N, _ = _band_perp(mk_stream(a))
+                if p < best_p:
+                    best_p, best_a, best_N, moved = p, a, N, True
+    return best_a, best_p, best_N
+
+
+def solve_focused(budget=110.0, want=30, verbose=True, ks=(3, 4)):
+    """SELF-ADAPTIVE one-shot walk-stab dust search (pure sim, no calibration, NO per-seam tuning --
+    [[oneshot-no-manual-tweaking]]). The freeze-solver pattern (cheap perp predictor + bracket + exact
+    bit-confirm + wall-faithful gate), with every knob the tool USED to need by hand now searched:
+
+      0. AUTO-GRAZE (`_graze_aim`): 1D-minimize the cruise-walk's cut-ray |perp to S| over the walk
+         azimuth -> the grazing aim, no hand-picked `cruise_off`/sign.
+      A. Coarse brackets: at the grazed aim, sweep the 2 crawl-frame aims (a1,a2)x mags x N, rank by
+         |perp_ray| (the cheap predictor). Keep the top brackets.
+      B. Per bracket, AUTO-DECOMPOSE the two independent knobs and drive each to the razor:
+           * PERP  = the crawl aim (a1,a2) -> `_refine_aim` hill-descends it to |perp| < PERP_GATE.
+           * ALONG = the last crawl frame's byte nudge (c4) -> shifts d2S into the reach band at FIXED
+             facing (so it does not disturb the refined perp). Drill it, test the EXACT genuine_clip.
+      C. Walled confirm: re-sim with walls, accept only wall_hit==False (old is the true pre-brake
+         position, speedF still capped -> the >35u WallCorrect clearance the safe window needs).
+      * AUTO crawl-length retry: try each k in `ks` until hits (K=3 base; K=4 adds along phase for a
+        rest whose walk is long -- the k-3 middle frames held at the 0.66-mag grazed crawl).
+
+    Rank by perp_margin (delivery robustness). Writes ranked hits (explicit delivered `sticks` + N for
+    deliver()) to HITS_PATH. Caller passes NOTHING per-seam: feed a corner, get the clip inputs."""
+    t0 = time.time()
+    B = bounds()
+    NLO_F, NHI_F = B['NLO'], B['NHI']
+    cs = seed().csangle
+    # FEASIBILITY pre-check via the SHARED detector (session 72, DRY): does genuine walk-cap dust
+    # exist? It ANSWERS feasibility; it does NOT set the walk aim (that is _graze_aim -- see docstring).
+    from harness.rollstab.seam_feasibility import best_walk_aim
+    bF, ntot, nsafe, _safe = best_walk_aim(sg(), speedf=17.0, min_clearance=35.0,
+                                           fstep=2048, budget=25.0, verbose=False)
+    if ntot == 0:
+        if verbose:
+            print('solve_focused: NO genuine walk-cap dust at any aim -- seam not walk-stab feasible '
+                  '(the shared detector, not a mint/search failure -- [[infeasible-needs-proof]]).',
+                  flush=True)
+        os.makedirs(os.path.dirname(HITS_PATH), exist_ok=True)
+        json.dump([], open(HITS_PATH, 'w'))
+        return []
+    if verbose:
+        print('feasible: richest dust aim F=%d (%.1fdeg) genuine=%d walk-reachable=%d (%.1fs)'
+              % (bF, bF / 65536 * 360, ntot, nsafe, time.time() - t0), flush=True)
+    cb = _graze_aim(verbose)              # the walk aim = the cruise whose cut ray threads S (steering)
+    cruise = _sfbd(cb, cs, 1.0)
+    c3base = _sfb(cb, cs, 0.66)
+    c3base_d = _dtm(c3base)
     clips, seen = [], set()
-    for (pr0, a1, m1, a2, m2, N) in brackets:
-        if time.time() - t0 > budget or len(clips) >= want:
+    for k in ks:
+        if clips or time.time() - t0 > budget:
             break
-        c1 = _sfbd(a1, cs, m1)
-        c2 = _sfbd(a2, cs, m2)
-        for dx in range(-13, 14):
+        mid = [c3base_d] * max(0, k - 3)
+        # --- Phase A: coarse perp brackets at the grazed aim ---
+        brackets = []
+        for a1 in range(cb - 1200, cb + 1200, 160):
+            for m1 in (0.6, 0.66, 0.72):
+                c1 = _sfbd(a1, cs, m1)
+                for a2 in range(cb - 1200, cb + 1200, 160):
+                    for m2 in (0.6, 0.72):
+                        c2 = _sfbd(a2, cs, m2)
+                        pr, N, _ = _band_perp(_stream_k([c1, c2], mid, c3base_d, cruise))
+                        if N is not None:
+                            brackets.append((pr, a1, m1, a2, m2, N))
+        brackets.sort(key=lambda b: b[0])
+        brackets = brackets[:16]
+        if verbose:
+            print('Phase A (k=%d, cb=%d): %d brackets, best |perp|=%.6f (%.1fs)'
+                  % (k, cb, len(brackets), brackets[0][0] if brackets else -1,
+                     time.time() - t0), flush=True)
+        # --- Phase B/C: per bracket, refine perp (a1,a2) then drill along (c4) + wall-faithful ---
+        for (pr0, a1, m1, a2, m2, N0) in brackets:
+            if time.time() - t0 > budget or len(clips) >= want:
+                break
+            # PERP: hill-descend a1 then a2 (fixed c4) to minimize band |perp|.
+            a1r, pr1, Nr = _refine_aim(a1, m1, cs,
+                                       lambda a: _stream_k([_sfbd(a, cs, m1), _sfbd(a2, cs, m2)],
+                                                           mid, c3base_d, cruise), 160, 8)
+            a2r, pr2, Nr = _refine_aim(a2, m2, cs,
+                                       lambda a: _stream_k([_sfbd(a1r, cs, m1), _sfbd(a, cs, m2)],
+                                                           mid, c3base_d, cruise), 120, 8)
+            if pr2 >= B['PERP_GATE'] * 6:      # aim can't thread S at this bracket -- skip the drill
+                continue
+            c1 = _sfbd(a1r, cs, m1)
+            c2 = _sfbd(a2r, cs, m2)
+            # ALONG: drill the last crawl frame's byte (shifts d2S at fixed facing -> preserves perp).
             for dz in range(-13, 14):
-                c3d = _dtm((min(254, max(1, c3base[0] + dx)), min(254, max(1, c3base[1] + dz))))
-                sticks = _stream_k3(cs, c1, c2, c3d, cruise)
-                ox = oz = fac = nsp = None
-                for (kN, x, z, f, n) in _walk_fast(sticks, N):
-                    if kN == N:
-                        ox, oz, fac, nsp = x, z, f, n
-                nx, nz = fast_cut(ox, oz, fac, nsp)
-                if abs(perp_ray((ox, oz), (nx, nz))) >= B['PERP_GATE']:
-                    continue
-                if not genuine_clip((ox, oz), (nx, nz))[0]:
-                    continue
-                wf = _wall_faithful(sticks, N)                  # Phase C: reject wall artifacts
-                if wf is None:
-                    continue
-                (wox, woz), (wnx, wnz), wfac, wsp = wf
-                if not genuine_clip((wox, woz), (wnx, wnz))[0]:
-                    continue
-                key = (round(wox, 5), round(woz, 5))
-                if key in seen:
-                    continue
-                seen.add(key)
-                margin = perp_margin((wox, woz), (wnx, wnz))
-                clips.append(dict(sticks=[list(sk) for sk in sticks[:18]], N=N,
-                                  a1=a1, m1=m1, a2=a2, m2=m2, c3dx=dx, c3dz=dz,
-                                  cruise_beta=cruise_beta, old=[wox, woz], new=[wnx, wnz],
-                                  facing=wfac, speedF=wsp, margin=margin,
-                                  d2S=math.hypot(SEAM[0] - wox, SEAM[1] - woz),
-                                  perp=perp_ray((wox, woz), (wnx, wnz))))
+                for dx in range(-6, 7):
+                    if time.time() - t0 > budget or len(clips) >= want:
+                        break
+                    c4 = _dtm((min(254, max(1, c3base[0] + dx)), min(254, max(1, c3base[1] + dz))))
+                    sticks = _stream_k([c1, c2], mid, c4, cruise)
+                    pr, N, snap = _band_perp(sticks)
+                    if N is None or pr >= B['PERP_GATE'] or snap is None:
+                        continue
+                    ox, oz, fac, nsp = snap
+                    nx, nz = fast_cut(ox, oz, fac, nsp)
+                    if not genuine_clip((ox, oz), (nx, nz))[0]:
+                        continue
+                    wf = _wall_faithful(sticks, N)              # Phase C: reject wall artifacts
+                    if wf is None:
+                        continue
+                    (wox, woz), (wnx, wnz), wfac, wsp = wf
+                    if not genuine_clip((wox, woz), (wnx, wnz))[0]:
+                        continue
+                    key = (round(wox, 5), round(woz, 5))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    clips.append(dict(sticks=[list(sk) for sk in sticks[:18]], N=N,
+                                      a1=a1r, m1=m1, a2=a2r, m2=m2, c3dx=dx, c3dz=dz, k=k,
+                                      cruise_beta=cb, old=[wox, woz], new=[wnx, wnz],
+                                      facing=wfac, speedF=wsp,
+                                      margin=perp_margin((wox, woz), (wnx, wnz)),
+                                      d2S=math.hypot(SEAM[0] - wox, SEAM[1] - woz),
+                                      perp=perp_ray((wox, woz), (wnx, wnz))))
     clips.sort(key=lambda h: -h['margin'])
     os.makedirs(os.path.dirname(HITS_PATH), exist_ok=True)
     json.dump(clips, open(HITS_PATH, 'w'), indent=1)
@@ -556,8 +735,8 @@ def solve_focused(budget=110.0, want=30, cruise_beta=None, verbose=True):
         print('%d wall-faithful clips in %.1fs -> %s. top by perp margin:'
               % (len(clips), time.time() - t0, HITS_PATH), flush=True)
         for h in clips[:8]:
-            print('  margin=%d N=%d a1=%d/%.2f a2=%d/%.2f c3=(%+d,%+d) d2S=%.2f perp=%+.6f old=(%.6f,%.6f)'
-                  % (h['margin'], h['N'], h['a1'], h['m1'], h['a2'], h['m2'], h['c3dx'], h['c3dz'],
+            print('  margin=%d k=%d N=%d a1=%d a2=%d c4=(%+d,%+d) d2S=%.2f perp=%+.6f old=(%.6f,%.6f)'
+                  % (h['margin'], h['k'], h['N'], h['a1'], h['a2'], h['c3dx'], h['c3dz'],
                      h['d2S'], h['perp'], h['old'][0], h['old'][1]))
     return clips
 
@@ -578,10 +757,8 @@ def reachability(beta=5730, mag=1.0, nmax=15):
               % (N, r['facing'], r['spF'], d2S, r['rho'], r['disp'], r['why']))
 
 
-GOLDEN_PATH = os.path.join(_rb, 'tests', 'golden', 'walkstab_deliver.json')
-
-
-def deliver(hit=None, b_frame=None, log_n=40, norelaunch=False, verbose=True, save_golden=True):
+def deliver(hit=None, b_frame=None, log_n=40, norelaunch=False, verbose=True, save_golden=True,
+            dtm_seed=None):
     """LIVE clean-DTM delivery of a solver hit (C-down every frame; NEVER advancewith). Authors the
     hit's walk stream + a B edge at `b_frame` (the 4-frame item put-away delay + 1-frame DTM buffering
     fires CUT_F at frame N), logs per frame, and diffs vs the from-rest sim. Reports the walk residual,
@@ -589,10 +766,19 @@ def deliver(hit=None, b_frame=None, log_n=40, norelaunch=False, verbose=True, sa
     OOB (`pos_y` drops below the floor -- the definitive clip signal; a post-cut proc that is neither
     an idle nor the recoil also flags it). Per-frame diff -> never guess the B frame; read the divergence.
 
+    `dtm_seed` (session 72): the make_dtm leading-poll layout the DTM is delivered with, threaded to
+    BOTH the authored movie AND the from-rest sim (rest_state) so they align. It MUST match the seed
+    the anchor's REST gate verified BIT-EXACT: a freshly-minted (mint_walkstab/mint_current) anchor is
+    bit-exact at seed=0 (noops = rest_noops + 1), so DEFAULT 0. The old default (1) delivered a novel
+    anchor's walk 1 frame off -> `old` ~1u past the razor -> the CUT_F lunge CrrPos-blocks (found by a
+    per-frame delivery diff, not a guess -- the [[run-dtm 1-frame jitter]] seed fix).
+
     Returns 0 (clip confirmed live) / 2 (cut fired but no clip) / 1 (no CUT fired). Reads the top hit
     from HITS_PATH if `hit` is None; saves the live golden on a confirmed clip."""
     from harness.dtm.run_dtm import run_dtm, land_ready
     B_BTN = 0x200
+    if dtm_seed is None:
+        dtm_seed = DTM_SEED           # the anchor's REST-bit-exact seed (configure): kaze 1, novel 0
     if hit is None:
         hit = json.load(open(HITS_PATH))[0]
     # New (solve_focused) hits carry the explicit delivered `sticks`; legacy hits carry build_stream params.
@@ -608,7 +794,7 @@ def deliver(hit=None, b_frame=None, log_n=40, norelaunch=False, verbose=True, sa
         seed = C.G.load_seed(ANCHOR)
         sword_out = bool(seed.get('sword_drawn', seed.get('equip_item', 0x103) == 0x103))
         b_frame = (N - 1) if sword_out else (N - 5)
-    s = C.rest_state(ANCHOR)
+    s = C.rest_state(ANCHOR, dtm_seed=dtm_seed)
     rows = []
     for k in range(N):
         s.step(sticks[k][0], sticks[k][1], csx=128, csy=CDOWN)
@@ -625,7 +811,7 @@ def deliver(hit=None, b_frame=None, log_n=40, norelaunch=False, verbose=True, sa
            for k in range(18)]
     dtm += [dict(stickX=128, stickY=128, substickX=128, substickY=CDOWN, buttons=0)] * 90
     end = run_dtm(dtm, anchor=ANCHOR, ready=land_ready, relaunch_dolphin=not norelaunch,
-                  log_frames=log_n, verbose=verbose)
+                  log_frames=log_n, verbose=verbose, seed=dtm_seed)
     live = end['log']
     cut_i = next((i for i, f in enumerate(live) if f['proc'] == 0x42), None)
     if cut_i is None:
@@ -671,14 +857,23 @@ def deliver(hit=None, b_frame=None, log_n=40, norelaunch=False, verbose=True, sa
     return 0 if ok else 2
 
 
+configure()   # default target: the kaze r11 walk-stab seam (byte-identical to the pre-s72 hardcode)
+
+
 if __name__ == '__main__':
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'reach'
+    _kw = dict(a.split('=', 1) for a in sys.argv[2:] if '=' in a)
+    # Retarget to a NOVEL seam from the CLI: anchor=<isokey> geo=<fixture> name=<slug>.
+    if 'anchor' in _kw or 'geo' in _kw:
+        configure(_kw.get('anchor', _KAZE_ANCHOR), _kw.get('geo', _KAZE_GEO),
+                  name=_kw.get('name', 'walkstab'))
     if cmd == 'reach':
         reachability()
     elif cmd == 'solve':
-        solve_focused()
+        solve_focused(budget=float(_kw.get('budget', 110.0)))
     elif cmd == 'solve_legacy':
         solve()
     elif cmd == 'deliver':
         bf = next((int(a.split('=')[1]) for a in sys.argv if a.startswith('b=')), None)
-        sys.exit(deliver(b_frame=bf, norelaunch=('norelaunch' in sys.argv)))
+        sys.exit(deliver(b_frame=bf, norelaunch=('norelaunch' in sys.argv),
+                         dtm_seed=(int(_kw['seed']) if 'seed' in _kw else None)))

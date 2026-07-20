@@ -383,6 +383,54 @@ def mint_online(name, geo_path, d2s=580.0, base='kaze_r11_rollstab_idle13@twwgz'
     return seed
 
 
+def mint_walkstab(name, geo_path, d2s=200.0, base='kaze_r11_walkstab@twwgz',
+                  target_csangle=None, settle_walk=0):
+    """Mint a from-rest WALK-stab anchor for a NOVEL seam (session 72) -- the walk-stab counterpart of
+    mint_online, the piece the walk-stab tier lacked (ledger #58). Three differences from the roll mint:
+
+      * The rest sits at a SUB-580u distance. A capped-walk cut reaches ~40u (speedF 17 + the 23.22
+        CUT_F root translate), so the rest is only a short walk out -- and for seam_0352_0353 it must
+        sit past the corridor CC actor, which is why the roll (which needs the ~506u A-press runway)
+        cannot deliver that corner. But it must be FAR ENOUGH for the walk to reach the speedF-17 cap
+        before the cut zone -- `check_runway` GUARDS this after minting (session-72 fix: an earlier
+        mint over-settled to d2S ~58 with no runway and wasted a live REST-gate run). `d2s` defaults
+        to 200 (parked DIRECTLY, no settle overshoot).
+      * NO settle-walk. mint_novel's settle-walk (walk-until-cam-freezes) OVERSHOOTS here -- it
+        travels ~240u toward S and curves off-line -- and a live probe showed the camera is already
+        behind Link after the pan + a brief idle (csangle drifts only ~11 hw over the whole approach,
+        an arm idle->walk transient, NOT a wall collision). So `settle_walk=0`: park AT d2s, pan the
+        cam behind Link, idle to steady WAITS, mint. The rest stays put at d2s.
+      * NO baseline-perp secant loop (a walk-stab has no baseline roll; the solver's grazing cruise +
+        bearing arcs absorb residual misaim, ledger #58).
+
+    Parks on the seam's aim line (`_aim_line`; bisector unless the geo declares `aim_deg`) at `d2s`,
+    pans the free cam to `target_csangle` (default = the aim F), idles to a clean steady-WAITS rest --
+    all PRE-mint, so none lands in the delivered DTM. `base` defaults to the item-held kaze walk-stab
+    idle (sword sheathed -> the delivery's B edge draws it via the 4-frame put-away). After minting it
+    RETARGETS walkstab.configure(name, geo) and runs the runway guard. Verify next with
+    `rest.main(anchor, seam=<walkstab SeamGeo>, dtm_seed=0)` -> REST BIT-EXACT. Returns the seed dict."""
+    import math
+    geo = json.load(open(geo_path))
+    F, dx, dz, Sx, Sz = _aim_line(geo)
+    if target_csangle is None:
+        target_csangle = F
+    park_x = Sx - d2s * dx
+    park_z = Sz - d2s * dz
+    seed = mint_novel(name, park_x, park_z, F, int(target_csangle) & 0xFFFF, geo['link_y'],
+                      base=base, settle_walk=settle_walk)
+    # GUARD (session 72): retarget the tier to the fresh anchor + verify runway (check_runway) so a
+    # too-close 'no speedF cap before the cut' mint is flagged HERE, not after a wasted live run.
+    try:
+        from harness.rollstab import walkstab as W
+        W.configure(name, geo_path, name=name.split('@')[0].split('_')[-1])
+        ok, msg, info = W.check_runway()
+        if not ok:
+            print('*** %s' % msg, flush=True)
+    except Exception as e:
+        print('mint_walkstab: runway guard skipped (%s)' % e, flush=True)
+    return seed
+
+
 def floor_probe(geo_path, dists, settle_frames=30, base='kaze_r11_rollstab_idle13@twwgz',
                 fall_tol=60.0):
     """Live park-FLOOR probe (session 60, dead-end #43): does the aim line still have walkable
@@ -603,6 +651,11 @@ if __name__ == '__main__':
                     target_csangle=(int(o['target_csangle'], 0) if 'target_csangle' in o else None),
                     settle_walk=int(o.get('settle_walk', 42)),
                     base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))
+    elif 'walkstab' in o:                 # WALK-stab sub-580u pan mint for a NOVEL seam (session-72)
+        mint_walkstab(o['walkstab'], o['geo'], d2s=float(o.get('d2s', 200.0)),
+                      target_csangle=(int(o['target_csangle'], 0) if 'target_csangle' in o else None),
+                      settle_walk=int(o.get('settle_walk', 0)),
+                      base=o.get('base', 'kaze_r11_walkstab@twwgz'))
     elif 'novel' in o:                    # camera-behind mint for a NOVEL seam (session-50 procedure)
         mint_novel(o['novel'], float(o['x']), float(o['z']), int(o['facing'], 0),
                    int(o['csangle'], 0), float(o['y']), base=o.get('base', 'kaze_r11_rollstab_idle13@twwgz'))

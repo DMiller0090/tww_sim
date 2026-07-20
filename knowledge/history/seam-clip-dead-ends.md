@@ -1227,6 +1227,41 @@ probe built on it.
     bit-exactness), both fixable.** Corridor-actor removal for a ROLL delivery (the #52 recipe) also
     remains open.
 
+## The seam352 corridor is camera-CLEAN, and the walk-stab perp knob washes out at range (session 72)
+
+59. **"seam352's corridor is bumpCheck-DIRTY for the walk-stab approach": FALSE -- a false alarm
+    from a pan/settle transient, not a real collision.** The `cam_clean_screen` SETTLE walk drifted
+    csangle ~2600-2900 hw, which I wrongly read as `bumpCheck` camera-wall contamination over the
+    approach and escalated to "model the camera collision" (a ~1500-line dCamera_c + dBgS port,
+    ruled out-of-scope by Dereck). A real from-rest approach probe settled it: teleport to d2S 200,
+    camera behind Link, walk toward S with C-down -- **csangle moved a total of 11 hw over the whole
+    approach and the arm CONVERGED monotonically 672 -> 514 (nominal) with ZERO pull-in.** A wall
+    collision spikes/pushes the arm BELOW nominal; a clean convergence to nominal is the idle->walk
+    arm settle, radial, csangle-neutral. The ~2900 settle drift was the pan/settle transient inside
+    the screen tool, NOT the corridor. **The from-rest walk-stab walk is BIT-EXACT 28/28 (0-ULP) with
+    the seam walls in the gate.** LESSON: confirm a "camera collision" from a REAL from-rest approach
+    playback (arm length + csangle per frame), not from a pan/settle probe's transient -- and read the
+    arm signature (converge-to-nominal = settle, spike/below-nominal = collision). The `cam_clean.py`
+    arm-compression signal exists precisely to tell these apart; use it before concluding.
+
+60. **The start-crawl perp knob WASHES OUT over a long walk, so a walk-stab rest that is far enough
+    for runway can be too far to thread the razor with the crawl alone (session 72).** seam352's
+    walk-stab from a d2S-200 rest (cut at N~16) is feasibility-confirmed (the shared
+    `seam_feasibility` detector finds genuine walk-cap dust), and its from-rest model is bit-exact,
+    but `solve_focused` finds 0 clips: on the bit-exact (seed=0, noops=2) trajectory the auto-graze
+    floors the cut-ray |perp to S| at ~0.0016 (~16x the ~1e-4 f32 razor). Root cause, found by
+    instrumenting the drill: the start-crawl (early partial-mag frames) perp perturbation DAMPS OUT
+    over the ~16-frame walk, and the last-crawl byte NUDGE shifts `old` ALONG its own facing (same
+    ray -> same perp), so it is an ALONG knob, not perp. Perp is set by the crawl AIM (a1/a2), which
+    floors at 0.0016 here. The perp-0.000025 hits found at seed=1 are on a 1-frame-off
+    (non-deliverable) trajectory -- a per-frame delivery diff proved live leads the seed=1 sim by 1
+    frame; the anchor is bit-exact only at seed=0. Corollary (ledger seed rule): a freshly-minted
+    (mint_walkstab/mint_current) anchor is REST-bit-exact at the seed giving noops=2 (rest_noops 1 ->
+    seed=0); solve AND deliver must both use it. FIX (open, session-73 handoff): a finer
+    WALK-reachable perp knob that does NOT wash out -- a mid-walk partial-magnitude dip near the cut
+    frame, or the bearing-arc knob (a full-mag off-aim hold for a few frames near the cut) -- to
+    thread the razor on the true trajectory. NOT a per-seam constant: the same knob family, searched.
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

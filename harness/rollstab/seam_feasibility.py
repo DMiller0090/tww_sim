@@ -30,11 +30,18 @@ from harness.rollstab.seamgeo import SeamGeo
 from harness.rollstab.geometry import load_seed
 
 
-def scan_aim(seam, F, perp_w=2.0, pstep=0.001, astep=0.3, along_frac=(0.5, 1.05), speedf=None):
+def scan_aim(seam, F, perp_w=2.0, pstep=0.001, astep=0.3, along_frac=(0.5, 1.05), speedf=None,
+             min_clearance=None):
     """Genuine f32 dust for a roll-stab firing its CUT at facing `F`. Places `old` at
     `S - along*dir(F) + perp*perp(F)` over the reach band and tests the EXACT `pred_genuine`
     (== the sim cut). f32 resolution in perp is LOAD-BEARING (coarse steps miss the ~0.001u
-    columns). Returns (count, [(along, perp, old_x, old_z), ...])."""
+    columns). Returns (count, [(along, perp, old_x, old_z), ...]).
+
+    `min_clearance` (session 72): if set, keep only dust whose `old` is > this far from the incident
+    walls (`SeamGeo.wall_clearance`) -- the WALK-reachable subset, since a walk-stab approach whose
+    cylinder is inside Link's ~35u WallCorrect radius brakes on the wall (the wall-faithful reject).
+    This makes the shared detector answer 'where is the WALK-reachable dust?', not just the
+    geometrically-genuine dust ([[oneshot-no-manual-tweaking]] -- one detector, enhanced, not a copy)."""
     Sx, Sz = seam.S
     reach = seam.reach_at(speedf)
     r = (F & 0xFFFF) / 65536.0 * 2 * math.pi
@@ -47,10 +54,40 @@ def scan_aim(seam, F, perp_w=2.0, pstep=0.001, astep=0.3, along_frac=(0.5, 1.05)
         while p <= perp_w:
             ox, oz = _f(Sx - a * dx + p * px), _f(Sz - a * dz + p * pz)
             if seam.pred_genuine((ox, oz), facing=(F & 0xFFFF), speedf=speedf):
-                hits.append((a, p, float(ox), float(oz)))
+                if min_clearance is None or seam.wall_clearance(ox, oz) > min_clearance:
+                    hits.append((a, p, float(ox), float(oz)))
             p += pstep
         a += astep
     return len(hits), hits
+
+
+def best_walk_aim(seam, speedf=17.0, min_clearance=35.0, fstep=1024, budget=60.0,
+                  perp_w=1.5, pstep=0.001, astep=0.3, verbose=False):
+    """Pick the CUT facing whose genuine dust is richest -- the self-adaptive target-finder a
+    walk-stab solver aims at (session 72; replaces walkstab's redundant perp-to-S auto-graze, which
+    found rays threading S where NO genuine old exists). Ranks facings by TOTAL genuine dust (stable
+    at f32 resolution -- the clearance-filtered subset aliases badly for ranking because the dust
+    hugs the wall at clr~35), and reports the WALK-reachable (clearance > `min_clearance`) subset of
+    the winner separately -- clearance is a STEERING constraint (the wall-faithful gate), not a
+    ranking one. Returns (best_F, total_count, safe_count, [safe olds...]) or (None,0,0,[]). DRY
+    front-end: pure `scan_aim` reuse."""
+    import time
+    t0 = time.time()
+    best = (None, 0, [])
+    for F in range(0, 65536, fstep):
+        n, hits = scan_aim(seam, F, speedf=speedf, perp_w=perp_w, pstep=pstep, astep=astep)
+        if n > best[1]:
+            best = (F, n, hits)
+        if verbose and n:
+            print('  aim F=%5d (%.1fdeg): genuine=%d' % (F, F / 65536 * 360, n), flush=True)
+        if time.time() - t0 > budget:
+            if verbose:
+                print('  ...budget cutoff at F=%d' % F, flush=True)
+            break
+    if best[0] is None:
+        return (None, 0, 0, [])
+    safe = [h for h in best[2] if seam.wall_clearance(h[2], h[3]) > min_clearance]
+    return (best[0], best[1], len(safe), safe)
 
 
 

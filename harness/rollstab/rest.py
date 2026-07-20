@@ -132,18 +132,23 @@ def rest_state(anchor, walls=None, model_draw=None, dtm_seed=1, noops=None, floo
     return s
 
 
-def verify_rest(anchor, calib=None, seam=None, dtm_seed=1, floors=None):
+def verify_rest(anchor, calib=None, seam=None, dtm_seed=1, floors=None, walls=None):
     """Offline gate: replay the calibration stream FROM REST and diff every row vs the live
     trace -- pos, d/w frames, m359C (+ pos_y when a Phase G floors mesh is in play). Returns
     nbad (0 == REST BIT-EXACT). `seam`/`dtm_seed` for a NOVEL seam (aim at seam.F) / a seed-0
-    delivery; defaults byte-identical to the kaze path. `floors` = mesh path or Tri list."""
+    delivery; defaults byte-identical to the kaze path. `floors` = mesh path or Tri list.
+    `walls` (session 72): the seam CrrPos tris for the in-stepper wall response -- REQUIRED for a
+    short-corridor (walk-stab) anchor whose ~200u-out verification walk reaches the seam wall and
+    SLIDES along it; without walls the wall-less sim walks THROUGH and the gate false-DIVERGEs at
+    the wall frame. Byte-identical for a far (~580u) roll anchor: its 28-frame walk never nears a
+    wall, so no wall_hit fires (verified). Pass `seam.TRIS`."""
     def bits(x):
         return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
     if calib is None:
         calib = json.load(open(CALIB_PATH))
         assert calib['anchor'] == anchor, (calib['anchor'], anchor)
-    s = rest_state(anchor, dtm_seed=dtm_seed, floors=floors)
+    s = rest_state(anchor, dtm_seed=dtm_seed, floors=floors, walls=walls)
     _, straight, aim = sticks_of(anchor, seam=seam)
     stream = [straight] * NPREF + [aim] * NCRUISE
     nbad = 0
@@ -208,7 +213,7 @@ def _dedup_log(frames, rest_d):
     return out
 
 
-def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None, floors=None):
+def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None, floors=None, walls=None):
     """The per-anchor LIVE gate: one clean-DTM run of the verification stream, logging the anim
     fields per frame, then the offline from-rest diff. A new anchor must print REST BIT-EXACT
     before its solver hits are trusted. `seam` (a SeamGeo, or built from a `geo=` fixture) aims the
@@ -257,7 +262,7 @@ def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None, floors=None):
     os.makedirs(os.path.dirname(CALIB_PATH), exist_ok=True)
     json.dump(calib, open(CALIB_PATH, 'w'))
     print('wrote %s (%d frames)' % (CALIB_PATH, len(frames)), flush=True)
-    nbad = verify_rest(anchor, calib, seam=seam, dtm_seed=dtm_seed, floors=floors)
+    nbad = verify_rest(anchor, calib, seam=seam, dtm_seed=dtm_seed, floors=floors, walls=walls)
     if nbad == 0 and golden:
         write_golden(anchor, golden, calib=calib, seam=seam, dtm_seed=dtm_seed, geo=geo,
                      floors=floors if isinstance(floors, str) else None)
@@ -267,10 +272,15 @@ def main(anchor, seam=None, dtm_seed=1, golden=None, geo=None, floors=None):
 if __name__ == '__main__':
     o = dict(t.split('=', 1) for t in sys.argv[1:] if '=' in t)
     _seam = None
+    _walls = None
     if 'geo' in o:                    # NOVEL seam: build a SeamGeo from its geo fixture + anchor csangle
         from harness.rollstab.seamgeo import SeamGeo
         _a = o.get('anchor', 'kaze_r11_rollstab_idle2@twwgz')
         _seam = SeamGeo(json.load(open(o['geo'])), csangle=G.load_seed(_a)['csangle'] & 0xFFFF)
+        # Auto-enable the seam walls in the gate (session 72): byte-identical for a far roll anchor,
+        # REQUIRED for a short-corridor walk-stab whose walk slides the wall. `walls=0` disables.
+        if o.get('walls', '1') != '0':
+            _walls = _seam.TRIS
     sys.exit(main(o.get('anchor', 'kaze_r11_rollstab_idle2@twwgz'),
                   seam=_seam, dtm_seed=int(o.get('seed', 1)),
-                  golden=o.get('golden'), geo=o.get('geo'), floors=o.get('floors')))
+                  golden=o.get('golden'), geo=o.get('geo'), floors=o.get('floors'), walls=_walls))

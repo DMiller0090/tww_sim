@@ -85,13 +85,60 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-20, session 71)
+## Status (2026-07-20, session 72)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-20, session 71): an in-situ shakeout ran the s70 `cam_clean` gate
+> **CURRENT THREAD (2026-07-20, session 72): the WALK-stab tier is GENERALIZED to a novel anchor
+> and made SELF-ADAPTIVE (Dereck's steer: one-shot from any viable corner, NO per-seam manual
+> tweaking -- [[oneshot-no-manual-tweaking]]). The tooling ships regression-clean; the seam352 live
+> clip is NOT yet delivered (a solver perp-resolution gap on the bit-exact trajectory, handed off).**
+> - **`walkstab.configure(anchor, geo, name)` retargets the tier to ANY seam** (was hardcoded to the
+>   one session-32 kaze anchor); the kaze default is byte-identical (23 offline gates green). New
+>   novel-anchor machinery, all decomp/live-grounded: **`mint.mint_walkstab`** (a sub-580u pan mint,
+>   parked directly, NO settle-walk -- a live probe showed the cam is behind Link after the pan, and
+>   the long settle-walk OVERSHOT + curved off-line) with a **`check_runway` GUARD** (simulates the
+>   from-rest walk and ABORTS if speedF does not cap before the cut zone -- a self-detect so a
+>   too-close mint never wastes a live run); a **walls-aware REST gate** (`rest.main`/`verify_rest`
+>   auto-thread the seam walls when a geo is given, byte-identical for far roll anchors -- a
+>   short-corridor walk that SLIDES the seam wall no longer reads as a false DIVERGE); and a
+>   **per-anchor `DTM_SEED`** (configure derives it: legacy kaze seed=1, a freshly-minted novel anchor
+>   seed=0 -- the seed the anchor is REST-bit-exact at; a mismatch delivered the walk 1 frame off, the
+>   old past the razor -- found by a per-frame delivery diff, not a guess).
+> - **`solve_focused` is now self-adaptive (no per-seam args):** a FEASIBILITY pre-check via the
+>   SHARED detector (`seam_feasibility.best_walk_aim`, the same `SeamGeo.pred_genuine` acceptance the
+>   CSV dump uses -- enhanced with a `wall_clearance` filter + `SeamGeo.wall_clearance`, per Dereck's
+>   DRY steer, NOT a re-implementation) confirms genuine walk-cap dust exists; then an AUTO-GRAZE
+>   (1D-minimize the cut-ray |perp to S| over the walk aim -- replaces the hand-found `cruise_off`
+>   sign/magnitude) + perp/along auto-decompose (crawl aim = perp, last-crawl byte nudge = along at
+>   fixed facing) + auto k in {3,4}. It still delivers the kaze hit (margin 5, d2S 36).
+> - **seam352 is minted (d2S 200, on-line, REST BIT-EXACT 28/28 with walls), feasibility-confirmed,
+>   but NOT delivered.** The camera was a FALSE alarm (no collision; the arm converges to nominal and
+>   csangle holds -- the earlier "dirty corridor" was a pan/settle transient). The real blocker: on
+>   the bit-exact (seed=0) trajectory the auto-graze floors the cut-ray perp at ~0.0016 (~16x the
+>   ~1e-4 razor) -- the start-crawl perp perturbation washes out over the ~16-frame walk, and the
+>   along nudge does not touch perp. The seed=1 perp-0.000025 hits are on a 1-frame-off
+>   (non-deliverable) trajectory. Needs a finer WALK-reachable perp knob on the true trajectory (a
+>   mid-walk partial-mag dip near the cut, or the bearing-arc knob) -- the handoff's Next step.
+> - **Locked live-data-backed:** anchor `kaze_r11_walkstab_seam352@twwgz` (minted, seed tracked) +
+>   golden `fixtures/seam352_rest_golden.json` (REST BIT-EXACT, walls-aware) + geo
+>   `fixtures/kaze_r11_seam352_geo.json` (regenerable). Gate `tests/test_seam352_walkstab.py`:
+>   `test_seam352_rest_bitexact` GREEN, `test_seam352_clip_delivered` strict-xfail (flips when the
+>   clip ships). Suite **425 passed, 1 skipped, 6 xfailed** (+1 pass +1 xfail). NO behavior change to
+>   the kaze walk-stab delivery, `solver.py`, `deliver.py`, `mint_online`, or any shipped roll seam
+>   (all recompose). KB: dead-ends #59 (camera false-alarm) / #60 (perp washout at range). Every
+>   other thread UNCHANGED (ten delivered roll seams, kaze walk-stab, Tetra STANDALONE,
+>   97m/hseam2709 lotteries, 467/163 blocked).
+>
+> **NEXT (session 73): deliver the seam352 walk-stab clip -- add a finer WALK-reachable perp knob to
+> `solve_focused`'s steering (a mid-walk partial-magnitude dip near the cut frame, or the bearing-arc
+> knob) that shifts perp WITHOUT the start-crawl washout, thread the ~1e-4 razor on the seed=0
+> trajectory, and deliver via the (now seed-correct) `walkstab.deliver`. The anchor + REST golden +
+> feasibility are ready. Then the standing ROADMAP exp5(b)/(c)+exp6 and the lotteries.**
+
+> **PRIOR THREAD (2026-07-20, session 71): an in-situ shakeout ran the s70 `cam_clean` gate
 > END-TO-END on a FRESH kaze corner for the first time -- and it exposed + fixed a REGRESSION the
 > s70 rewrite introduced (ledger #57). The corner did not deliver (a corridor CC actor + the
 > walk-stab tier boundary), but the cam-gate fix is the session's verified deliverable.**

@@ -209,6 +209,17 @@ class SeamGeo:
         """Straight-line distance from `p=(x,z)` to the seam vertex S."""
         return math.hypot(p[0] - self.S[0], p[1] - self.S[1])
 
+    def wall_clearance(self, x, z):
+        """XZ distance from (x,z) to the NEARER incident seam wall (edge distance of the wallA/wallB
+        tris). A walk-reachable `old` needs clearance > Link's ~35u WallCorrect radius, else the
+        approach walk brakes on the wall (the wall-faithful reject). Shared so the feasibility
+        detector can report WALK-reachable dust, not just geometrically-genuine dust
+        ([[oneshot-no-manual-tweaking]] -- reuse the detector, don't re-derive clearance per caller)."""
+        from harness.collision.seam_scan import _tri_xz_edge_dist
+        va = [tuple(v) for v in self.geo["wallA"]["v"]]
+        vb = [tuple(v) for v in self.geo["wallB"]["v"]]
+        return min(_tri_xz_edge_dist(va, x, z), _tri_xz_edge_dist(vb, x, z))
+
     # --- reachability (is a WallCorrect-standable old able to clip this seam?) ------------
     def roll_reachable(self):
         """Is there a WallCorrect-STANDABLE `old` whose clip threads this seam -- i.e. is the seam
