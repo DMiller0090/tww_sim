@@ -152,9 +152,11 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       flip + re-aim, additive inertness -- ALL exact/0-ULP against pinned model outputs, no tolerances).
       **NOT yet live-0-ULP-validated** (that is the next box); the flip physics are decomp-faithful and
       the model produces the right shape, but the magnitude is only validated against the MODEL, not live.
-- [~] **Validate sim vs live from state 2**, 0-ULP. The untarget-brakeslide FLIP is now validated
-      BIT-EXACT against live for BOTH push cycles (session 3); the remaining gaps are frame-exact
-      alignment + the full replay, and they need a jitter-free capture.
+- [~] **Validate sim vs live from state 2**, 0-ULP. The untarget-brakeslide FLIP is validated
+      BIT-EXACT for BOTH cycles (session 3), and (session 4) it stays bit-exact under FULL Tetra
+      coupling. The remaining gap is the full from-f0 replay, now reduced to ONE crux: the
+      MOVE-backslide `mNormalSpeed` decel (below). The "jitter-free capture" worry from session 3 was
+      inherited caution -- it does NOT apply (the capture frame-axis is clean; see below).
       - **Gap 1 (raw DTM stick bytes) -- CLOSED.** `harness/tetrapush/dtm_inputs.py` extracts the real
         per-frame raw controller bytes from the recorded movie `GZLJ01.s02.dtm` (the companion DTM
         beside slot 2, NOT a TAS-Studio export). Alignment: port0 = odd DTM rows, 4 uniform polls/game
@@ -181,16 +183,40 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
         validation it is MOOT (the initial directional L is before the seed, so the only L in each window
         is the intended re-pulse -> `target_present=True` throughout is correct). It is still needed for a
         from-state-2 full replay and the planner (the lock acquires MID-ROLL, not at the first L).
-      Still open for full frame-exact 0-ULP (all blocked on a JITTER-FREE capture -- the single-step is
-      `+-1` on edges, `[[run-dtm-1frame-jitter]]`; do NOT chase it with the single-stepped fixture):
-      1. The **`procAtnActorMove_init` frame** (decomp 6294: init does NOT call `setSpeedAndAngleAtnActor`
-         or `checkNextMode`). The sim merges init+body, so the flip lands 1 frame off the (jittery)
-         capture. Model it as an `_atn_actor_entered` entry-hold (cf. `_roll_entered`) once a clean
-         capture can place it.
-      2. The **MOVE backslide speedF after the flip** (proc 9 -> MOVE): the sim's cold foot engine zeroes
-         it; the game continues ~-25.45 decaying. Needs the foot stream warmed to the backward MOVE.
-      3. A **from-state-2 full replay** (the MOVE-backslide seed) needs the foot engine warmed to the
-         -24.57 backslide (seeding a MOVE mid-motion, not a roll).
+      - **The capture frame-axis is CLEAN (session 4 -- the "jitter-free capture" worry does not apply
+        here).** The player anim frame ctrl advances a dead-constant `+1.1`/frame through the roll and
+        `+2.3`/frame through the MOVE in the single-stepped fixture, so each captured row IS exactly one
+        game-logic frame (proven; not `+-1` on the frame count). The large per-frame POSITION swings are
+        REAL coupled physics -- the Link<->Tetra CC plow (`dCcS::SetPosCorrect`) + the roll root-motion
+        envelope -- NOT a capture artifact (Dereck's correction). A live re-capture re-confirmed the
+        settled scalars bit-for-bit. So the proc-9 tier and the roll length ARE reliably placed.
+      - **FULL-COUPLED per-frame diff (session 4, Tetra sim-driven).** Seed the coupled sim
+        (`CcCoupledStepper(atn_lock=True)`, Tetra = `Zl1FollowState`) at a roll entry, feed the DTM
+        bytes, diff BOTH actors vs the fixture. Result: **Link roll + untarget flip are BIT-EXACT
+        through the flip** (both cycles) even under full coupling. Two divergences named:
+        1. **The Tetra plow "divergence" is a SEED-STARTUP ARTIFACT, not a model bug.** Live Link<->Tetra
+           feet distance OSCILLATES 41-85u (a chase-and-plow: shove her ahead, gap opens, catch up,
+           shove again). Seeding at the roll entry with no prior push lets sim-Link roll into a
+           stationary sim-Tetra -> a false ~70u Co overlap that blasts them apart (`co_move_pair`
+           correctly resolves it, ~28u/frame). The CC model is fine; it must run from BEFORE Link
+           reaches Tetra -- i.e. **from state 2 (f0)**, where the push builds naturally frame-by-frame.
+        2. **The MOVE-backslide zero (proc 9 -> MOVE): ROOT-CAUSED + confirmed fix, but a residual
+           remains.** `foot_speedf.step_single_anim` (the roll/proc-9 pose path) warms the toe stream
+           but -- unlike its siblings `step`/`step_atn`/`enter_wait_idle` -- never sets `self.started`
+           (the `getOldFrameFlg()` analog, `posMoveFromFootPos` :2354). So MOVE-from-backslide (nspeed<0)
+           hits the cold path and returns speedF 0 (and can't self-start on a negative nspeed). Setting
+           `started=True` in `step_single_anim` un-zeroes it (441 offline pass, golden-safe) -- NOT yet
+           committed (native `w_step_single` also needs it + the residual below is unclosed + no live
+           gate run). **Live-confirmed (session 4): the backslide has `speedF == mNormalSpeed` EXACTLY,
+           `m3598 == 0`, so NO foot term** -- the old "cold foot engine" framing was imprecise. The
+           residual is PURELY `mNormalSpeed`'s decel: live drops **0.275** on the first MOVE frame then
+           ~0.011/frame; the sim (started-fixed) drops only 0.010. It's a `setNormalSpeedF`/`dVar9`
+           decel-step detail at the ATN_ACTOR->MOVE transition -- instrument `_set_normal_speed_f` at f21
+           vs the live -25.727->-25.452 drop.
+      - **The `procAtnActorMove_init` frame** (decomp 6294: init does NOT call `setSpeedAndAngleAtnActor`
+        or `checkNextMode`) is still merged in the sim, but MOOT for magnitude: the frame axis is clean
+        and the flip lands on the right frame. Model it as an `_atn_actor_entered` entry-hold only if a
+        frame-exact placement is later needed.
 - [x] **Viable Tetra clip positions = `_generated/tetra_placements.tsv`** (Dereck, 2026-07-21): those
       288 genuine coords are the target set. They were recorded at a specific roll entry, but the
       planner ARRANGES the matching roll entry as part of the push sequence (the genuine-coord set is
