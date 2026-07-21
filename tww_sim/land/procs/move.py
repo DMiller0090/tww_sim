@@ -8,6 +8,7 @@ procs). This is the base of LandState's MRO. Decomp: d_a_player_main.cpp procMov
 from __future__ import annotations
 from ...core.mathlib import f32, cLib_addCalc, cM_scos_s16, s16_signed
 from ..constants import (MOVE, MOVE_TURN, WAIT, FREE_WAIT, WAIT_TURN, ATN_MOVE,
+                         ATN_ACTOR_MOVE, ATN_ACTOR_WAIT,
                          DIR_FORWARD, DIR_BACKWARD, DIR_LEFT, DIR_RIGHT, DIR_NONE,
                          cLib_addCalcAngleS, _is_zero, _dist_angle_s)
 
@@ -139,9 +140,16 @@ class _MoveMixin:
         The reversal-branch travel chase in setSpeedAndAngleNormal runs BEFORE this, so a slow MOVE
         reversal arrives here already below 0x7800 and routes via the DIR_BACKWARD branch instead."""
         cur = self.state                                  # mCurProc (dispatch-time proc)
-        if l_held:                                        # r24: checkAttentionLock (no lock-on actor)
+        # r24 = checkAttentionLock() = Lockon(): L held OR the reticle still fading (RELEASE keeps the
+        # actor locked -- attention.py). No actor => `_atn.locked` always False => r24 == l_held.
+        atn = getattr(self, "_atn", None)
+        locked_actor = atn is not None and atn.locked      # mpAttnActorLockOn != NULL
+        if l_held or locked_actor:                        # r24 true
             self.max_nspeed = self.ATN_MAX
-            self.state = WAIT if abs(self.nspeed) <= 0.001 else ATN_MOVE
+            if locked_actor:                              # actor-lock -> ATN_ACTOR_WAIT / ATN_ACTOR_MOVE
+                self.state = ATN_ACTOR_WAIT if abs(self.nspeed) <= 0.001 else ATN_ACTOR_MOVE
+            else:                                         # attention, no actor -> ATN_MOVE / WAIT
+                self.state = WAIT if abs(self.nspeed) <= 0.001 else ATN_MOVE
             return
         self.max_nspeed = f32(self.MAX_NSPEED)
         self.direction = DIR_NONE

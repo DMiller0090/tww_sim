@@ -42,8 +42,11 @@ from .constants import *  # noqa: F401,F403  (proc enums, DIR_*, gates -- also r
 from .constants import _STATE_TAG, _cM_ssin_s16
 from .walls import wall_pass, sidle_blocks_roll, GRAVITY as walls_GRAVITY
 from .floors import gnd_spz as _gnd_spz_fn, gnd_frame_end as _gnd_frame_end_fn
+from .attention import AttentionLock
+from .hio import _LandHIO
 from .procs.move import _MoveMixin
 from .procs.atn import _AtnMixin
+from .procs.atn_actor import _AtnActorMixin
 from .procs.roll import _RollMixin
 from .procs.crash import _CrashMixin
 from .procs.cut import _CutMixin
@@ -52,8 +55,8 @@ from .procs.ballistic import _BallisticMixin
 from .procs.freeze import _FreezeMixin
 
 
-class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _TurnMixin,
-                _BallisticMixin, _FreezeMixin):
+class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _CrashMixin, _CutMixin,
+                _TurnMixin, _BallisticMixin, _FreezeMixin):
     """One Link on flat, wall-free ground, stepped frame by frame. The land analogue of
     SwimState. Carries the two-angle model first-class (travel = current.angle.y velocity
     direction; facing = shape_angle.y visual body direction) even though the on-axis walk
@@ -62,129 +65,8 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
     Seed from a live frame-0 snapshot (pos_z, angles, csangle) exactly like run_tests seeds
     SwimState. Step with raw sticks; csangle is a per-frame input (default 0 = free-cam ref).
     """
-    # HIO m_HIO->mMove walk constants (d_a_player_HIO_data.inc:8; normal play never mutates
-    # HIO, so these are shipped literals, no live dump). See design-note 5b table.
-    MAX_NSPEED = f32(17.0)          # mMaxNormalSpeed (= mMove.field_0x18)
-    F0 = 3000                       # base angle-turn rate (param_1 to setSpeedAndAngleNormal)
-    F4 = 100                        # angle-approach max-delta (cLib_addCalcAngleS clamp)
-    F6 = 5                          # angle-approach scale/mode arg
-    F14 = f32(3.5)                  # target-speed scale (dVar9 *= field_0x14 * dist^2)
-    F1C = f32(2.5)                  # accel rate -> setNormalSpeedF param_3 (cLib maxStep)
-    F20 = f32(1.8)                  # decel rate -> setNormalSpeedF param_4 (cLib minStep)
-    F24 = f32(0.6)                  # speed cLib scale -> setNormalSpeedF param_2
-
-    # HIO mAtnMove (targeting-move) constants (d_a_player_HIO_data.inc:14, offsets per
-    # daPy_HIO_atnMove_c1). Used by setSpeedAndAngleAtn side branch + the DIR_FORWARD->Normal cap.
-    ATN_MAX = f32(12.0)             # field_0xC  = mMaxNormalSpeed under attention lock
-    ATN_TURN_MAX = 3000             # field_0x0  = travel-chase max step (s16)
-    ATN_TURN_MIN = 2000             # field_0x2  = travel-chase min step (s16)
-    ATN_TURN_SCALE = 6              # field_0x4  = travel-chase scale (s16)
-    ATN_SPD = f32(5.0)             # field_0x8  = target-speed scale (fVar2 = *msd*cos)
-    ATN_ACC = f32(7.5)             # field_0x10 = setNormalSpeedF maxStep
-    ATN_DEC = f32(4.0)             # field_0x14 = setNormalSpeedF minStep
-    ATN_SCL = f32(0.5)             # field_0x18 = setNormalSpeedF cLib scale
-    # HIO mAtnMoveB (targeting-move BACKWARD) constants, d_a_player_HIO_data.inc:18. The
-    # steady-state brakeslide runs here (facing locked, travel ~180, speed negative bleeding up).
-    ATNB_MAX = f32(15.0)            # field_0xC  = mMaxNormalSpeed when DIR_BACKWARD
-    ATNB_SPD = f32(2.5)             # field_0x8  = target-speed scale
-    ATNB_ACC = f32(8.0)             # field_0x10 = setNormalSpeedF maxStep
-    ATNB_DEC = f32(2.0)             # field_0x14 = setNormalSpeedF minStep
-    ATNB_SCL = f32(0.5)             # field_0x18 = setNormalSpeedF cLib scale
-    ATNB_COS_FWD = f32(0.99)        # field_0x2C = cos(travel-facing) >= this -> DIR_FORWARD
-    ATNB_COS_BACK = f32(-0.99)      # field_0x30 = cos(travel-facing) <= this -> DIR_BACKWARD
-
-    # HIO mRoll (forward roll) constants, d_a_player_HIO_data.inc:97 (daPy_HIO_roll_c1). The roll
-    # speed is set ONCE at entry from the pre-roll speedF; the anim frame ctrl (ANM_ROLLF) times it.
-    ROLL_SPD = f32(1.5)             # field_0x18 = speedF multiplier
-    ROLL_ADD = f32(0.5)             # field_0x1C = base add
-    ROLL_MIN = f32(5.0)             # field_0x20 = speed floor (standstill roll) + neutral-exit -= this
-    ROLL_END = f32(19.0)            # field_0x0 = ANM_ROLLF end frame; anim completes (rate->0) here
-    ROLL_RATE = f32(1.1)            # field_0x8 = ANM_ROLLF frame-ctrl rate (mFrameCtrlUnder[MOVE0])
-    ROLL_ENTRY_MORF = 2.0           # field_0x14 = setSingleMoveAnime i_morf at roll entry
-    MOVE_REENTRY_MORF = 2.4         # mBasic.field_0xC = procMove_init setBlendMoveAnime morf (roll->walk)
-    ROLL_EARLY = f32(17.0)          # field_0x10 = getFrame()>this -> checkNextMode(1) moving-stick exit
-    # (with a neutral stick checkNextMode(1) is inert -- 4457 returns false when msd<=0.05 and no action
-    # button -- so a neutral roll runs to ROLL_END; a held stick exits one frame early, e.g. the roll-EBS.)
-
-    # HIO mCut sword-thrust cuts (roll stab). d_a_player_HIO_data.inc:31/27, procCutF/A sword.inc:660/430;
-    # the roll-stab lunge model + why 49.22u: knowledge/mechanics/land-movement.md + reference/constants.md.
-    CUT_ANIM = {CUT_F: 'cutf', CUT_A: 'cuta'}
-    CUT_RATE = f32(1.2)             # field_0x4  = ANM_CUT frame-ctrl rate (mFrameCtrlUnder[MOVE0])
-    CUT_START = f32(4.0)            # field_0x8  = setSingleMoveAnime start frame (fc begins here)
-    CUT_END = f32(19.0)            # bck frameMax (EMode_NONE end); rate->0 clamp at end-0.001
-    CUT_PASS = f32(6.0)            # field_0x28 = checkPass frame -> set mNormalSpeed launch
-    CUT_LAUNCH_MUL = f32(0.2)      # field_0x10 = mNormalSpeed = |speedF|*this + <add>
-    CUT_DEC_SCALE = f32(0.7)       # field_0x20 = cLib_addCalc decel scale
-    CUT_DEC_MIN = f32(0.5)         # field_0x1C = cLib_addCalc decel minStep
-    # per-cut fields: field_0xC (getFrame()> -> checkNextMode(1) exit) / field_0x14 (add) / field_0x18 (max)
-    CUT_EARLY = {CUT_F: f32(17.0), CUT_A: f32(16.0)}   # field_0xC
-    CUT_LAUNCH_ADD = {CUT_F: f32(8.0), CUT_A: f32(10.0)}  # field_0x14
-    CUT_DEC_MAX = {CUT_F: f32(0.95), CUT_A: f32(2.6)}     # field_0x18
-    # Diagonal-thrust aim turn: procCutF/A snap shape=travel to the latched m34D4 aim on the 1st cut
-    # proc frame (cLib min-step 0x1F40 >> any in-range diff). See knowledge/mechanics/roll-stab.md.
-    CUT_TURN_SCALE = 30            # mTurn.field_0x4 (cLib_addCalcAngleS scale)
-    CUT_TURN_MAX = 0x3CDF          # mTurn.field_0x0 (maxStep)
-    CUT_TURN_MIN = 0x1F40          # mTurn.field_0x2 (minStep; >> any in-range diff -> 1-frame snap)
-    CUT_DIR_FWD = 0x2000          # getDirectionFromAngle FORWARD band: |aim - facing| < this stays CUT_F
-
-    # HIO mTurn (ground reversal turns), d_a_player_HIO_data.inc:22. WaitTurn pivots facing toward the
-    # captured stick target; the min step (0x1F40) dominates -> ~8000/frame. (MoveTurn sweep: see its init.)
-    TURN_MAX = 0x3CDF               # field_0x0 = cLib_addCalcAngleS max step (WaitTurn facing pivot)
-    TURN_MIN = 0x1F40               # field_0x2 = min step
-    TURN_SCALE = 30                 # field_0x4 = scale (diff/scale; << min so the min step rules)
-    WAIT_TURN_ANIM_RATE = f32(1.0)  # mBasic.field_0x4 = ANM_ROT frame-ctrl rate (pivot pose)
-    # HIO mSlip (high-speed reversal skid), d_a_player_HIO_data.inc:106 (daPy_HIO_slip_c1). Entry from a
-    # MOVE frame whose speedF/mMaxNormalSpeed exceeds the threshold AND the stick genuinely flipped.
-    SLIP_THRESH = f32(0.6)          # field_0x4 = speedF/mMaxNormalSpeed slip-entry threshold
-    SLIP_ENTRY = f32(1.1)           # field_0x8 = entry-speed multiplier (mNormalSpeed = speedF * this)
-    SLIP_DEC_SCALE = f32(0.6)       # field_0x18 = cLib_addCalc decel scale
-    SLIP_DEC_MAX = f32(1.25)        # field_0x10 = cLib_addCalc decel maxStep (~-1.25/frame skid bleed)
-    SLIP_DEC_MIN = f32(0.1875)      # field_0x14 = cLib_addCalc decel minStep
-    SLIP_ANIM_RATE = f32(0.4)       # field_0xC = ANM_SLIP frame-ctrl rate (skid pose)
-    SLIP_MORF = f32(1.7)            # field_0x1C = ANM_SLIP setSingleMoveAnime oldframe-morf
-    # MoveTurn slip-exit re-accel seed = mMaxNormalSpeed * this (procSlip 6666); shape nudge = 0x100.
-    MT_SLIP_SEED = f32(0.5)
-
-    # HIO mSideStep (targeted sidehop), d_a_player_HIO_data.inc:223. Ballistic launch perp to facing;
-    # lands on the first ground-hit frame. Mechanics: knowledge/mechanics/land-movement.md.
-    SIDESTEP_ANGLE = 6200          # field_0x2 = s16 launch angle (fed to cM_scos/cM_ssin, >>4 table)
-    SIDESTEP_SPEED = f32(30.0)     # field_0x8 = launch speed magnitude
-    SIDESTEP_GRAV = f32(-2.4)      # field_0x18 = gravity per frame
-    SIDESTEP_LAND_END = f32(5.0)   # field_0x6 = land anim end frame (recovery duration)
-    SIDESTEP_LAND_RATE = f32(0.85) # field_0x1C = land anim frame-ctrl rate
-    # HIO mBackJump (targeted backflip), d_a_player_HIO_data.inc:102. Ballistic backward launch; lands
-    # once ground-hit AND the ROLLB anim finishes. Mechanics: knowledge/mechanics/land-movement.md.
-    BACKJUMP_SPEED = f32(22.5)     # field_0x10 = mNormalSpeed (backward horizontal)
-    BACKJUMP_VY = f32(19.0)        # field_0x14 = speed.y launch
-    BACKJUMP_GRAV = f32(-3.0)      # field_0x18 = gravity per frame
-    BACKJUMP_ANIM_START = f32(2.0) # field_0x8 = ROLLB frame-ctrl start
-    BACKJUMP_ANIM_END = f32(11.0)  # field_0x0 = ROLLB frame-ctrl end (getRate()<0.01 gates the land)
-    BACKJUMP_ANIM_RATE = f32(0.8)  # field_0x4 = ROLLB frame-ctrl rate
-    BACKJUMP_LAND_END = f32(5.0)   # field_0x2 = land anim end frame (recovery duration)
-    BACKJUMP_LAND_RATE = f32(0.8)  # field_0x24 = land anim frame-ctrl rate
-    # Terminal fall velocity (mAutoJump.field_0x10 global default, d_a_player_HIO_data.inc:116): speed.y
-    # is clamped to this after gravity each frame (posMoveFromFootPos 2472). Never reached on a flat hop.
-    MAX_FALL = f32(-175.0)
-    # The default per-frame gravity, mAutoJump.field_0xC, reset by commonProcInit on EVERY proc
-    # change (5826) -- the grounded speed.y at CrrPos time (the hop procs override at entry).
-    GRAVITY = f32(-2.5)
-
-    # Wall interaction (ROADMAP Phase W; active only with a `walls=` mesh -- flags stay False
-    # without one, leaving every wall-free path byte-identical).
-    WALL_SPEED_DOWN = f32(0.6)     # mBasic.field_0x14: setNormalSpeedF wall-hit target *= 1-cos*this
-    ROLL_BONK_ANGLE = 5000         # mRoll.field_0x4:  |travel+0x8000 - wallAngleY| bonk/latch window
-    ROLL_BONK_FMIN = f32(6.0)      # mRoll.field_0x34: bonk anim-frame window lo
-    ROLL_BONK_FMAX = f32(15.0)     # mRoll.field_0x38: bonk anim-frame window hi
-    ROLL_BONK_SPEED = f32(10.0)    # mRoll.field_0x3C: speedF floor for the crash
-    CRASH_SPEED_MUL = f32(0.4)     # mRoll.field_0x40: crash mNormalSpeed = speedF * this (reversed)
-    CRASH_VY = f32(7.0)            # mRoll.field_0x44: crash speed.y launch
-    CRASH_ANIM_START = f32(6.0)    # mRoll.field_0x28: ANM_ROLLFMIS start (rate 0 while airborne)
-    CRASH_ANIM_END = f32(24.0)     # mRoll.field_0x2:  ANM_ROLLFMIS end (rate<0.01 exit)
-    CRASH_ANIM_RATE = f32(0.7)     # mRoll.field_0x24: rate set at the landing
-    CRASH_EARLY = f32(20.0)        # mRoll.field_0x30: getFrame()> -> checkNextMode(1) exit
-    # Mid-walk sword pull-out: acted-frame delay from the B rising edge to the foot anim-set flip
-    # (=5 after the raw B feed, live-pinned). See FootSpeedF.draw_sword + knowledge/model/anim-engine.md.
-    DRAW_DELAY = 3
+    # HIO constant block (m_HIO->m{Move,AtnMove,Roll,Cut,Turn,Slip,...}) lives in hio.py as the
+    # _LandHIO base (split out to keep this module under the size cap); read as self.<NAME> via MRO.
 
     def __init__(self, pos_z=764.079, pos_x=0.0, facing=0, travel=0, csangle=0,
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
@@ -244,6 +126,10 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         self.direction = DIR_NONE              # mDirection (ATN physics branch selector)
         self.m34E6 = int(facing) & 0xFFFF      # facing lock captured on attention-lock engage
         self._l_prev = False                   # attention-lock (L) held last frame (rising edge)
+        # Actor-lock (Z-target) machine (attention.py); `_atn_actor_pos` = the locked actor's world XZ.
+        # None => inert (`_atn` stays NONE), so every single-actor path is byte-identical.
+        self._atn = AttentionLock()
+        self._atn_actor_pos = None
         self._subj_arm = False                 # C-up gesture seen -> enter SUBJECTIVITY next frame
         self._subj_ended = False               # B/A/L/C-DOWN ended the freeze (checkSubjectEnd) -> stick re-walks
         self._subj_frames = 0                  # body frames since the freeze locked (C-DOWN camera floor)
@@ -442,6 +328,10 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         self._b_trig = ((abtn & ~self._abtn_prev) & 0x200) != 0
         self._abtn_prev = abtn
 
+        # Attention lock-on machine (dAttention_c::Run, every frame): drives the ATN_ACTOR procs + the
+        # untarget latency. Inert with no target (`_atn_actor_pos` None) -> byte-identical everywhere.
+        self._atn.update(l_held, self._atn_actor_pos is not None)
+
         # --- mid-walk sword pull-out (opt-in): B rising edge -> DRAW_DELAY frames later the anim set
         # flips base->sword BEFORE the proc dispatch (this frame's foot pose). See FootSpeedF.draw_sword.
         if self._model_draw and self._foot is not None:
@@ -544,7 +434,10 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         # checkNextMode (the arbiter: starts locomotion from idle, routes reversals to the turn procs).
         proc = self.state                        # dispatch-time proc (mCurProc; may transition below)
         if proc in (WAIT, FREE_WAIT):
-            if l_held:                           # attention lock from a standstill -> procAtnMove path
+            if self._atn.locked:                 # locked actor from a standstill -> procAtnActorWait
+                self.state = ATN_ACTOR_WAIT
+                self._set_speed_and_angle_atn_actor()
+            elif l_held:                         # attention lock, no actor -> procAtnMove path
                 self.state = ATN_MOVE
                 self._set_speed_and_angle_atn()
             else:
@@ -555,6 +448,9 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
             self._check_next_mode(l_held)
         elif proc == ATN_MOVE:
             self._set_speed_and_angle_atn()
+            self._check_next_mode(l_held)
+        elif proc in (ATN_ACTOR_MOVE, ATN_ACTOR_WAIT):
+            self._set_speed_and_angle_atn_actor()   # procAtnActorMove/Wait: actor-lock speed/angle
             self._check_next_mode(l_held)
         elif proc == WAIT_TURN:
             self._proc_wait_turn(l_held)         # checkNextMode when the pivot completes
@@ -576,11 +472,11 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
         # setBlendAtnMoveAnime's direction update for a (possibly just-entered) ATN frame. Capture the
         # pre-update mDirection (uVar1, 3291): the anim re-triggers the oldframe-morf when it changes.
         prev_dir = self.direction
-        if self.state == ATN_MOVE:
-            self._update_atn_direction()
-        # ATN -> MOVE (L released): the next frame is procMove_init, which re-triggers the oldframe-morf
-        # (setBlendMoveAnime(mBasic.field_0xC), 6215) -- the walk re-warms from the ATN strafe pose.
-        if proc == ATN_MOVE and self.state == MOVE and self._foot is not None:
+        if self.state in (ATN_MOVE, ATN_ACTOR_MOVE, ATN_ACTOR_WAIT):
+            self._update_atn_direction()         # setBlendAtnMoveAnime mDirection (proc 7/8/9 share it)
+        # ATN[_ACTOR] -> MOVE (attention dropped): the next frame is procMove_init, which re-triggers the
+        # oldframe-morf (setBlendMoveAnime(mBasic.field_0xC), 6215) -- the walk re-warms from the strafe pose.
+        if proc in (ATN_MOVE, ATN_ACTOR_MOVE, ATN_ACTOR_WAIT) and self.state == MOVE and self._foot is not None:
             self._foot._pending_morf = self.MOVE_REENTRY_MORF
 
         # Before posing, set Link's CURRENT (pre-integration) world pos + shape_angle.y: the foot FK runs
@@ -636,6 +532,12 @@ class LandState(_MoveMixin, _AtnMixin, _RollMixin, _CrashMixin, _CutMixin, _Turn
                 self._foot.step_single_anim(self.nspeed, self.msd)   # warm the toe stream
             # m3598==0 here so speedF == mNormalSpeed, but posMoveFromFootPos still snaps |speedF|<0.05
             # to 0 (d_a_player_main.cpp:2418) -- the slip decel tail. See land-sim.md (slip-skid tail).
+            self.speedF = _gnd_spz_fn(self, self.nspeed)
+        elif self.state in (ATN_ACTOR_MOVE, ATN_ACTOR_WAIT):
+            # Position as speedF momentum (entered from a roll, m3598==0); the 2-frame proc-9 POSITION is
+            # provisional/live-gated -- the mechanic-critical output is the mNormalSpeed flip set above.
+            if self._foot is not None:
+                self._foot.step_single_anim(self.nspeed, self.msd)
             self.speedF = _gnd_spz_fn(self, self.nspeed)
         elif self.state == FRONT_ROLL_CRASH:
             # Roll-bonk bounce: reversed momentum + gravity arc; the ground snap runs AFTER

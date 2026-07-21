@@ -70,7 +70,7 @@ class CcCoupledStepper:
 
     def __init__(self, link, tetra, walls_tetra=None, ground_y=None,
                  link_w=WEIGHT_LINK, tetra_w=WEIGHT_TETRA_V5, link_first=True,
-                 link_co_center_fn=link_co_center):
+                 link_co_center_fn=link_co_center, atn_lock=False):
         self.link = link
         self.tetra = tetra
         self.walls_tetra = walls_tetra
@@ -79,6 +79,9 @@ class CcCoupledStepper:
         self.tetra_w = tetra_w
         self.link_first = link_first
         self._center = link_co_center_fn
+        # atn_lock: Link Z-targets Tetra (Courtyard push) -> feed her XZ as his lock-on actor each frame
+        # (drives the ATN_ACTOR untarget brakeslide). OFF by default -> `_atn_actor_pos` None -> unchanged.
+        self.atn_lock = atn_lock
         # Pending m_cc_move for the NEXT frame's posMove (accumulated by the prior frame's check).
         self._link_pending = None
         self._tetra_pending = (0.0, 0.0, 0.0)
@@ -101,6 +104,9 @@ class CcCoupledStepper:
         ``tag`` = Link's proc tag."""
         link_push = self._link_pending
         tetra_push = self._tetra_pending
+
+        if self.atn_lock:                            # Link Z-targets Tetra: her XZ is his lock-on actor
+            self.link._atn_actor_pos = (self.tetra.x, self.tetra.z)
 
         if self.link_first:
             self.link.set_cc_move(link_push)

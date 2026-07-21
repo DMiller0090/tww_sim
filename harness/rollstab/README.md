@@ -91,6 +91,11 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
+> **Shared-tool note (2026-07-21):** `cc_stepper.CcCoupledStepper` gained an `atn_lock=` opt-in
+> (default OFF) for the Tetra-push harness (`harness/tetrapush`); when on, it feeds Tetra's XZ as
+> Link's lock-on actor to drive the new ATN_ACTOR untarget brakeslide. Default off => seam-clip
+> runs are byte-identical (the rollstab gates are unchanged). Nothing else here changed.
+
 > **CURRENT THREAD (2026-07-20, session 75): the seam352 walk-stab clip is DELIVERED LIVE 0-ULP --
 > the ELEVENTH seam -- by root-causing and fixing the walk->cut DISPATCH-FRAME model. s74's "~1-ULP
 > cut-endpoint gap" framing is OVERTURNED: the gap was ~0.026u, a model bug, found by capturing the

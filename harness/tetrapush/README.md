@@ -57,11 +57,13 @@ rolling Co-center, no self-locomotion). Once Link's rolls stop and he glides awa
 **stt 4 and FOLLOWS** (speedF ramps 0 to the 10 cap then decays; the `Zl1FollowState` model). So the
 herd is a **mix of CC-plow (during roll-throughs) + follow-chase (between)**, both already in the sim.
 
-## THE key modeling gap: untarget brakesliding = the ATN_ACTOR procs
+## THE key modeling gap: untarget brakesliding = the ATN_ACTOR procs  [MODELED session 2; live-validation pending]
 
 The payoff frames read **`ATN_ACTOR_MOVE` (proc 9)**, `daPyProc_ATN_ACTOR_MOVE_e`, the
 **actor-lock** variant of ATN_MOVE, plus its idle sibling **`ATN_ACTOR_WAIT` (proc 8)**. The land sim
-(`tww_sim/land`) only models **plain `ATN_MOVE` (7)**: targeting a *direction*, not an *actor*.
+originally modeled only **plain `ATN_MOVE` (7)** (targeting a *direction*, not an *actor*); session 2
+added procs 8/9 + the attention lock-on state machine per the recipe below (see `## Plan / status`).
+It is implemented decomp-first and offline-gated but **not yet 0-ULP-validated against a live capture**.
 
 The mechanic (Dereck's description, confirmed live): target Tetra mid-roll; **releasing L does not
 untarget immediately, it takes several frames.** Time the L release to the end of the roll anim and
@@ -138,9 +140,25 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
 
 - [x] **Ground truth captured** (state-2 seed + 51 push frames to the fixture).
 - [x] **Push mechanic characterized** (roll to ATN_ACTOR untarget-EBS to re-roll; plow + follow herd).
-- [ ] **Model the untarget brakeslide** (ATN_ACTOR procs + L-release latency), decomp-first. THE blocker.
+- [x] **Model the untarget brakeslide** (ATN_ACTOR procs 8/9 + the attention lock-on state machine),
+      decomp-first (session 2). `tww_sim/land/attention.py` = the `AttentionLock` (NONE/LOCK/RELEASE,
+      hold mode, animation-driven untarget latency); `tww_sim/land/procs/atn_actor.py` =
+      `setSpeedAndAngleAtnActor` (the DIR_BACKWARD negation + `setShapeAngleToAtnActor` re-aim);
+      `checkNextMode` routes the roll exit to proc 9 while `_atn.locked`. Purely additive -- inert
+      without a driven lock-on actor, so all 16 land goldens + the full offline suite (438) stay green.
+      Gate: `tests/test_atn_actor.py` (11 offline invariants: state machine, routing, the negation
+      flip + re-aim, additive inertness -- ALL exact/0-ULP against pinned model outputs, no tolerances).
+      **NOT yet live-0-ULP-validated** (that is the next box); the flip physics are decomp-faithful and
+      the model produces the right shape, but the magnitude is only validated against the MODEL, not live.
 - [ ] **Validate sim vs live from state 2**, 0-ULP over the ~45 push frames (seed LandState at the
-      state-2 mid-EBS state; couple Tetra via `cc_stepper` + `Zl1FollowState`). List remaining gaps.
+      state-2 mid-EBS state; couple Tetra via `cc_stepper(atn_lock=True)` + `Zl1FollowState`). BLOCKED
+      on two inputs the current fixture lacks, both needed for a bit-exact claim: (1) the real per-frame
+      controller inputs (L trigger + buttons + C-stick -- `capture_push.py` logs the main stick only);
+      (2) a CLEAN FREE-RUN capture -- the single-stepped-playing-movie fixture's per-frame POSITION
+      deltas are jitter-corrupted (`[[run-dtm-1frame-jitter]]`; ratio disp/speedF bounces 0.18-0.68 at
+      constant speedF/travel), so it is scalar (proc/speedF/facing) ground truth ONLY. The untarget
+      latency `FADE_FRAMES` (reticle YJ_DELETE anim length) is the one empirical constant -- source it
+      from that clean capture / the BCK, not the jittery fixture. List remaining gaps after.
 - [x] **Viable Tetra clip positions = `_generated/tetra_placements.tsv`** (Dereck, 2026-07-21): those
       288 genuine coords are the target set. They were recorded at a specific roll entry, but the
       planner ARRANGES the matching roll entry as part of the push sequence (the genuine-coord set is
