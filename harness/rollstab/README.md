@@ -85,13 +85,52 @@ sim at the DTM's REAL roll entry) which are NOT re-derivable from the sim alone 
 live run in session 22. When live disagrees with the sim, run `pushaside diff` (per-frame, BOTH actors)
 -- never guess inputs.
 
-## Status (2026-07-20, session 74)
+## Status (2026-07-20, session 75)
 
 > SINGLE SOURCE OF TRUTH for current seam-clip state. A pre-commit gate blocks any commit
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
-> **CURRENT THREAD (2026-07-20, session 74): s73's "Wind-Waker-in-hand CUT" diagnosis is OVERTURNED --
+> **CURRENT THREAD (2026-07-20, session 75): the seam352 walk-stab clip is DELIVERED LIVE 0-ULP --
+> the ELEVENTH seam -- by root-causing and fixing the walk->cut DISPATCH-FRAME model. s74's "~1-ULP
+> cut-endpoint gap" framing is OVERTURNED: the gap was ~0.026u, a model bug, found by capturing the
+> live RAW CUT_F endpoint at posMove stage boundaries (movie-faithful playback + JP breakpoints, the
+> s74 handoff's recipe).**
+> - **The mechanic (RAM-verified, decomp-grounded):** the buffered-B cut dispatches INSIDE procMove
+>   AFTER `setSpeedAndAngleNormal` runs that frame (6221 -> checkNextMode 4424 ->
+>   checkNextActionFromButton), and `procCutF_init` never writes `current.angle.y` -- so the entry
+>   foot term (speedF 17) fires along the JUST-CHASED travel (64961 here, one -100 step past the
+>   old-frame 65061) while the m3700 delta rotates by shape/facing (64946). The sim's `_cut_init`
+>   snapped travel=facing first, a 0.026u phantom on this razor corner. m3598 IS 0 on the cut frame
+>   (commonProcInit force-zeroes it) -- the s74 foot-residual hypothesis was wrong; and dead-end #64's
+>   "foot-term uses facing" was wrong too (s74 tested the STALE old-frame travel; ledger s75 entry).
+> - **The fix (sim + solver, all decomp-grounded, no tuned constants):** `_cut_init` no longer snaps
+>   travel; new `LandState.enter_cut_from_move(sx, sy, ...)` runs the dispatch-frame procMove prefix
+>   (input-delay pop, stick decode, setSpeedAndAngleNormal, mMaxNormalSpeed) then the entry lunge;
+>   `SeamGeo.cut_new`/`walkstab.fast_cut` take the dispatch `travel`; the solver's fast paths read it
+>   off the walking state one frame later (zero extra cost), `_wall_faithful` runs the exact dispatch.
+>   Roll paths are provably byte-identical (`_roll_init` sets travel=facing) and all four kaze
+>   walk-stab goldens have converged travel==facing -- suite green unchanged, every shipped hit
+>   recomposes.
+> - **The delivery:** corrected-model `solve_focused` -> 1 wall-faithful hit (margin 24, N=16,
+>   `old=(9346.9970703125,-410.4026184082031)` -> `new=(9344.6201171875,-370.25262451171875)`,
+>   speedF 17.0), oracle-vetted (exact new CLIPS live, +0.001u BLOCKS), then `walkstab.deliver`:
+>   **live CUT_F@f16, old/new bit-for-bit the sim, genuine, OOB** (proc 0x24, y through the floor).
+> - **Locked live-data-backed:** golden `tests/golden/walkstab_seam352_deliver.json` (the ship) +
+>   fixture `fixtures/seam352_rawcut_golden.json` (the raw dispatch-frame capture: sp8C=0, m3598=0,
+>   travel'=64961, speed bits bf7035aa/4187caed, raw new 461202c4/c3b980f3). Gates
+>   `tests/test_seam352_walkstab.py`: `test_seam352_rawcut_dispatch_frame_bitexact` NEW GREEN,
+>   `test_seam352_clip_delivered` FLIPPED GREEN (xfail removed). Suite **427 passed, 1 skipped,
+>   5 xfailed** (+2 / -1 xfail). KB: `mechanics/walk-stab.md` (the two-angle lunge) + the ledger s75
+>   entry. Every other thread UNCHANGED (ten prior seams recompose, Tetra STANDALONE, lotteries).
+>
+> **NEXT (session 76): the standing queue -- ROADMAP exp5(b) (the fast-move camera auto-flip
+> envelope) / exp5(c) (arbitrary starting csangle) + exp6 (arbitrary mid-walk entry states), the s64
+> leftovers re-scope-or-drop, and the 97m/hseam2709 lotteries. Also worth a pass: re-screen the
+> budget-capped "unknown" seams ([[seam-scanner-budget-optimization]]) now that the walk-stab tier
+> is razor-correct -- corners the phantom model failed may now solve.**
+
+> **PRIOR THREAD (2026-07-20, session 74): s73's "Wind-Waker-in-hand CUT" diagnosis is OVERTURNED --
 > the WW cut fires FINE, the collision model is CORRECT, the 40.22 clip is REAL (live-verified), and the
 > walk is 0-ULP. seam352's ONLY blocker is a ~1-ULP gap in the sim's `enter_cut` CUT_F endpoint, fatal
 > because this sharp corner (interior 155) is a ~1-ULP ACCEPTANCE RAZOR (kaze walk-stab delivered only

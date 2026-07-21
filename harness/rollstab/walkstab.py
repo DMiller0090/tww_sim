@@ -26,11 +26,14 @@ WHAT IS PROVEN (live-gated):
     razor. Live regression: tests/test_walkstab_rest.py.
   * THE CLIP IS DELIVERED LIVE, 0-ULP (session 32): tests/golden/walkstab_deliver.json.
 
-DRIVER: walk N frames from the rest seed (C-down held), then enter_cut(CUT_F). The item put-away
-delay is 4 frames of continued walking (the equip anime is upper-body; KB walk-stab.md), so the sim
-is just walk-N-then-cut and the B-press is delivered at frame N-5 (4-frame put-away + 1-frame DTM
-buffering -> CUT_F at frame N). The B-timing sets where `old` lands; time it to fire at the target
-`old` before any wall decel (the search's wall-faithful gate enforces speedF still 17 at the cut).
+DRIVER: walk N frames from the rest seed (C-down held), then the CUT-DISPATCH frame
+(`enter_cut_from_move`, session 75): procMove's setSpeedAndAngleNormal chase runs first, then the
+CUT_F entry foot term fires along the CHASED travel (not facing -- live 0-ULP, the seam352 razor
+fix). The item put-away delay is 4 frames of continued walking (the equip anime is upper-body; KB
+walk-stab.md), so the sim is walk-N-then-dispatch and the B-press is delivered at frame N-5 (4-frame
+put-away + 1-frame DTM buffering -> CUT_F at frame N). The B-timing sets where `old` lands; time it
+to fire at the target `old` before any wall decel (the search's wall-faithful gate enforces speedF
+still 17 at the cut).
 
 SOLVER (`solve_focused()`, session 32): the objective-compliant one-shot -- the freeze-solver pattern
 (cheap monotone predictor + bracket + exact bit-confirm), pure sim, no calibration. The acceptance perp
@@ -155,19 +158,22 @@ def seed():
 
 
 def walk_then_cut(sticks, N, aim=None):
-    """DRIVER: walk `sticks` for N frames from rest (C-down held), then enter_cut(CUT_F). Frames past
-    len(sticks) reuse the last. The 4-frame equip delay is delivery-only (the sim just walks then
-    cuts; the DTM presses B at frame N-4). Returns an acceptance dict or None."""
+    """DRIVER: walk `sticks` for N frames from rest (C-down held), then the buffered-B cut DISPATCH
+    frame (`enter_cut_from_move`: procMove's setSpeedAndAngleNormal chase runs first, then the CUT_F
+    entry lunge fires its foot term along the chased travel -- live 0-ULP, session 75). Frames past
+    len(sticks) reuse the last; the dispatch frame consumes sticks[N]. The 4-frame equip delay is
+    delivery-only (the DTM presses B at frame N-5). Returns an acceptance dict or None."""
     s = seed()
     for k in range(N):
         stk = sticks[k] if k < len(sticks) else sticks[-1]
         s.step(stk[0], stk[1], csx=128, csy=CDOWN)
     old = (s.pos_x, s.pos_z)
-    fac, spF = s.facing, s.speedF
+    dstk = sticks[N] if N < len(sticks) else sticks[-1]
     try:
-        s.enter_cut(CUT_F, aim=aim)
+        s.enter_cut_from_move(dstk[0], dstk[1], csx=128, csy=CDOWN, cut_type=CUT_F, aim=aim)
     except Exception:
         return None
+    fac, spF = s.facing, s.speedF
     new = (s.pos_x, s.pos_z)
     disp = math.hypot(new[0] - old[0], new[1] - old[1])
     ok, why = genuine_clip(old, new)
@@ -187,21 +193,25 @@ def snapshot_walk(sticks, nmax=18):
     return snaps
 
 
-def fast_cut(old_x, old_z, facing, nspeed):
-    """The CUT_F entry lunge -- BIT-IDENTICAL to enter_cut(CUT_F, aim=None) but ~20x cheaper (no clone,
-    no J3D keyframe eval). Delegates to SeamGeo.cut_new with the runtime walk `facing` + per-frame
-    `nspeed` (a walk-stab cut's lunge speed is the walk speedF, not a fixed roll cap). Returns
-    (new_x, new_z)."""
-    return sg().cut_new((old_x, old_z), facing=facing, speedf=nspeed)
+def fast_cut(old_x, old_z, facing, nspeed, travel=None):
+    """The CUT_F entry lunge -- BIT-IDENTICAL to the dispatch-frame enter_cut but ~20x cheaper (no
+    clone, no J3D keyframe eval). Delegates to SeamGeo.cut_new with the runtime walk `facing`,
+    per-frame `nspeed`, and the DISPATCH-frame `travel` (the walk travel AFTER that frame's
+    setSpeedAndAngleNormal chase -- the foot term fires along it, session 75; the walk's own next
+    step() runs the identical chase, so callers read it off the walking state one frame later).
+    `travel=None` assumes travel==facing (exact only for a converged walk). Returns (new_x, new_z)."""
+    return sg().cut_new((old_x, old_z), facing=facing, speedf=nspeed, travel=travel)
 
 
-def cut_at(snap, aim=None):
+def cut_at(snap, dstick, aim=None):
+    """Cut from a walk snapshot via the dispatch frame (`dstick` = the frame's controller stick)."""
     c = snap.clone()
-    old = (c.pos_x, c.pos_z); fac, spF = c.facing, c.speedF
+    old = (c.pos_x, c.pos_z)
     try:
-        c.enter_cut(CUT_F, aim=aim)
+        c.enter_cut_from_move(dstick[0], dstick[1], csx=128, csy=CDOWN, cut_type=CUT_F, aim=aim)
     except Exception:
         return None
+    fac, spF = c.facing, c.speedF
     new = (c.pos_x, c.pos_z)
     ok, why = genuine_clip(old, new)
     return dict(old=old, new=new, facing=fac, spF=spF,
@@ -272,7 +282,7 @@ def bounds():
         cs = seed().csangle
         cruise = _sfbd(bear_to_S(), cs, 1.0)
         n_cross = None
-        for (N, ox, oz, fac, nsp) in _walk_fast([cruise] * 24, 22):
+        for (N, ox, oz, fac, nsp, trv) in _walk_fast([cruise] * 24, 22):
             if math.hypot(g.S[0] - ox, g.S[1] - oz) <= hi:
                 n_cross = N
                 break
@@ -396,20 +406,27 @@ def _cut_all(sticks, base, base_k):
     NMAX = B['NMAX']
     s = base.clone()
     s._foot.skip_cruise_pose = True
-    snaps = []
-    for k in range(base_k, NMAX + 1):
-        snaps.append((k, s.pos_x, s.pos_z, s.facing, s.nspeed))
-        if k < NMAX:
-            s.step(sticks[k][0], sticks[k][1], csx=128, csy=CDOWN)
+    rows = []             # (k, pos after frame k)
+    dispatch = {}         # k -> (facing, nspeed, travel) after frame k+1's chase (session 75)
+    prev = None
+    for k in range(base_k, NMAX + 2):
+        rows.append((k, s.pos_x, s.pos_z))
+        if prev is not None:
+            dispatch[prev] = (s.facing, s.nspeed, s.travel)
+        prev = k
+        if k <= NMAX:
+            stk = sticks[k] if k < len(sticks) else sticks[-1]
+            s.step(stk[0], stk[1], csx=128, csy=CDOWN)
     out = []
-    for (k, ox, oz, fac, nsp) in snaps:
-        if k < B['NLO']:
+    for (k, ox, oz) in rows:
+        if k < B['NLO'] or k not in dispatch:
             continue
         dd = math.hypot(SEAM[0] - ox, SEAM[1] - oz)
         if not (B['WIN_LO'] <= dd <= B['WIN_HI']):
             continue
+        fac, nsp, trv = dispatch[k]
         old = (ox, oz)
-        nx, nz = fast_cut(ox, oz, fac, nsp)
+        nx, nz = fast_cut(ox, oz, fac, nsp, trv)
         new = (nx, nz)
         ok, why = genuine_clip(old, new)
         out.append((k, dd, dict(old=old, new=new, facing=fac,
@@ -508,26 +525,40 @@ def seed_walled():
 
 def _walk_fast(sticks, nmax):
     """Wall-less C-down walk from rest with the cruise pose skipped (bit-exact for walk-then-cut).
-    Yields (N, old_x, old_z, facing, nspeed) at each frame 1..nmax."""
+    Yields (N, old_x, old_z, facing, nspeed, travel) for each frame N=1..nmax, where old_* is the
+    position after frame N and (facing, nspeed, travel) are the CUT-DISPATCH-frame values: the state
+    after frame N+1's setSpeedAndAngleNormal chase. The walk's own next step() runs the identical
+    procMove prefix, so they are read off the walking state one frame later at zero extra cost
+    (session 75: the entry foot term fires along the chased travel, not the frame-N travel)."""
     s = seed(); s._foot.skip_cruise_pose = True
-    for k in range(nmax):
+    prev = None
+    for k in range(nmax + 1):
         stk = sticks[k] if k < len(sticks) else sticks[-1]
         s.step(stk[0], stk[1], csx=128, csy=CDOWN)
-        yield (k + 1, s.pos_x, s.pos_z, s.facing, s.nspeed)
+        if prev is not None:
+            yield (prev[0], prev[1], prev[2], s.facing, s.nspeed, s.travel)
+        prev = (k + 1, s.pos_x, s.pos_z)
 
 
 def _wall_faithful(sticks, N):
     """Re-sim the walk WITH walls; return the walled (old, new, facing, speedF) iff no wall was hit
     through frame N (so `old` is the true pre-brake position). None if a wall braked the walk (the
-    wall-less `old` is an overshoot -> a delivery would MISS: dead-end #28)."""
+    wall-less `old` is an overshoot -> a delivery would MISS: dead-end #28). The cut runs the EXACT
+    dispatch-frame path (`enter_cut_from_move`, consuming sticks[N]) -- this is the authoritative
+    accept the fast one-frame-lag filter approximates."""
     s = seed_walled()
     for k in range(N):
         stk = sticks[k] if k < len(sticks) else sticks[-1]
         s.step(stk[0], stk[1], csx=128, csy=CDOWN)
         if getattr(s, 'wall_hit', False):
             return None
-    nx, nz = fast_cut(s.pos_x, s.pos_z, s.facing, s.nspeed)
-    return (s.pos_x, s.pos_z), (nx, nz), s.facing, s.speedF
+    old = (s.pos_x, s.pos_z)
+    dstk = sticks[N] if N < len(sticks) else sticks[-1]
+    try:
+        s.enter_cut_from_move(dstk[0], dstk[1], csx=128, csy=CDOWN)
+    except Exception:
+        return None
+    return old, (s.pos_x, s.pos_z), s.facing, s.speedF
 
 
 def _stream_k3(cs, c1, c2, c3d, cruise):
@@ -548,16 +579,16 @@ def _band_perp(sticks, N_only=None):
     predictor the auto-refine minimizes. (None,None,None) if no frame lands in the band."""
     B = bounds()
     best = (1e18, None, None)
-    for (N, ox, oz, fac, nsp) in _walk_fast(sticks, B['NHI']):
+    for (N, ox, oz, fac, nsp, trv) in _walk_fast(sticks, B['NHI']):
         if not (B['NLO'] <= N <= B['NHI']):
             continue
         if N_only is not None and N != N_only:
             continue
         if not (B['WIN_LO'] <= math.hypot(SEAM[0] - ox, SEAM[1] - oz) <= B['WIN_HI']):
             continue
-        pr = abs(perp_ray((ox, oz), fast_cut(ox, oz, fac, nsp)))
+        pr = abs(perp_ray((ox, oz), fast_cut(ox, oz, fac, nsp, trv)))
         if pr < best[0]:
-            best = (pr, N, (ox, oz, fac, nsp))
+            best = (pr, N, (ox, oz, fac, nsp, trv))
     return best
 
 
@@ -680,8 +711,8 @@ def solve_focused(budget=110.0, want=30, verbose=True, ks=(3, 4)):
                     pr, N, snap = _band_perp(sticks)
                     if N is None or pr >= B['PERP_GATE'] or snap is None:
                         continue
-                    ox, oz, fac, nsp = snap
-                    nx, nz = fast_cut(ox, oz, fac, nsp)
+                    ox, oz, fac, nsp, trv = snap
+                    nx, nz = fast_cut(ox, oz, fac, nsp, trv)
                     if not genuine_clip((ox, oz), (nx, nz))[0]:
                         continue
                     wf = _wall_faithful(sticks, N)              # Phase C: reject wall artifacts
@@ -722,7 +753,7 @@ def reachability(beta=5730, mag=1.0, nmax=15):
     snaps = snapshot_walk([cr] * (nmax + 1), nmax=nmax + 1)
     print('aim beta=%d mag=%.2f  (facing settles at the quantized decode)' % (beta, mag))
     for N in range(2, nmax):
-        r = cut_at(snaps[N])
+        r = cut_at(snaps[N], cr)
         if r is None:
             continue
         d2S = math.hypot(SEAM[0] - r['old'][0], SEAM[1] - r['old'][1])
@@ -773,7 +804,8 @@ def deliver(hit=None, b_frame=None, log_n=40, norelaunch=False, verbose=True, sa
         s.step(sticks[k][0], sticks[k][1], csx=128, csy=CDOWN)
         rows.append((s.pos_x, s.pos_z, s.facing & 0xFFFF))
     sold = (s.pos_x, s.pos_z)
-    s.enter_cut(CUT_F)
+    dstk = sticks[N] if N < len(sticks) else sticks[-1]
+    s.enter_cut_from_move(dstk[0], dstk[1], csx=128, csy=CDOWN)   # the dispatch-frame cut (s75)
     snew = (s.pos_x, s.pos_z)
     if verbose:
         print('SIM hit: old=(%.7f,%.7f) new=(%.7f,%.7f) genuine=%s' %

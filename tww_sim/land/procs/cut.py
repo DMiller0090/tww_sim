@@ -49,7 +49,11 @@ class _CutMixin:
     def _cut_init(self, cut_type, aim=None):
         """procCutF_init / procCutA_init (d_a_player_sword.inc:660/430): setSingleMoveAnime(ANM_CUT*,
         rate=1.2, start=4.0, ...); m3700 = 0; m34C2 = 1. mNormalSpeed keeps the entry value (the roll's
-        carried speedF) this frame. current.angle.y = shape_angle.y (travel snaps to facing).
+        carried speedF) this frame. current.angle.y (travel) is NOT touched -- procCutF_init never
+        writes it; the snap to shape_angle.y happens in procCutF frame 2+ (:744, `_proc_cut`). A
+        roll-dispatched cut has travel==facing already (`_roll_init` 6837), but a MOVE-dispatched cut
+        carries the walk's still-converging travel into the entry-frame foot term (live-verified
+        0-ULP, seam352 session 75; see `enter_cut_from_move`).
 
         `aim` = mProcVar2.m34D4 (the thrust's latched aim, param_0 in changeCutProc = sVar2 = the stick
         target m34E8 when the stick is pushed & unlocked, else shape_angle.y). None -> straight-forward
@@ -60,7 +64,6 @@ class _CutMixin:
         self._cut_entered = True
         self._cut_m3700 = (0.0, 0.0, 0.0)        # m3700 = cXyz::Zero in init
         self.cut_target = self.facing if aim is None else (int(aim) & 0xFFFF)   # mProcVar2.m34D4
-        self.travel = self.facing                # current.angle.y = shape_angle.y (procCutF sets it)
         # No foot-engine pose: the cut anim isn't a foot-chain walk anim and m3598 stays 0 (speedF==nspeed),
         # so position = joint-0 root lunge (_cut_m3700_at) + mNormalSpeed. Toe stream freezes (see the KB).
 
@@ -114,9 +117,16 @@ class _CutMixin:
     def enter_cut(self, cut_type=CUT_F, aim=None):
         """Programmatic roll-stab: run the CUT's ENTRY frame from the current state (mirrors the game's
         procCut*_init frame, dispatched out of a roll). Carries the current speedF into the first-frame
-        lunge = speedF (foot term, m3598==0) + the ANM_CUT joint-0 root translate at frame 4.0 (m3700,
-        reset to 0 in init) -- the ~49.22u single-frame move that reaches the seam-clip floor. Advance the
-        rest of the animation with step() (which dispatches _proc_cut) until it returns to WAIT (idle).
+        lunge = speedF (foot term, m3598==0, fired along the CARRIED current.angle.y = `travel`) + the
+        ANM_CUT joint-0 root translate at frame 4.0 (m3700, reset to 0 in init) rotated by shape/facing
+        -- the ~49.22u single-frame move that reaches the seam-clip floor. Advance the rest of the
+        animation with step() (which dispatches _proc_cut) until it returns to WAIT (idle).
+
+        Dispatch context matters for `travel`: a roll-dispatched cut has travel==facing (`_roll_init`),
+        so this is exact as-is; a BUFFERED-B cut dispatched out of a WALK fires AFTER procMove's
+        setSpeedAndAngleNormal travel chase that frame (procMove 6221 -> checkNextMode 4424 ->
+        checkNextActionFromButton) -- use `enter_cut_from_move`, which runs that dispatch-frame prefix
+        first (live-verified 0-ULP at the walk-stab cut, seam352 session 75).
 
         `aim` (s16 world angle) = the DIAGONAL-thrust aim (mProcVar2.m34D4 = the stick target m34E8 sampled
         at the thrust frame). None -> a straight in-line thrust (aim == the roll facing). The entry lunge
@@ -130,7 +140,7 @@ class _CutMixin:
             raise ValueError("aim %d is >= 0x2000 off the roll facing %d -> dispatches CUT_L/R, not %s; "
                              "the in-line CUT_F/A range is +-0x2000 (45deg)" % (int(aim) & 0xFFFF,
                              self.facing, "CUT_F" if cut_type == CUT_F else "CUT_A"))
-        self._cut_init(cut_type, aim=aim)            # state=CUT*, cut_frame=4.0, m3700_prev=0, travel=facing
+        self._cut_init(cut_type, aim=aim)            # state=CUT*, cut_frame=4.0, m3700_prev=0
         # --- entry frame pos update (mirrors the step() pos-block CUT branch) ---
         self.speedF = 0.0 if abs(self.nspeed) < 0.05 else self.nspeed
         m3700 = self._cut_m3700_at(cut_type, self.cut_frame)
@@ -145,3 +155,32 @@ class _CutMixin:
         self.pos_z = f32(f32(self.pos_z + f32(self.speedF * S.cM_scos_s16(self.travel))) + add_z)
         self.visited.add(cut_type)
         return (f32(self.pos_x - px0), f32(self.pos_z - pz0))
+
+    def enter_cut_from_move(self, sx, sy, csx=128, csy=128, cut_type=CUT_F, aim=None):
+        """The buffered-B WALK -> CUT dispatch frame (live-verified 0-ULP, seam352 session 75).
+
+        On the frame the buffered B fires the cut out of a walk, the game runs the MOVE proc FIRST:
+        procMove (d_a_player_main.cpp 6221) calls setSpeedAndAngleNormal (2751) -- the travel/facing
+        chase + setNormalSpeedF -- and only THEN checkNextMode (4424), whose mMaxNormalSpeed update and
+        checkNextActionFromButton dispatch procCutF_init. posMoveFromFootPos then fires the entry foot
+        term along the JUST-CHASED current.angle.y (travel), NOT facing (RAM-verified: speed ==
+        17*dir(travel') at the cut-frame positionWallCorrect). Calling plain `enter_cut` after N walk
+        steps skips that chase and lunges along the stale travel -- ~0.03u off at a 100-hw residue,
+        fatal on a razor seam.
+
+        (sx, sy, csx, csy) = the dispatch frame's CONTROLLER input (the DTM row after the last walk
+        row); it flows through the same 2-frame input-delay buffer and stick decode as step(). Returns
+        the entry-frame (dx, dz) like `enter_cut`."""
+        if self._core is not None:
+            raise RuntimeError("enter_cut_from_move is a Python-path proc; construct "
+                               "LandState(native=False)")
+        # step()'s input path: push this frame's poll, act on the delayed one (whole poll together).
+        self._inbuf.append((int(sx), int(sy), 0, 0, int(csx), int(csy)))
+        asx, asy, _abtn, _atrig, _acsx, _acsy = self._inbuf.pop(0)
+        self.csangle = self._cam.csangle         # m34E8 reads the camera as of frame START
+        self._set_stick_data(asx, asy)
+        # procMove prefix: the travel/facing chase + speed update run BEFORE the dispatch...
+        self._set_speed_and_angle_normal(self.F0, attention_lock=False)
+        # ...then checkNextMode sets mMaxNormalSpeed (4443, before checkNextActionFromButton fires).
+        self.max_nspeed = f32(self.MAX_NSPEED)
+        return self.enter_cut(cut_type, aim=aim)

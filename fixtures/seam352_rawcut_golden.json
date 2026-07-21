@@ -1,0 +1,27 @@
+{
+ "what": "LIVE RAW (pre-collision) CUT_F endpoint capture, seam352 walk-stab dispatch frame (session 75). Movie-faithful DTM playback (seed=0, b_frame=11) halted at posMove stage boundaries (JP bps: posMove 0x80106514, posMoveFromFootPos 0x80105cf8/blr 0x80106510, posMove blr 0x80106DF4, positionWallCorrect 0x800a39a8), reading Link's current.pos (deref 0x803AD860 + 0x120) and speed (+0x148). Proves the entry foot term fires along the DISPATCH-frame travel (procMove's setSpeedAndAngleNormal chase runs before checkNextActionFromButton dispatches the cut), not facing.",
+ "anchor": "kaze_r11_walkstab_seam352@twwgz",
+ "dtm_seed": 0,
+ "N": 16,
+ "b_frame": 11,
+ "sticks": [[108, 180], [109, 176], [107, 178], [93, 254], [93, 254], [93, 254], [93, 254], [93, 254],
+            [93, 254], [93, 254], [93, 254], [93, 254], [93, 254], [93, 254], [93, 254], [93, 254],
+            [93, 254], [93, 254]],
+ "live_old": [9347.0419921875, -411.15887451171875],
+ "live_old_bits": ["46120c2b", "c3cd9456"],
+ "cut_frame": {
+  "sp8C_m3700_at_posmove_entry": [0.0, 0.0, 0.0],
+  "m3598": 0.0,
+  "m3700_spB8": [-0.0946453, 40.0158653, 23.2201385],
+  "d_frame": 4.0,
+  "travel": 64961,
+  "facing": 64946,
+  "nspeed": 17.0,
+  "speed_xz": [-0.9383188486099243, 16.974084854125977],
+  "speed_xz_bits": ["bf7035aa", "4187caed"]
+ },
+ "live_raw_new": [9344.69140625, -371.0074157714844],
+ "live_raw_new_bits": ["461202c4", "c3b980f3"],
+ "live_precollision_at_wallcorrect": [9345.060546875, -374.58148193359375],
+ "note": "live_raw_new = posMove output (the true unblocked CUT_F endpoint). Between posMove and positionWallCorrect the CrrPos line-clip already pulled the lunge back ~3.57u (the wall block). The OLD model (travel snapped to facing in _cut_init) predicted new=(9344.6650390625, -371.0088806152344) = 461202a9/c3b98123 -- 0.026u off, a phantom clip cell on this ~1-ULP razor seam."
+}

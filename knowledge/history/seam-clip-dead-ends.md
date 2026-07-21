@@ -1343,6 +1343,42 @@ re-open the travel/facing split. (Also ruled out this session: driving the deliv
 reach the cut frame with a breakpoint armed -- it DESYNCS the buffered-B walk, ~4.6u off; the faithful
 walk is only reproducible via the DTM MOVIE.)
 
+## The s74 "~1-ULP cut-endpoint gap" and the #64 travel refutation: BOTH overturned by direct RAM capture (session 75, DELIVERED)
+
+Session 75 captured the live RAW (pre-collision) CUT_F endpoint at posMove stage boundaries (JP bps:
+posMove entry/blr, posMoveFromFootPos entry/blr, positionWallCorrect) on a movie-faithful playback.
+The direct measurement overturned both of s74's inferences and delivered the seam352 clip:
+
+- **The gap was NOT ~1 ULP -- it was ~0.026u**, and it is a MODEL bug, not a sub-ULP foot residual:
+  the buffered-B walk-stab cut dispatches AFTER procMove's `setSpeedAndAngleNormal` runs that frame
+  (procMove 6221 -> checkNextMode 4424 -> checkNextActionFromButton), so the entry foot term fires
+  along the JUST-CHASED `current.angle.y` (travel), while the m3700 delta rotates by shape/facing.
+  RAM proof: at the cut-frame positionWallCorrect, `speed == 17*dir(travel')` exactly (travel'=64961,
+  one more -100 chase step past the old-frame 65061; facing 64946). The m3598 residual hypothesis was
+  wrong (m3598 is force-zeroed by commonProcInit; the BP read 0), and sp8C was genuinely Zero.
+- **Dead-end #64's "the foot-term uses facing" refutation was itself wrong**: s74's travel fix used
+  the OLD-frame travel (65061, no chase step), whose endpoint indeed never matched -- the CONCEPT
+  (foot term along carried travel) was right, the VALUE was one chase step stale. The block-basin
+  endpoint match that "proved" facing was a coincidence of the basin swallowing the difference.
+  `procCutF_init` does NOT write current.angle.y (only procCutF frame 2+ snaps it) -- as #64's decomp
+  reading already said.
+- **Why every earlier delivery hid it:** the roll-stab dispatch has travel==facing (`_roll_init`
+  6837), and the kaze walk-stab cruise had converged travel==facing by its cut frame (verified for
+  all four kaze goldens) -- byte-identical under both models. seam352's start-crawl left a 115-hw
+  residue that ~16 frames of chase had not converged, and its razor acceptance made the resulting
+  0.026u phantom fatal. **Lesson: a "verified 0-ULP" sub-model is only verified FOR THE DISPATCH
+  CONTEXTS exercised; a new context (walk-dispatched cut with unconverged travel) needs its own raw
+  capture, and endpoint basin-matching is NOT a substitute for reading the mid-frame RAM.**
+- Also useful: between posMove's output and positionWallCorrect, CrrPos's line-clip already pulls a
+  blocked lunge back (~3.57u here) -- the "raw" pos read at the wallCorrect BP is NOT posMove's
+  output. Capture at the posMove blr (JP 0x80106DF4) for the true unblocked endpoint.
+
+Fix shipped: `_cut_init` no longer snaps travel; `LandState.enter_cut_from_move` runs the dispatch
+prefix; the solver/fast paths thread the dispatch-frame travel. Locked by
+`tests/test_seam352_walkstab.py::test_seam352_rawcut_dispatch_frame_bitexact` (fixture
+`fixtures/seam352_rawcut_golden.json`) + the delivered-clip gate (the 11th seam, margin-24 hit,
+oracle-vetted CLIP/BLOCK at exact/+0.001u).
+
 ## Pointers
 
 - Current pipeline + run protocol + verification: `harness/rollstab/README.md`.

@@ -137,28 +137,34 @@ class SeamGeo:
             return False
         return self.wA.pla.func(pn) < 0 or self.wB.pla.func(pn) < 0
 
-    def cut_new(self, old, facing=None, speedf=None):
+    def cut_new(self, old, facing=None, speedf=None, travel=None):
         """The CUT_F entry endpoint from `old` -- bit-identical to `LandState.enter_cut(CUT_F,
-        aim=None)` / `walkstab.fast_cut` (travel==facing, the root translate rotated by facing + the
-        speedF lunge term; the two component f32 adds, per candidate). `facing`/`speedf` default to the
-        seam's thrust facing F + `roll_speedf` (the roll-stab out-of-a-roll cut); a walk-stab cut passes
-        the runtime walk `facing` and per-frame `nspeed`, since its lunge speed is not the fixed roll cap."""
+        aim=None)`: the speedF foot term fired along `travel` (current.angle.y as CARRIED into the
+        dispatch; procCutF_init never writes it) + the root translate rotated by `facing` (shape); the
+        two component f32 adds, per candidate. `facing`/`speedf` default to the seam's thrust facing F
+        + `roll_speedf` (the roll-stab out-of-a-roll cut, where travel==facing); a walk-stab cut passes
+        the runtime walk `facing`, per-frame `nspeed`, AND the dispatch-frame `travel` (the walk's
+        travel AFTER that frame's setSpeedAndAngleNormal chase -- see LandState.enter_cut_from_move;
+        omitting it assumes travel==facing, which is ~0.03u off at a 100-hw residue: session 75)."""
         fac = self.F if facing is None else facing
+        trv = fac if travel is None else travel
         sp = self.roll_speedf if speedf is None else speedf
         L0 = _cut_root_translate()
         speedF = 0.0 if abs(sp) < 0.05 else sp
         s = _cM_ssin_s16(fac)
         c = M.cM_scos_s16(fac)
+        st = s if trv == fac else _cM_ssin_s16(trv)
+        ct = c if trv == fac else M.cM_scos_s16(trv)
         add_x = _f(_f(L0[2] * s) + _f(L0[0] * c))
         add_z = _f(_f(L0[2] * c) - _f(L0[0] * s))
-        nx = _f(_f(_f(old[0]) + _f(speedF * s)) + add_x)
-        nz = _f(_f(_f(old[1]) + _f(speedF * c)) + add_z)
+        nx = _f(_f(_f(old[0]) + _f(speedF * st)) + add_x)
+        nz = _f(_f(_f(old[1]) + _f(speedF * ct)) + add_z)
         return (nx, nz)
 
-    def pred_genuine(self, old, facing=None, speedf=None):
+    def pred_genuine(self, old, facing=None, speedf=None, travel=None):
         """genuine_clip against the REAL cut endpoint at `old` (bit-identical to the sim's cut
-        `new`) -- the pure-geometry dust test used by maps/rankers. `facing`/`speedf` as `cut_new`."""
-        return self.genuine_clip(old, self.cut_new(old, facing, speedf))
+        `new`) -- the pure-geometry dust test used by maps/rankers. Args as `cut_new`."""
+        return self.genuine_clip(old, self.cut_new(old, facing, speedf, travel))
 
     def perp(self, p):
         return (p[0] - self.S[0]) * self.PX + (p[1] - self.S[1]) * self.PZ

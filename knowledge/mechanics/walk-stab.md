@@ -8,7 +8,9 @@ frames when Link is holding an item? How does the one-frame L-target speed it up
 live-measured, the from-rest sim is **BIT-EXACT (0 ULP) in position AND facing**, and a pure-sim solver
 hit (found entirely offline, no calibration) was delivered as a clean DTM and **clipped the seam live**:
 the CUT_F fired at N=13 with `old`/`new` bit-for-bit the sim's prediction and Link went OOB through the
-seam. See Simulation. Regression: `tests/test_walkstab_clip.py` + golden `tests/golden/walkstab_deliver.json`.
+seam. A second, razor-acceptance corner (seam352, interior 155.4) delivered 2026-07-20 after the
+dispatch-frame travel fix (below).
+See Simulation. Regression: `tests/test_walkstab_clip.py` + golden `tests/golden/walkstab_deliver.json`.
 **Source:** decomp `d_a_player_main.cpp:4087` (`checkNextActionFromButton`), `:3946`/`:3959`
 (equip-anime completion), `:3436`/`:3499` (the take/rest anime setup), `d_a_player_sword.inc:404`
 (`changeCutProc`); HIO `daPy_HIO_item` (`d_a_player_HIO_data.inc:293`); live captures + the
@@ -28,6 +30,17 @@ The cut's first-frame displacement is `speedF (carried in) + the CUT_F joint-0 r
 `procCutF_init` zeroes `m3700` so frame 1 gets the full 23.220). A roll carries speedF 26 (lunge
 **49.22**); a capped walk carries speedF 17, so the walk-stab lunge tops out at **17 + 23.220 = 40.22**.
 Any sub-cap walk gives a shorter, tunable lunge down to a standstill stab's 23.22.
+
+**The two terms aim at DIFFERENT angles on the dispatch frame** (live RAM-verified 0-ULP, 2026-07-20).
+On the frame the buffered B fires the cut out of a walk, `procMove` (d_a_player_main.cpp:6221) runs
+`setSpeedAndAngleNormal` -- the `current.angle.y` (travel) chase -- BEFORE `checkNextMode`'s
+`checkNextActionFromButton` dispatches `procCutF_init`, and the init never writes `current.angle.y`
+(only `procCutF` frame 2+ snaps it to shape). So `posMoveFromFootPos` fires the speedF foot term along
+the **just-chased travel**, while the root-translate delta rotates by **shape/facing**. A walk whose
+travel has not finished converging to facing (e.g. a start-crawl leaves a ~100-hw residue over ~16
+frames) lunges measurably (~0.03u) off the facing line -- fatal on a razor-acceptance corner, invisible
+on a dense one and on roll stabs (`_roll_init` sets travel = facing). Sim: `LandState.enter_cut_from_move`
+(the dispatch-frame prefix + entry lunge); gate `tests/test_seam352_walkstab.py` (rawcut golden).
 
 ## Which seams a walk stab can clip (the displacement floor)
 
