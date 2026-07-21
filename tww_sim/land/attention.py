@@ -22,10 +22,9 @@ from __future__ import annotations
 # mLockOnState values (dAttention_c). RELEASE = L let go but the reticle is still fading out.
 NONE, LOCK, RELEASE = 0, 1, 2
 
-# Untarget latency = the reticle YJ_DELETE fade-out anim length (AttnFlag_40000000 clears the frame it
-# completes, runDrawProc 692-698). LIVE-OBSERVED ~8 (session-2 state-2 capture, L-release to proc-9 exit,
-# INPUT_DELAY-corrected); PROVISIONAL -- pin exactly with the raw-byte replay. Anim length, not a knob.
-DEFAULT_FADE_FRAMES = 8
+# = the reticle YJ_DELETE fade-out anim length (end=10/rate=1.0), live-measured session 6; the
+# session-5 "10 vs 11" was a single-step capture double-read. Anim constant, not a knob. See README.
+DEFAULT_FADE_FRAMES = 10
 
 
 class AttentionLock:

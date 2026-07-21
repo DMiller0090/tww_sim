@@ -330,7 +330,14 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
 
         # Attention lock-on machine (dAttention_c::Run, every frame): drives the ATN_ACTOR procs + the
         # untarget latency. Inert with no target (`_atn_actor_pos` None) -> byte-identical everywhere.
-        self._atn.update(l_held, self._atn_actor_pos is not None)
+        # It reads L via mDoCPd directly -> delay 1, one LESS than physics INPUT_DELAY=2 (session 6:
+        # field_0x01a tracks the raw DTM L at delay 1). Feed the delay-1 L (`_inbuf[0]`). See README.
+        if self._inbuf:
+            _atn_btn, _atn_trig = self._inbuf[0][2], self._inbuf[0][3]
+            l_atn = bool(_atn_btn & 0x40) or _atn_trig >= 200
+        else:
+            l_atn = l_held
+        self._atn.update(l_atn, self._atn_actor_pos is not None)
 
         # --- mid-walk sword pull-out (opt-in): B rising edge -> DRAW_DELAY frames later the anim set
         # flips base->sword BEFORE the proc dispatch (this frame's foot pose). See FootSpeedF.draw_sword.

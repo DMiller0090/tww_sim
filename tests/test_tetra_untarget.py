@@ -106,3 +106,44 @@ def test_untarget_flip_bit_exact(push, cycle):
     assert _bits(flip) == _bits(flip_live), (
         "cycle %d flip %r (bits %#x) != live %r (bits %#x)"
         % (cycle, flip, _bits(flip), flip_live, _bits(flip_live)))
+
+
+@pytest.mark.parametrize("cycle", [0, 1])
+def test_untarget_2frame_tier(push, cycle):
+    """The untarget brakeslide is a 2-frame proc-9 (ATN_ACTOR_MOVE) tier, not 1: body1 = the flip
+    (bit-exact, above), body2 = a SECOND setSpeedAndAngleAtnActor frame that decays the -26 by the
+    gentle mAtnMove term (~0.26-0.28), and ONLY THEN does MOVE take over (~0.011/frame). Session 5
+    RAM+asm PROVED this (the drop frame breaks INSIDE setSpeedAndAngleAtnActor with the ATN param
+    family); session 6 modeled the actor-lock lifetime -- the reticle YJ_DELETE anim = 10 frames
+    (`FADE_FRAMES`), and the attention's L-input delay is 1 (vs physics INPUT_DELAY=2) -- so proc 9
+    runs 2 body frames driven by the REAL AttentionLock, with NO RAM-timeline injection.
+
+    body2 is NOT yet bit-exact from the mid-roll seed (~0.0024 residual: csangle=39432 and
+    travel/target are seeded approximately, so the ATN turn-chase cos term is slightly off); its
+    ULP-exact value awaits the from-f0 coupled replay. So we assert the STRUCTURE (exactly 2 proc-9
+    body frames), that body2 is a proc-9 ATN step (~0.27, distinguishable from the MOVE ~0.011 decel),
+    and that it matches the fixture's own body2 within the mid-roll-seed residual."""
+    frames = push['frames']
+    entry = _roll_entries(frames)[cycle]
+    traj = _replay_from_roll(frames, entry, nsteps=22)
+
+    # Exactly two consecutive proc-9 BODY frames (the flip + body2). Before the session-6 lock-lifetime
+    # fix (fade 8 + physics-delayed L) the lock dropped a frame early and only ONE body frame ran.
+    body9 = [k for k, (_, disp, _) in enumerate(traj) if disp == 9]
+    assert len(body9) == 2, "proc-9 tier must be 2 body frames, got %d (%r)" % (len(body9), body9)
+    assert body9[1] == body9[0] + 1, "the two proc-9 body frames must be consecutive"
+
+    flip = traj[body9[0]][2]
+    body2 = traj[body9[1]][2]
+    # body2 decays the flip by the gentle mAtnMove term, NOT the MOVE decel -> proves proc 9 (not the
+    # MOVE foot path) ran it: a MOVE frame would drop only ~0.011, an ATN body2 drops ~0.27.
+    assert 0.20 < (body2 - flip) < 0.35, "body2 must be a proc-9 ATN step, got d=%.5f" % (body2 - flip)
+
+    # Fixture body2 = the frame right after its (argmin) flip -- located BY VALUE so the cycle-2
+    # single-step capture +1 shift ([[run-dtm-1frame-jitter]]) doesn't matter (the sim is the clean one).
+    win = list(range(entry, min(entry + 22, len(frames))))
+    fi = min(win, key=lambda i: frames[i]['live']['speedF'])
+    body2_live = frames[fi + 1]['live']['speedF']
+    assert abs(body2 - body2_live) < 0.003, (
+        "cycle %d body2 %.6f vs fixture %.6f (residual %.5f exceeds the mid-roll-seed budget)"
+        % (cycle, body2, body2_live, body2 - body2_live))

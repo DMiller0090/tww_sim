@@ -57,7 +57,7 @@ rolling Co-center, no self-locomotion). Once Link's rolls stop and he glides awa
 **stt 4 and FOLLOWS** (speedF ramps 0 to the 10 cap then decays; the `Zl1FollowState` model). So the
 herd is a **mix of CC-plow (during roll-throughs) + follow-chase (between)**, both already in the sim.
 
-## THE key modeling gap: untarget brakesliding = the ATN_ACTOR procs  [MODELED s2; FLIP live-validated BIT-EXACT s3]
+## THE key modeling gap: untarget brakesliding = the ATN_ACTOR procs  [MODELED s2; FLIP live-exact s3; LOCK-LIFETIME + 2-FRAME TIER s6]
 
 The payoff frames read **`ATN_ACTOR_MOVE` (proc 9)**, `daPyProc_ATN_ACTOR_MOVE_e`, the
 **actor-lock** variant of ATN_MOVE, plus its idle sibling **`ATN_ACTOR_WAIT` (proc 8)**. The land sim
@@ -122,6 +122,7 @@ The mechanism is fully grounded (US GZLE01 line numbers; logic identical to JP):
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
 | `fixtures/courtyard_push_state2.json` | 51-frame session-1 ground-truth capture from state 2 (repo `fixtures/`). |
+| `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5). |
 
 Run: `python -m harness.tetrapush.capture_push frames=60` (needs Dolphin up with slot 2 = the
 courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM via `dolphin_mem`
@@ -144,6 +145,12 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
   `mFlags` `+0x20` (u32; `AttnFlag_40000000` = reticle fade alive), reticle `draw[0].anm` `+0x038`.
   `mMaxNormalSpeed` = `la + 0x2A8` (12 locked / 17 unlocked); `mNormalSpeed` `la+0x35BC`;
   `mStickDistance` `la+0x35B0`; `m34E8` (target) `la+0x34E8`.
+  - **Attention detail (session 6):** `field_0x01a` `mAttention+0x1a` (u8, `judgementButton` L machine:
+    0 off / 1 rising / 2 held -- delay 1 from the raw pad, one less than physics `INPUT_DELAY=2`);
+    `field_0x028` `+0x28` (s8). Reticle `draw[0].anm` `+0x38` = `mDoExt_McaMorf*`; its `J3DFrameCtrl`
+    is at McaMorf `+0x58` -> `mEnd` (s16) `+0x60`, `mRate` (f32) `+0x64`, `mFrame` (f32) `+0x68`,
+    `mState` (u8, 0x1 STOP) `+0x5D`. `YJ_DELETE` (untarget fade) = `end 10 / rate 1.0`; `YJ_IN` end 13,
+    `YJ_SCALE` end 34. The anim completing (frame->10) clears `AttnFlag_40000000` -> RELEASE ends.
 - **JP GZLJ01 function addrs (framework.map):** `setNormalSpeedF` `0x80105ae0`, `setSpeedAndAngleNormal`
   `0x80107474` (+0x498), `setSpeedAndAngleAtnActor` `0x80107b24` (+0x108), `procMoveTurn_init` `0x80111874`.
 
@@ -163,16 +170,33 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       the model produces the right shape, but the magnitude is only validated against the MODEL, not live.
 - [~] **Validate sim vs live from state 2**, 0-ULP. The untarget-brakeslide FLIP is validated
       BIT-EXACT for BOTH cycles (session 3), and (session 4) it stays bit-exact under FULL Tetra
-      coupling. **Session 5 RAM+asm-proved the real remaining gap and OVERTURNED the session-4
-      framing** (it is NOT a MOVE-decel detail): the untarget brakeslide is a **2-frame proc-9
+      coupling. Session 5 RAM+asm-proved the untarget brakeslide is a **2-frame proc-9
       (`ATN_ACTOR_MOVE` / `setSpeedAndAngleAtnActor`) tier** in BOTH cycles -- body1 = the flip
       (-26 + the ATN speed term ~0.273 -> -25.727), **body2 = a SECOND `setSpeedAndAngleAtnActor`
       frame** (no re-flip; travel chases the target, +ATN term ~0.26-0.275 -> -25.452 / -25.486) --
-      and ONLY THEN does MOVE decay it ~0.0095/frame. **The sim runs proc-9 body ONCE**, so it drops
-      straight to MOVE at the flip+1 frame and misses body2. Root cause: the actor-lock
-      (`mpAttnActorLockOn`) drops **one dispatch-frame too early** in the sim. See the session-5
-      sub-bullet below; the "MOVE `mNormalSpeed` decel residual" chase (session 4) was aiming at the
-      wrong frame (that 0.27 drop is a proc-9 ATN frame, not a MOVE frame).
+      and ONLY THEN does MOVE decay it ~0.0095/frame; the sim ran proc-9 body ONCE because the
+      actor-lock (`mpAttnActorLockOn`) dropped **one dispatch-frame too early**.
+      **Session 6 CLOSED that gap** -- the actor-lock lifetime is now modeled decomp-faithfully and
+      the sim runs the **2-frame proc-9 tier from the REAL `AttentionLock`** (no RAM-timeline
+      injection): the sim's per-frame lock timeline now matches the live RAM `mpAttnActorLockOn`
+      bit-for-bit (LOCK f8-10, RELEASE f11-20, drop f21 cyc1; LOCK f32-36, RELEASE f37-46, drop f47
+      cyc2 de-duplicated), the **flip stays bit-exact**, and body2 lands (off ~0.0024, the mid-roll
+      seed -- ULP-exact awaits the from-f0 replay). Two decomp-grounded fixes did it (both LIVE-
+      measured, no guessed constants):
+      - **The untarget latency is the reticle `YJ_DELETE` J3D anim = exactly 10 frames** (`end=10`,
+        `rate=1.0`, `EMode_NONE`), read live from the reticle frame ctrl at `mAttention+0x38`
+        (`draw[0].anm`, a `mDoExt_McaMorf*`; frame ctrl `+0x58` -> `mFrame +0x68` / `mEnd +0x60`).
+        `runDrawProc` sets it on the LOCK->RELEASE frame and clears `AttnFlag_40000000` when it
+        completes -> RELEASE->NONE. **The session-5 "10 vs 11" was a single-step capture DOUBLE-READ**
+        (Link's anim ctrl was byte-identical across the duplicated frame -- `_notes/tetrapush-reticle_probe.py`),
+        NOT a real variation; it is a FIXED anim-length constant. `AttentionLock.DEFAULT_FADE_FRAMES = 10`.
+      - **The attention's L-input delay is 1, not the physics `INPUT_DELAY = 2`.** The attention reads
+        L via `mDoCPd_L_LOCK_BUTTON` (`g_mDoCPd_cpadInfo`) directly; live, `field_0x01a` rises/falls
+        exactly 1 frame after the raw DTM L on BOTH edges, while the physics acted-L is 2 frames after.
+        `state.py` now feeds `_atn.update` the delay-1 L (`_inbuf[0]` right after the delay-2 pop), not
+        the physics `l_held`. Gate: `tests/test_tetra_untarget.py::test_untarget_2frame_tier` (both
+        cycles: exactly 2 proc-9 body frames, body2 an ATN ~0.27 step matching the fixture within the
+        mid-roll-seed budget). Purely additive -- 441 offline + 16 goldens byte-identical.
       - **Gap 1 (raw DTM stick bytes) -- CLOSED.** `harness/tetrapush/dtm_inputs.py` extracts the real
         per-frame raw controller bytes from the recorded movie `GZLJ01.s02.dtm` (the companion DTM
         beside slot 2, NOT a TAS-Studio export). Alignment: port0 = odd DTM rows, 4 uniform polls/game
@@ -191,18 +215,18 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
         to MOVE for NEXT frame, so the position section now keys the momentum branch on the DISPATCH proc
         (like the CUT branch) -- else the MOVE foot path overwrote the flipped speedF to 0. Golden-inert
         (441 offline pass; goldens never drive the lock).
-      - **Gap 3 (`FADE_FRAMES`) -- a FIXED count is PROVEN WRONG (session 5); the untarget latency is
-        anim-driven.** RAM-measured `mLockOnState` (via `mpAttention` deref, `_notes/tetrapush-live_lock_probe.py`):
-        cycle 1 = LOCK f8-10 then **RELEASE f11-20 (10 frames)**, NONE f21; cycle 2 = LOCK f32-36 then
-        **RELEASE f37-47 (11 frames)**, NONE f48. RELEASE duration **10 vs 11 differs** -> it is NOT a
-        constant `FADE_FRAMES`; it is the reticle **`YJ_DELETE`** J3D anim completing (`d_attention.cpp`
-        `runDrawProc` 692-698 clears `AttnFlag_40000000` when `draw[0].anm->play()` returns true, one Run
-        AFTER `judgementStatusHd`). The proc-9 BODY tier is nonetheless **exactly 2 frames in both
-        cycles** (the roll exits ~2 frames before RELEASE ends). Model the lock lifetime as that anim's
-        frame ctrl (measure `draw[0].anm` at `mAttention+0x038`), NOT a magic 8/9. NOTE also: the
-        attention reads L via `mDoCPd_L_LOCK_BUTTON` in `judgementButton` -- the LOCK engaged at f8, one
-        frame BEFORE the physics `INPUT_DELAY=2` acted-L (f9), so the lock machine may use a shorter
-        input delay than the physics; confirm before wiring the from-f0 model.
+      - **Gap 3 (`FADE_FRAMES`) -- RESOLVED (session 6): a fixed 10-frame anim length.** Reading the
+        reticle J3D frame ctrl live (`_notes/tetrapush-reticle_probe.py`, `mAttention+0x38` -> `McaMorf`
+        -> frame ctrl `+0x58`) shows `YJ_DELETE` = `end=10 / rate=1.0 / EMode_NONE`, advancing frame
+        1->10 over **exactly 10 game frames in BOTH cycles**. `runDrawProc` (`d_attention.cpp` 686-698)
+        clears `AttnFlag_40000000` the Run the anim completes -> the next `judgementStatusHd` sets
+        RELEASE->NONE. The session-5 "RELEASE = 10 vs 11" was a **single-step capture DOUBLE-READ** (the
+        `advance` re-sampled a game frame -- Link's anim ctrl was byte-identical across the dup, cyc2 f44==f45),
+        NOT a real variation; the true RELEASE is 10 in both. So `FADE_FRAMES = 10` is faithful (it IS the
+        anim length, not a tuned knob). **Attention L-input delay = 1** (vs physics `INPUT_DELAY = 2`):
+        `field_0x01a` rises/falls exactly 1 frame after the raw DTM L on both edges (the attention reads
+        `g_mDoCPd_cpadInfo` directly); `state.py` feeds `_atn.update` the delay-1 L (`_inbuf[0]` after the
+        delay-2 pop). With both, the sim's lock timeline matches RAM `mpAttnActorLockOn` bit-for-bit.
       - **Gap 2 (`chaseAttention` acquisition gate) -- still unmodeled.** For the roll-entry-seeded flip
         validation it is MOOT (the initial directional L is before the seed, so the only L in each window
         is the intended re-pulse -> `target_present=True` throughout is correct). It is still needed for a
@@ -232,13 +256,14 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
            (`0x80107b24`..`0x80107c2c`). So the 0.275 is `ATN_SPD(5.0)*msd(0.0556)*cos(travel-chase)`,
            i.e. a second `ATN_ACTOR` body frame -- `travel` snaps 4548->6005 via the ATN turn chase.
            The `mCurProc` read of 6 (MOVE) at that frame's END is `checkNextMode`'s `procMove_init`
-           setting NEXT frame's proc early -- not the proc that ran the body. **The sim's ONLY gap is
-           the actor-lock lifetime**: driving the sim's lock straight from the RAM-measured
-           `mpAttnActorLockOn` timeline (`_notes/tetrapush-verify_2frame.py`) makes it run the 2-frame
-           tier -- flip bit-exact, body2 off by only 0.0024 (mid-roll-seed `travel`/`csangle`
-           imprecision, not a model error). The `started`/`getOldFrameFlg` fix is STILL needed for the
-           MOVE backslide AFTER the tier (`speedF == mNormalSpeed`, `m3598 == 0`, no foot term), but it
-           is NOT the 0.27 drop.
+           setting NEXT frame's proc early -- not the proc that ran the body. The gap was the actor-lock
+           lifetime -- **CLOSED session 6** (reticle-anim + delay-1 L, above): the REAL `AttentionLock`
+           now runs the 2-frame tier, flip bit-exact, body2 off ~0.0024 (mid-roll-seed `travel`/`csangle`
+           imprecision, not a model error -- ULP-exact awaits the from-f0 replay). The
+           `started`/`getOldFrameFlg` fix is STILL needed for the MOVE backslide AFTER the tier
+           (`speedF == mNormalSpeed`, `m3598 == 0`, no foot term -- session 6 re-confirmed it zeroes
+           without the fix: cyc1 f22-25 read 0 vs live -25.44), but it is NOT the 0.27 drop. It is the
+           immediate NEXT step, together with the from-f0 coupled replay (its only consumer).
       - **The `procAtnActorMove_init` frame** (decomp 6294: init does NOT call `setSpeedAndAngleAtnActor`
         or `checkNextMode`) is still merged in the sim, but MOOT for magnitude: the frame axis is clean
         and the flip lands on the right frame. Model it as an `_atn_actor_entered` entry-hold only if a
