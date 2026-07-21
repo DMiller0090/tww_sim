@@ -57,7 +57,7 @@ rolling Co-center, no self-locomotion). Once Link's rolls stop and he glides awa
 **stt 4 and FOLLOWS** (speedF ramps 0 to the 10 cap then decays; the `Zl1FollowState` model). So the
 herd is a **mix of CC-plow (during roll-throughs) + follow-chase (between)**, both already in the sim.
 
-## THE key modeling gap: untarget brakesliding = the ATN_ACTOR procs  [MODELED s2; FLIP live-exact s3; LOCK-LIFETIME + 2-FRAME TIER s6]
+## THE key modeling gap: untarget brakesliding = the ATN_ACTOR procs  [MODELED s2; FLIP live-exact s3; LOCK-LIFETIME + 2-FRAME TIER s6; BACKSLIDE-UNZEROED + GAP-2 CONE s7]
 
 The payoff frames read **`ATN_ACTOR_MOVE` (proc 9)**, `daPyProc_ATN_ACTOR_MOVE_e`, the
 **actor-lock** variant of ATN_MOVE, plus its idle sibling **`ATN_ACTOR_WAIT` (proc 8)**. The land sim
@@ -227,10 +227,37 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
         `field_0x01a` rises/falls exactly 1 frame after the raw DTM L on both edges (the attention reads
         `g_mDoCPd_cpadInfo` directly); `state.py` feeds `_atn.update` the delay-1 L (`_inbuf[0]` after the
         delay-2 pop). With both, the sim's lock timeline matches RAM `mpAttnActorLockOn` bit-for-bit.
-      - **Gap 2 (`chaseAttention` acquisition gate) -- still unmodeled.** For the roll-entry-seeded flip
-        validation it is MOOT (the initial directional L is before the seed, so the only L in each window
-        is the intended re-pulse -> `target_present=True` throughout is correct). It is still needed for a
-        from-state-2 full replay and the planner (the lock acquires MID-ROLL, not at the first L).
+      - **Gap 2 (`chaseAttention` acquisition gate) -- MODELED (session 7), decomp-first + live-geometry-
+        gated.** `chaseAttention` (`d_attention.cpp:563`) gates the lock-on target on the front-of-player
+        cone (`check_flontofplayer`): a target is chaseable only within **+-0x4000 (90 deg)** of
+        `shape_angle.y` (ftp bit 0x04 -> `ang_table[0]`; Tetra's `dist_table[0xAB]`, matching
+        `knowledge/mechanics/tetra-follow.md`). XZ distance (<=~300) never binds here. This is EXACTLY why
+        the Courtyard lock acquires MID-ROLL and never at the first held L: at state 2 Tetra is **~122 deg
+        BEHIND** Link (out of cone -> `chaseAttention` false -> live proc 6/7, no actor), and only when the
+        roll swings Link to face her (~0-2 deg) does the mid-roll L re-pulse acquire. `state.py` now feeds
+        `_atn.update` a cone-gated `target_present` (`_AtnActorMixin._atn_target_present`, reusing the
+        `setShapeAngleToAtnActor` bearing); `attention.FRONT_CONE_HALF = 0x4000`. Golden-inert (no actor ->
+        False -> machine stays NONE). Gate: `tests/test_atn_actor.py::test_chase_attention_front_cone`
+        (synthetic +-90 boundary + the force override) and
+        `tests/test_tetra_untarget.py::test_chase_acquires_mid_roll_not_at_state2` (the live-pose per-frame
+        cone: False f0-2, in-cone across both roll bodies). A **bare non-coupled replay** (the tier test)
+        can't compute the real cone (its rolled position diverges ~100u with no CC plow), so it sets
+        `_atn_force_present = True` to inject the acquisition it knows happened live; the coupled from-f0
+        replay leaves it None so the cone runs for real.
+      - **The `started`/`getOldFrameFlg` fix -- DONE (session 7), both foot paths.**
+        `FootSpeedF.step_single_anim` (Python) and `w_step_single` (native `_anmc`) now set `started`
+        (the `getOldFrameFlg()` analog, posMoveFromFootPos:2354) like `step_atn`/`enter_wait_idle`/
+        `enter_single` do -- so the MOVE backslide AFTER the proc-9 tier no longer takes `FootSpeedF.step`'s
+        cold `not started and nspeed<=0` rest path and return 0 (probe: cyc1 f22-25 read 0.0, cyc2 f48-55
+        read 0.0 pre-fix). With the fix the backslide is pure momentum (m3598==0 -> `speedF == mNormalSpeed`
+        bit-for-bit) and tracks the live decay within the mid-roll-seed budget (cyc1 <=0.0024, cyc2 <=0.0005
+        with the +1 capture-shift alignment; ULP-exactness awaits the from-f0 replay). **Golden-safe**: every
+        real roll/slip/WAIT_TURN enters via `enter_single` (which already sets `started`) BEFORE
+        `step_single_anim` runs, so the fix is inert in every existing path (16 land goldens + 445 offline
+        byte-identical). Native `_anmc` rebuilt. Gate: `tests/test_tetra_untarget.py::test_untarget_backslide_unzeroed`.
+      - **Gap-2 note (superseded):** the roll-entry-seeded flip validation was MOOT for Gap 2 (the only
+        L in-window is the intended re-pulse -> `target_present=True` was correct); the cone gate is now
+        modeled for real and is required by the from-f0 replay + the planner.
       - **The capture frame-axis is CLEAN (session 4 -- the "jitter-free capture" worry does not apply
         here).** The player anim frame ctrl advances a dead-constant `+1.1`/frame through the roll and
         `+2.3`/frame through the MOVE in the single-stepped fixture, so each captured row IS exactly one
@@ -260,10 +287,11 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
            lifetime -- **CLOSED session 6** (reticle-anim + delay-1 L, above): the REAL `AttentionLock`
            now runs the 2-frame tier, flip bit-exact, body2 off ~0.0024 (mid-roll-seed `travel`/`csangle`
            imprecision, not a model error -- ULP-exact awaits the from-f0 replay). The
-           `started`/`getOldFrameFlg` fix is STILL needed for the MOVE backslide AFTER the tier
-           (`speedF == mNormalSpeed`, `m3598 == 0`, no foot term -- session 6 re-confirmed it zeroes
-           without the fix: cyc1 f22-25 read 0 vs live -25.44), but it is NOT the 0.27 drop. It is the
-           immediate NEXT step, together with the from-f0 coupled replay (its only consumer).
+           `started`/`getOldFrameFlg` fix for the MOVE backslide AFTER the tier is now **DONE (session 7,
+           both foot paths; see the bullet above)** -- the backslide is `speedF == mNormalSpeed` bit-exact,
+           no longer the cold-path 0. It was NOT the 0.27 drop (that is body2, a proc-9 ATN frame); it only
+           un-zeroes the backslide. Its remaining consumer is the from-f0 coupled replay (where body2 goes
+           ULP-exact).
       - **The `procAtnActorMove_init` frame** (decomp 6294: init does NOT call `setSpeedAndAngleAtnActor`
         or `checkNextMode`) is still merged in the sim, but MOOT for magnitude: the frame axis is clean
         and the flip lands on the right frame. Model it as an `_atn_actor_entered` entry-hold only if a
@@ -273,6 +301,26 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       planner ARRANGES the matching roll entry as part of the push sequence (the genuine-coord set is
       coupled to Link's final roll entry, so the two are solved jointly). From state 2 Link/Tetra are
       still far from the corner, so there is runway to steer both into place.
+- [~] **From-f0 coupled replay** (the last piece before the planner; session 7 diagnosed it, did not
+      finish it). Seed a `CcCoupledStepper` at f0 (state 2, MOVE backslide) + feed the real DTM bytes +
+      diff BOTH actors -- where body2 becomes ULP-exact (real per-frame `csangle`/`m34E8`) and the plow
+      seed-startup artifact resolves (the push builds naturally from f0). **Session-7 probe findings (the
+      concrete next-session to-do):**
+      1. **The CC plow is ACTIVE from f0.** At f0 live Link displaces only ~12u despite `speedF -24.57`,
+         because Tetra (behind him, being backslid-into) is plowed ~12.6u and Link's net move is reduced
+         by the equal-and-opposite CC recoil. So the replay must run the plow from frame 0 -- Link is in
+         MOVE (feet Co-cylinder), NOT the FRONT_ROLL cylinder that `cc_stepper` currently hardcodes
+         (`LINK_CO_R = FRONT_ROLL_R`). **Model the MOVE-phase Link Co-cylinder** (`daPy_lk_c::setCollision`
+         walk radius) so `link_co_center` is right off the roll.
+      2. **Input-delay pre-seed.** `INPUT_DELAY = 2` means f0 acts on the input delivered at f-2; the
+         fixture starts at f0, so `_inbuf` must be pre-seeded with the two pre-f0 DTM inputs (re-extract
+         via `dtm_inputs.py` at DTM groups F0-1/F0-2, or bake them into the fixture). Align post-step(inp[i])
+         to `live[i+1]` (frames[0].live == the seed == state at f0).
+      3. **Foot warm at seed:** set `link._foot.started = True` (backslide entered state 2 mid-run ->
+         oldFrameFlg already true); confirm `m3598 == 0` so `speedF == nspeed`.
+      4. **Camera/csangle:** feed the real substick (`inp.substickX/Y`) through `CameraManual` (frozen
+         `csx=128` is the tier-test shortcut; the from-f0 `m34E8` needs the real per-frame csangle).
+      Then the cone-gated `target_present` (Gap 2, done) drives the mid-roll acquisition for real.
 - [ ] **Build the planner**: state-2 config to a coupled sim (Link roll/untarget-EBS + Tetra
       plow/follow) to a search for the input sequence that lands Tetra on a genuine `tetra_placements`
       coord AND sets up the matching roll entry. Method reference: `plan_land` / the seam-clip `solver`

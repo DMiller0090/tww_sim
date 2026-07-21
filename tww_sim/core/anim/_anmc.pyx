@@ -1110,9 +1110,13 @@ cdef class PoseEngine:
                                    self._fc0_frame, self._fc1_frame, self._a_ratio, self._m3598, m)
 
     def w_step_single(self, double nspeed, double msd):
-        """One single-anim proc frame (ROLL / WAIT_TURN / SLIP). Port of FootSpeedF.step_single_anim."""
+        """One single-anim proc frame (ROLL / WAIT_TURN / SLIP). Port of FootSpeedF.step_single_anim.
+        Sets _started (getOldFrameFlg analog) like w_step_atn/w_enter_single do -- so a MOVE backslide
+        after the proc-9 tier does not take w_step's cold nspeed<=0 rest path and return 0. Golden-inert
+        (every real single-anim proc enters via w_enter_single, which already sets it)."""
         nspeed = f32(nspeed)
         msd = f32(msd)
+        self._started = True
         cdef double morf = self._pending_morf if self._has_pending else -1.0
         self._has_pending = False
         if self._single_entered:

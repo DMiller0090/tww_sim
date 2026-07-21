@@ -128,6 +128,30 @@ def test_untarget_flip_model_regression():
     assert small.nspeed < big.nspeed                    # smaller stick -> more of the roll speed retained
 
 
+def test_chase_attention_front_cone():
+    """chaseAttention's front-of-player cone gate (`_atn_target_present`, check_flontofplayer): the
+    lock-on actor is only chaseable within +-0x4000 (90 deg) of shape_angle.y. This is why the
+    Courtyard lock acquires MID-ROLL (Tetra swings into the front cone) and never at the first held L
+    (she is ~122 deg behind Link at state 2)."""
+    s = _mk(facing=0)
+    s.pos_x, s.pos_z = 0.0, 0.0
+    assert s._atn_target_present() is False              # no actor driven -> inert (goldens)
+    s._atn_actor_pos = (0.0, 100.0)                      # straight ahead (bearing 0) -> in cone
+    assert s._atn_target_present() is True
+    s._atn_actor_pos = (100.0, 0.0)                      # exactly 90 deg to the side (0x4000) -> in cone (<=)
+    assert s._atn_target_present() is True
+    s._atn_actor_pos = (10.0, -100.0)                    # behind (~174 deg) -> out of cone
+    assert s._atn_target_present() is False
+    s._atn_actor_pos = (100.0, -10.0)                    # ~96 deg behind the side -> out of cone
+    assert s._atn_target_present() is False
+    # the force override (bare non-coupled replay injects the known acquisition)
+    s._atn_force_present = True
+    assert s._atn_target_present() is True               # behind actor, but forced present
+    s._atn_force_present = False
+    s._atn_actor_pos = (0.0, 100.0)
+    assert s._atn_target_present() is False              # in cone, but forced absent
+
+
 def test_atn_actor_reaim_noop_without_actor_pos():
     """With no locked-actor position the re-aim is a no-op (mpAttnActorLockOn == NULL guard)."""
     s = _mk(state=ATN_ACTOR_MOVE, nspeed=5.0, facing=0x1234)

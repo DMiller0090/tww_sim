@@ -350,9 +350,17 @@ class FootSpeedF:
         """One single-anim proc frame: advance the anim frame ctrl, pose the foot, run the
         posMoveFromFootPos toe-stream bookkeeping (f31_2, m359C, stored toe). Returns speedF (which the
         caller discards for the momentum/frozen procs). Its real job is warming the toe stream so the
-        post-proc walk tail is bit-exact."""
+        post-proc walk tail is bit-exact.
+
+        Sets `started` (the getOldFrameFlg() analog, posMoveFromFootPos d_a_player_main.cpp:2354) like
+        step_atn/enter_wait_idle/enter_single do: posing a roll/proc-9/slip frame leaves oldFrameFlg
+        true, so a FOLLOWING MOVE (esp. a NEGATIVE-nspeed backslide) must NOT take the cold rest path
+        in step() and return 0. Golden-inert: every real roll/slip/WAIT_TURN enters via enter_single
+        (which already sets started) BEFORE this runs, so this only bites a state SEEDED directly into a
+        single-anim proc (the couple_replay / from-state-2 convention that skips the proc init)."""
         if self._core is not None:
             return self._core.w_step_single(_f32(nspeed), _f32(msd))
+        self.started = True
         nspeed = _f32(nspeed)
         msd = _f32(msd)
         morf = self._pending_morf if self._pending_morf is not None else -1.0

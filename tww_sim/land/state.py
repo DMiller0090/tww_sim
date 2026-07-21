@@ -42,7 +42,7 @@ from .constants import *  # noqa: F401,F403  (proc enums, DIR_*, gates -- also r
 from .constants import _STATE_TAG, _cM_ssin_s16
 from .walls import wall_pass, sidle_blocks_roll, GRAVITY as walls_GRAVITY
 from .floors import gnd_spz as _gnd_spz_fn, gnd_frame_end as _gnd_frame_end_fn
-from .attention import AttentionLock
+from .attention import AttentionLock, FRONT_CONE_HALF
 from .hio import _LandHIO
 from .procs.move import _MoveMixin
 from .procs.atn import _AtnMixin
@@ -130,6 +130,9 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         # None => inert (`_atn` stays NONE), so every single-actor path is byte-identical.
         self._atn = AttentionLock()
         self._atn_actor_pos = None
+        # chaseAttention override: None = compute the real front-cone gate; True/False forces it (only
+        # for a bare non-coupled replay whose Link position is wrong -- see _atn_target_present).
+        self._atn_force_present = None
         self._subj_arm = False                 # C-up gesture seen -> enter SUBJECTIVITY next frame
         self._subj_ended = False               # B/A/L/C-DOWN ended the freeze (checkSubjectEnd) -> stick re-walks
         self._subj_frames = 0                  # body frames since the freeze locked (C-DOWN camera floor)
@@ -337,7 +340,9 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
             l_atn = bool(_atn_btn & 0x40) or _atn_trig >= 200
         else:
             l_atn = l_held
-        self._atn.update(l_atn, self._atn_actor_pos is not None)
+        # chaseAttention target-present gate (front-of-player cone; see _atn_target_present): a lock-on
+        # actor is chaseable only inside the cone, so the Courtyard lock acquires mid-roll, not at state 2.
+        self._atn.update(l_atn, self._atn_target_present())
 
         # --- mid-walk sword pull-out (opt-in): B rising edge -> DRAW_DELAY frames later the anim set
         # flips base->sword BEFORE the proc dispatch (this frame's foot pose). See FootSpeedF.draw_sword.

@@ -26,6 +26,10 @@ NONE, LOCK, RELEASE = 0, 1, 2
 # session-5 "10 vs 11" was a single-step capture double-read. Anim constant, not a knob. See README.
 DEFAULT_FADE_FRAMES = 10
 
+# chaseAttention front-of-player cone half-angle (check_flontofplayer ang_table[0], ftp bit 0x04): a
+# lock-on target is chaseable only within +-0x4000 of shape_angle.y. See knowledge/mechanics/tetra-follow.md.
+FRONT_CONE_HALF = 0x4000
+
 
 class AttentionLock:
     """The per-frame hold-mode lock state. Feed it the (delayed) L input + whether a lock-on target

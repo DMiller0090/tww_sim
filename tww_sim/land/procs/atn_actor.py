@@ -18,6 +18,7 @@ from __future__ import annotations
 from ...core import mathlib as S
 from ...core.mathlib import f32, cM_scos_s16, s16_signed
 from ..constants import DIR_BACKWARD, cLib_addCalcAngleS
+from ..attention import FRONT_CONE_HALF
 
 # setShapeAngleToAtnActor's cLib_addCalcAngleS knobs (2629): chase shape_angle.y toward the bearing
 # to the actor's eyePos at scale 2, maxStep 0x2000, minStep 0x800. Not HIO -- hard-coded in the decomp.
@@ -25,6 +26,22 @@ _SHAPE_SCALE, _SHAPE_MAX, _SHAPE_MIN = 2, 0x2000, 0x800
 
 
 class _AtnActorMixin:
+    def _atn_target_present(self):
+        """chaseAttention's per-frame "is the lock-on actor chaseable" gate (d_attention.cpp:563),
+        reduced to the binding constraint for the Courtyard push: the actor exists AND is inside the
+        front-of-player cone (`check_flontofplayer`, |bearing - shape_angle.y| <= FRONT_CONE_HALF).
+        Returns False with no driven actor (`_atn_actor_pos` None) -> the AttentionLock stays NONE, so
+        every single-actor land path (goldens) is byte-identical. The bearing is the SAME
+        cM_atan2s(actor.x - pos.x, actor.z - pos.z) the re-aim (setShapeAngleToAtnActor) uses."""
+        forced = getattr(self, "_atn_force_present", None)
+        if forced is not None:                   # bare non-coupled replay: inject the known acquisition
+            return bool(forced)
+        ap = getattr(self, "_atn_actor_pos", None)
+        if ap is None:
+            return False
+        bearing = S.cM_atan2s(f32(ap[0] - self.pos_x), f32(ap[1] - self.pos_z))
+        return abs(s16_signed((bearing - self.facing) & 0xFFFF)) <= FRONT_CONE_HALF
+
     def _set_shape_angle_to_atn_actor(self):
         """setShapeAngleToAtnActor (2625): chase shape_angle.y toward the bearing to the locked
         actor (cLib_targetAngleY = cM_atan2s(actor.x - pos.x, actor.z - pos.z)). No-op with no actor
