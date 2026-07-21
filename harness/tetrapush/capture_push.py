@@ -68,9 +68,26 @@ def _rdr(D):
         def s8(self, a):
             return struct.unpack('>b', D.read_bytes(h, mem1, a, 1))[0]
 
+        def u8(self, a):
+            return struct.unpack('>B', D.read_bytes(h, mem1, a, 1))[0]
+
         def u32(self, a):
             return struct.unpack('>I', D.read_bytes(h, mem1, a, 4))[0]
     return R()
+
+
+def _pad(r):
+    """Full interface_of_controller_pad @ CPAD: main + C stick, analog L, and the decoded a/b/l
+    button-hold bits (the input timeline for the push). Raw hold bytes kept for provenance."""
+    hold0 = r.u8(CPAD + 0x30)
+    hold1 = r.u8(CPAD + 0x31)
+    return dict(px=r.f32(CPAD + 0x00), py=r.f32(CPAD + 0x04),
+                value=r.f32(CPAD + 0x08), angle=r.u16(CPAD + 0x0C),
+                cpx=r.f32(CPAD + 0x10), cpy=r.f32(CPAD + 0x14),
+                cvalue=r.f32(CPAD + 0x18), cangle=r.u16(CPAD + 0x1C),
+                trigL=r.f32(CPAD + 0x28),
+                hold=(hold0 << 8) | hold1,
+                a=bool(hold0 & 0x01), l=bool(hold0 & 0x02), b=bool(hold1 & 0x80))
 
 
 def _snap(r, tetra, fi):
@@ -84,8 +101,9 @@ def _snap(r, tetra, fi):
         tetra=dict(pos=[r.f32(tetra + 0x1F8), r.f32(tetra + 0x1FC), r.f32(tetra + 0x200)],
                    travel=r.u16(tetra + 0x206), facing=r.u16(tetra + 0x20E),
                    speedF=r.f32(tetra + 0x254), stt=r.s8(tetra + ZL1_STT_OFF)),
-        pad=dict(px=r.f32(CPAD + 0x00), py=r.f32(CPAD + 0x04),
-                 value=r.f32(CPAD + 0x08), angle=r.u16(CPAD + 0x0C)))
+        # Full pad (_pad): the DECODED input timeline (L/buttons/stick). Byte-exact raw stick for
+        # position 0-ULP is the DTM bytes (run_dtm), not this post-octagon-clamp struct.
+        pad=_pad(r))
     lp_, tp_ = row['link']['pos'], row['tetra']['pos']
     row['dist_LT'] = math.hypot(lp_[0] - tp_[0], lp_[2] - tp_[2])
     return row

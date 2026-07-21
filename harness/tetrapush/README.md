@@ -150,15 +150,22 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       flip + re-aim, additive inertness -- ALL exact/0-ULP against pinned model outputs, no tolerances).
       **NOT yet live-0-ULP-validated** (that is the next box); the flip physics are decomp-faithful and
       the model produces the right shape, but the magnitude is only validated against the MODEL, not live.
-- [ ] **Validate sim vs live from state 2**, 0-ULP over the ~45 push frames (seed LandState at the
-      state-2 mid-EBS state; couple Tetra via `cc_stepper(atn_lock=True)` + `Zl1FollowState`). BLOCKED
-      on two inputs the current fixture lacks, both needed for a bit-exact claim: (1) the real per-frame
-      controller inputs (L trigger + buttons + C-stick -- `capture_push.py` logs the main stick only);
-      (2) a CLEAN FREE-RUN capture -- the single-stepped-playing-movie fixture's per-frame POSITION
-      deltas are jitter-corrupted (`[[run-dtm-1frame-jitter]]`; ratio disp/speedF bounces 0.18-0.68 at
-      constant speedF/travel), so it is scalar (proc/speedF/facing) ground truth ONLY. The untarget
-      latency `FADE_FRAMES` (reticle YJ_DELETE anim length) is the one empirical constant -- source it
-      from that clean capture / the BCK, not the jittery fixture. List remaining gaps after.
+- [~] **Validate sim vs live from state 2**, 0-ULP over the ~45 push frames. IN PROGRESS (session 2):
+      `capture_push.py` now logs the FULL pad (stick + C-stick + L + a/b/l) and the real state-2 input
+      timeline is captured. It CONFIRMS the mechanic's shape (both cycles: L held into ATN_MOVE proc 7
+      no-actor -> A roll -> L re-pulsed MID-ROLL acquires the Tetra lock -> released -> roll exits into
+      ATN_ACTOR_MOVE proc 9 -> speedF flips +26 -> -25.73 -> MOVE). NOT yet 0-ULP. Three gaps to close:
+      1. **Raw DTM stick bytes** -- feed the sim raw bytes (it decodes them; the octagon clamp is part
+         of the physics), not the pad struct's decoded (lossy) stick. Use the `harness/dtm/run_dtm.py`
+         path against `28_Courtyard_TetraPush_Unfinished.dtm`.
+      2. **`chaseAttention` acquisition gate** (range + view cone) -- the lock acquires MID-ROLL, not at
+         the first L (frames 0-1 read proc 7 = no actor), so `target_present` is NOT a constant flag.
+      3. **Pin `FADE_FRAMES`** -- live-observed ~8 (L-release to proc-9->MOVE, INPUT_DELAY-corrected),
+         NOT the placeholder 2; confirm exactly with the raw-byte replay. It is an anim length, not a knob.
+      Then seed LandState + `cc_stepper(atn_lock=True)` + `Zl1FollowState`, replay raw inputs, per-frame
+      diff BOTH actors. NOTE: the single-stepped fixture's per-frame POSITION deltas are jitter-corrupted
+      (`[[run-dtm-1frame-jitter]]`), so it is scalar (proc/speedF/facing) ground truth; positions need a
+      clean run_dtm capture.
 - [x] **Viable Tetra clip positions = `_generated/tetra_placements.tsv`** (Dereck, 2026-07-21): those
       288 genuine coords are the target set. They were recorded at a specific roll entry, but the
       planner ARRANGES the matching roll entry as part of the push sequence (the genuine-coord set is

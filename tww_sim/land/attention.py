@@ -23,8 +23,9 @@ from __future__ import annotations
 NONE, LOCK, RELEASE = 0, 1, 2
 
 # Untarget latency = the reticle YJ_DELETE fade-out anim length (AttnFlag_40000000 clears the frame it
-# completes, runDrawProc 692-698). LIVE-GATED anim constant, NOT fit to the fixture -- see module doc.
-DEFAULT_FADE_FRAMES = 2
+# completes, runDrawProc 692-698). LIVE-OBSERVED ~8 (session-2 state-2 capture, L-release to proc-9 exit,
+# INPUT_DELAY-corrected); PROVISIONAL -- pin exactly with the raw-byte replay. Anim length, not a knob.
+DEFAULT_FADE_FRAMES = 8
 
 
 class AttentionLock:
