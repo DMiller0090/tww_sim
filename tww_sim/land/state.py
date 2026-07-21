@@ -533,9 +533,9 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
             # m3598==0 here so speedF == mNormalSpeed, but posMoveFromFootPos still snaps |speedF|<0.05
             # to 0 (d_a_player_main.cpp:2418) -- the slip decel tail. See land-sim.md (slip-skid tail).
             self.speedF = _gnd_spz_fn(self, self.nspeed)
-        elif self.state in (ATN_ACTOR_MOVE, ATN_ACTOR_WAIT):
-            # Position as speedF momentum (entered from a roll, m3598==0); the 2-frame proc-9 POSITION is
-            # provisional/live-gated -- the mechanic-critical output is the mNormalSpeed flip set above.
+        elif proc in (ATN_ACTOR_MOVE, ATN_ACTOR_WAIT) or self.state in (ATN_ACTOR_MOVE, ATN_ACTOR_WAIT):
+            # speedF momentum (entered from a roll, m3598==0). Keyed on the DISPATCH proc so the proc-9
+            # BODY flip isn't overwritten when checkNextMode already routed self.state to MOVE (cf. CUT).
             if self._foot is not None:
                 self._foot.step_single_anim(self.nspeed, self.msd)
             self.speedF = _gnd_spz_fn(self, self.nspeed)
