@@ -62,16 +62,22 @@ class _AtnMixin:
         self._set_normal_speed_f(f1, self.ATNB_SCL, self.ATNB_ACC, self.ATNB_DEC)
 
     def _update_atn_direction(self):
-        """setBlendAtnMoveAnime's mDirection state machine (3280), the flat/no-lock-on subset.
+        """setBlendAtnMoveAnime's mDirection state machine (3280), the flat subset.
         Runs AFTER checkNextMode each ATN frame (and at ATN entry) to pick next frame's direction
         from cos/sin(travel - facing): within ~8deg of facing -> FORWARD, of the opposite -> BACKWARD,
-        else a side (sin sign). Also sets mMaxNormalSpeed for the chosen direction (17/15/12)."""
+        else a side (sin sign). Also sets mMaxNormalSpeed for the chosen direction (17/15/12).
+
+        The FORWARD/BACKWARD branch is gated on `mpAttnActorLockOn == NULL` (3299): with a live
+        actor-lock the direction can only go to a SIDE, so the proc-9 untarget tier keeps posing the
+        ATN{L,R} strafe family even while travel reads dead-ahead/behind (the courtyard f19-21 pose)."""
         iVar6 = s16_signed(self.travel - self.facing)   # current.angle.y - shape_angle.y
         f2 = _cM_ssin_s16(iVar6)
         fVar4 = S.cM_scos_s16(iVar6)
         uVar1 = self.direction
+        atn = getattr(self, "_atn", None)
+        locked_actor = atn is not None and atn.locked   # mpAttnActorLockOn != NULL
         if self.msd > 0.05:
-            if fVar4 <= self.ATNB_COS_BACK or fVar4 >= self.ATNB_COS_FWD:
+            if not locked_actor and (fVar4 <= self.ATNB_COS_BACK or fVar4 >= self.ATNB_COS_FWD):
                 self.direction = DIR_BACKWARD if fVar4 <= self.ATNB_COS_BACK else DIR_FORWARD
             else:
                 if uVar1 in (DIR_BACKWARD, DIR_FORWARD):

@@ -246,25 +246,73 @@ def test_setcollision_is_execute_time_midpoint(setcol):
         assert d < 1e-4, "frame %d: exec midpoint off %.6f u" % (r['f'], d)
 
 
-def test_computed_centers_track_on_settled_roll_frames(fix, seed):
-    """The self-contained centre pipeline (FK exec midpoint + the half-depth settled-centre law),
-    diagnosed OPEN-LOOP (diag mode: pushes stay injected, so the trajectory is the gated bit-exact
-    one; the computed centre is compared per frame). On the settled single-anim roll frames the
-    computed centre matches the capture to <2e-3 u -- the law + FK are right; what remains open for
-    the fully-computed closed loop are the enumerated pose gaps (f0-seed warmup f1/f3, the proc-9
-    ATN blend f19-21 and its post-untarget morf decay f22-26, small blend residue elsewhere)."""
+_EYES = os.path.join(_ROOT, 'fixtures', 'courtyard_push_eyepos.json')
+
+
+@pytest.fixture(scope='module')
+def eyes():
+    if not os.path.exists(_EYES):
+        pytest.skip("Tetra eyePos fixture not present (session-15 probe)")
+    return [r['eye'] for r in json.load(open(_EYES))['frames']]
+
+
+def test_facing_and_lean_bit_exact_with_eye_aim(fix, seed, eyes):
+    """THE proc-9 re-aim law (session 15, live-pinned `_notes/tetrapush-eyepos_probe.py`): with the
+    injected Tetra EYE positions (her animated head-joint world pos -- the actual
+    `setShapeAngleToAtnActor` target, d_a_player_main.cpp:2628) and the `mpAttnActorLockOn != NULL`
+    re-aim guard (2627 -- the body2 frame runs one frame past the lock drop and must NOT re-aim),
+    Link's shape_angle.y is bit-exact against the capture on EVERY frame f1..f43. Aiming at the
+    plowed FEET instead lands the f20 chase 184 BAM short (37364 vs 37548) and the ghost f21 re-aim
+    adds +432 -- the error that fed the m351C lean sawtooth and the ~1 u Co-centre bias f21-26."""
     if seed is None:
         pytest.skip("state-2 seed fixture not present")
     cyl_frames, dtm_frames = fix
     rows = replay(cyl_frames, _input_at(dtm_frames), 0, upto=44,
-                  seed_nspeed=seed['link']['nspeed'], centers='diag')
+                  seed_nspeed=seed['link']['nspeed'], centers='diag', eyes=eyes)
+    for d in rows:
+        assert d['sim_proc'] == d['live_proc'] and d['speedF'] == d['live_speedF']
+        assert d['sim_facing'] == d['live_facing'], (
+            "frame %d: sim facing %d != live %d" % (d['f'], d['sim_facing'], d['live_facing']))
+        assert d['sim_shape_z'] == d['live_shape_z'], (
+            "frame %d: sim lean %d != live %d" % (d['f'], d['sim_shape_z'], d['live_shape_z']))
     by_f = {d['f']: d for d in rows}
-    settled = [5, 7, 8, 9, 10, 11, 12, 13, 17, 18, 39, 40, 41, 42, 43]
+    # the frames the feet-aim/ghost-re-aim errors used to dominate: now centre-exact to <=0.02 u.
+    for k in (19, 20, 26, 27, 28):
+        r = by_f[k]
+        fx = cyl_frames[k]['link']['cyl']
+        d = math.hypot(r['sim_cyl'][0] - fx[0], r['sim_cyl'][1] - fx[-1])
+        assert d < 2e-2, "frame %d: computed centre off %.5f u (re-aim regression)" % (k, d)
+
+
+def test_computed_centers_track_on_settled_roll_frames(fix, seed, eyes):
+    """The self-contained centre pipeline (FK exec midpoint + the half-depth settled-centre law),
+    diagnosed OPEN-LOOP (diag mode: pushes stay injected, so the trajectory is the gated bit-exact
+    one; the computed centre is compared per frame). With the session-15 proc-9 pose fixes (the
+    lock-gated SIDE direction, the routing-frame pose timing, the eyePos re-aim) the computed
+    centre matches the capture to <2e-3 u on EVERY settled frame -- both rolls, the proc-9 tier
+    (f19-20), and the whole backslide->cyc2 chain f27-43. What remains open for the fully-computed
+    closed loop: the f0-seed warmup f1/f3 (~1.2-1.8 u), the walk-morf decay f21-26 (<=0.36 u), and
+    small mid-roll blend residue f14-16 (<=0.05 u)."""
+    if seed is None:
+        pytest.skip("state-2 seed fixture not present")
+    cyl_frames, dtm_frames = fix
+    rows = replay(cyl_frames, _input_at(dtm_frames), 0, upto=44,
+                  seed_nspeed=seed['link']['nspeed'], centers='diag', eyes=eyes)
+    by_f = {d['f']: d for d in rows}
+    settled = [5, 7, 8, 9, 10, 11, 12, 13, 17, 18, 19, 20,
+               27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43]
     for k in settled:
         r = by_f[k]
         fx = cyl_frames[k]['link']['cyl']
         d = math.hypot(r['sim_cyl'][0] - fx[0], r['sim_cyl'][1] - fx[-1])
         assert d < 2e-3, "settled frame %d: computed centre off %.5f u" % (k, d)
+    # the enumerated open pose gaps hold their measured ceilings (regression fence, not a target)
+    for k, cap in [(1, 2.0), (3, 1.3), (14, 0.06), (15, 0.06), (16, 0.06),
+                   (21, 0.1), (22, 0.2), (23, 0.3), (24, 0.4), (25, 0.15), (26, 0.02)]:
+        r = by_f[k]
+        fx = cyl_frames[k]['link']['cyl']
+        d = math.hypot(r['sim_cyl'][0] - fx[0], r['sim_cyl'][1] - fx[-1])
+        assert d < cap, "open-gap frame %d: computed centre off %.5f u (cap %.2f)" % (k, d, cap)
     # and the diag run must not perturb the gated replay: procs + speedF stay live-exact
     for d in rows:
         assert d['sim_proc'] == d['live_proc'], "diag mode changed the trajectory (f%d)" % d['f']

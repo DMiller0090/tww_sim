@@ -44,9 +44,21 @@ class _AtnActorMixin:
 
     def _set_shape_angle_to_atn_actor(self):
         """setShapeAngleToAtnActor (2625): chase shape_angle.y toward the bearing to the locked
-        actor (cLib_targetAngleY = cM_atan2s(actor.x - pos.x, actor.z - pos.z)). No-op with no actor
-        (mpAttnActorLockOn == NULL). eyePos XZ == actor.pos XZ (the head-joint Y offset doesn't turn)."""
-        ap = getattr(self, "_atn_actor_pos", None)
+        actor's EYE position (cLib_targetAngleY(current.pos, mpAttnActorLockOn->eyePos)). No-op while
+        `mpAttnActorLockOn == NULL` (2627) -- the proc-9 body can still run one frame past the lock
+        drop (the courtyard body2 frame) and must NOT re-aim there (live facing holds bit-for-bit).
+
+        The eye XZ is `self._atn_actor_eye` when driven (Tetra's eyePos = her ANIMATED head-joint
+        world pos, d_a_npc_zl1.cpp:1283 -- it leads her feet 16-26 u and wobbles with her look-at
+        anim, so aiming at the feet lands the chase short; live-pinned session 15,
+        `_notes/tetrapush-eyepos_probe.py`: feet-aim 37364 vs eye-aim 37548 == live at the courtyard
+        f20). Falls back to the feet `_atn_actor_pos` when no eye stream is injected."""
+        atn = getattr(self, "_atn", None)
+        if atn is None or not atn.locked:        # mpAttnActorLockOn == NULL -> no re-aim
+            return
+        ap = getattr(self, "_atn_actor_eye", None)
+        if ap is None:
+            ap = getattr(self, "_atn_actor_pos", None)
         if ap is None:
             return
         target_angle = S.cM_atan2s(f32(ap[0] - self.pos_x), f32(ap[1] - self.pos_z))

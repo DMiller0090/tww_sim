@@ -194,7 +194,7 @@ def _seed_link(row, csangle, seed_nspeed=None):
 
 
 def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None,
-           centers='injected'):
+           centers='injected', eyes=None):
     """Run the coupled from-f0 replay and diff BOTH actors vs the live capture, frame by frame.
 
     ``frames``   -- the live-capture rows (the cyl fixture), each ``{proc, csangle, link:{pos, facing,
@@ -209,6 +209,12 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
                     input_delay=1 -- physics reads the delay-1 DTM pad). See the README from-f0 box.
     ``seed_nspeed`` -- optional mNormalSpeed for a non-roll seed (the true f0 seed needs it; speedF
                     lags nspeed a frame there -- see `_seed_link`). Omit for roll-entry seeds.
+    ``eyes``     -- optional per-frame Tetra EYE positions (``fixtures/courtyard_push_eyepos.json``
+                    ``frames[k]['eye']``, indexed by game frame): the proc-9 re-aim target
+                    (`setShapeAngleToAtnActor` chases the bearing to `mpAttnActorLockOn->eyePos`,
+                    Tetra's ANIMATED head-joint world pos -- it leads her feet 16-26 u, so the feet
+                    fallback lands the chase ~200 BAM short; session 15). Injected as end-of-previous-
+                    frame values (Link executes before Tetra). None -> aim at the plowed feet.
     ``centers``  -- ``'injected'`` (default): Link's Co centre comes from the capture
                     (``frames[k]['link']['cyl']``), the validated mode. ``'computed'``: the centre is
                     rebuilt each frame from the SIM'S OWN drawn pose (`FootFK.body_co_center` --
@@ -252,6 +258,9 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         link._cam.yaw = _yaw_from_csangle(frames[k - 1]['csangle'])
         link.set_cc_move((pend_link[0], 0.0, pend_link[1]))
         link._atn_actor_pos = (tx, tz)             # Link Z-targets Tetra (drives the ATN_ACTOR tier)
+        if eyes is not None and k - 1 < len(eyes):
+            e = eyes[k - 1]                        # end-of-prev-frame eyePos (the re-aim target)
+            link._atn_actor_eye = (e[0], e[-1])
         link.step(*_step_args(input_at(k)))
         tx += pend_tetra[0]
         tz += pend_tetra[1]
@@ -259,6 +268,8 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         lv = frames[k]
         row = dict(
             f=k, sim_proc=link.state, live_proc=lv['proc'],
+            sim_facing=link.facing, live_facing=lv['link']['facing'],
+            sim_shape_z=_s16(link.m351C) >> 1, live_shape_z=lv['link'].get('shape_z'),
             sim_link=(link.pos_x, link.pos_z), live_link=(lv['link']['pos'][0], lv['link']['pos'][2]),
             sim_tetra=(tx, tz), live_tetra=(lv['tetra']['pos'][0], lv['tetra']['pos'][2]),
             speedF=link.speedF, live_speedF=lv['link']['speedF'],

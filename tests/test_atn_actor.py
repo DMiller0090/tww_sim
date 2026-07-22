@@ -98,6 +98,7 @@ def _flip(msd, max_nspeed=12.0):
     s.target = (0x2000 + 0x8000) & 0xFFFF               # slight-backward stick (ESS-down) -> DIR_BACKWARD
     s.msd = msd
     s._atn_actor_pos = (0.0, 100.0)                     # actor straight ahead (+z): bearing 0
+    s._atn.state = LOCK                                 # re-aim requires mpAttnActorLockOn != NULL (2627)
     s.max_nspeed = max_nspeed
     before_facing = s.facing
     s._set_speed_and_angle_atn_actor()
