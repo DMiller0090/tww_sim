@@ -12,15 +12,17 @@ This gate proves the coupling is bit-exact where the sim's proc physics are alre
   * Tetra's full-depth plow, composed from state 2 (f0) with the injected centres, reproduces her
     WHOLE trajectory to within a handful of ULP over the plow window (both cycles) -- 0-ULP.
 
-The two fixtures are the locked live capture: `courtyard_push_cyl.json` supplies the per-frame Link Co
-centre + csangle + both actors' live positions; `courtyard_push_dtm.json` supplies the raw controller
-bytes. Both are single-stepped from slot 2 and IMMUTABLE. The gated range (f<=23 / f<=43) is BEFORE
-the cyc2 f44 double-read, so no dedup is needed there.
+The three fixtures are the locked live capture: `courtyard_push_cyl.json` supplies the per-frame Link
+Co centre + csangle + both actors' live positions; `courtyard_push_dtm.json` supplies the raw
+controller bytes; `courtyard_push_seed.json` supplies the state-2 seed's HIDDEN mNormalSpeed (a
+deterministic single read, no single-step jitter). All are captured from slot 2 and IMMUTABLE. The
+gated range (f<=23 / f<=43) is BEFORE the cyc2 f44 double-read, so no dedup is needed there.
 
-OPEN (not gated -- the next frontier): the backslide->roll-setup (the MOVE->ATN_MOVE re-target that
-flips speedF ~-25 -> +18 just before each roll) is 1 frame late, so cycle 2 does not yet chain and the
-true f0 seed (which also needs the previous cycle's attention-RELEASE residual) is not yet bit-exact.
-See harness/tetrapush/README.md "## Plan / status".
+The TRUE f0 seed (state 2) is CLOSED (session 12, `test_true_f0_seed_bit_exact`): seeded at f0 with the
+measured mNormalSpeed, the replay is bit-exact from the first stepped frame. The gap was that at f0
+speedF LAGS mNormalSpeed a frame and the replay seeded `nspeed = speedF`; the fix seeds nspeed from the
+live mNormalSpeed (mDirection + the attention state already match the sim defaults at f0). The whole
+from-f0 chain -- roll-entry-seeded AND state-2-seeded -- is now bit-exact through cycle 2's roll.
 """
 import json
 import math
@@ -34,6 +36,7 @@ from harness.tetrapush.from_f0 import replay
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CYL = os.path.join(_ROOT, 'fixtures', 'courtyard_push_cyl.json')
 _DTM = os.path.join(_ROOT, 'fixtures', 'courtyard_push_dtm.json')
+_SEED = os.path.join(_ROOT, 'fixtures', 'courtyard_push_seed.json')
 
 _FRONT_ROLL = 30
 
@@ -61,6 +64,13 @@ def _dedup(frames):
             continue
         out.append(f)
     return out
+
+
+@pytest.fixture(scope='module')
+def seed():
+    if not os.path.exists(_SEED):
+        return None
+    return json.load(open(_SEED))
 
 
 def _input_at(dtm_frames):
@@ -133,6 +143,43 @@ def test_chained_replay_through_cyc2_roll_bit_exact(fix):
     assert by_f[26]['live_proc'] == 7 and by_f[26]['sim_proc'] == 7, "proc-7 re-target entry (f26)"
     assert by_f[28]['sim_proc'] == 7 and by_f[28]['speedF'] > 18.0, "the +18 re-target flip (f28)"
     assert by_f[29]['sim_proc'] == _FRONT_ROLL, "cyc2 roll trigger (f29)"
+    for d in rows:
+        assert d['sim_proc'] == d['live_proc'], (
+            "frame %d: sim proc %d != live %d" % (d['f'], d['sim_proc'], d['live_proc']))
+        assert _bits(d['speedF']) == _bits(d['live_speedF']), (
+            "frame %d: sim speedF %.9f != live %.9f (not 0-ULP)" % (
+                d['f'], d['speedF'], d['live_speedF']))
+        err = math.hypot(d['sim_link'][0] - d['live_link'][0], d['sim_link'][1] - d['live_link'][1])
+        assert err < 1e-3, "frame %d: Link pos off by %.6f u (> capture precision)" % (d['f'], err)
+
+
+def test_true_f0_seed_bit_exact(fix, seed):
+    """THE true f0 seed (session 12): seeded at STATE 2 itself (f0, proc MOVE) with the live-measured
+    mNormalSpeed (`courtyard_push_seed.json` link.nspeed), the from-f0 replay is bit-exact from the
+    FIRST stepped frame -- f1..f44 every Link speedF 0-ULP, every proc matching live, Link pos within
+    the injected-cyl capture precision (<1e-3 u). This closes the last from-f0 gap.
+
+    Root cause (session 12, live-probed `_notes/tetrapush-seed_probe.py`): at f0 Link is mid-transition
+    out of the prior cycle's untarget, where speedF LAGS mNormalSpeed a frame (speedF -24.574,
+    mNormalSpeed -24.982). The replay seeded `nspeed = speedF`, so f1 (a MOVE backslide) could only
+    decay it (-24.572) instead of letting speedF catch up to the already-set nspeed (-24.980). Seeding
+    `nspeed` from the live mNormalSpeed is the whole fix; f1 then reads -24.980 bit-exact and the +18
+    re-target flip (f2) + cyc1 roll (f3) + the whole cyc1->cyc2 chain follow. mDirection (DIR_NONE at
+    f0) and the attention state (no lock at f0) already match the sim defaults -- no other seed field
+    is needed (both confirmed live)."""
+    if seed is None:
+        pytest.skip("state-2 seed fixture not present (run: "
+                    "python -m harness.tetrapush.capture_push seed)")
+    cyl_frames, dtm_frames = fix
+    rows = replay(cyl_frames, _input_at(dtm_frames), 0, upto=45,
+                  seed_nspeed=seed['link']['nspeed'])
+    assert len(rows) >= 40, "expected the full f0->cyc2-roll chain, got %d" % len(rows)
+    by_f = {d['f']: d for d in rows}
+    # f0-seed landmarks: the MOVE backslide catches up to nspeed (f1 -24.980, not a fresh decay to
+    # -24.572), the +18 re-target flip (f2), cyc1's roll (f3).
+    assert by_f[1]['speedF'] < -24.9, "f1 backslide must catch up to ~-24.98 (the nspeed seed)"
+    assert by_f[2]['speedF'] > 18.0, "f2 the +18 re-target flip"
+    assert by_f[3]['sim_proc'] == _FRONT_ROLL, "cyc1 roll trigger (f3)"
     for d in rows:
         assert d['sim_proc'] == d['live_proc'], (
             "frame %d: sim proc %d != live %d" % (d['f'], d['sim_proc'], d['live_proc']))

@@ -115,7 +115,9 @@ def _snap(r, tetra, fi):
         f=fi, proc=r.s32(lp + 0x3100),
         link=dict(pos=[r.f32(la + 0x1F8), r.f32(la + 0x1FC), r.f32(la + 0x200)],
                   travel=r.u16(la + 0x206), facing=r.u16(la + 0x20E),
-                  speedF=r.f32(la + 0x254), anim=r.f32(lp + 0x2F64), mrate=r.f32(lp + 0x2F60),
+                  speedF=r.f32(la + 0x254), nspeed=r.f32(la + 0x35BC),   # mNormalSpeed (potential speed;
+                  #                    speedF LAGS it a frame at a proc transition -- needed for the f0 seed)
+                  anim=r.f32(lp + 0x2F64), mrate=r.f32(lp + 0x2F60),
                   # body Co cylinder (the Tetra-plow driver): center + radius + height, and shape.z lean.
                   cyl=[r.f32(lp + LINK_CYL_C), r.f32(lp + LINK_CYL_C + 4), r.f32(lp + LINK_CYL_C + 8)],
                   cyl_r=r.f32(lp + 0x4070), cyl_h=r.f32(lp + 0x4074), shape_z=r.s16(la + 0x210)),
@@ -129,6 +131,50 @@ def _snap(r, tetra, fi):
     lp_, tp_ = row['link']['pos'], row['tetra']['pos']
     row['dist_LT'] = math.hypot(lp_[0] - tp_[0], lp_[2] - tp_[2])
     return row
+
+
+SEED_OUT = os.path.join(_rb, 'fixtures', 'courtyard_push_seed.json')
+
+
+def capture_seed(out=SEED_OUT, slot=2):
+    """Capture the COMPLETE state-2 seed (f0) in ONE deterministic read -- no single-stepping, so no
+    bug#2 edge jitter. This is the from-f0 replay's seed AND the planner's initial condition: it adds
+    the HIDDEN fields the cyl/dtm fixtures never logged, above all **mNormalSpeed** (la+0x35BC). At f0
+    (mid-transition out of the prior cycle's untarget) speedF LAGS mNormalSpeed by a frame (speedF
+    -24.574, mNormalSpeed -24.982), so seeding `nspeed = speedF` -- as the replay did -- leaves f1-f2
+    off; seeding `nspeed` from mNormalSpeed makes the whole from-f0 chain bit-exact. Also records the
+    attention state (lock/actor) + mDirection/m34E6 for provenance (all match the sim defaults at this
+    seed: mDir DIR_NONE, no lock -- confirmed live, session 12). Self-contained: reads Link only (no
+    find_tetra); Tetra's f0 pos already lives in the cyl fixture the replay pairs this with."""
+    import dolphin_mem as D
+    D.control_pipe_quiet("pause")
+    D.control_pipe_quiet("savestate", {"action": "load", "slot": int(slot)})
+    r = _rdr(D)
+    lp = r.u32(LINK_PTR_ADDR)
+    la = lp - 0xD8
+    attn = r.u32(lp + 0x33A8)
+    seed = dict(
+        stage="Hyrule", slot=int(slot), proc=r.s32(lp + 0x3100),
+        link=dict(pos=[r.f32(la + 0x1F8), r.f32(la + 0x1FC), r.f32(la + 0x200)],
+                  travel=r.u16(la + 0x206), facing=r.u16(la + 0x20E),
+                  speedF=r.f32(la + 0x254), nspeed=r.f32(la + 0x35BC),
+                  max_nspeed=r.f32(la + 0x2A8), mdir=r.u8(la + 0x34B8),
+                  m34E6=r.u16(la + 0x34E6), csangle=_csangle(r)),
+        # attention residual (session 12: NONE / no actor at f0 -> the sim's default AttentionLock)
+        atn=dict(lock_state=(r.u8(attn + 0x18) if attn else -1),
+                 actor_lock=r.u32(lp + 0x30C4)))
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, 'w') as f:
+        json.dump(seed, f, indent=1)
+    lk = seed['link']
+    print("seed f0 (%s slot %d, proc %s): pos (%.4f, %.4f, %.4f)" % (
+        seed['stage'], seed['slot'], PROC.get(seed['proc'], seed['proc']),
+        lk['pos'][0], lk['pos'][1], lk['pos'][2]))
+    print("  speedF=%.9f  mNormalSpeed=%.9f  (lag %.4f)  mDir=%d  lock=%d  actor=0x%08x"
+          % (lk['speedF'], lk['nspeed'], lk['nspeed'] - lk['speedF'], lk['mdir'],
+             seed['atn']['lock_state'], seed['atn']['actor_lock']))
+    print("wrote seed -> %s" % out)
+    return 0
 
 
 def capture(out=DEFAULT_OUT, frames=60, slot=2):
@@ -171,5 +217,7 @@ def capture(out=DEFAULT_OUT, frames=60, slot=2):
 
 if __name__ == '__main__':
     kw = dict(a.split('=', 1) for a in sys.argv[1:] if '=' in a)
+    if 'seed' in sys.argv[1:]:            # `python -m harness.tetrapush.capture_push seed` -> the f0 seed
+        sys.exit(capture_seed(out=kw.get('out', SEED_OUT), slot=int(kw.get('slot', 2))))
     sys.exit(capture(out=kw.get('out', DEFAULT_OUT),
                      frames=int(kw.get('frames', 60)), slot=int(kw.get('slot', 2))))

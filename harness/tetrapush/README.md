@@ -159,15 +159,16 @@ The mechanism is fully grounded (US GZLE01 line numbers; logic identical to JP):
 | File | What |
 |------|------|
 | `find_tetra.py` | Locate Tetra (Zl1, id 429) live via the DMC walk, `_execute` breakpoint, `r3`. Session-stable (recomputes the REL base). |
-| `capture_push.py` | Load slot 2, locate Tetra, single-step the movie N frames, log both actors + FULL pad to a fixture. The (scalar) GROUND TRUTH -- single-stepped, so `+-1` on edges. |
+| `capture_push.py` | Load slot 2, locate Tetra, single-step the movie N frames, log both actors + FULL pad to a fixture. The (scalar) GROUND TRUTH -- single-stepped, so `+-1` on edges. Now also logs `nspeed` (mNormalSpeed). Subcommand **`capture_push seed`** = a DETERMINISTIC single read of the complete f0 state (no single-step jitter) -> `fixtures/courtyard_push_seed.json`. |
+| `fixtures/courtyard_push_seed.json` | The complete STATE-2 seed (f0): pos/travel/facing/speedF + the HIDDEN **mNormalSpeed** (`link.nspeed`) the cyl/dtm fixtures never logged, plus mDirection/m34E6/csangle + the attention state, for provenance. Deterministic single read (jitter-free). The from-f0 replay's `seed_nspeed` source AND the planner's initial condition (session 12). |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
 | `fixtures/courtyard_push_state2.json` | 51-frame session-1 ground-truth capture from state 2 (repo `fixtures/`). |
 | `tetra_plow.py` | **The Courtyard Tetra-plow LAW** (session 8): Tetra's per-frame move = the FULL Co overlap depth from Link's animated mCyl centre (`Tetra += depth·unit(Tetra−link_centre)`; `depth = 80 − dist`). `reconstruct()` predicts her whole trajectory from Link's centre path + seed. Gated `tests/test_tetra_plow.py` (frac==1.0 every frame; whole-push reconstruction <0.01 u vs live). |
 | `link_plow.py` | **The Courtyard Link-recoil LAW** (session 9): the MIRROR of `tetra_plow` -- Link's per-frame recoil = the FULL Co overlap depth AWAY from Tetra (`link += depth·unit(link_centre−Tetra)`), on top of his foot term. `recoil()`/`recoil_step()`. Gated `tests/test_link_plow.py` (frac==1.0 every push frame; recoil vector + feet reconstruction 0-ULP-within-jitter on the roll frames). Reuses `tetra_plow.plow_depth`. |
-| `from_f0.py` | **The from-f0 COUPLED replay** (session 10): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay()`. Gated `tests/test_from_f0.py`: from the roll entry, cyc1 (roll + untarget tier + backslide) is bit-exact (speedF 0-ULP; Link pos <1e-3 u), Tetra 0-ULP from f0 both cycles. |
+| `from_f0.py` | **The from-f0 COUPLED replay** (session 10-12): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay(..., seed_nspeed=)`. Gated `tests/test_from_f0.py`: from the roll entry AND from **state 2 itself** (`seed_nspeed` = the measured mNormalSpeed) the replay is bit-exact f1..f44 (speedF 0-ULP, procs match, Link pos <1e-3 u), Tetra 0-ULP both cycles. |
 | `fixtures/courtyard_push_cyl.json` | Session-8 live ground truth: per-frame Link **mCyl Co-centre** + **csangle** + Tetra pos, single-stepped from slot 2 (`capture_push`). The Co-centre/csangle source the from-f0 replay needs. **Single-step, so cyc2 is edge-jittery** (the `_dedup` in the plow test drops the f44==f45 double-read); NOT a pinned edge oracle. |
-| `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5). |
+| `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5), `_notes/tetrapush-retarget_probe.py` (session 11), and `_notes/tetrapush-seed_probe.py` (session 12: reads the hidden f0 seed fields -- mNormalSpeed/mDirection/attention -- that pinned the true-f0 seed as a speedF-lags-mNormalSpeed gap). |
 
 Run: `python -m harness.tetrapush.capture_push frames=60` (needs Dolphin up with slot 2 = the
 courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM via `dolphin_mem`
@@ -420,14 +421,23 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       byte-identical). `from_f0` seeds `input_delay=1` + a 1-frame `_inbuf`. This SUPERSEDES the
       session-10 "gate r24 on delay-1 / model the DIR flip separately" plan (those per-consumer delay-1
       hacks broke the EBS/brakeslide goldens -- the delay is a whole-pipeline property, not per-consumer).
-- [~] **The TRUE f0 seed (state 2) -- 2-frame prior-cycle residual remaining.** Seeded at f0 with
-      `input_delay=1`, every PROC now matches live (proc-7 at f1-2, roll f3) and f3+ is bit-exact, but
-      f1-f2 speedF is off ~0.4/0.2: at state 2 Link is mid-backslide from the PRIOR cycle's untarget, so
-      the seed must carry the prior-cycle **`mDirection`** (live `la+0x34B8` = 4 at f0, read via the s11
-      probe) and the attention RELEASE residual -- a fresh `LandState` seeds `mDirection = DIR_NONE`, so
-      the f1 ATN-back branch does not accelerate the backslide (-24.57 -> -24.98) the way live does. Seed
-      `mDirection` (+ the `AttentionLock` state / reticle-fade counter if RELEASE is live at f0) from the
-      capture, then the from-f0 replay is complete f0->f44. Small; the chained physics is proven.
+- [x] **The TRUE f0 seed (state 2) -- CLOSED (session 12); the from-f0 replay is complete f0->f44.**
+      Seeded at STATE 2 itself with the measured **mNormalSpeed**, the replay is bit-exact from the
+      FIRST stepped frame: f1..f44 every Link speedF 0-ULP, every proc matching live, Link pos within the
+      injected-cyl capture precision (max 1.4e-4 u). **Root cause (live-probed, `_notes/tetrapush-seed_probe.py`,
+      NOT mDirection/attention):** at f0 Link is mid-transition out of the prior cycle's untarget, where
+      **speedF LAGS mNormalSpeed by a frame** -- live f0 speedF `-24.573892593`, mNormalSpeed
+      `-24.982038498` (bits `c1c7db37`). The replay seeded `nspeed = speedF`, so f1 (a MOVE backslide,
+      which can only decay toward 0) gave `-24.572` instead of letting speedF catch up to the already-set
+      nspeed `-24.980`. **The whole fix is seeding `nspeed` from the live mNormalSpeed** -- f1 then reads
+      `-24.980` bit-exact and the +18 re-target flip (f2) + cyc1 roll (f3) + the cyc1->cyc2 chain follow.
+      The session-11 "seed mDirection + the attention RELEASE residual" hypothesis was a **red herring**:
+      live f0 `mDirection = 4 = DIR_NONE` and the attention is NONE / no actor -- both already the sim's
+      fresh-`LandState` defaults (confirmed live). New deterministic seed capture (single read, no
+      single-step jitter): `capture_push seed` -> `fixtures/courtyard_push_seed.json` (the complete f0
+      state incl. mNormalSpeed); `from_f0.replay(..., seed_nspeed=)` threads it; `_seed_link` uses it for
+      the non-roll seed. Gate: `tests/test_from_f0.py::test_true_f0_seed_bit_exact` (f1..f44 0-ULP). 459
+      offline pass, land goldens byte-identical (additive; no library change).
 - [ ] **Build the planner**: state-2 config to a coupled sim (Link roll/untarget-EBS + Tetra
       plow/follow) to a search for the input sequence that lands Tetra on a genuine `tetra_placements`
       coord AND sets up the matching roll entry. Method reference: `plan_land` / the seam-clip `solver`

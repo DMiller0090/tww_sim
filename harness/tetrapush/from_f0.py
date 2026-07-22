@@ -35,9 +35,14 @@ single-step-jittered cyc2 untarget (f45+, session-8 known corruption).
 Runs at `input_delay=1` (see `_seed_link`): the DTM stream IS the polled `g_mDoCPd` pad, already one
 pipeline stage into the raw-controller latency `LandState` models from (shipped default 2, for the live
 walk goldens) -- so a DTM replay is delay-1 (live-probed s11: `m34E8`/roll-A/soft-L all land 1 frame
-after the DTM). This is what makes the +18 re-target flip land on the right frame. The remaining gap is
-the TRUE f0 seed (state 2): all procs match from f0 but f1-f2 speedF is off ~0.4/0.2 -- the seed must
-carry the prior cycle's `mDirection` + attention-RELEASE residual (Link is mid-backslide at f0).
+after the DTM). This is what makes the +18 re-target flip land on the right frame.
+
+The TRUE f0 seed (state 2) is CLOSED (session 12): seeded at f0 with the measured mNormalSpeed
+(`seed_nspeed`, from `fixtures/courtyard_push_seed.json`), f1..f44 is bit-exact (every speedF 0-ULP,
+Link pos within capture precision). The gap was NOT mDirection or an attention residual (both match the
+sim defaults at f0 -- live mDir DIR_NONE, no lock); it was that at f0 speedF LAGS mNormalSpeed a frame
+(speedF -24.574, mNormalSpeed -24.982) and the replay seeded `nspeed = speedF`. Seeding nspeed from the
+live mNormalSpeed is the whole fix; f1's speedF simply catches up to the already-set nspeed.
 
 Pure-sim / no calibration: the replay takes only the seed + the DTM bytes + the injected centre/csangle
 (all from the locked capture); the diff against the capture is the out-of-band gate, never in a loop.
@@ -71,12 +76,20 @@ def full_depth_push(link_center, tetra_xz):
     return (float(rlx), float(rlz)), (float(ntx) - tx, float(ntz) - tz)
 
 
-def _seed_link(row, csangle):
+def _seed_link(row, csangle, seed_nspeed=None):
     """Seed a Python-path `LandState` from a captured frame ``row`` (``{proc, pos, facing, travel,
     speedF}`` under ``row['link']``). A roll entry is seeded FRONT_ROLL with speedF pinned at 26.0
     (constant-momentum roll -- the `couple_replay` convention, no foot-warming); any other proc is
     seeded at its live speedF with the foot stream warm (the backslide entered its proc mid-run, so
-    `getOldFrameFlg` is already true)."""
+    `getOldFrameFlg` is already true).
+
+    ``seed_nspeed`` (mNormalSpeed) seeds the potential speed SEPARATELY from ``speedF``. At the true f0
+    seed (state 2) Link is mid-transition out of the prior cycle's untarget, where ``speedF`` LAGS
+    ``mNormalSpeed`` a frame (speedF -24.574, mNormalSpeed -24.982); the fixture only logs ``speedF``,
+    so ``nspeed = speedF`` left f1-f2 off by ~0.4/0.2. Pass the live-measured mNormalSpeed
+    (`fixtures/courtyard_push_seed.json` `link.nspeed`, session 12) and the whole from-f0 chain is
+    bit-exact. Omitted -> ``nspeed = speedF`` (correct wherever speedF has already settled to nspeed --
+    every roll-entry seed and any steady-state frame)."""
     ll = row['link']
     proc = row['proc']
     # input_delay=1: the DTM stream IS the polled `g_mDoCPd` pad, one pipeline stage into the sim's
@@ -88,16 +101,17 @@ def _seed_link(row, csangle):
                          use_anim=True, native=False, sword_drawn=False, input_delay=1)
         link._roll_m3570 = False           # seeded mid-roll: live grinds (no bonk) -> m3570 False
     else:
+        ns = ll['speedF'] if seed_nspeed is None else float(seed_nspeed)
         link = LandState(pos_x=ll['pos'][0], pos_z=ll['pos'][2], pos_y=ll['pos'][1],
                          facing=ll['facing'], travel=ll['travel'], csangle=csangle,
-                         state=proc, nspeed=ll['speedF'], speedF=ll['speedF'],
+                         state=proc, nspeed=ns, speedF=ll['speedF'],
                          use_anim=True, native=False, foot_native=False, sword_drawn=False,
                          input_delay=1)
         link._foot.started = True
     return link
 
 
-def replay(frames, input_at, entry, upto=None, pre_inputs=None):
+def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None):
     """Run the coupled from-f0 replay and diff BOTH actors vs the live capture, frame by frame.
 
     ``frames``   -- the live-capture rows (the cyl fixture), each ``{proc, csangle, link:{pos, facing,
@@ -110,6 +124,8 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None):
                     1-tuple/list). If omitted, uses ``input_at(entry)`` (the convention: after seeding
                     state[entry], ``step(input_at(entry+1))`` acts on ``input_at(entry)`` at
                     input_delay=1 -- physics reads the delay-1 DTM pad). See the README from-f0 box.
+    ``seed_nspeed`` -- optional mNormalSpeed for a non-roll seed (the true f0 seed needs it; speedF
+                    lags nspeed a frame there -- see `_seed_link`). Omit for roll-entry seeds.
 
     Link's Co centre and csangle are injected from ``frames`` each frame; Tetra is a tracked XZ point
     moved by the full-depth plow. Returns a list of per-frame dicts: ``f``, live/sim ``proc``,
@@ -119,7 +135,7 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None):
         upto = len(frames)
 
     e = frames[entry]
-    link = _seed_link(e, e['csangle'])
+    link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
     if pre_inputs is not None:
         pi = pre_inputs[-1] if isinstance(pre_inputs, (list, tuple)) and pre_inputs and \
             isinstance(pre_inputs[0], (list, tuple, dict)) else pre_inputs
