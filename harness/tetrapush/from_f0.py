@@ -76,6 +76,56 @@ def full_depth_push(link_center, tetra_xz):
     return (float(rlx), float(rlz)), (float(ntx) - tx, float(ntz) - tz)
 
 
+def _seed_pose_f0(link, anim_frame, m351c):
+    """Seed the f0 DRAWN-POSE state for the computed-centre mode (state 2 is a full-speed MOVE
+    backslide, so the under-body blend is the regime-3 DASH cruise -- the whole hidden anim state is
+    the one frame-ctrl phase the capture logs as ``link.anim``, plus the turn lean ``m351C``).
+
+    Enables ``body_co`` on the foot FK (poses the neck-chain extras from here on), sets the
+    UnderAnimState to the dash cruise at the captured phase (ratio 1, m3598 0, rate 2.3 -- the
+    regime-3 `_set_move_anime` output), and warms the stored old pose + toe stream with the last two
+    drawn rest-of-cycle poses (pure dash at phase-2.3 and phase: f0-1/f0 were both regime-3 MOVE
+    frames, no morf active -- the prior cycle's ATN->MOVE morf decayed frames earlier). The stored
+    pose is LOCAL (position-independent), so the warmup base does not matter; the toe stream only
+    feeds speedF where m3598 != 0, which never happens in the courtyard window. Python foot path
+    only (the MOVE seed is already foot_native=False)."""
+    from tww_sim.core.anim.anim_state import ANIM_META, EMode_LOOP
+    fsf = link._foot                     # FootSpeedF
+    fsf.ff.body_co = True
+    st = fsf.st
+    ph = float(anim_frame)
+    dash = st._dash                      # 'dash' (sword_drawn=False)
+    end = float(ANIM_META[dash][0])
+    st.move0 = st.move1 = dash
+    st.m34C3 = 1
+    st.ratio = 1.0
+    st.m3598 = 0.0
+    st.fc0.set(EMode_LOOP, 0, end, 2.3, ph)
+    st.fc1.set(EMode_LOOP, 0, end, 2.3, ph)
+    ph_prev = ph - 2.3
+    if ph_prev < 0.0:
+        ph_prev += end
+    fsf.ff.set_pos(link.pos_x, link.pos_z, py=link.pos_y, facing=link.facing)
+    fsf.t2 = fsf.ff.step_feet(dash, dash, ph_prev, ph_prev, 1.0, -1.0)
+    fsf.t1 = fsf.ff.step_feet(dash, dash, ph, ph, 1.0, -1.0)
+    link.m351C = int(m351c) & 0xFFFF
+    link._draw_lean = _s16(link.m351C) >> 1
+
+
+def _s16(v):
+    v = int(v) & 0xFFFF
+    return v - 0x10000 if v >= 0x8000 else v
+
+
+def _computed_center(link):
+    """Link's body Co centre for the frame just stepped: the setCollision root/neck midpoint rebuilt
+    from the sim's own drawn pose at the settled position, the draw-time lean (cf. cc_stepper's
+    link_co_center, generalized to every proc via FootFK.body_co_center)."""
+    cx, cz = link._foot.ff.body_co_center(link.pos_x, link.pos_y, link.pos_z,
+                                          link.facing, link._draw_lean)
+    return (float(cx), float(cz))
+
+
 def _seed_link(row, csangle, seed_nspeed=None):
     """Seed a Python-path `LandState` from a captured frame ``row`` (``{proc, pos, facing, travel,
     speedF}`` under ``row['link']``). A roll entry is seeded FRONT_ROLL with speedF pinned at 26.0
@@ -111,7 +161,8 @@ def _seed_link(row, csangle, seed_nspeed=None):
     return link
 
 
-def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None):
+def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None,
+           centers='injected'):
     """Run the coupled from-f0 replay and diff BOTH actors vs the live capture, frame by frame.
 
     ``frames``   -- the live-capture rows (the cyl fixture), each ``{proc, csangle, link:{pos, facing,
@@ -126,6 +177,13 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
                     input_delay=1 -- physics reads the delay-1 DTM pad). See the README from-f0 box.
     ``seed_nspeed`` -- optional mNormalSpeed for a non-roll seed (the true f0 seed needs it; speedF
                     lags nspeed a frame there -- see `_seed_link`). Omit for roll-entry seeds.
+    ``centers``  -- ``'injected'`` (default): Link's Co centre comes from the capture
+                    (``frames[k]['link']['cyl']``), the validated mode. ``'computed'``: the centre is
+                    rebuilt each frame from the SIM'S OWN drawn pose (`FootFK.body_co_center` --
+                    setCollision's root/neck midpoint), seeded at f0 off the captured anim phase +
+                    turn lean (`_seed_pose_f0`) -- the self-contained mode the planner needs (no
+                    per-frame injection; only csangle stays injected). f0-seed only. Each row then
+                    also carries ``sim_cyl`` and the centre-vs-capture ULP diffs ``dcx``/``dcz``.
 
     Link's Co centre and csangle are injected from ``frames`` each frame; Tetra is a tracked XZ point
     moved by the full-depth plow. Returns a list of per-frame dicts: ``f``, live/sim ``proc``,
@@ -136,6 +194,11 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
 
     e = frames[entry]
     link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
+    if centers == 'computed':
+        if e['proc'] == FRONT_ROLL:
+            raise ValueError("centers='computed' needs the f0 (MOVE) seed -- a mid-roll seed has no "
+                             "pre-roll pose for the entry morf")
+        _seed_pose_f0(link, e['link']['anim'], (int(e['link']['shape_z']) << 1) & 0xFFFF)
     if pre_inputs is not None:
         pi = pre_inputs[-1] if isinstance(pre_inputs, (list, tuple)) and pre_inputs and \
             isinstance(pre_inputs[0], (list, tuple, dict)) else pre_inputs
@@ -144,7 +207,8 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         link._inbuf = [_step_args(input_at(entry))]     # delay-1: state[entry+1] acts inp[entry]
 
     tx, tz = e['tetra']['pos'][0], e['tetra']['pos'][2]
-    pend_link, pend_tetra = full_depth_push(e['link']['cyl'], (tx, tz))
+    c0 = _computed_center(link) if centers == 'computed' else e['link']['cyl']
+    pend_link, pend_tetra = full_depth_push(c0, (tx, tz))
 
     out = []
     for k in range(entry + 1, upto):
@@ -158,7 +222,7 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         tz += pend_tetra[1]
 
         lv = frames[k]
-        out.append(dict(
+        row = dict(
             f=k, sim_proc=link.state, live_proc=lv['proc'],
             sim_link=(link.pos_x, link.pos_z), live_link=(lv['link']['pos'][0], lv['link']['pos'][2]),
             sim_tetra=(tx, tz), live_tetra=(lv['tetra']['pos'][0], lv['tetra']['pos'][2]),
@@ -166,10 +230,18 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
             dlx=_bits(link.pos_x) - _bits(lv['link']['pos'][0]),
             dlz=_bits(link.pos_z) - _bits(lv['link']['pos'][2]),
             dtx=_bits(tx) - _bits(lv['tetra']['pos'][0]),
-            dtz=_bits(tz) - _bits(lv['tetra']['pos'][2])))
+            dtz=_bits(tz) - _bits(lv['tetra']['pos'][2]))
         # end-of-frame k check: the push consumed producing state[k+1] uses frame-k's SETTLED centre
         # + Tetra pos (the decomp draw-phase Ccsp()->Move() order).
-        pend_link, pend_tetra = full_depth_push(frames[k]['link']['cyl'], (tx, tz))
+        if centers == 'computed':
+            ck = _computed_center(link)
+            row['sim_cyl'] = ck
+            row['dcx'] = _bits(ck[0]) - _bits(lv['link']['cyl'][0])
+            row['dcz'] = _bits(ck[1]) - _bits(lv['link']['cyl'][-1])
+        else:
+            ck = lv['link']['cyl']
+        out.append(row)
+        pend_link, pend_tetra = full_depth_push(ck, (tx, tz))
     return out
 
 

@@ -51,6 +51,10 @@ def _shared_anim_data(anms, chains):
 # union of both foot chains, in joint-index (calc) order; each processed once per frame.
 CHAIN_JOINTS = [0, 1, 29, 30, 31, 32, 33, 34, 36, 37, 38, 39]
 MORF_START, MORF_END = 0, 0x2A          # initOldFrameMorf(2.4, 0, 0x2A) joint range
+# body-Co mode (setCollision root/neck midpoint, body_co=True): the neck-chain joints beyond the
+# foot set (body_chn..neck_jnt); all < MORF_END so the oldframe-morf covers them like the feet.
+BODY_CO_EXTRA = [2, 3, 4, 14]
+NECK_CHAIN = [0, 1, 2, 3, 4, 14]
 
 
 class MorfState:
@@ -137,6 +141,9 @@ class FootFK:
         # / 31 (i=1) (jointBeforeCB :276/:282). None = off (flat paths).
         self.foot030 = None
         self.last_waist = None
+        # body-Co mode: also pose the neck-chain extras each frame for body_co_center (the
+        # setCollision midpoint). Off by default -- the pose loop is byte-identical without it.
+        self.body_co = False
 
     def clone(self):
         """State-copy clone (mid-walk-safe): shares the immutable anims/skeleton/chains (+ the shared
@@ -163,6 +170,7 @@ class FootFK:
         c.track_waist = self.track_waist
         c.last_waist = self.last_waist
         c.foot030 = self.foot030                     # immutable tuple (or None): assign ok
+        c.body_co = self.body_co
         return c
 
     def set_pos(self, px, pz, py=0.0, facing=0, lean=0, m35b8=0.0):
@@ -221,6 +229,7 @@ class FootFK:
     def _pose_frame(self, move0, move1, f0, f1, ratio, rate):
         """Pose all chain joints once, return {jnt: local 3x4 matrix}."""
         local = {}
+        joints = CHAIN_JOINTS + BODY_CO_EXTRA if self.body_co else CHAIN_JOINTS
         if _N is not None and self.world:
             # Fused native path: one C call per joint does the whole blend + PSMTXQuat + scale/trans,
             # returning the local matrix and the (quat, trans, scale) to store as the new old pose.
@@ -228,7 +237,7 @@ class FootFK:
             ct = j3d_eval.calc_transform
             oq = self.old_quat; ot = self.old_trans; os_ = self.old_scale
             morf_on = rate > 0.0
-            for jnt in CHAIN_JOINTS:
+            for jnt in joints:
                 i0 = ct(anm0, jnt, f0)
                 i1 = ct(anm1, jnt, f1)
                 apply_morf = morf_on and MORF_START <= jnt < MORF_END and jnt in oq
@@ -239,7 +248,7 @@ class FootFK:
                 local[jnt] = m
             self._apply_foot030(local)
             return local
-        for jnt in CHAIN_JOINTS:
+        for jnt in joints:
             q3, trans, scale = self._blend_joint(move0, move1, f0, f1, ratio, jnt, rate)
             m = self.quatfn(q3)                      # 3x3 rotation, trans column 0 (PSMTXQuat in world mode)
             for i in range(3):                       # M = R * diag(scale): scale column j by scale[j]
@@ -305,6 +314,61 @@ class FootFK:
             if jnt == 30:
                 break
         return self._waist_world(local)
+
+    def _local_from_old(self, jnt, body_x=0):
+        """Rebuild one joint's local 3x4 matrix from the STORED old pose (the quat/trans/scale of
+        the LAST posed frame) -- the same reconstruction waist_from_old uses, factored per joint.
+        ``body_x`` (s16) = jointBeforeCB's body_chn extra rotation x term (-mBodyAngle.z; the y/x
+        attention twists are separate and 0 in the courtyard window) -- the callback post-multiplies
+        the animated quat (d_a_player_main.cpp:350-357) and the stored old pose keeps the UN-adjusted
+        quat (m3658), so the adjust is applied here at rebuild time, only at CL_JNT_BODY_CHN."""
+        q = self.old_quat[jnt]
+        if body_x:
+            e = Q.euler_to_quat(int(body_x) & 0xFFFF, 0, 0)
+            aw, ax, ay, az = q
+            bw, bx, by, bz = e
+            q = (fp.f32(aw * bw - ax * bx - ay * by - az * bz),
+                 fp.f32(aw * bx + ax * bw + ay * bz - az * by),
+                 fp.f32(aw * by - ax * bz + ay * bw + az * bx),
+                 fp.f32(aw * bz + ax * by - ay * bx + az * bw))
+        m = self.quatfn(q)
+        s = self.old_scale[jnt]
+        t = self.old_trans[jnt]
+        for i in range(3):
+            m[i][0] = fp.fmuls(m[i][0], s[0])
+            m[i][1] = fp.fmuls(m[i][1], s[1])
+            m[i][2] = fp.fmuls(m[i][2], s[2])
+        m[0][3] = fp.f32(t[0]); m[1][3] = fp.f32(t[1]); m[2][3] = fp.f32(t[2])
+        return m
+
+    def body_co_center(self, px, py, pz, facing, lean=0):
+        """Link's body **Co** cylinder centre (x, z) for the pose LAST posed (drawn) by this driver --
+        ``daPy_lk_c::setCollision``'s root/neck world midpoint (d_a_player_main.cpp:9748-9754), the
+        centre ``cM3d_Cross_CylCyl`` pushes other actors from. The generalization of
+        ``body_cyl.roll_co_center`` to EVERY pose this driver produces (walk/dash blends, ATN strafes,
+        rolls INCLUDING the entry oldframe-morf): the stored old pose (position-independent local
+        quat/trans/scale) is re-accumulated from ``worldBase(px, py, pz, facing, lean)`` WITHOUT the
+        ``m37B4`` removal -- ``getAnmMtx(joint)`` column 3 is world.
+
+        Call it AFTER the frame's pose with the frame's SETTLED (post-integration) position, facing,
+        and the draw-time lean (``LandState._draw_lean``) -- the setCollision timing the coupled
+        stepper is gated on. Requires ``body_co`` mode (the neck-chain extras must have been posed);
+        Python world path only."""
+        if not (self.body_co and self.world):
+            raise RuntimeError("body_co_center needs body_co=True on the Python world FK path")
+        base, _ = fk.world_base(fp.f32(px), fp.f32(py), fp.f32(pz), int(facing) & 0xFFFF,
+                                int(lean) & 0xFFFF)
+        lv = int(lean) & 0xFFFF
+        body_x = -(lv - 0x10000 if lv >= 0x8000 else lv)   # -mBodyAngle.z; .z==shape_angle.z (:9526)
+        cur = base
+        root_t = None
+        for jnt in NECK_CHAIN:
+            cur = fk.mtx_concat(cur, self._local_from_old(jnt, body_x=body_x if jnt == 2 else 0))
+            if jnt == 0:
+                root_t = (cur[0][3], cur[2][3])
+        cx = fp.fmuls(0.5, fp.fadds(root_t[0], cur[0][3]))
+        cz = fp.fmuls(0.5, fp.fadds(root_t[1], cur[2][3]))
+        return cx, cz
 
     def _waist_world(self, local):
         """WORLD translate of the WAIST joint (30) for the pose being drawn: the base->waist

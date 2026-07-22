@@ -168,7 +168,7 @@ The mechanism is fully grounded (US GZLE01 line numbers; logic identical to JP):
 | `link_plow.py` | **The Courtyard Link-recoil LAW** (session 9): the MIRROR of `tetra_plow` -- Link's per-frame recoil = the FULL Co overlap depth AWAY from Tetra (`link += depth·unit(link_centre−Tetra)`), on top of his foot term. `recoil()`/`recoil_step()`. Gated `tests/test_link_plow.py` (frac==1.0 every push frame; recoil vector + feet reconstruction 0-ULP-within-jitter on the roll frames). Reuses `tetra_plow.plow_depth`. |
 | `from_f0.py` | **The from-f0 COUPLED replay** (session 10-12): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay(..., seed_nspeed=)`. Gated `tests/test_from_f0.py`: from the roll entry AND from **state 2 itself** (`seed_nspeed` = the measured mNormalSpeed) the replay is bit-exact f1..f44 (speedF 0-ULP, procs match, Link pos <1e-3 u), Tetra 0-ULP both cycles. |
 | `fixtures/courtyard_push_cyl.json` | Session-8 live ground truth: per-frame Link **mCyl Co-centre** + **csangle** + Tetra pos, single-stepped from slot 2 (`capture_push`). The Co-centre/csangle source the from-f0 replay needs. **Single-step, so cyc2 is edge-jittery** (the `_dedup` in the plow test drops the f44==f45 double-read); NOT a pinned edge oracle. |
-| `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5), `_notes/tetrapush-retarget_probe.py` (session 11), and `_notes/tetrapush-seed_probe.py` (session 12: reads the hidden f0 seed fields -- mNormalSpeed/mDirection/attention -- that pinned the true-f0 seed as a speedF-lags-mNormalSpeed gap). |
+| `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5), `_notes/tetrapush-retarget_probe.py` (session 11), `_notes/tetrapush-seed_probe.py` (session 12: reads the hidden f0 seed fields -- mNormalSpeed/mDirection/attention -- that pinned the true-f0 seed as a speedF-lags-mNormalSpeed gap), and `_notes/tetrapush-{upper_probe,anmmtx_probe}.py` (session 13: the upper anim part / mBodyAngle state and the live `mpNodeMtx` root+neck matrices + `.json` dumps -- the ground truth behind the body-Co FK validation + the open mCyl timing law). |
 
 Run: `python -m harness.tetrapush.capture_push frames=60` (needs Dolphin up with slot 2 = the
 courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM via `dolphin_mem`
@@ -210,6 +210,12 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
   the clean way to pin the CC-split doubling), **`dCcS::SetPosCorrect` `0x800ab1e4`** (confirmed halting,
   session 9 -- the Co push split; note MANY scene Co pairs hit it, identify the Link-Tetra pair by ppos
   centres ~ Link Co (-1310, 61) / Tetra feet (-1337, -1)).
+- **Anim parts + body angles (session 13; `la = lp - 0xD8`):** `mBodyAngle` (csXyz s16) `la+0x2B4`
+  (`.z == shape_angle.z` per :9526; x/y = attention twists, 0 all window); `mAnmRatioUnder` `la+0x2FB4`
+  (2 x {f32 ratio +0, anm* +4}), `mAnmRatioUpper` `la+0x2FC4` (3 packs); `mFrameCtrlUnder` `la+0x302C`
+  (2 x J3DFrameCtrl 0x14: rate +0xC, frame +0x10 -- so lp+0x2F60/0x2F64 == ctrl0), `mFrameCtrlUpper`
+  `la+0x3054` (3 ctrls); `mpCLModel` `la+0x32C` -> `mpNodeMtx` (J3DModel +0x8C, 0x30/joint; translate
+  col +0xC/+0x1C/+0x2C) = `getAnmMtx`. US `setCollision` = `0x8011D788` (JP translate pending).
 - **CC push + camera (session 8, live-found 2026-07-22; `this` = deref `0x803AD860` = `lp`):**
   Link body **Co cylinder centre** = `lp + 0x4064` (cXyz; radius `lp+0x4070` = 30.0, height `lp+0x4074`
   ≈ 104.6; the `lp+0x4044` block is the derived AABB, `centre ± (r,0,r)`/`+(0,h,0)` -- how the centre was
@@ -438,10 +444,39 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       state incl. mNormalSpeed); `from_f0.replay(..., seed_nspeed=)` threads it; `_seed_link` uses it for
       the non-roll seed. Gate: `tests/test_from_f0.py::test_true_f0_seed_bit_exact` (f1..f44 0-ULP). 459
       offline pass, land goldens byte-identical (additive; no library change).
+- [~] **The SELF-CONTAINED Co centre (replace the per-frame cyl injection) -- the planner
+      prerequisite (session 13).** A planner exploring NOVEL inputs cannot inject the captured mCyl
+      centre, so the sim must compute it from its own pose. Built + partially validated:
+      - **`FootFK.body_co_center`** (`core/anim/foot_fk.py`, `body_co=True` mode): poses the neck
+        chain `[0,1,2,3,4,14]` alongside the foot joints and rebuilds `setCollision`'s root/neck
+        world midpoint from the stored old pose at any (pos, facing, lean), including the
+        `jointBeforeCB` body_chn extra rotation `Q(-mBodyAngle.z,0,0)` (`d_a_player_main.cpp:289`,
+        `mBodyAngle.z == shape_angle.z` :9526; x/y attention twists are 0 across the whole courtyard
+        window -- live-probed, `_notes/tetrapush-upper_probe.py`).
+      - **Proc-8/9 frames now pose the real ATN blend** (`state.py`: `step_atn`, entry morf on the
+        routing frame) instead of advancing the stale single-anim ctrl -- `procAtnActorMove` calls the
+        same `setBlendAtnMoveAnime` dispatcher (:6299/:6308). speedF untouched (m3598==0 tier);
+        459 offline green, land goldens byte-identical.
+      - **The f0 pose seed** (`from_f0._seed_pose_f0` + `replay(centers='computed')`): state 2 is a
+        regime-3 DASH cruise, so the hidden anim state is one phase (the cyl fixture's `link.anim`
+        25.4) + the lean (`shape_z<<1`); old pose warmed with two pure-dash poses.
+      - **VALIDATED: the FK == the game's draw-final anm matrices.** Against a live nodeMtx probe
+        (`mpCLModel` la+0x32C -> `mpNodeMtx` +0x8C; `_notes/tetrapush-anmmtx_probe.py`), the computed
+        centre matches `mid(root,neck)` to **~6e-5 u on every settled roll frame** (entry-morf frames
+        0.05-0.8 u; proc-9 frames 3.8-8.1 u still off -- the ATN side/direction pose needs pinning).
+      - **OPEN -- the mCyl TIMING law.** The captured/pushed `mCyl(k)` (the value the gated plow laws
+        consume, self-consistent with Tetra's motion) equals NEITHER `mid(k)` nor `mid(k-1)` of the
+        draw-final matrices (0.3-9 u off, deterministic per cycle phase; per-frame alignment sweeps,
+        implied-base solves, and mixed root/neck-timestamp fits all fail to collapse it). setCollision
+        (:9748, plain midpoint `SetC`, no smoothing) must read the matrices at a mid-frame state the
+        pause boundary never shows. **Next: breakpoint JP setCollision (US 0x8011D788 -> translate via
+        framework.map) and read `mpNodeMtx[0/14]` at hit time**, plus its caller position in execute.
 - [ ] **Build the planner**: state-2 config to a coupled sim (Link roll/untarget-EBS + Tetra
       plow/follow) to a search for the input sequence that lands Tetra on a genuine `tetra_placements`
       coord AND sets up the matching roll entry. Method reference: `plan_land` / the seam-clip `solver`
-      (cheap predictor + exact bit-confirm, no calibration).
+      (cheap predictor + exact bit-confirm, no calibration). Blocked on the self-contained centre
+      above; csangle is the other injected quantity (the follow-camera chase is unmodeled --
+      `camera_exact` covers only the C-stick omega path -- but drifts slowly, ~6 BAM/frame max).
 
 ## Hard rules (inherited from the seam-clip work)
 

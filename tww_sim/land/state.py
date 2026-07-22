@@ -548,7 +548,13 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
             # speedF momentum (entered from a roll, m3598==0). Keyed on the DISPATCH proc so the proc-9
             # BODY flip isn't overwritten when checkNextMode already routed self.state to MOVE (cf. CUT).
             if self._foot is not None:
-                self._foot.step_single_anim(self.nspeed, self.msd)
+                # procAtnActorMove/Wait pose = the ATN_MOVE setBlendAtnMoveAnime dispatcher (6299/
+                # 6308); entry morf fires on the routing frame (init runs inside its checkNextMode).
+                f31 = f32(abs(self.nspeed) / self.max_nspeed)
+                entered = proc not in (ATN_ACTOR_MOVE, ATN_ACTOR_WAIT)
+                atn_morf = (self.MOVE_REENTRY_MORF if (entered or self.direction != prev_dir)
+                            else None)
+                self._foot.step_atn(self.nspeed, self.msd, self.direction, f31, atn_morf)
             self.speedF = _gnd_spz_fn(self, self.nspeed)
         elif self.state == FRONT_ROLL_CRASH:
             # Roll-bonk bounce: reversed momentum + gravity arc; the ground snap runs AFTER
