@@ -196,6 +196,13 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
     is at McaMorf `+0x58` -> `mEnd` (s16) `+0x60`, `mRate` (f32) `+0x64`, `mFrame` (f32) `+0x68`,
     `mState` (u8, 0x1 STOP) `+0x5D`. `YJ_DELETE` (untarget fade) = `end 10 / rate 1.0`; `YJ_IN` end 13,
     `YJ_SCALE` end 34. The anim completing (frame->10) clears `AttnFlag_40000000` -> RELEASE ends.
+  - **Re-target state (session 11, `_notes/tetrapush-retarget_probe.py`):** `m34DC` (stick want-angle,
+    `= mMainStickAngle + 0x8000`) `la+0x34DC` (u16); `m34E8` (world target `= m34DC + csangle`) `la+0x34E8`;
+    `mDirection` (the ATN branch selector) `la+0x34B8` (u8). The probe read these + the delivered pad
+    per single-step frame and found `m34DC[k] = DTM_inp[k-1]` UNIFORMLY -- the stick target, the roll-A,
+    and the soft-lock L all land exactly 1 frame after the DTM stream (because the DTM IS the polled
+    `g_mDoCPd` pad, already one pipeline stage in). This is why a DTM replay runs at `input_delay=1`
+    (see the `## Plan / status` roll-setup box) and the raw-controller default is 2.
 - **JP GZLJ01 function addrs (framework.map):** `setNormalSpeedF` `0x80105ae0`, `setSpeedAndAngleNormal`
   `0x80107474` (+0x498), `setSpeedAndAngleAtnActor` `0x80107b24` (+0x108), `procMoveTurn_init` `0x80111874`,
   **`daPy_lk_c::posMove` `0x80106514`** (break here to read Link's `m_cc_move` before it's consumed --
@@ -392,40 +399,35 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       "wire it together" -- the full-depth coupling physics is validated. The mechanical scaffold works:
       input pre-seed `_inbuf=[inp[entry-1],inp[entry]]` -> step `inp[k]`->`live[k]` (INPUT_DELAY=2 handled
       internally), csangle injected via `_cam.yaw` (C-stick neutral).
-- [~] **THE current blocker: the backslide->roll-setup transition (MOVE->ATN_MOVE +18 re-target).**
-      The one gap in the from-f0 replay (why cycle 2 does not yet chain, and why the true f0 seed is not
-      bit-exact): just before each roll the player re-targets in ATN_MOVE (proc 7), which flips speedF
-      ~-25 -> +18 over ~2 frames, then A triggers the roll. **Diagnosed via per-frame diff (session 10):**
-      (a) the sim enters proc-7 **1 frame late** (sim f27, live f26 for cyc2) -- `checkNextMode`'s r24
-      (`checkAttentionLock()`) uses the physics delay-2 L, but live routes on the attention's **delay-1**
-      L (session 6: the attention reads L via `mDoCPd` directly, delay 1). Gating r24 on the delay-1 L
-      (`_inbuf[0]`) fixes the ENTRY (proc-7 at f26, cyc1 stays bit-exact -- verified by monkeypatch) --
-      BUT (b) the **+18 re-target flip** then lands 1 frame late in the OTHER direction (live flips f28,
-      sim f29): the `setSpeedAndAngleAtn` DIR_FORWARD/BACKWARD split + the ~180deg travel chase during
-      the re-target is a multi-frame subtlety not yet modelled, and pinning its exact frame needs a
-      jitter-free live probe (the single-step capture is +-1 on this edge, [[run-dtm-1frame-jitter]]).
-      So DON'T half-ship the delay-1 change (it fixes the entry but not the flip, and touches the hot
-      dispatch path); model the WHOLE re-target (delay-1 `checkAttentionLock` + the DIR_FORWARD flip +
-      the roll-trigger timing) decomp-first, then gate the full 45-frame chained replay end-to-end.
-      Then the true **f0 seed** also needs the previous cycle's **attention-RELEASE residual** seeded
-      (at f0 Link is mid-fade of the prior untarget -> proc 7 at f1-2 with no L held; a fresh NONE seed
-      can't reproduce it) -- capturable via `mLockOnState`/`mpAttnActorLockOn`/reticle-frame (session-5/6
-      addrs). **Session-7 probe findings still relevant:**
-      1. **The CC plow is ACTIVE from f0.** At f0 live Link displaces only ~12u despite `speedF -24.57`,
-         because Tetra (behind him, being backslid-into) is plowed ~12.6u and Link's net move is reduced
-         by the equal-and-opposite CC recoil. So the replay must run the plow from frame 0 -- Link is in
-         MOVE (feet Co-cylinder), NOT the FRONT_ROLL cylinder that `cc_stepper` currently hardcodes
-         (`LINK_CO_R = FRONT_ROLL_R`). **Model the MOVE-phase Link Co-cylinder** (`daPy_lk_c::setCollision`
-         walk radius) so `link_co_center` is right off the roll.
-      2. **Input-delay pre-seed.** `INPUT_DELAY = 2` means f0 acts on the input delivered at f-2; the
-         fixture starts at f0, so `_inbuf` must be pre-seeded with the two pre-f0 DTM inputs (re-extract
-         via `dtm_inputs.py` at DTM groups F0-1/F0-2, or bake them into the fixture). Align post-step(inp[i])
-         to `live[i+1]` (frames[0].live == the seed == state at f0).
-      3. **Foot warm at seed:** set `link._foot.started = True` (backslide entered state 2 mid-run ->
-         oldFrameFlg already true); confirm `m3598 == 0` so `speedF == nspeed`.
-      4. **Camera/csangle:** feed the real substick (`inp.substickX/Y`) through `CameraManual` (frozen
-         `csx=128` is the tier-test shortcut; the from-f0 `m34E8` needs the real per-frame csangle).
-      Then the cone-gated `target_present` (Gap 2, done) drives the mid-roll acquisition for real.
+- [x] **The backslide->roll-setup transition (MOVE->ATN_MOVE +18 re-target) -- SOLVED + gated (session
+      11).** The from-f0 replay now **chains bit-exact through cycle 2's roll**: seeded at the first roll
+      entry, f4..f44 is 0-ULP (every speedF, every proc, Link pos <1.4e-4 u) INCLUDING the whole
+      backslide->roll-setup -- the proc-7 re-target entry (f26), the +18 flip (f28 -25.15 -> +18.574),
+      and cyc2's roll trigger (f29). Gate: `tests/test_from_f0.py::test_chained_replay_through_cyc2_roll_bit_exact`
+      (stops at f44, before the cyl fixture's single-step-jittered cyc2 untarget f45+; session-8 known
+      corruption). **Root cause (live-probed s11, `_notes/tetrapush-retarget_probe.py`), one clean law:**
+      the re-target flip landed 1 frame late because the DTM-driven replay ran at the shipped
+      `INPUT_DELAY = 2`, but **the DTM stream IS the polled `g_mDoCPd` pad -- already one pipeline stage
+      in -- so a DTM replay is delay-1, not delay-2.** The probe read `m34DC`/`m34E8` (stick want-angle,
+      `la+0x34DC`/`la+0x34E8`) + `mDirection` (`la+0x34B8`) per single-step frame against the delivered
+      pad and found `m34DC[k] = DTM[k-1]` UNIFORMLY (the stick target, the roll-A, and the soft-lock L
+      all land exactly 1 frame after the DTM). The +18 is the `setSpeedAndAngleAtn` DIR_BACKWARD negation
+      (`mNormalSpeed *= -1`, travel += 0x8000; d_a_player_main.cpp:2863) firing when the big off-axis
+      re-target target arrives -- which at delay-1 is inp[27] at f28 (`|m34E8-travel|>0x6000` -> BACKWARD),
+      not inp[26] at f29. **Fix:** a `LandState(input_delay=1)` param -- at 1 the physics AND the
+      attention both act on the delay-1 pad (no ahead-by-one split); the shipped default stays 2 (the
+      raw-controller latency the live walk goldens validate, untouched -- 458 offline pass, goldens
+      byte-identical). `from_f0` seeds `input_delay=1` + a 1-frame `_inbuf`. This SUPERSEDES the
+      session-10 "gate r24 on delay-1 / model the DIR flip separately" plan (those per-consumer delay-1
+      hacks broke the EBS/brakeslide goldens -- the delay is a whole-pipeline property, not per-consumer).
+- [~] **The TRUE f0 seed (state 2) -- 2-frame prior-cycle residual remaining.** Seeded at f0 with
+      `input_delay=1`, every PROC now matches live (proc-7 at f1-2, roll f3) and f3+ is bit-exact, but
+      f1-f2 speedF is off ~0.4/0.2: at state 2 Link is mid-backslide from the PRIOR cycle's untarget, so
+      the seed must carry the prior-cycle **`mDirection`** (live `la+0x34B8` = 4 at f0, read via the s11
+      probe) and the attention RELEASE residual -- a fresh `LandState` seeds `mDirection = DIR_NONE`, so
+      the f1 ATN-back branch does not accelerate the backslide (-24.57 -> -24.98) the way live does. Seed
+      `mDirection` (+ the `AttentionLock` state / reticle-fade counter if RELEASE is live at f0) from the
+      capture, then the from-f0 replay is complete f0->f44. Small; the chained physics is proven.
 - [ ] **Build the planner**: state-2 config to a coupled sim (Link roll/untarget-EBS + Tetra
       plow/follow) to a search for the input sequence that lands Tetra on a genuine `tetra_placements`
       coord AND sets up the matching roll entry. Method reference: `plan_land` / the seam-clip `solver`

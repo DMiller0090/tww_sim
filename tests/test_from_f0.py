@@ -112,6 +112,37 @@ def test_cyc1_rollentry_link_pos_within_capture_precision(fix):
         assert err < 1e-3, "frame %d: Link pos off by %.6f u (> capture precision)" % (d['f'], err)
 
 
+def test_chained_replay_through_cyc2_roll_bit_exact(fix):
+    """THE full chained replay (session 11): seeded at the first roll entry, the sim runs UNBROKEN
+    through cycle 1 AND the backslide->roll-setup transition AND cycle 2's roll -- f4..f44 -- with
+    every Link speedF 0-ULP, every proc matching live, and Link's position within the injected-cyl
+    capture precision. This closes the backslide->roll-setup blocker: the +18 re-target flip lands on
+    the right frame (f28, -25.15 -> +18.574) and cycle 2's roll triggers on the right frame (f29),
+    because the DTM-driven replay runs at input_delay=1 (the DTM stream IS the polled pad, one pipeline
+    stage in -- live-probed s11: m34E8/roll/soft-L all land 1 frame after the DTM).
+
+    Gated range stops at f44 -- BEFORE the cyl fixture's single-step-jittered cyc2 untarget (f45+, a
+    known capture corruption, session 8; the DTM fixture has the clean -25.74 flip there). The chained
+    physics through the second roll is what this proves."""
+    cyl_frames, dtm_frames = fix
+    entry = next(i for i, f in enumerate(cyl_frames) if f['proc'] == _FRONT_ROLL)
+    rows = replay(cyl_frames, _input_at(dtm_frames), entry, upto=45)
+    assert len(rows) >= 40, "expected the full cyc1->cyc2-roll chain, got %d" % len(rows)
+    # the transition landmarks: proc-7 re-target entry (f26), the +18 flip (f28), cyc2 roll (f29).
+    by_f = {d['f']: d for d in rows}
+    assert by_f[26]['live_proc'] == 7 and by_f[26]['sim_proc'] == 7, "proc-7 re-target entry (f26)"
+    assert by_f[28]['sim_proc'] == 7 and by_f[28]['speedF'] > 18.0, "the +18 re-target flip (f28)"
+    assert by_f[29]['sim_proc'] == _FRONT_ROLL, "cyc2 roll trigger (f29)"
+    for d in rows:
+        assert d['sim_proc'] == d['live_proc'], (
+            "frame %d: sim proc %d != live %d" % (d['f'], d['sim_proc'], d['live_proc']))
+        assert _bits(d['speedF']) == _bits(d['live_speedF']), (
+            "frame %d: sim speedF %.9f != live %.9f (not 0-ULP)" % (
+                d['f'], d['speedF'], d['live_speedF']))
+        err = math.hypot(d['sim_link'][0] - d['live_link'][0], d['sim_link'][1] - d['live_link'][1])
+        assert err < 1e-3, "frame %d: Link pos off by %.6f u (> capture precision)" % (d['f'], err)
+
+
 def test_tetra_full_depth_from_f0_bit_exact(fix):
     """Tetra's full-depth plow, composed from state 2 (f0) with the injected Co centres, reproduces
     her WHOLE trajectory to within a handful of ULP over the plow window (f1..f43, both cycles). Her

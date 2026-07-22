@@ -25,14 +25,19 @@ Two modelling shortcuts, both deliberate (see README "## Plan / status" from-f0 
     the substick -- the "inject the camera, don't model it" convention (the frozen-cam shortcut the
     tier test uses, generalised to the captured per-frame value).
 
-VALIDATED (`tests/test_from_f0.py`), seeded at the FIRST roll entry: cycle 1 -- the roll, the 2-frame
-ATN_ACTOR untarget tier (the -25.727 flip + the -25.452 body2), and the following MOVE backslide -- is
-bit-exact vs the locked live capture (every speedF 0-ULP; Link pos within the injected-cyl single-step
-capture precision, <1e-3 u), and Tetra is 0-ULP over the whole window (both cycles). The OPEN gap is
-the backslide->roll-setup (the MOVE->ATN_MOVE re-target that flips speedF ~-25 -> +18 just before each
-roll): its proc-7 entry is 1 frame late in the sim (a `checkAttentionLock` delay-1-vs-2 issue) and the
-+18 re-target flip needs a jitter-free live probe -- so a full 45-frame chained replay (and the true
-f0 seed, which also needs the previous cycle's attention-RELEASE residual seeded) awaits that model.
+VALIDATED (`tests/test_from_f0.py`), seeded at the FIRST roll entry: the replay now CHAINS bit-exact
+through cycle 2's roll -- f4..f44 is 0-ULP (every speedF, every proc, Link pos <1.4e-4 u), covering
+cycle 1 (roll + the 2-frame ATN_ACTOR untarget tier -25.727/-25.452 + backslide), the whole
+backslide->roll-setup re-target (proc-7 entry f26, the +18 flip f28, cyc2 roll f29), and cycle 2's
+roll. Tetra is 0-ULP over the whole window. The gated range stops at f44, before the cyl fixture's
+single-step-jittered cyc2 untarget (f45+, session-8 known corruption).
+
+Runs at `input_delay=1` (see `_seed_link`): the DTM stream IS the polled `g_mDoCPd` pad, already one
+pipeline stage into the raw-controller latency `LandState` models from (shipped default 2, for the live
+walk goldens) -- so a DTM replay is delay-1 (live-probed s11: `m34E8`/roll-A/soft-L all land 1 frame
+after the DTM). This is what makes the +18 re-target flip land on the right frame. The remaining gap is
+the TRUE f0 seed (state 2): all procs match from f0 but f1-f2 speedF is off ~0.4/0.2 -- the seed must
+carry the prior cycle's `mDirection` + attention-RELEASE residual (Link is mid-backslide at f0).
 
 Pure-sim / no calibration: the replay takes only the seed + the DTM bytes + the injected centre/csangle
 (all from the locked capture); the diff against the capture is the out-of-band gate, never in a loop.
@@ -74,17 +79,20 @@ def _seed_link(row, csangle):
     `getOldFrameFlg` is already true)."""
     ll = row['link']
     proc = row['proc']
+    # input_delay=1: the DTM stream IS the polled `g_mDoCPd` pad, one pipeline stage into the sim's
+    # raw-controller latency, so physics + attention both act on the delay-1 pad (see README roll-setup).
     if proc == FRONT_ROLL:
         link = LandState(pos_x=ll['pos'][0], pos_z=ll['pos'][2], pos_y=ll['pos'][1],
                          facing=ll['facing'], travel=ll['travel'], csangle=csangle,
                          state=FRONT_ROLL, nspeed=26.0, speedF=26.0,
-                         use_anim=True, native=False, sword_drawn=False)
+                         use_anim=True, native=False, sword_drawn=False, input_delay=1)
         link._roll_m3570 = False           # seeded mid-roll: live grinds (no bonk) -> m3570 False
     else:
         link = LandState(pos_x=ll['pos'][0], pos_z=ll['pos'][2], pos_y=ll['pos'][1],
                          facing=ll['facing'], travel=ll['travel'], csangle=csangle,
                          state=proc, nspeed=ll['speedF'], speedF=ll['speedF'],
-                         use_anim=True, native=False, foot_native=False, sword_drawn=False)
+                         use_anim=True, native=False, foot_native=False, sword_drawn=False,
+                         input_delay=1)
         link._foot.started = True
     return link
 
@@ -98,10 +106,10 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None):
                     6-tuple; extra entries ignored) delivered at game-frame ``k`` (from the DTM).
     ``entry``    -- the seed frame (0 = true state-2 from-f0; a roll-entry index = the validated mode).
     ``upto``     -- exclusive end frame (default ``len(frames)``).
-    ``pre_inputs`` -- optional ``(inp[entry-2], inp[entry-1])`` to pre-seed the 2-frame controller
-                    buffer; if omitted, uses ``input_at(entry-1)`` and ``input_at(entry)`` (the
-                    convention: after seeding state[entry], ``step(input_at(entry+1))`` acts on
-                    ``input_at(entry-1)`` with INPUT_DELAY=2). See the README from-f0 box.
+    ``pre_inputs`` -- optional pre-seed for the delay-1 controller buffer; a single input (or a
+                    1-tuple/list). If omitted, uses ``input_at(entry)`` (the convention: after seeding
+                    state[entry], ``step(input_at(entry+1))`` acts on ``input_at(entry)`` at
+                    input_delay=1 -- physics reads the delay-1 DTM pad). See the README from-f0 box.
 
     Link's Co centre and csangle are injected from ``frames`` each frame; Tetra is a tracked XZ point
     moved by the full-depth plow. Returns a list of per-frame dicts: ``f``, live/sim ``proc``,
@@ -113,9 +121,11 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None):
     e = frames[entry]
     link = _seed_link(e, e['csangle'])
     if pre_inputs is not None:
-        link._inbuf = [tuple(pre_inputs[0])[:6], tuple(pre_inputs[1])[:6]]
+        pi = pre_inputs[-1] if isinstance(pre_inputs, (list, tuple)) and pre_inputs and \
+            isinstance(pre_inputs[0], (list, tuple, dict)) else pre_inputs
+        link._inbuf = [_step_args(pi)]
     else:
-        link._inbuf = [_step_args(input_at(entry - 1)), _step_args(input_at(entry))]
+        link._inbuf = [_step_args(input_at(entry))]     # delay-1: state[entry+1] acts inp[entry]
 
     tx, tz = e['tetra']['pos'][0], e['tetra']['pos'][2]
     pend_link, pend_tetra = full_depth_push(e['link']['cyl'], (tx, tz))

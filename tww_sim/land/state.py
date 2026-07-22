@@ -72,7 +72,7 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
                  use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True, foot_native=True,
                  sword_drawn=False, idle_anim=None, walls=None, model_draw=False,
-                 floors=None, gnd_seed=None):
+                 floors=None, gnd_seed=None, input_delay=INPUT_DELAY):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
         # Phase W: `walls` = WALL tris in game traversal order -> the per-frame CrrPos wall
@@ -169,9 +169,10 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         self.turn_shape_max = 0
         self.turn_shape_min = 0
         self._anim_nspeed = None               # 1-frame anim/integrate speed split (procMoveTurn_init halving)
-        # 2-frame controller-input buffer (index 0 = oldest = the input acted on this frame). Tuple =
-        # (stickX,stickY,buttons,triggerL,csx,csy): L/target AND the C-stick share the pipe, all delayed.
-        self._inbuf = [(128, 128, 0, 0, 128, 128)] * INPUT_DELAY
+        # Controller-input buffer (idx 0 = oldest = acted this frame): (sx,sy,btn,trigL,csx,csy). `input_delay`
+        # = raw->physics latency (default 2 = walk goldens; a DTM replay is one stage in -> 1; see README).
+        self._input_delay = int(input_delay)
+        self._inbuf = [(128, 128, 0, 0, 128, 128)] * self._input_delay
         # Anim-driven speedF: the ported posMoveFromFootPos chain (bit-exact position). None when
         # disabled or the keyframe data is absent -> fall back to the SPEEDF_CHASE stand-in.
         self._foot = None
@@ -331,11 +332,9 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         self._b_trig = ((abtn & ~self._abtn_prev) & 0x200) != 0
         self._abtn_prev = abtn
 
-        # Attention lock-on machine (dAttention_c::Run, every frame): drives the ATN_ACTOR procs + the
-        # untarget latency. Inert with no target (`_atn_actor_pos` None) -> byte-identical everywhere.
-        # It reads L via mDoCPd directly -> delay 1, one LESS than physics INPUT_DELAY=2 (session 6:
-        # field_0x01a tracks the raw DTM L at delay 1). Feed the delay-1 L (`_inbuf[0]`). See README.
-        if self._inbuf:
+        # Attention lock-on machine (dAttention_c::Run; inert with no target). It reads L one frame AHEAD
+        # of physics: input_delay=2 -> the delay-1 L `_inbuf[0]` (s6); input_delay=1 -> physics IS delay-1.
+        if self._input_delay >= 2 and self._inbuf:
             _atn_btn, _atn_trig = self._inbuf[0][2], self._inbuf[0][3]
             l_atn = bool(_atn_btn & 0x40) or _atn_trig >= 200
         else:
