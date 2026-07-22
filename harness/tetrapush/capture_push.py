@@ -46,6 +46,13 @@ CPAD = 0x80398308
 ZL1_TYPE_OFF = 0x84F
 ZL1_STT_OFF = 0x84B
 
+# Link body Co cylinder centre (the animated setCollision root/neck midpoint = the actual Tetra-plow
+# centre, NOT current.pos) + csangle (dCam_getControledAngleY). Provenance/offsets: README ## Addresses.
+LINK_CYL_C = 0x4064
+CAM_ROOT = 0x803AD380
+CAM_OFF1 = 0x34
+CAM_OFF2 = 0x2B0
+
 PROC = {1: "SUBJ", 4: "WAIT", 5: "FREE_WAIT", 6: "MOVE", 7: "ATN_MOVE", 8: "ATN_ACTOR_WAIT",
         9: "ATN_ACTOR_MOVE", 15: "CRAWL_START", 23: "WAIT_TURN", 24: "MOVE_TURN", 25: "SLIP",
         30: "FRONT_ROLL", 31: "ROLL_CRASH", 0x22: "BACK_JUMP", 0x24: "AUTO_JUMP", 0x27: "FALL",
@@ -73,7 +80,18 @@ def _rdr(D):
 
         def u32(self, a):
             return struct.unpack('>I', D.read_bytes(h, mem1, a, 4))[0]
+
+        def s16(self, a):
+            v = self.u16(a)
+            return v - 0x10000 if v >= 0x8000 else v
     return R()
+
+
+def _csangle(r):
+    """dCam_getControledAngleY (csangle) via the pointer chain [[0x803AD380]+0x34]+0x2B0 (u16)."""
+    p1 = r.u32(CAM_ROOT)
+    p2 = r.u32(p1 + CAM_OFF1)
+    return r.u16(p2 + CAM_OFF2)
 
 
 def _pad(r):
@@ -97,7 +115,11 @@ def _snap(r, tetra, fi):
         f=fi, proc=r.s32(lp + 0x3100),
         link=dict(pos=[r.f32(la + 0x1F8), r.f32(la + 0x1FC), r.f32(la + 0x200)],
                   travel=r.u16(la + 0x206), facing=r.u16(la + 0x20E),
-                  speedF=r.f32(la + 0x254), anim=r.f32(lp + 0x2F64), mrate=r.f32(lp + 0x2F60)),
+                  speedF=r.f32(la + 0x254), anim=r.f32(lp + 0x2F64), mrate=r.f32(lp + 0x2F60),
+                  # body Co cylinder (the Tetra-plow driver): center + radius + height, and shape.z lean.
+                  cyl=[r.f32(lp + LINK_CYL_C), r.f32(lp + LINK_CYL_C + 4), r.f32(lp + LINK_CYL_C + 8)],
+                  cyl_r=r.f32(lp + 0x4070), cyl_h=r.f32(lp + 0x4074), shape_z=r.s16(la + 0x210)),
+        csangle=_csangle(r),
         tetra=dict(pos=[r.f32(tetra + 0x1F8), r.f32(tetra + 0x1FC), r.f32(tetra + 0x200)],
                    travel=r.u16(tetra + 0x206), facing=r.u16(tetra + 0x20E),
                    speedF=r.f32(tetra + 0x254), stt=r.s8(tetra + ZL1_STT_OFF)),

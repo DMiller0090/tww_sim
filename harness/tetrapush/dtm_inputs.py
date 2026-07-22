@@ -109,7 +109,10 @@ def build(dtm=DTM_DEFAULT, cap_path=None, out=OUT_DEFAULT, nframes=56, write=Tru
         if cap is not None and i < len(cap):
             c = cap[i]
             row['live'] = dict(proc=c['proc'], speedF=c['link']['speedF'], facing=c['link']['facing'],
-                               travel=c['link']['travel'], pos=c['link']['pos'], anim=c['link'].get('anim'))
+                               travel=c['link']['travel'], pos=c['link']['pos'], anim=c['link'].get('anim'),
+                               # Link Co-cyl centre (Tetra-plow driver) + csangle -- the from-f0 replay
+                               # ground truth (see README ## The CC split / ## Addresses).
+                               cyl=c['link'].get('cyl'), csangle=c.get('csangle'))
             row['tetra'] = dict(pos=c['tetra']['pos'], stt=c['tetra']['stt'], speedF=c['tetra']['speedF'])
         frames.append(row)
     seed = None
