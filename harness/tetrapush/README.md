@@ -165,6 +165,7 @@ The mechanism is fully grounded (US GZLE01 line numbers; logic identical to JP):
 | `fixtures/courtyard_push_state2.json` | 51-frame session-1 ground-truth capture from state 2 (repo `fixtures/`). |
 | `tetra_plow.py` | **The Courtyard Tetra-plow LAW** (session 8): Tetra's per-frame move = the FULL Co overlap depth from Link's animated mCyl centre (`Tetra += depth·unit(Tetra−link_centre)`; `depth = 80 − dist`). `reconstruct()` predicts her whole trajectory from Link's centre path + seed. Gated `tests/test_tetra_plow.py` (frac==1.0 every frame; whole-push reconstruction <0.01 u vs live). |
 | `link_plow.py` | **The Courtyard Link-recoil LAW** (session 9): the MIRROR of `tetra_plow` -- Link's per-frame recoil = the FULL Co overlap depth AWAY from Tetra (`link += depth·unit(link_centre−Tetra)`), on top of his foot term. `recoil()`/`recoil_step()`. Gated `tests/test_link_plow.py` (frac==1.0 every push frame; recoil vector + feet reconstruction 0-ULP-within-jitter on the roll frames). Reuses `tetra_plow.plow_depth`. |
+| `from_f0.py` | **The from-f0 COUPLED replay** (session 10): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay()`. Gated `tests/test_from_f0.py`: from the roll entry, cyc1 (roll + untarget tier + backslide) is bit-exact (speedF 0-ULP; Link pos <1e-3 u), Tetra 0-ULP from f0 both cycles. |
 | `fixtures/courtyard_push_cyl.json` | Session-8 live ground truth: per-frame Link **mCyl Co-centre** + **csangle** + Tetra pos, single-stepped from slot 2 (`capture_push`). The Co-centre/csangle source the from-f0 replay needs. **Single-step, so cyc2 is edge-jittery** (the `_dedup` in the plow test drops the f44==f45 double-read); NOT a pinned edge oracle. |
 | `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5). |
 
@@ -372,22 +373,40 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       reconstruction 0-ULP-within-single-step-jitter on the clean roll frames; foot term uses the
       POST-update speedF along `current.angle.y`). See `## The CC split`. The 2x-vs-naive-50/50 doubling
       source is an open sub-puzzle (not needed for the law). 453 offline pass; land goldens byte-identical.
-- [~] **From-f0 coupled replay** (the last piece before the planner; s7 diagnosed, s8 built the
-      scaffold, **s9 closed the physics blocker -- the Link recoil law**). Seed a coupled stepper at f0
-      (state 2, MOVE backslide) + feed the real DTM bytes + apply BOTH gated plow laws (`link_plow` for
-      Link's recoil + `tetra_plow` for Tetra's push, each the full depth from Link's Co centre) + diff
-      BOTH actors. **What remains for the from-f0 integration (s9):** (1) the **MOVE-phase Link Co
-      centre** -- the plow depth on the backslide frames (f0-2, f21-28) needs Link's animated mCyl centre
-      during MOVE, which `body_cyl.roll_co_center` only models for rolls; model the `setCollision`
-      walk/slide Co centre offline (or, for a first validation, INJECT the captured per-frame `cyl` from
-      `courtyard_push_cyl.json`, as with csangle). (2) Wire the two full-depth laws into the coupled
-      stepper (the general `cc_stepper`/`co_move_pair` stays 50/50 for the FOLLOWING-Tetra sandbox --
-      add a Courtyard full-depth coupling mode, don't change the default). (3) The mechanical scaffold
-      (input pre-seed `_inbuf=[inp[-1],inp[0]]` -> step `inp[1..]`->`live[1..]`; foot warm; inject the
-      captured per-frame csangle; pending-push pre-seed). Also: **cyc2's untarget is
-      single-step-edge-jittery** (a re-capture exited the roll to +26 decaying, not the -25.7 flip); the
-      pinned `courtyard_push_dtm.json` is IMMUTABLE and the deterministic from-f0 replay is exactly what
-      disambiguates cyc2. **Session-7 probe findings still relevant:**
+- [x] **From-f0 coupled replay -- BUILT + cyc1 bit-exact (session 10).** `harness/tetrapush/from_f0.py`
+      wires BOTH full-depth plow laws (`link_plow` recoil + `tetra_plow` push) into a closed-loop
+      `LandState` replay: seed at f0 (or a roll entry), feed the real DTM bytes, INJECT Link's mCyl Co
+      centre + csangle per frame (deferring the MOVE-phase Co-centre model), track Tetra as a bare XZ
+      plow point (stt-3 the WHOLE window -- no follow leg). It is a COURTYARD-SPECIFIC full-depth mode;
+      the general `cc_stepper`/`co_move_pair` 50/50 is untouched. **Gated `tests/test_from_f0.py` (4
+      green):** seeded at the first roll entry, cycle 1 -- the FRONT_ROLL, the 2-frame ATN_ACTOR
+      untarget tier (flip -25.727313995361328 + body2 -25.452238082885742), and the following MOVE
+      backslide (f4-23) -- is bit-exact vs the locked capture (**every speedF 0-ULP**; Link pos within
+      the injected-cyl single-step capture precision, max 6.1e-5 u), and **Tetra's full-depth plow from
+      f0 reproduces her whole trajectory to <=9 ULP / <1.4e-4 u over the plow window, both cycles**.
+      457 offline pass, land goldens byte-identical (additive; no library change). This closes the s9
+      "wire it together" -- the full-depth coupling physics is validated. The mechanical scaffold works:
+      input pre-seed `_inbuf=[inp[entry-1],inp[entry]]` -> step `inp[k]`->`live[k]` (INPUT_DELAY=2 handled
+      internally), csangle injected via `_cam.yaw` (C-stick neutral).
+- [~] **THE current blocker: the backslide->roll-setup transition (MOVE->ATN_MOVE +18 re-target).**
+      The one gap in the from-f0 replay (why cycle 2 does not yet chain, and why the true f0 seed is not
+      bit-exact): just before each roll the player re-targets in ATN_MOVE (proc 7), which flips speedF
+      ~-25 -> +18 over ~2 frames, then A triggers the roll. **Diagnosed via per-frame diff (session 10):**
+      (a) the sim enters proc-7 **1 frame late** (sim f27, live f26 for cyc2) -- `checkNextMode`'s r24
+      (`checkAttentionLock()`) uses the physics delay-2 L, but live routes on the attention's **delay-1**
+      L (session 6: the attention reads L via `mDoCPd` directly, delay 1). Gating r24 on the delay-1 L
+      (`_inbuf[0]`) fixes the ENTRY (proc-7 at f26, cyc1 stays bit-exact -- verified by monkeypatch) --
+      BUT (b) the **+18 re-target flip** then lands 1 frame late in the OTHER direction (live flips f28,
+      sim f29): the `setSpeedAndAngleAtn` DIR_FORWARD/BACKWARD split + the ~180deg travel chase during
+      the re-target is a multi-frame subtlety not yet modelled, and pinning its exact frame needs a
+      jitter-free live probe (the single-step capture is +-1 on this edge, [[run-dtm-1frame-jitter]]).
+      So DON'T half-ship the delay-1 change (it fixes the entry but not the flip, and touches the hot
+      dispatch path); model the WHOLE re-target (delay-1 `checkAttentionLock` + the DIR_FORWARD flip +
+      the roll-trigger timing) decomp-first, then gate the full 45-frame chained replay end-to-end.
+      Then the true **f0 seed** also needs the previous cycle's **attention-RELEASE residual** seeded
+      (at f0 Link is mid-fade of the prior untarget -> proc 7 at f1-2 with no L held; a fresh NONE seed
+      can't reproduce it) -- capturable via `mLockOnState`/`mpAttnActorLockOn`/reticle-frame (session-5/6
+      addrs). **Session-7 probe findings still relevant:**
       1. **The CC plow is ACTIVE from f0.** At f0 live Link displaces only ~12u despite `speedF -24.57`,
          because Tetra (behind him, being backslid-into) is plowed ~12.6u and Link's net move is reduced
          by the equal-and-opposite CC recoil. So the replay must run the plow from frame 0 -- Link is in
