@@ -118,12 +118,44 @@ def _s16(v):
 
 
 def _computed_center(link):
-    """Link's body Co centre for the frame just stepped: the setCollision root/neck midpoint rebuilt
-    from the sim's own drawn pose at the settled position, the draw-time lean (cf. cc_stepper's
-    link_co_center, generalized to every proc via FootFK.body_co_center)."""
+    """Link's body Co centre AS setCollision WRITES it (the execute-pass value): the root/neck
+    midpoint rebuilt from the sim's own pose at the post-posMove position of the frame just stepped.
+    Live-pinned session 14 (`_notes/tetrapush-setcol_probe.py`, JP setCollision 0x8011a670 bp): the
+    breakpoint-read nodeMtx midpoint == the freshly written mCyl to <=6.1e-5 u every frame (proc-7,
+    roll entry, all roll bodies), at pos == the pause-boundary pos (posMove has run; the CC pass has
+    not). This is NOT yet the value the plow laws consume -- see `_cc_settled_center`."""
     cx, cz = link._foot.ff.body_co_center(link.pos_x, link.pos_y, link.pos_z,
                                           link.facing, link._draw_lean)
     return (float(cx), float(cz))
+
+
+def _cc_settled_center(exec_center, tetra_xz):
+    """The pause-boundary mCyl -- the value the gated plow laws consume (`courtyard_push_cyl.json`
+    `link.cyl`): the scene CC pass's IMMEDIATE SetPosCorrect write moves Link's registered Co
+    cylinder by HALF the overlap depth away from Tetra (the decomp 50/50 rank split, watchpoint-
+    caught session 14 at lp+0x4064, writer LR 0x800ab5d0 in dCcS).
+
+    Live-derived (probe frames f1..f12): ``fix(k) - exec(k) == 0.5 * depth(exec(k), tetra(k)) *
+    unit(exec(k) - tetra(k))`` exactly, which also equals ``recoil(fix(k), tetra(k))`` -- the "full
+    depth from the settled centre" framing the gated laws use. (This closes the session-9 "2x
+    doubling" sub-puzzle: both actors take the plain 0.5*cross_len split of the EXEC-centre overlap;
+    measured against the SETTLED centre it reads as the full depth.) fp-faithful mirror of
+    `tetra_plow.plow_step` with the half factor, directed away from Tetra."""
+    from harness.tetrapush.tetra_plow import plow_depth
+    from tww_sim.core.collision import is_zero, fsqrt
+    from tww_sim.core.fp import f32, fsubs, fadds, fmuls, fdivs
+    lx, lz = f32(exec_center[0]), f32(exec_center[-1])
+    tx, tz = f32(tetra_xz[0]), f32(tetra_xz[-1])
+    depth = plow_depth((lx, lz), (tx, tz))
+    if depth <= 0.0:
+        return float(lx), float(lz)
+    dx = fsubs(lx, tx)                          # away from Tetra
+    dz = fsubs(lz, tz)
+    dist = fsqrt(fadds(fmuls(dx, dx), fmuls(dz, dz)))
+    if is_zero(dist):
+        return float(lx), float(lz)
+    f = fdivs(fmuls(f32(depth), f32(0.5)), dist)
+    return float(fadds(lx, fmuls(dx, f))), float(fadds(lz, fmuls(dz, f)))
 
 
 def _seed_link(row, csangle, seed_nspeed=None):
@@ -194,7 +226,7 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
 
     e = frames[entry]
     link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
-    if centers == 'computed':
+    if centers in ('computed', 'diag'):
         if e['proc'] == FRONT_ROLL:
             raise ValueError("centers='computed' needs the f0 (MOVE) seed -- a mid-roll seed has no "
                              "pre-roll pose for the entry morf")
@@ -207,7 +239,10 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         link._inbuf = [_step_args(input_at(entry))]     # delay-1: state[entry+1] acts inp[entry]
 
     tx, tz = e['tetra']['pos'][0], e['tetra']['pos'][2]
-    c0 = _computed_center(link) if centers == 'computed' else e['link']['cyl']
+    if centers == 'computed':
+        c0 = _cc_settled_center(_computed_center(link), (tx, tz))
+    else:
+        c0 = e['link']['cyl']
     pend_link, pend_tetra = full_depth_push(c0, (tx, tz))
 
     out = []
@@ -233,11 +268,13 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
             dtz=_bits(tz) - _bits(lv['tetra']['pos'][2]))
         # end-of-frame k check: the push consumed producing state[k+1] uses frame-k's SETTLED centre
         # + Tetra pos (the decomp draw-phase Ccsp()->Move() order).
-        if centers == 'computed':
-            ck = _computed_center(link)
+        if centers in ('computed', 'diag'):
+            ck = _cc_settled_center(_computed_center(link), (tx, tz))
             row['sim_cyl'] = ck
             row['dcx'] = _bits(ck[0]) - _bits(lv['link']['cyl'][0])
             row['dcz'] = _bits(ck[1]) - _bits(lv['link']['cyl'][-1])
+            if centers == 'diag':
+                ck = lv['link']['cyl']      # diag: diffs only; the pushes stay injected/bit-exact
         else:
             ck = lv['link']['cyl']
         out.append(row)

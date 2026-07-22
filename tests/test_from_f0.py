@@ -203,3 +203,69 @@ def test_tetra_full_depth_from_f0_bit_exact(fix):
         assert abs(d['dtx']) <= 16 and abs(d['dtz']) <= 16, (
             "frame %d: Tetra off by (%d, %d) ULP -- not 0-ULP" % (d['f'], d['dtx'], d['dtz']))
         assert err < 1e-3, "frame %d: Tetra pos off by %.6f u" % (d['f'], err)
+
+
+_SETCOL = os.path.join(_ROOT, 'fixtures', 'courtyard_push_setcol.json')
+
+
+@pytest.fixture(scope='module')
+def setcol():
+    if not os.path.exists(_SETCOL):
+        pytest.skip("setCollision breakpoint fixture not present (session-14 probe)")
+    return json.load(open(_SETCOL))['frames']
+
+
+def test_settled_center_law_half_depth(fix, setcol):
+    """The mCyl TIMING law (session 14, breakpoint-pinned): the pause-boundary mCyl the gated plow
+    laws consume equals setCollision's execute-pass midpoint PLUS the scene CC pass's immediate
+    half-depth SetPosCorrect write away from Tetra (the plain decomp 50/50 rank split). Gate:
+    `_cc_settled_center(cyl_exec(k), tetra(k))` reproduces the capture's `link.cyl` on every probed
+    frame to capture precision. This is also the closure of the session-9 "2x doubling" sub-puzzle:
+    full-depth-from-the-settled-centre == half-depth-from-the-exec-centre, same numbers."""
+    from harness.tetrapush.from_f0 import _cc_settled_center
+    cyl_frames, _ = fix
+    for r in setcol:
+        k = r['f']
+        fx = cyl_frames[k]['link']['cyl']
+        t = cyl_frames[k]['tetra']['pos']
+        sx, sz = _cc_settled_center((r['cyl_exec'][0], r['cyl_exec'][2]), (t[0], t[2]))
+        d = math.hypot(sx - fx[0], sz - fx[-1])
+        assert d < 2e-4, "frame %d: settled centre off %.6f u" % (k, d)
+
+
+def test_setcollision_is_execute_time_midpoint(setcol):
+    """setCollision's write IS the plain root/neck nodeMtx midpoint at call time (execute-pass
+    matrices, post-posMove pre-CC-push base) -- read at the JP 0x8011a670 breakpoint, <=6.1e-5 u on
+    every probed frame (proc-7, the roll entry, and the roll bodies). The draw-pass matrices the
+    session-13 offline fits compared against are a DIFFERENT base -- never use pause-boundary
+    nodeMtx as the setCollision source."""
+    for r in setcol:
+        mx = 0.5 * (r['root'][0] + r['neck'][0])
+        mz = 0.5 * (r['root'][2] + r['neck'][2])
+        d = math.hypot(mx - r['cyl_exec'][0], mz - r['cyl_exec'][2])
+        assert d < 1e-4, "frame %d: exec midpoint off %.6f u" % (r['f'], d)
+
+
+def test_computed_centers_track_on_settled_roll_frames(fix, seed):
+    """The self-contained centre pipeline (FK exec midpoint + the half-depth settled-centre law),
+    diagnosed OPEN-LOOP (diag mode: pushes stay injected, so the trajectory is the gated bit-exact
+    one; the computed centre is compared per frame). On the settled single-anim roll frames the
+    computed centre matches the capture to <2e-3 u -- the law + FK are right; what remains open for
+    the fully-computed closed loop are the enumerated pose gaps (f0-seed warmup f1/f3, the proc-9
+    ATN blend f19-21 and its post-untarget morf decay f22-26, small blend residue elsewhere)."""
+    if seed is None:
+        pytest.skip("state-2 seed fixture not present")
+    cyl_frames, dtm_frames = fix
+    rows = replay(cyl_frames, _input_at(dtm_frames), 0, upto=44,
+                  seed_nspeed=seed['link']['nspeed'], centers='diag')
+    by_f = {d['f']: d for d in rows}
+    settled = [5, 7, 8, 9, 10, 11, 12, 13, 17, 18, 39, 40, 41, 42, 43]
+    for k in settled:
+        r = by_f[k]
+        fx = cyl_frames[k]['link']['cyl']
+        d = math.hypot(r['sim_cyl'][0] - fx[0], r['sim_cyl'][1] - fx[-1])
+        assert d < 2e-3, "settled frame %d: computed centre off %.5f u" % (k, d)
+    # and the diag run must not perturb the gated replay: procs + speedF stay live-exact
+    for d in rows:
+        assert d['sim_proc'] == d['live_proc'], "diag mode changed the trajectory (f%d)" % d['f']
+        assert d['speedF'] == d['live_speedF'], "diag mode changed speedF (f%d)" % d['f']

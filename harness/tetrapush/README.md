@@ -24,6 +24,21 @@ To get there:
    relevant live RAM (Link pos/speed/facing/anim/proc; Tetra pos/facing/speed/stt).
 2. Build a planner: state-2 config to an input sequence that lands Tetra on a viable clip coord.
 
+## Live setup (HARD-WON, session 14 -- read before rebuilding the slot-2 state)
+
+The real-TAS setup runs on **`TWW-JP.iso`** (the official unmodified JP disc), NOT `twwgz.iso` (the
+practice hack every sandbox anchor uses) -- match the iso to the savestate's origin. On the wrong
+iso the state half-loads and **Dolphin exits cleanly seconds-to-minutes later** (no crash dump, no
+log line). Two more traps:
+
+- **`MMU = True` is required** in `Release/User/Config/Dolphin.ini` (`[Core]`); the slot-1/2 states
+  were saved with MMU on, and with it off `loadstate 2` **silently aborts** (`MemoryManager::DoState`
+  fake-vmem mismatch; the only signal is a 3-second OSD toast -- screenshot the render window to read
+  OSD, it is never logged). MMU stays on, always (Dereck's standing requirement).
+- **A movie-anchored state needs its movie active before the load**: from a stopped instance,
+  `play <StateSaves/GZLJ01.s02.dtm> game=<TWW-JP.iso>`, wait for `running/playing:true`, then
+  `loadstate 2` (lands paused at frame 89952). This fork does not sync MMU from DTM headers.
+
 ## The setup (measured live, 2026-07-21)
 
 "Courtyard" = the flooded **Hyrule** castle room (stage `Hyrule`, room 0), flat floor **Y = 0.16327**,
@@ -86,17 +101,17 @@ Link's side (his recoil = the full depth too, the mirror). Grounded geometry:
   **overturns** the session-8 "Tetra 100 % / Link 0 %" reading (Link is not 0 %; he ejects the full
   depth too), and is distinct from the type-5 FOLLOWING Tetra's gated 50/50 (`[[tetra-push-model]]`,
   the sandbox `cc_stepper`) -- this open-floor being-pushed (stt-3) split is Courtyard-specific.
-- **OPEN sub-puzzle (not a blocker -- the law is measured + derived + gated): why 2x the naive split.**
-  The static decomp gives a SINGLE `SetPosCorrect` per Co pair per frame (`ChkCo` iterates unordered
-  pairs once; `Ccsp()->Move()` runs once/frame, `d_s_play.cpp:287`), and Link (weight 120, rank 5) vs
-  Tetra (`temp=0x8C`=140, rank 5) is a **50/50** split (0.5*depth each) -- HALF what live does. Both
-  actors moving the full depth (2*depth total) means a doubling the static read doesn't explain
-  (candidates: the immediate `*ppos += vec` writes at `d_cc_s.cpp:267-268` on top of the deferred
-  `m_cc_move`; a second resolution; the `SetMass`/`mMass_Mng` layer -- but Tetra doesn't register mass).
-  Pin it next session with a clean live read of Link's `m_cc_move` at `posMove` entry (JP `0x80106514`)
-  -- is the delivered push 0.5*depth or full? -- and/or the `SetPosCorrect` (JP `0x800AB1E4`) vec1
-  magnitude for the Link-Tetra pair. The from-f0 replay does NOT need this resolved: it applies the
-  measured full-depth `link_plow` + `tetra_plow` laws directly.
+- **The "2x the naive split" sub-puzzle -- SOLVED (session 14): there is no doubling; it IS the plain
+  50/50.** The scene CC pass applies the decomp 50/50 rank split to the **EXEC-time** centres (each
+  actor moves `0.5 * cross_len` of the `setCollision`-written overlap), and the immediate
+  `SetPosCorrect` write (watchpoint-caught at `lp+0x4064`, writer LR `0x800ab5d0` in dCcS) moves
+  Link's REGISTERED Co cylinder by that half-depth away from Tetra. Because that shrinks the
+  centre-to-centre gap by the same half, "full depth measured from the PAUSE-BOUNDARY (settled)
+  centre" -- what the fixtures log and the gated `link_plow`/`tetra_plow` laws consume -- is
+  numerically identical to "half depth from the exec centre". Verified exactly on probe frames
+  f1..f12 (`fixtures/courtyard_push_setcol.json`; `delta == recoil(fix, tetra) == 0.5 *
+  recoil(exec, tetra)` to 4 decimals). The gated full-depth laws stay as-built (they are the settled-
+  centre framing of the same numbers); `from_f0._cc_settled_center` encodes the exec-to-settled map.
 
 ## THE key modeling gap: untarget brakesliding = the ATN_ACTOR procs  [MODELED s2; FLIP live-exact s3; LOCK-LIFETIME + 2-FRAME TIER s6; BACKSLIDE-UNZEROED + GAP-2 CONE s7]
 
@@ -168,6 +183,7 @@ The mechanism is fully grounded (US GZLE01 line numbers; logic identical to JP):
 | `link_plow.py` | **The Courtyard Link-recoil LAW** (session 9): the MIRROR of `tetra_plow` -- Link's per-frame recoil = the FULL Co overlap depth AWAY from Tetra (`link += depth·unit(link_centre−Tetra)`), on top of his foot term. `recoil()`/`recoil_step()`. Gated `tests/test_link_plow.py` (frac==1.0 every push frame; recoil vector + feet reconstruction 0-ULP-within-jitter on the roll frames). Reuses `tetra_plow.plow_depth`. |
 | `from_f0.py` | **The from-f0 COUPLED replay** (session 10-12): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay(..., seed_nspeed=)`. Gated `tests/test_from_f0.py`: from the roll entry AND from **state 2 itself** (`seed_nspeed` = the measured mNormalSpeed) the replay is bit-exact f1..f44 (speedF 0-ULP, procs match, Link pos <1e-3 u), Tetra 0-ULP both cycles. |
 | `fixtures/courtyard_push_cyl.json` | Session-8 live ground truth: per-frame Link **mCyl Co-centre** + **csangle** + Tetra pos, single-stepped from slot 2 (`capture_push`). The Co-centre/csangle source the from-f0 replay needs. **Single-step, so cyc2 is edge-jittery** (the `_dedup` in the plow test drops the f44==f45 double-read); NOT a pinned edge oracle. |
+| `fixtures/courtyard_push_setcol.json` | Session-14 breakpoint ground truth (f1..f12): at each JP-`setCollision` hit, the nodeMtx root/neck translates + pos/anim/facing AT CALL TIME and the freshly-written **`cyl_exec`**. Pins the mCyl timing law (exec midpoint) + the half-depth settled-centre map. Source probe `_notes/tetrapush-setcol_probe.py`. |
 | `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5), `_notes/tetrapush-retarget_probe.py` (session 11), `_notes/tetrapush-seed_probe.py` (session 12: reads the hidden f0 seed fields -- mNormalSpeed/mDirection/attention -- that pinned the true-f0 seed as a speedF-lags-mNormalSpeed gap), and `_notes/tetrapush-{upper_probe,anmmtx_probe}.py` (session 13: the upper anim part / mBodyAngle state and the live `mpNodeMtx` root+neck matrices + `.json` dumps -- the ground truth behind the body-Co FK validation + the open mCyl timing law). |
 
 Run: `python -m harness.tetrapush.capture_push frames=60` (needs Dolphin up with slot 2 = the
@@ -215,7 +231,10 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
   (2 x {f32 ratio +0, anm* +4}), `mAnmRatioUpper` `la+0x2FC4` (3 packs); `mFrameCtrlUnder` `la+0x302C`
   (2 x J3DFrameCtrl 0x14: rate +0xC, frame +0x10 -- so lp+0x2F60/0x2F64 == ctrl0), `mFrameCtrlUpper`
   `la+0x3054` (3 ctrls); `mpCLModel` `la+0x32C` -> `mpNodeMtx` (J3DModel +0x8C, 0x30/joint; translate
-  col +0xC/+0x1C/+0x2C) = `getAnmMtx`. US `setCollision` = `0x8011D788` (JP translate pending).
+  col +0xC/+0x1C/+0x2C) = `getAnmMtx`. **JP `setCollision` = `0x8011a670`** (`setCollision__9daPy_lk_cFv`,
+  framework.map; US 0x8011D788), sole caller `daPy_lk_c::execute+0x119c` (LR `0x8011f8ec`), once per
+  frame. The dCcS immediate half-depth writer to `lp+0x4064` traps with LR `0x800ab5d0` (session-14
+  watchpoint; probe `_notes/tetrapush-setcol_probe.py`, baked to `fixtures/courtyard_push_setcol.json`).
 - **CC push + camera (session 8, live-found 2026-07-22; `this` = deref `0x803AD860` = `lp`):**
   Link body **Co cylinder centre** = `lp + 0x4064` (cXyz; radius `lp+0x4070` = 30.0, height `lp+0x4074`
   ≈ 104.6; the `lp+0x4044` block is the derived AABB, `centre ± (r,0,r)`/`+(0,h,0)` -- how the centre was
@@ -464,19 +483,31 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
         (`mpCLModel` la+0x32C -> `mpNodeMtx` +0x8C; `_notes/tetrapush-anmmtx_probe.py`), the computed
         centre matches `mid(root,neck)` to **~6e-5 u on every settled roll frame** (entry-morf frames
         0.05-0.8 u; proc-9 frames 3.8-8.1 u still off -- the ATN side/direction pose needs pinning).
-      - **OPEN -- the mCyl TIMING law.** The captured/pushed `mCyl(k)` (the value the gated plow laws
-        consume, self-consistent with Tetra's motion) equals NEITHER `mid(k)` nor `mid(k-1)` of the
-        draw-final matrices (0.3-9 u off, deterministic per cycle phase; per-frame alignment sweeps,
-        implied-base solves, and mixed root/neck-timestamp fits all fail to collapse it). setCollision
-        (:9748, plain midpoint `SetC`, no smoothing) must read the matrices at a mid-frame state the
-        pause boundary never shows. **Next: breakpoint JP setCollision (US 0x8011D788 -> translate via
-        framework.map) and read `mpNodeMtx[0/14]` at hit time**, plus its caller position in execute.
+      - **The mCyl TIMING law -- CLOSED (session 14, breakpoint-pinned).** Broke on JP setCollision
+        `0x8011a670` (caller `daPy_lk_c::execute+0x119c`, once per frame): the write IS the plain
+        root/neck nodeMtx midpoint AT CALL TIME (<=6.1e-5 u every probed frame) -- the EXECUTE-pass
+        matrices (`mpCLModel->calc()` :11591 after `posMove` :11407, before the scene CC pass), at
+        the pause-boundary `current.pos`. The session-13 residual was comparing against the DRAW-pass
+        matrices (a different, lagged base). The pause-boundary `mCyl` the fixtures log = that exec
+        midpoint + the dCcS immediate HALF-DEPTH write (see `## The CC split`), encoded as
+        `from_f0._cc_settled_center`. Probe fixture `fixtures/courtyard_push_setcol.json`; gates
+        `test_from_f0.py::{test_settled_center_law_half_depth,
+        test_setcollision_is_execute_time_midpoint, test_computed_centers_track_on_settled_roll_frames}`
+        (462 offline green). Open-loop (diag mode) the computed centre now matches the capture to
+        **<2e-3 u on every settled single-anim roll frame** (many at ~1e-5); closed-loop
+        (`centers='computed'`) procs+speedF chain through f28.
+      - **OPEN -- the remaining POSE gaps** (all enumerated by the diag run, largest first): the
+        proc-9 ATN blend frames f19-21 (4.6-8.5 u; the ATN side/direction anim choice) and its
+        post-untarget morf decay f22-26 (1.1-3.0 u); the f0-seed warmup f1 (1.8 u) and the roll-entry
+        morf f3 (1.2 u); small blend residue f14-16/f29-38 (0.03-0.3 u). These are what separate the
+        closed-loop computed replay from bit-exact past f28 (drift-induced cyc2 divergence).
 - [ ] **Build the planner**: state-2 config to a coupled sim (Link roll/untarget-EBS + Tetra
       plow/follow) to a search for the input sequence that lands Tetra on a genuine `tetra_placements`
       coord AND sets up the matching roll entry. Method reference: `plan_land` / the seam-clip `solver`
-      (cheap predictor + exact bit-confirm, no calibration). Blocked on the self-contained centre
-      above; csangle is the other injected quantity (the follow-camera chase is unmodeled --
-      `camera_exact` covers only the C-stick omega path -- but drifts slowly, ~6 BAM/frame max).
+      (cheap predictor + exact bit-confirm, no calibration). Blocked on the remaining POSE gaps above
+      (the centre law itself is closed); csangle is the other injected quantity (the follow-camera
+      chase is unmodeled -- `camera_exact` covers only the C-stick omega path -- but drifts slowly,
+      ~6 BAM/frame max).
 
 ## Hard rules (inherited from the seam-clip work)
 
