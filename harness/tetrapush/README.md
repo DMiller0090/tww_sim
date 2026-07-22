@@ -225,7 +225,11 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       flip + re-aim, additive inertness -- ALL exact/0-ULP against pinned model outputs, no tolerances).
       **NOT yet live-0-ULP-validated** (that is the next box); the flip physics are decomp-faithful and
       the model produces the right shape, but the magnitude is only validated against the MODEL, not live.
-- [~] **Validate sim vs live from state 2**, 0-ULP. The untarget-brakeslide FLIP is validated
+- [x] **Validate sim vs live from state 2**, 0-ULP -- **CLOSED for cyc1 (session 10):** the from-f0
+      coupled replay (below) validates the untarget flip AND body2 **0-ULP** from the clean roll-entry
+      seed (`test_from_f0.py`: flip -25.727313995361328, body2 -25.452238082885742, both bit-exact),
+      resolving the "body2 ULP-exact awaits the from-f0 replay" residual noted below. The
+      untarget-brakeslide FLIP is validated
       BIT-EXACT for BOTH cycles (session 3), and (session 4) it stays bit-exact under FULL Tetra
       coupling. Session 5 RAM+asm-proved the untarget brakeslide is a **2-frame proc-9
       (`ATN_ACTOR_MOVE` / `setSpeedAndAngleAtnActor`) tier** in BOTH cycles -- body1 = the flip
