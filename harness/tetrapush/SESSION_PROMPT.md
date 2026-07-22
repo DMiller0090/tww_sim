@@ -45,10 +45,10 @@ Then restate, before editing anything: (a) current state in one paragraph, (b) t
 THIS session, (c) your plan. If the session message names no goal, the goal IS the newest handoff's
 "Next step".
 
-THE CURRENT BLOCKER (model gap): **untarget brakesliding = the ATN_ACTOR procs (8/9)**. The sim only
-models plain ATN_MOVE (7). See README "Decomp anchors" + "Modeling recipe". Model it decomp-first, as
-a new proc mixin / attention state machine, and keep every already-bit-exact land tech unchanged
-(`tests/test_land_goldens.py` must stay green).
+THE CURRENT BLOCKER (model gap): read it off the README `## Plan / status` -- the newest `[~]`/`[ ]`
+box IS the live blocker (this file stays stable and never names a specific one, since the blocker moves
+every session). Whatever it is: model it **decomp-first**, and keep every already-bit-exact land tech
+unchanged (`tests/test_land_goldens.py` must stay green).
 
 METHOD REFERENCE (how to be fast + exact, a pattern to absorb): the seam-clip `solver` /
 `tww_sim/land/plan_land` (a cheap monotone predictor + subtree prune + exact bit-confirm, no table, no
