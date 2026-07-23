@@ -533,8 +533,11 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       contact dynamics stay exact" reading here was WRONG -- session 22 measured the drift as
       DIFFERENTIAL**: e_link ~ -e_tetra (a pair mode), and by f39 the sim's Link<->Tetra distance
       (127.9 u) has left the live one (40.4 u) -- the late-window contact dynamics diverge. The
-      seed is bit-exact across fixtures; the residual driving it is the computed exec-centre FK
-      (<=3e-4 u/frame ~ 1-2 f32 ULP at courtyard coordinates). See the FK 0-ULP box below.) Four decomp-pinned
+      seed is bit-exact across fixtures. **Session 23 re-diagnosed the residual: it is NOT the
+      computed exec-centre FK** (proven bit-exact given exact pos -- 0 ULP vs the setcol breakpoint
+      f1..12) but a ~1e-5 u/frame position-integration residual at the single-step fixtures' f32
+      noise floor, amplified ~1.35x/contact-frame by the unstable plow feedback (see the FK 0-ULP
+      box below). Four decomp-pinned
       exec-pose laws closed it (all live-verified at the JP setCollision breakpoint; gates
       `test_computed_centers_track_on_settled_roll_frames` + NEW
       `test_closed_loop_computed_replay_dynamics_bit_exact`):
@@ -748,19 +751,42 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
                of the placement zone (-1640, -910); coarse feasibility is UNRESOLVED (suspect the
                canonical-template re-engagement approximation degrades chained cycles; FreeRun-
                confirmed chains are the honest test once realized as inputs).
-      - [ ] **THE FK 0-ULP HUNT (the planner-blocking model gap, named session 22):** the computed
-            exec-centre FK carries a <=3e-4 u/frame residual (~1-2 f32 ULP at courtyard magnitudes
-            -- the float64 matrix path vs the console's f32 PSMTX pipeline), which the plow feedback
-            amplifies DIFFERENTIALLY (e_link ~ -e_tetra) to ~93 u by f43; by f39 the sim's contact
-            dynamics have left the live ones. Fix = make `FootFK.body_co_center` (the joints
-            [0,1,2,3,4,14] chain: quat->mtx, SSC, worldBase concat) fp-faithful, 0-ULP against the
-            LOCKED `courtyard_push_setcol.json` exec centres + the settled `courtyard_push_cyl.json`
-            stream. That collapses the whole self-contained replay to bit-exact positions (the plow
-            laws + seed already are), un-blocks tier-2 exact confirm at the full plan horizon, and
-            retires `test_drift_is_differential_not_common_mode` (it self-skips when drift < 0.01 u).
+      - [x] **THE FK 0-ULP HUNT -- RE-DIAGNOSED (session 23): the FK matrix is NOT the blocker.**
+            Session 22 named the blocker "make `FootFK.body_co_center` fp-faithful." That is
+            **misdiagnosed** -- `body_co_center` is ALREADY bit-exact: fed the breakpoint-exact pos,
+            the computed exec centre equals `courtyard_push_setcol.json`'s `cyl_exec` to **0 ULP on
+            every frame f1..12** (the joint-chain accumulation, SSC, worldBase concat, quantization
+            are all correct). The console `sqrtf` (MSL `frsqrte` + 3 double Newton steps + f32 cast,
+            math.h:89) was also RULED OUT -- bit-identical to a correctly-rounded `math.sqrt` over the
+            loop's whole dist_sq range, swapping it in changes nothing. **The real picture (gated
+            `test_from_f0.py::test_onestep_error_bounded_from_exact_state`):** the coupled STEP
+            FUNCTION is bit-faithful -- reset to the exact captured state each frame and step once, the
+            one-step Link-pos error stays BOUNDED and NON-accumulating (<=64 ULP in z ~ 1.5e-5 u,
+            largest at the roll-entry morf frames k3..k5 = the known `calc_transform`/Hermite
+            entry-morf sub-ULP flagged in `core/anim/quat.py`; single-digit ULP elsewhere; x 0-ULP
+            throughout -- its coarse f32 quantum at ~1335 hides the same ~1e-5 u residual that shows
+            at small-z). facing + speedF bit-exact every frame; diag mode (push driven by the injected
+            fixture centre) does NOT drift over all 43 frames. So the `centers='computed'` blow-up is
+            the plow feedback (depth = 80 - dist, **~1.35x/contact-frame = an unstable amplifier**)
+            magnifying a ~1e-5 u/frame residual that sits at the single-step fixtures' own f32 noise
+            floor. The FK matrix, the sqrt, the plow/recoil math, and the seed are each correct to
+            that resolution.
+      - [ ] **THE REMAINING <=1-ULP HUNT (the real planner blocker):** collapsing the closed loop to
+            true 0-ULP means pinning the last <=1-ULP op(s) in the **DASH/ROLL foot-term + recoil
+            path** (the roll-entry frames inject the biggest residual; the `calc_transform`/Hermite
+            entry-morf sub-ULP is the #1 concrete lead, already documented in `quat.py`). The
+            single-step fixtures resolve only to ~1e-5 u, so localizing a <=1-ULP op needs a per-op
+            LIVE capture (breakpoint the foot toe / `m_cc_move` / the roll root-motion delta across
+            f1..f43, the way `setcol` pinned the exec centre) -- offline ground truth is at the noise
+            floor. **Open question for the planner (decide before the hunt):** the ~1.35x amplifier is
+            plausibly a REAL chaotic sensitivity of the chase-and-plow (session-22 finding 2: 11 BAM
+            at cycle 1 flips cycle 2's band), in which case NO bit-faithful-but-not-bit-IDENTICAL model
+            can predict >~1 cycle open-loop, and the planner should trust the sim for ~1 cycle +
+            confirm multi-cycle chains via DTM-on-Dolphin (tier 2 = the real hardware), with tier-0 for
+            the coarse envelope -- rather than chase a possibly-irreducible last ULP.
       - [ ] **Then the search proper**: realize cycle chains as raw inputs (`macro_inputs`) and
-            confirm in FreeRun (tier 2); resolve coarse feasibility (can ~4-6 cycles herd her the
-            full ~960 u?); add the walk-push nudge endgame + the entry walk-in.
+            confirm in FreeRun / on Dolphin (tier 2); resolve coarse feasibility (can ~4-6 cycles herd
+            her the full ~960 u?); add the walk-push nudge endgame + the entry walk-in.
 
 ## Hard rules (inherited from the seam-clip work)
 

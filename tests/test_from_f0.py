@@ -349,6 +349,64 @@ def test_closed_loop_computed_replay_dynamics_bit_exact(fix, seed, eyes):
                 "frame %d: closed-loop position off dL=%.5f dT=%.5f" % (d['f'], dl, dt))
 
 
+def test_onestep_error_bounded_from_exact_state(fix, seed, eyes):
+    """THE RE-DIAGNOSIS (session 23): the coupled STEP FUNCTION is bit-faithful; the closed-loop
+    position drift is an AMPLIFICATION instability, NOT an FK matrix bug.
+
+    Session 22 named the blocker "the FK 0-ULP hunt -- make `FootFK.body_co_center` fp-faithful."
+    That is misdiagnosed: `body_co_center` is already BIT-EXACT given exact input (the computed exec
+    centre equals `courtyard_push_setcol.json`'s breakpoint `cyl_exec` to 0 ULP on every frame f1..12
+    when fed the breakpoint-exact pos). The console `sqrtf` (MSL `frsqrte` + 3 double Newton steps +
+    f32 cast, math.h:89) was also RULED OUT -- it is bit-identical to a correctly-rounded `math.sqrt`
+    over the loop's whole dist_sq range, so the plow sqrt is not the residual either.
+
+    The real situation, proven here: reset the sim to the EXACT captured state each frame (pos + Tetra
+    + the push from the fixture centre), step ONCE, and the one-step Link-position error stays BOUNDED
+    and NON-accumulating -- <=64 ULP in z (~1.5e-5 u), largest at the roll-entry morf frames (k3..k5,
+    the known `calc_transform`/Hermite entry-morf sub-ULP flagged in `core/anim/quat.py`), single-digit
+    ULP elsewhere; x is 0 ULP throughout (its coarse f32 quantum at ~1335 hides the same ~1e-5 u
+    residual that shows at small-magnitude z). facing + speedF are bit-exact every frame. So each
+    component (foot FK, recoil, plow, centre FK) is correct to the single-step fixture's f32 noise
+    floor; the `centers='computed'` blow-up (test above) is the plow feedback (depth = 80 - dist,
+    ~1.35x/contact-frame -- an unstable amplifier) magnifying those floor-level residuals. Closing it
+    to true 0-ULP needs the last <=1-ULP op(s) in the DASH/ROLL foot-term + recoil path pinned against
+    a per-op live capture (the single-step fixtures resolve only to ~1e-5 u); the FK matrix is not it."""
+    if seed is None:
+        pytest.skip("state-2 seed fixture not present")
+    from harness.tetrapush.from_f0 import FreeRun, full_depth_push
+    from tww_sim.core.fp import f32
+    cyl_frames, dtm_frames = fix
+    input_at = _input_at(dtm_frames)
+
+    run = FreeRun(cyl_frames[0], seed_nspeed=seed['link']['nspeed'], computed_pose=True,
+                  seed_old_pose=seed.get('old_pose'))
+    run.pre_seed_input(input_at(0))
+    link = run.link
+    worst = 0
+    for k in range(1, 44):
+        prev = cyl_frames[k - 1]
+        # reset to the EXACT captured state[k-1], recompute the outgoing push from the exact
+        # fixture centre + Tetra -> isolates the ONE-STEP error from pure accumulation.
+        link.pos_x = f32(prev['link']['pos'][0]); link.pos_z = f32(prev['link']['pos'][2])
+        run.tx = f32(prev['tetra']['pos'][0]); run.tz = f32(prev['tetra']['pos'][2])
+        run.pend_link, run.pend_tetra = full_depth_push(prev['link']['cyl'], (run.tx, run.tz))
+        eye = eyes[k - 1] if (eyes is not None and k - 1 < len(eyes)) else None
+        row = run.step(input_at(k), csangle=cyl_frames[k - 1]['csangle'], eye=eye,
+                       center=cyl_frames[k]['link']['cyl'])
+        lv = cyl_frames[k]['link']
+        assert row['sim_proc'] == cyl_frames[k]['proc'], "frame %d: one-step proc diverged" % k
+        assert _bits(row['speedF']) == _bits(lv['speedF']), "frame %d: one-step speedF diverged" % k
+        assert row['sim_facing'] == lv['facing'], "frame %d: one-step facing diverged" % k
+        ex = abs(_bits(row['sim_link'][0]) - _bits(lv['pos'][0]))
+        ez = abs(_bits(row['sim_link'][1]) - _bits(lv['pos'][2]))
+        assert ex <= 4, "frame %d: one-step x error %d ULP (a real step bug, not noise)" % (k, ex)
+        worst = max(worst, ez)
+        assert ez <= 128, "frame %d: one-step z error %d ULP -- step function bug, not amplification" % (k, ez)
+    # sanity: the one-step floor is TINY next to the closed-loop drift it feeds (thousands of ULP
+    # by mid-window) -- proving the drift is amplification, not a per-step error.
+    assert worst <= 128
+
+
 def test_freerun_direct_api_matches_replay(fix, seed, eyes):
     """`FreeRun` -- the planner's novel-input stepper -- driven DIRECTLY (no capture rows in the
     loop) reproduces the wrapped `replay(centers='computed')` byte-for-byte. Pins the API contract
