@@ -76,7 +76,7 @@ def full_depth_push(link_center, tetra_xz):
     return (float(rlx), float(rlz)), (float(ntx) - tx, float(ntz) - tz)
 
 
-def _seed_pose_f0(link, anim_frame, m351c):
+def _seed_pose_f0(link, anim_frame, m351c, old_pose=None):
     """Seed the f0 DRAWN-POSE state for the computed-centre mode (state 2 is a full-speed MOVE
     backslide, so the under-body blend is the regime-3 DASH cruise -- the whole hidden anim state is
     the one frame-ctrl phase the capture logs as ``link.anim``, plus the turn lean ``m351C``).
@@ -108,6 +108,20 @@ def _seed_pose_f0(link, anim_frame, m351c):
     fsf.ff.set_pos(link.pos_x, link.pos_z, py=link.pos_y, facing=link.facing)
     fsf.t2 = fsf.ff.step_feet(dash, dash, ph_prev, ph_prev, 1.0, -1.0)
     fsf.t1 = fsf.ff.step_feet(dash, dash, ph, ph, 1.0, -1.0)
+    if old_pose is not None:
+        # Overwrite the store with the CAPTURED live m_old_fdata (`courtyard_push_seed.json`
+        # `old_pose`; RAM quat order x,y,z,w -> sim (w,x,y,z)) + seed the morf counters.
+        for j, jj in enumerate(old_pose['joints']):
+            q = jj['quat']
+            fsf.ff.old_quat[j] = (q[3], q[0], q[1], q[2])
+            fsf.ff.old_trans[j] = tuple(jj['trans'])
+            fsf.ff.old_scale[j] = tuple(jj['scale'])
+        ms = fsf.ff.morf
+        ms.counter = old_pose['counter']
+        ms.f8 = old_pose['f8']
+        ms.rate = old_pose['rate']
+        ms.f10 = old_pose['f10']
+        ms.f14 = old_pose['f14']
     link.m351C = int(m351c) & 0xFFFF
     link._draw_lean = _s16(link.m351C) >> 1
 
@@ -117,15 +131,27 @@ def _s16(v):
     return v - 0x10000 if v >= 0x8000 else v
 
 
-def _computed_center(link):
+def _computed_center(link, init_frame=False):
     """Link's body Co centre AS setCollision WRITES it (the execute-pass value): the root/neck
     midpoint rebuilt from the sim's own pose at the post-posMove position of the frame just stepped.
     Live-pinned session 14 (`_notes/tetrapush-setcol_probe.py`, JP setCollision 0x8011a670 bp): the
     breakpoint-read nodeMtx midpoint == the freshly written mCyl to <=6.1e-5 u every frame (proc-7,
     roll entry, all roll bodies), at pos == the pause-boundary pos (posMove has run; the CC pass has
-    not). This is NOT yet the value the plow laws consume -- see `_cc_settled_center`."""
+    not). This is NOT yet the value the plow laws consume -- see `_cc_settled_center`.
+
+    The BODY_CHN counter-twist uses this frame's POST-update lean (`m351C >> 1` after
+    `_set_move_slant_angle`, == the execute-pass `mBodyAngle.z` at calc time), while the base keeps
+    the draw lean -- the session-16 timing law (see `FootFK.body_co_center`).
+
+    ``init_frame`` -- True when this frame DISPATCHED a proc ``*_init`` (its dispatch proc differs
+    from the previous frame's). ``commonProcInit`` zeroes ``shape_angle.z`` (d_a_player_main.cpp
+    :5841) BEFORE ``setWorldMatrix`` builds the base, and ``setMoveSlantAngle`` only restores it
+    (from the untouched ``m351C``) after -- so the exec base has NO lean on proc-entry frames
+    (live-pinned session 16: the f1/f3 base matrices read row0[1] == 0.0 while f2's carries the
+    old lean; the residual was exactly sin(lean_old) x the root height)."""
     cx, cz = link._foot.ff.body_co_center(link.pos_x, link.pos_y, link.pos_z,
-                                          link.facing, link._draw_lean)
+                                          link.facing, 0 if init_frame else link._draw_lean,
+                                          body_lean=_s16(link.m351C) >> 1)
     return (float(cx), float(cz))
 
 
@@ -194,7 +220,7 @@ def _seed_link(row, csangle, seed_nspeed=None):
 
 
 def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None,
-           centers='injected', eyes=None):
+           centers='injected', eyes=None, seed_old_pose=None):
     """Run the coupled from-f0 replay and diff BOTH actors vs the live capture, frame by frame.
 
     ``frames``   -- the live-capture rows (the cyl fixture), each ``{proc, csangle, link:{pos, facing,
@@ -209,6 +235,12 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
                     input_delay=1 -- physics reads the delay-1 DTM pad). See the README from-f0 box.
     ``seed_nspeed`` -- optional mNormalSpeed for a non-roll seed (the true f0 seed needs it; speedF
                     lags nspeed a frame there -- see `_seed_link`). Omit for roll-entry seeds.
+    ``seed_old_pose`` -- optional captured live `m_old_fdata` store for the f0 pose seed
+                    (`courtyard_push_seed.json` ``old_pose``): the per-joint post-morf pre-twist
+                    quat/transform of the last live-posed frame + the morf counters. Required for a
+                    bit-exact f1 entry-morf pose (the pure-dash warmup is ~1.7 u off at f0 -- the
+                    store still carries the prior cycle's ATN->MOVE morf mixture; session 16).
+                    Computed/diag modes only.
     ``eyes``     -- optional per-frame Tetra EYE positions (``fixtures/courtyard_push_eyepos.json``
                     ``frames[k]['eye']``, indexed by game frame): the proc-9 re-aim target
                     (`setShapeAngleToAtnActor` chases the bearing to `mpAttnActorLockOn->eyePos`,
@@ -236,7 +268,8 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         if e['proc'] == FRONT_ROLL:
             raise ValueError("centers='computed' needs the f0 (MOVE) seed -- a mid-roll seed has no "
                              "pre-roll pose for the entry morf")
-        _seed_pose_f0(link, e['link']['anim'], (int(e['link']['shape_z']) << 1) & 0xFFFF)
+        _seed_pose_f0(link, e['link']['anim'], (int(e['link']['shape_z']) << 1) & 0xFFFF,
+                      old_pose=seed_old_pose)
     if pre_inputs is not None:
         pi = pre_inputs[-1] if isinstance(pre_inputs, (list, tuple)) and pre_inputs and \
             isinstance(pre_inputs[0], (list, tuple, dict)) else pre_inputs
@@ -245,13 +278,13 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         link._inbuf = [_step_args(input_at(entry))]     # delay-1: state[entry+1] acts inp[entry]
 
     tx, tz = e['tetra']['pos'][0], e['tetra']['pos'][2]
-    if centers == 'computed':
-        c0 = _cc_settled_center(_computed_center(link), (tx, tz))
-    else:
-        c0 = e['link']['cyl']
+    # The SEED frame's Co centre is static state-2 initial-condition data even in computed mode
+    # (computing it needs f-1's m351C, which the seed doesn't carry); f1 on is computed. (s16)
+    c0 = e['link']['cyl']
     pend_link, pend_tetra = full_depth_push(c0, (tx, tz))
 
     out = []
+    prev_disp = link.state                         # dispatch proc of the seed frame
     for k in range(entry + 1, upto):
         # inject the start-of-frame csangle (the previous frame's integrated value; C-stick neutral so
         # the forced yaw holds), then consume the pending full-depth pushes from frame k-1's snapshot.
@@ -262,6 +295,10 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
             e = eyes[k - 1]                        # end-of-prev-frame eyePos (the re-aim target)
             link._atn_actor_eye = (e[0], e[-1])
         link.step(*_step_args(input_at(k)))
+        # proc *_init (commonProcInit shape_angle.z=0) runs on the first frame whose pause-read
+        # mCurProc differs from the previous frame's -- the post-step state stream is that boundary.
+        init_frame = link.state != prev_disp
+        prev_disp = link.state
         tx += pend_tetra[0]
         tz += pend_tetra[1]
 
@@ -280,7 +317,7 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         # end-of-frame k check: the push consumed producing state[k+1] uses frame-k's SETTLED centre
         # + Tetra pos (the decomp draw-phase Ccsp()->Move() order).
         if centers in ('computed', 'diag'):
-            ck = _cc_settled_center(_computed_center(link), (tx, tz))
+            ck = _cc_settled_center(_computed_center(link, init_frame=init_frame), (tx, tz))
             row['sim_cyl'] = ck
             row['dcx'] = _bits(ck[0]) - _bits(lv['link']['cyl'][0])
             row['dcz'] = _bits(ck[1]) - _bits(lv['link']['cyl'][-1])

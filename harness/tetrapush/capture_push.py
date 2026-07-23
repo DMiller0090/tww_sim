@@ -153,6 +153,22 @@ def capture_seed(out=SEED_OUT, slot=2):
     lp = r.u32(LINK_PTR_ADDR)
     la = lp - 0xD8
     attn = r.u32(lp + 0x33A8)
+    # m_old_fdata (header 0x31B4 -> lp+0x30DC): the per-joint OLD-POSE store (post-morf pre-twist)
+    # + morf counters -- the general-correctness f0 pose seed (README ## Addresses, session 16).
+    ofd = r.u32(lp + 0x30DC)
+    joints = []
+    for j in range(42):                       # all CL joints; the body_co/foot chains read a subset
+        ti = r.u32(ofd + 0x1C) + j * 0x20     # J3DTransformInfo: scale +0, rot(s16x3) +0xC, trans +0x14
+        qp = r.u32(ofd + 0x20) + j * 0x10     # Quaternion: x,y,z,w f32
+        joints.append(dict(
+            scale=[r.f32(ti + 0x0), r.f32(ti + 0x4), r.f32(ti + 0x8)],
+            rot=[r.s16(ti + 0xC), r.s16(ti + 0xE), r.s16(ti + 0x10)],
+            trans=[r.f32(ti + 0x14), r.f32(ti + 0x18), r.f32(ti + 0x1C)],
+            quat=[r.f32(qp + 0x0), r.f32(qp + 0x4), r.f32(qp + 0x8), r.f32(qp + 0xC)]))
+    old_pose = dict(
+        flg=r.u8(ofd + 0x0), counter=r.f32(ofd + 0x4), f8=r.f32(ofd + 0x8),
+        rate=r.f32(ofd + 0xC), f10=r.f32(ofd + 0x10), f14=r.f32(ofd + 0x14),
+        start_joint=r.u16(ofd + 0x18), end_joint=r.u16(ofd + 0x1A), joints=joints)
     seed = dict(
         stage="Hyrule", slot=int(slot), proc=r.s32(lp + 0x3100),
         link=dict(pos=[r.f32(la + 0x1F8), r.f32(la + 0x1FC), r.f32(la + 0x200)],
@@ -162,7 +178,8 @@ def capture_seed(out=SEED_OUT, slot=2):
                   m34E6=r.u16(la + 0x34E6), csangle=_csangle(r)),
         # attention residual (session 12: NONE / no actor at f0 -> the sim's default AttentionLock)
         atn=dict(lock_state=(r.u8(attn + 0x18) if attn else -1),
-                 actor_lock=r.u32(lp + 0x30C4)))
+                 actor_lock=r.u32(lp + 0x30C4)),
+        old_pose=old_pose)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, 'w') as f:
         json.dump(seed, f, indent=1)

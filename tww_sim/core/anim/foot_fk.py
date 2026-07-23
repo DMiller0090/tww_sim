@@ -55,6 +55,9 @@ MORF_START, MORF_END = 0, 0x2A          # initOldFrameMorf(2.4, 0, 0x2A) joint r
 # foot set (body_chn..neck_jnt); all < MORF_END so the oldframe-morf covers them like the feet.
 BODY_CO_EXTRA = [2, 3, 4, 14]
 NECK_CHAIN = [0, 1, 2, 3, 4, 14]
+# J3D segment-scale-compensation joints on the neck chain (scale_compensate=1): mDoExt_setJ3DData
+# (m_Do_ext.cpp:47) row-scales their local 3x3 by 1/parentS. See harness/tetrapush/README.md (s16).
+BODY_CO_SSC = (3, 4, 14)
 
 
 class MorfState:
@@ -324,7 +327,10 @@ class FootFK:
         quat (m3658), so the adjust is applied here at rebuild time, only at CL_JNT_BODY_CHN."""
         q = self.old_quat[jnt]
         if body_x:
-            e = Q.euler_to_quat(int(body_x) & 0xFFFF, 0, 0)
+            # JMAEulerToQuat halves the angle as a SIGNED s16; an unsigned-masked -1 mis-rounds
+            # to a ~-32-BAM ghost twist where the game gets identity (session 16).
+            bx = int(body_x) & 0xFFFF
+            e = Q.euler_to_quat(bx - 0x10000 if bx >= 0x8000 else bx, 0, 0)
             aw, ax, ay, az = q
             bw, bx, by, bz = e
             q = (fp.f32(aw * bw - ax * bx - ay * by - az * bz),
@@ -341,7 +347,7 @@ class FootFK:
         m[0][3] = fp.f32(t[0]); m[1][3] = fp.f32(t[1]); m[2][3] = fp.f32(t[2])
         return m
 
-    def body_co_center(self, px, py, pz, facing, lean=0):
+    def body_co_center(self, px, py, pz, facing, lean=0, body_lean=None):
         """Link's body **Co** cylinder centre (x, z) for the pose LAST posed (drawn) by this driver --
         ``daPy_lk_c::setCollision``'s root/neck world midpoint (d_a_player_main.cpp:9748-9754), the
         centre ``cM3d_Cross_CylCyl`` pushes other actors from. The generalization of
@@ -353,17 +359,38 @@ class FootFK:
         Call it AFTER the frame's pose with the frame's SETTLED (post-integration) position, facing,
         and the draw-time lean (``LandState._draw_lean``) -- the setCollision timing the coupled
         stepper is gated on. Requires ``body_co`` mode (the neck-chain extras must have been posed);
-        Python world path only."""
+        Python world path only.
+
+        ``body_lean`` = the lean the BODY_CHN counter-twist uses -- this frame's POST-update
+        ``shape_angle.z`` (``m351C >> 1``), NOT the draw lean. In the execute pass, ``setWorldMatrix``
+        (:11551, the base -- OLD lean) runs BEFORE ``setMoveSlantAngle`` (:11561, updates ``m351C``
+        and sets ``mBodyAngle.z = shape_angle.z``), and ``mpCLModel->calc()`` (:11591, where
+        ``jointBeforeCB`` reads ``mBodyAngle.z``) runs after BOTH -- so the twist is one lean-update
+        ahead of the base (session-16 chain probe: anim x Rx(-new_lean) reproduces the live joint-2
+        matrix to 0.000000 on every probed frame; the old-lean twist erred only where the two leans
+        cross a sin-table quantization bucket, which is why the gap toggled per frame). Defaults to
+        ``lean`` (the old behavior) for callers without a post-update value."""
         if not (self.body_co and self.world):
             raise RuntimeError("body_co_center needs body_co=True on the Python world FK path")
         base, _ = fk.world_base(fp.f32(px), fp.f32(py), fp.f32(pz), int(facing) & 0xFFFF,
                                 int(lean) & 0xFFFF)
-        lv = int(lean) & 0xFFFF
+        lv = int(lean if body_lean is None else body_lean) & 0xFFFF
         body_x = -(lv - 0x10000 if lv >= 0x8000 else lv)   # -mBodyAngle.z; .z==shape_angle.z (:9526)
         cur = base
         root_t = None
         for jnt in NECK_CHAIN:
-            cur = fk.mtx_concat(cur, self._local_from_old(jnt, body_x=body_x if jnt == 2 else 0))
+            m = self._local_from_old(jnt, body_x=body_x if jnt == 2 else 0)
+            if jnt in BODY_CO_SSC:
+                # SSC: row r of the local 3x3 scaled by 1/parentS[r] (the parent's post-morf local
+                # scale this frame = the old-scale store; mDoExt_setJ3DData:47).
+                ps = self.old_scale.get(self.parent[jnt])
+                if ps is not None and (ps[0] != 1.0 or ps[1] != 1.0 or ps[2] != 1.0):
+                    for r in range(3):
+                        inv = fp.fdivs(1.0, ps[r])
+                        m[r][0] = fp.fmuls(m[r][0], inv)
+                        m[r][1] = fp.fmuls(m[r][1], inv)
+                        m[r][2] = fp.fmuls(m[r][2], inv)
+            cur = fk.mtx_concat(cur, m)
             if jnt == 0:
                 root_t = (cur[0][3], cur[2][3])
         cx = fp.fmuls(0.5, fp.fadds(root_t[0], cur[0][3]))

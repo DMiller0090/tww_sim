@@ -175,7 +175,7 @@ The mechanism is fully grounded (US GZLE01 line numbers; logic identical to JP):
 |------|------|
 | `find_tetra.py` | Locate Tetra (Zl1, id 429) live via the DMC walk, `_execute` breakpoint, `r3`. Session-stable (recomputes the REL base). |
 | `capture_push.py` | Load slot 2, locate Tetra, single-step the movie N frames, log both actors + FULL pad to a fixture. The (scalar) GROUND TRUTH -- single-stepped, so `+-1` on edges. Now also logs `nspeed` (mNormalSpeed). Subcommand **`capture_push seed`** = a DETERMINISTIC single read of the complete f0 state (no single-step jitter) -> `fixtures/courtyard_push_seed.json`. |
-| `fixtures/courtyard_push_seed.json` | The complete STATE-2 seed (f0): pos/travel/facing/speedF + the HIDDEN **mNormalSpeed** (`link.nspeed`) the cyl/dtm fixtures never logged, plus mDirection/m34E6/csangle + the attention state, for provenance. Deterministic single read (jitter-free). The from-f0 replay's `seed_nspeed` source AND the planner's initial condition (session 12). |
+| `fixtures/courtyard_push_seed.json` | The complete STATE-2 seed (f0): pos/travel/facing/speedF + the HIDDEN **mNormalSpeed** (`link.nspeed`) the cyl/dtm fixtures never logged, plus mDirection/m34E6/csangle + the attention state, for provenance. Deterministic single read (jitter-free). The from-f0 replay's `seed_nspeed` source AND the planner's initial condition (session 12). Session 16 added **`old_pose`** -- the live `m_old_fdata` per-joint post-morf pre-twist store (quat x,y,z,w + transform, all 42 joints) + morf counters, the `replay(..., seed_old_pose=)` source (at THIS seed it equals the pure-dash warmup; general-correctness for any f0 with live morf residue). |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
 | `fixtures/courtyard_push_state2.json` | 51-frame session-1 ground-truth capture from state 2 (repo `fixtures/`). |
@@ -185,6 +185,7 @@ The mechanism is fully grounded (US GZLE01 line numbers; logic identical to JP):
 | `fixtures/courtyard_push_cyl.json` | Session-8 live ground truth: per-frame Link **mCyl Co-centre** + **csangle** + Tetra pos, single-stepped from slot 2 (`capture_push`). The Co-centre/csangle source the from-f0 replay needs. **Single-step, so cyc2 is edge-jittery** (the `_dedup` in the plow test drops the f44==f45 double-read); NOT a pinned edge oracle. |
 | `fixtures/courtyard_push_setcol.json` | Session-14 breakpoint ground truth (f1..f12): at each JP-`setCollision` hit, the nodeMtx root/neck translates + pos/anim/facing AT CALL TIME and the freshly-written **`cyl_exec`**. Pins the mCyl timing law (exec midpoint) + the half-depth settled-centre map. Source probe `_notes/tetrapush-setcol_probe.py`. |
 | `fixtures/courtyard_push_eyepos.json` | Session-15 live ground truth (single-stepped, f0..f28): Tetra's **eyePos** (fopAc `+0x260` -- her animated head-joint world pos, the `setShapeAngleToAtnActor` aim target), her feet pos, Link facing, and `mpAttnActorLockOn` per frame (non-NULL f8-f20, NULL f21+). The `replay(..., eyes=)` injection source. Probe `_notes/tetrapush-eyepos_probe.py`. |
+| `_notes/tetrapush-chain_probe.py` | (gitignored) Session-16 breakpoint probe: FULL 3x4 nodeMtx for the neck-chain joints [0,1,2,3,4,14] at each JP-setCollision hit + `mBodyAngle`/`m351C`/`m34F2/F4`/`m34C2`/`m35E0`/`m35B8` at hit time. The joint-by-joint diff that pinned all four exec-pose laws. Companion `_notes/tetrapush-setframe_probe.py`: the J3DModel BASE TR mtx + `m_old_fdata` morf state + under-blend packs at the f1-f3 hits (the init-frame zero-lean base + the true morf cadence). |
 | `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5), `_notes/tetrapush-retarget_probe.py` (session 11), `_notes/tetrapush-seed_probe.py` (session 12: reads the hidden f0 seed fields -- mNormalSpeed/mDirection/attention -- that pinned the true-f0 seed as a speedF-lags-mNormalSpeed gap), and `_notes/tetrapush-{upper_probe,anmmtx_probe}.py` (session 13: the upper anim part / mBodyAngle state and the live `mpNodeMtx` root+neck matrices + `.json` dumps -- the ground truth behind the body-Co FK validation + the open mCyl timing law). |
 
 Run: `python -m harness.tetrapush.capture_push frames=60` (needs Dolphin up with slot 2 = the
@@ -236,6 +237,13 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
   framework.map; US 0x8011D788), sole caller `daPy_lk_c::execute+0x119c` (LR `0x8011f8ec`), once per
   frame. The dCcS immediate half-depth writer to `lp+0x4064` traps with LR `0x800ab5d0` (session-14
   watchpoint; probe `_notes/tetrapush-setcol_probe.py`, baked to `fixtures/courtyard_push_setcol.json`).
+- **Session-16 exec-pose fields:** `m_old_fdata` (`mDoExt_MtxCalcOldFrame*`, header 0x31B4) =
+  `lp + 0x30DC` -> deref: flg `+0`, morf counter `+4`, f8 `+8`, rate `+0xC`, f10 `+0x10`, f14
+  `+0x14`, start/end joint `+0x18/+0x1A`, `J3DTransformInfo*` `+0x1C` (0x20/joint: scale +0,
+  rot s16x3 +0xC, trans +0x14), `Quaternion*` `+0x20` (0x10/joint, **x,y,z,w order**). The J3DModel
+  base TR mtx = `[la+0x32C] + 0x24` (Mtx 3x4 -- how the init-frame zero-lean base was pinned).
+  NOTE the morf counters read at a setCollision hit are POST-calc (the last-joint dec already
+  fired); the rate the calc USED is one dec earlier.
 - **Session-15 pose/aim fields:** fopAc `eyePos` = fopAc `+0x260` (cXyz; any actor -- Tetra's is her
   animated head-joint world pos, the proc-9 re-aim target). Link waist twist `m34E0` `la+0x34E0`
   (s16; jointBeforeCB WAIST_JNT=30 z-rot, LEGS subtree only; f0 residual 1325 decaying
@@ -471,9 +479,45 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       state incl. mNormalSpeed); `from_f0.replay(..., seed_nspeed=)` threads it; `_seed_link` uses it for
       the non-roll seed. Gate: `tests/test_from_f0.py::test_true_f0_seed_bit_exact` (f1..f44 0-ULP). 459
       offline pass, land goldens byte-identical (additive; no library change).
-- [~] **The SELF-CONTAINED Co centre (replace the per-frame cyl injection) -- the planner
-      prerequisite (session 13).** A planner exploring NOVEL inputs cannot inject the captured mCyl
-      centre, so the sim must compute it from its own pose. Built + partially validated:
+- [x] **The SELF-CONTAINED Co centre (replace the per-frame cyl injection) -- the planner
+      prerequisite -- CLOSED (session 16).** The computed centre now matches the capture on EVERY
+      frame f1..43 to <3e-4 u (the cyl fixture's own single-step precision), and the fully
+      **CLOSED-LOOP replay (`centers='computed'`) chains from state 2 with every proc, speedF, and
+      lean 0-ULP f1..43** (facing within a +6-BAM eye-aim echo of the amplified capture noise;
+      positions amplify that ~1e-4 noise ~1.35x/frame through the plow feedback, common-mode --
+      Link and Tetra drift TOGETHER so the contact dynamics stay exact). Four decomp-pinned
+      exec-pose laws closed it (all live-verified at the JP setCollision breakpoint; gates
+      `test_computed_centers_track_on_settled_roll_frames` + NEW
+      `test_closed_loop_computed_replay_dynamics_bit_exact`):
+      1. **The BODY_CHN twist uses the NEW lean** (`mBodyAngle.z`): in execute, `setWorldMatrix`
+         (:11551, the base -- OLD lean) runs BEFORE `setMoveSlantAngle` (:11561, re-sets
+         `mBodyAngle.z = shape_angle.z`), and `mpCLModel->calc()` (:11591) after both -- so the
+         counter-twist is one lean update ahead of the base. The old-lean error only showed where
+         the two leans cross a sin-table bucket (`JMAEulerToQuat` half-angle >>4), which is why the
+         gap toggled per frame (f2/f4/f6 on, f5/f7-13 off).
+      2. **J3D segment-scale-compensation on the neck chain** (`BODY_CO_SSC` = stomach/chest/neck,
+         skeleton `scale_compensate=1`): `mDoExt_setJ3DData` (m_Do_ext.cpp:47-59) row-scales the SSC
+         joint's local 3x3 by `1/mParentS` (the parent's local anim scale). The dash bck scales
+         `stomach_jnt.x` 0.91-1.07, so the neck sat `scale_err * 22.26 u` off along the chest X on
+         every dash-posed frame -- THE "dash-backslide root-pose XZ bias" (and the f0-seed gap).
+         The foot chains carry SSC flags too (30/33/38) but only ANM_SLIP's jnt37 1.2 has a
+         non-identity parent there -- the foot path is deliberately untouched (validated live
+         separately); open question noted in the session-16 handoff.
+      3. **Signed body_x euler quantization**: `JMAEulerToQuat` halves the angle as a SIGNED s16;
+         the rebuild masked to unsigned first, mis-rounding every negative twist (worst at -1 BAM:
+         game half=0 -> identity, masked 65535//2 -> a ~-32-BAM ghost twist -- the f14/15 residue).
+      4. **Proc-init frames have NO base lean**: `commonProcInit` zeroes `shape_angle.z` (:5841)
+         BEFORE `setWorldMatrix`; `setMoveSlantAngle` restores it (from the untouched `m351C`)
+         after -- so the exec base is lean-free exactly on proc-entry frames (live-pinned: the
+         f1/f3 base matrices read row0[1]==0.0 while f2 carries the old lean). `from_f0` flags
+         init frames off the post-step proc stream.
+      Plus: the state-2 seed fixture now carries the captured live `m_old_fdata` per-joint OLD-POSE
+      store + morf counters (`capture_push seed`; `replay(..., seed_old_pose=)`) -- at THIS seed it
+      equals the pure-dash warmup bit-for-bit (f0's morf is dead), but it is the general-correctness
+      seed for any f0 with a live morf residue. The SEED frame's own Co centre stays part of the
+      static initial condition (computing it needs f-1's m351C, which the seed doesn't carry).
+      Earlier steps (sessions 13-15) built the FK/body-Co machinery, the mCyl timing law
+      (exec-time midpoint + dCcS half-depth settled write), and the proc-9 pose fixes:
       - **`FootFK.body_co_center`** (`core/anim/foot_fk.py`, `body_co=True` mode): poses the neck
         chain `[0,1,2,3,4,14]` alongside the foot joints and rebuilds `setCollision`'s root/neck
         world midpoint from the stored old pose at any (pos, facing, lean), including the
@@ -531,29 +575,22 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
            (facing + shape_z 0-ULP f1..f43), the extended `test_computed_centers_...` (per-frame
            ceilings). The replay injects the eye stream (`replay(..., eyes=)`) like csangle; the
            PLANNER model for eyePos (her look-at head anim chasing Link) is still open.
-      - **OPEN -- the remaining POSE gaps** (diag ceilings, largest first): a systematic
-        **dash-backslide root-pose XZ bias** ~0.1-0.4 u (f22-25 0.10-0.35 u; the f0 SEED pose shows
-        the same 0.42/0.72 u root/neck XZ gap -- session 15 ruled OUT the lean scale, a phase lag,
-        `dashs`-vs-`dash` content (root identical), `m34EC`/`shape.x` (0 all window), and the seed
-        Y gap (= `m35B8` -5.198, the footBgCheck draw-base Y shift, XZ-irrelevant); left: the
-        upper-part phase, wind-ish `m3730`/`m36B8` terms, a morf residue); the morf-trigger frames
-        f1/f3 (1.2-1.8 u, amplified by the same bias in the old pose); f14-16 blend residue
-        (0.03-0.05 u). The CLOSED-LOOP computed replay is blocked on these: the plow coupling has
-        positive feedback (a centre bias changes depth = 80 - dist, shoving BOTH actors), so the
-        early-frame bias compounds ~1.3x/frame into tens of units by f19 (common-mode -- speedF/procs
-        stay exact through f25). Also measured (session 15, `_notes/tetrapush-waist_probe.json`):
-        the f0 seed carries a WAIST twist residual `m34E0 = 1325` decaying (2, 0x800, 0x200) to 0 by
-        f3 -- it rotates the LEGS subtree only (jointBeforeCB WAIST_JNT=30, not the neck chain), so
-        it does not move the Co centre; and Link is SWORD-DRAWN the whole window (`m3562 = 0x103`) --
-        physics-inert (S-variants share rates/frameMax) but the S-pose set may matter for the final
-        CUT cycle.
+      - **The "remaining POSE gaps" of session 15 are ALL CLOSED by the session-16 laws above**
+        (the "dash-backslide root-pose XZ bias" WAS the missing SSC; f14-16 the unsigned body_x;
+        f1/f3 the proc-init base lean; f21-26 the new-lean twist). The session-15 rule-out list
+        (lean scale, phase lag, dashs-vs-dash root content, m34EC/shape.x, m35B8, m34E0 waist,
+        m3730/m36B8) stands -- those were all correctly eliminated. Sword-drawn note kept: `m3562 =
+        0x103` all window, physics-inert (dash/dashs identical at joints 0-4/14; only feet differ),
+        may matter for the final CUT pose set.
 - [ ] **Build the planner**: state-2 config to a coupled sim (Link roll/untarget-EBS + Tetra
       plow/follow) to a search for the input sequence that lands Tetra on a genuine `tetra_placements`
       coord AND sets up the matching roll entry. Method reference: `plan_land` / the seam-clip `solver`
-      (cheap predictor + exact bit-confirm, no calibration). Blocked on the remaining POSE gaps above
-      (the centre law itself is closed); csangle is the other injected quantity (the follow-camera
-      chase is unmodeled -- `camera_exact` covers only the C-stick omega path -- but drifts slowly,
-      ~6 BAM/frame max).
+      (cheap predictor + exact bit-confirm, no calibration). The pose/centre pipeline is CLOSED
+      (session 16); the remaining injected quantities a novel-input planner must model or bound:
+      **csangle** (the follow-camera chase is unmodeled -- `camera_exact` covers only the C-stick
+      omega path -- but drifts slowly, ~6 BAM/frame max) and **Tetra's eyePos** (her look-at head
+      anim chasing Link -- the proc-9 re-aim target; injected from
+      `fixtures/courtyard_push_eyepos.json` today, probe range f0..f28).
 
 ## Hard rules (inherited from the seam-clip work)
 

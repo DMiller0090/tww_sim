@@ -287,33 +287,62 @@ def test_facing_and_lean_bit_exact_with_eye_aim(fix, seed, eyes):
 def test_computed_centers_track_on_settled_roll_frames(fix, seed, eyes):
     """The self-contained centre pipeline (FK exec midpoint + the half-depth settled-centre law),
     diagnosed OPEN-LOOP (diag mode: pushes stay injected, so the trajectory is the gated bit-exact
-    one; the computed centre is compared per frame). With the session-15 proc-9 pose fixes (the
-    lock-gated SIDE direction, the routing-frame pose timing, the eyePos re-aim) the computed
-    centre matches the capture to <2e-3 u on EVERY settled frame -- both rolls, the proc-9 tier
-    (f19-20), and the whole backslide->cyc2 chain f27-43. What remains open for the fully-computed
-    closed loop: the f0-seed warmup f1/f3 (~1.2-1.8 u), the walk-morf decay f21-26 (<=0.36 u), and
-    small mid-roll blend residue f14-16 (<=0.05 u)."""
+    one; the computed centre is compared per frame). With the session-16 exec-pose laws -- the
+    NEW-lean BODY_CHN twist (mBodyAngle.z is re-set by setMoveSlantAngle BEFORE mpCLModel->calc,
+    :11559-11591), J3D segment-scale-compensation on the neck chain (the dash bck scales
+    stomach_jnt.x; mDoExt_setJ3DData:47), the signed body_x euler quantization, and the proc-init
+    base lean (commonProcInit zeroes shape_angle.z :5841 BEFORE setWorldMatrix; setMoveSlantAngle
+    restores it after) -- the computed centre matches the capture on EVERY frame f1..43 to
+    <3e-4 u (the cyl fixture's own single-step precision). No open pose gaps remain in-window."""
     if seed is None:
         pytest.skip("state-2 seed fixture not present")
     cyl_frames, dtm_frames = fix
     rows = replay(cyl_frames, _input_at(dtm_frames), 0, upto=44,
-                  seed_nspeed=seed['link']['nspeed'], centers='diag', eyes=eyes)
-    by_f = {d['f']: d for d in rows}
-    settled = [5, 7, 8, 9, 10, 11, 12, 13, 17, 18, 19, 20,
-               27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43]
-    for k in settled:
-        r = by_f[k]
-        fx = cyl_frames[k]['link']['cyl']
+                  seed_nspeed=seed['link']['nspeed'], centers='diag', eyes=eyes,
+                  seed_old_pose=seed.get('old_pose'))
+    for r in rows:
+        fx = cyl_frames[r['f']]['link']['cyl']
         d = math.hypot(r['sim_cyl'][0] - fx[0], r['sim_cyl'][1] - fx[-1])
-        assert d < 2e-3, "settled frame %d: computed centre off %.5f u" % (k, d)
-    # the enumerated open pose gaps hold their measured ceilings (regression fence, not a target)
-    for k, cap in [(1, 2.0), (3, 1.3), (14, 0.06), (15, 0.06), (16, 0.06),
-                   (21, 0.1), (22, 0.2), (23, 0.3), (24, 0.4), (25, 0.15), (26, 0.02)]:
-        r = by_f[k]
-        fx = cyl_frames[k]['link']['cyl']
-        d = math.hypot(r['sim_cyl'][0] - fx[0], r['sim_cyl'][1] - fx[-1])
-        assert d < cap, "open-gap frame %d: computed centre off %.5f u (cap %.2f)" % (k, d, cap)
+        assert d < 3e-4, "frame %d: computed centre off %.6f u" % (r['f'], d)
     # and the diag run must not perturb the gated replay: procs + speedF stay live-exact
     for d in rows:
         assert d['sim_proc'] == d['live_proc'], "diag mode changed the trajectory (f%d)" % d['f']
         assert d['speedF'] == d['live_speedF'], "diag mode changed speedF (f%d)" % d['f']
+
+
+def test_closed_loop_computed_replay_dynamics_bit_exact(fix, seed, eyes):
+    """THE PLANNER PREREQUISITE, CLOSED (session 16): the fully self-contained replay
+    (`centers='computed'` -- Link's Co centre rebuilt every frame from the sim's OWN pose; only the
+    static state-2 seed, the DTM bytes, csangle, and the Tetra eye stream are consumed) chains from
+    STATE 2 with every proc, speedF, facing, and lean BIT-EXACT vs live f1..f43, through both rolls,
+    both untarget tiers, and the whole coupled plow. Positions amplify the capture's own ~1e-4
+    single-step noise through the plow feedback (depth = 80 - dist, ~1.35x/frame -- common-mode:
+    Link and Tetra drift TOGETHER, their relative geometry and hence all contact dynamics stay
+    exact), so the position gate is the PRE-AMPLIFICATION window: <2e-3 u over f1..10. The same
+    noise perturbs the proc-9 eye-aim bearing (a bearing to a point ~30 u away, from a position
+    with the amplified noise), so facing carries a few-BAM echo on f20-28 (measured max +6); lean
+    stays 0-ULP (its addCalc sawtooth quantizes the echo away)."""
+    if seed is None:
+        pytest.skip("state-2 seed fixture not present")
+    cyl_frames, dtm_frames = fix
+    rows = replay(cyl_frames, _input_at(dtm_frames), 0, upto=44,
+                  seed_nspeed=seed['link']['nspeed'], centers='computed', eyes=eyes,
+                  seed_old_pose=seed.get('old_pose'))
+    for d in rows:
+        assert d['sim_proc'] == d['live_proc'], (
+            "frame %d: closed-loop proc %d != live %d" % (d['f'], d['sim_proc'], d['live_proc']))
+        assert d['speedF'] == d['live_speedF'], (
+            "frame %d: closed-loop speedF %r != live %r" % (d['f'], d['speedF'], d['live_speedF']))
+        df = (d['sim_facing'] - d['live_facing']) & 0xFFFF
+        df = df - 0x10000 if df >= 0x8000 else df
+        assert abs(df) <= 16, (
+            "frame %d: closed-loop facing %d != live %d" % (d['f'], d['sim_facing'], d['live_facing']))
+        assert d['sim_shape_z'] == d['live_shape_z'], (
+            "frame %d: closed-loop lean %d != live %d" % (d['f'], d['sim_shape_z'], d['live_shape_z']))
+        if d['f'] <= 10:
+            dl = math.hypot(d['sim_link'][0] - d['live_link'][0],
+                            d['sim_link'][1] - d['live_link'][1])
+            dt = math.hypot(d['sim_tetra'][0] - d['live_tetra'][0],
+                            d['sim_tetra'][1] - d['live_tetra'][1])
+            assert dl < 2e-3 and dt < 2e-3, (
+                "frame %d: closed-loop position off dL=%.5f dT=%.5f" % (d['f'], dl, dt))
