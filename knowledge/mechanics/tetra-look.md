@@ -87,14 +87,10 @@ old-pose store (not the case at the courtyard f0 -- `cur_morf == 1.0`).
 
 ## Open
 
-- **Link's own head-look (`m3564`)** is UNMODELED: `jointBeforeCB` twists Link's head joint
-  toward the lock target's eye through the untarget tier + backslide (live
-  `_notes/tetrapush-m3564_probe.json`: swings to -2492 BAM on f19-27, zero through every roll,
-  chased `addCalcAngleS(.., 3, 0x1000, 0x100)` in the d_a_player look updater ~:9060-9170).
-  Costs <=0.96 u of `mHeadTopPos.y` there -> her elevation chase shifts -> a <=16-BAM facing
-  echo on Link's re-aim frames in the self-contained replay
-  (`test_zl1_in_the_loop_replay_dynamics_bit_exact` documents the envelope). The named next
-  model gap for exact novel-input planning.
+- **Link's own head-look (`m3564`)** -- MODELED + live-validated (session 21): her elevation
+  chase consumes his twisted `mHeadTopPos.y` via [link-head-look.md](link-head-look.md)
+  (`FreeRun(neck=)`); the former <=16-BAM facing echo is closed (facing bit-exact in the
+  capture-tight replay, `tests/test_neck_look.py`).
 - Her `pos.y` is tracked static in the replay (live CrrPos wiggles it ~1e-5 u) -- a last-bit
   echo in eye/tattn Y only.
 - The morf (anim-switch) pose path is decomp-faithful but has no live ground truth yet (no

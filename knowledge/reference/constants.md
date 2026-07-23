@@ -221,6 +221,21 @@ The big-reversal ground-turn constants. Decomp `mSlip`/`mTurn`/`mMove`; see
 | WaitTurn facing pivot `mTurn.0x4/0x0/0x2` | `cLib_addCalcAngleS(scale 30, max 0x3CDF, min 0x1F40)` → ~0x1F40 (≈8000)/frame | |
 | MoveTurn facing sweep `cLib_addCalcAngleS(scale,max,min)` | 1-path 2 / (F0·4+0x4A56) / (F0·2) · slip-exit 3 / (F0·2) / F0 | F0 = `mMove.field_0x0` = 3000 |
 
+## Link head-look
+
+`setNeckAngle`'s `m3564` head twist (d_a_player_main.cpp:8938-9169). Mechanic:
+[link-head-look.md](../mechanics/link-head-look.md).
+
+| Constant | Value | Meaning (source) |
+|----------|-------|------------------|
+| head-centre / eye local offsets | (11.25, 0, 0) / (11.25, 18.75, 0) | `l_head_center_offset` / `l_eye_offset` (`d_a_player_main_data.inc:20`) |
+| look-pos cone | **±0x6000** of `m34DE` | `checkAttentionPosAngle` / :9014 |
+| chase `cLib_addCalcAngleS(scale,max,min)` | **3 / 0x1000 / 0x100** | :9157 |
+| pitch clamp | **[−10000, 8000]** | :9093 |
+| yaw clamp | **±14336** | HIO `mShip.m.field_0x0` (`d_a_player_HIO_data.inc:297`) |
+| yaw-freeze proximity | `absXZ(target − head centre) < `**30** | :9090 (the tier-frame razor branch) |
+| head-top offset | (40, 0, 0) | `head_offset` :11589 (`mHeadTopPos` :11592) |
+
 ## Camera (steering) - summary (full table migrates with the camera topic)
 
 | Constant | Value | Meaning | Source |

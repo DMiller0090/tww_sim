@@ -321,25 +321,42 @@ class FootFK:
                 break
         return self._waist_world(local)
 
-    def _local_from_old(self, jnt, body_x=0):
+    @staticmethod
+    def _quat_concat(a, b):
+        """mDoMtx_QuatConcat(a, b) -- the quaternion product the jointBeforeCB adjust uses."""
+        aw, ax, ay, az = a
+        bw, bx, by, bz = b
+        return (fp.f32(aw * bw - ax * bx - ay * by - az * bz),
+                fp.f32(aw * bx + ax * bw + ay * bz - az * by),
+                fp.f32(aw * by - ax * bz + ay * bw + az * bx),
+                fp.f32(aw * bz + ax * by - ay * bx + az * bw))
+
+    @staticmethod
+    def _sx(v):
+        v = int(v) & 0xFFFF
+        return v - 0x10000 if v >= 0x8000 else v
+
+    def _local_from_old(self, jnt, body_x=0, cb_xyz=None):
         """Rebuild one joint's local 3x4 matrix from the STORED old pose (the quat/trans/scale of
         the LAST posed frame) -- the same reconstruction waist_from_old uses, factored per joint.
         ``body_x`` (s16) = jointBeforeCB's body_chn extra rotation x term (-mBodyAngle.z; the y/x
         attention twists are separate and 0 in the courtyard window) -- the callback post-multiplies
         the animated quat (d_a_player_main.cpp:350-357) and the stored old pose keeps the UN-adjusted
-        quat (m3658), so the adjust is applied here at rebuild time, only at CL_JNT_BODY_CHN."""
+        quat (m3658), so the adjust is applied here at rebuild time, only at CL_JNT_BODY_CHN.
+        ``cb_xyz`` = a full ``local_38`` (x, y, z) callback adjust (the HEAD joint's
+        ``(m3564.y, m3564.z, m3564.x)`` twist, :270): the decomp applies it as TWO quat concats --
+        ``Q(x, y, 0)`` then ``Q(0, 0, z)`` -- each skipped when its components are 0 (:353-362)."""
         q = self.old_quat[jnt]
         if body_x:
             # JMAEulerToQuat halves the angle as a SIGNED s16; an unsigned-masked -1 mis-rounds
             # to a ~-32-BAM ghost twist where the game gets identity (session 16).
-            bx = int(body_x) & 0xFFFF
-            e = Q.euler_to_quat(bx - 0x10000 if bx >= 0x8000 else bx, 0, 0)
-            aw, ax, ay, az = q
-            bw, bx, by, bz = e
-            q = (fp.f32(aw * bw - ax * bx - ay * by - az * bz),
-                 fp.f32(aw * bx + ax * bw + ay * bz - az * by),
-                 fp.f32(aw * by - ax * bz + ay * bw + az * bx),
-                 fp.f32(aw * bz + ax * by - ay * bx + az * bw))
+            q = self._quat_concat(q, Q.euler_to_quat(self._sx(body_x), 0, 0))
+        if cb_xyz is not None:
+            lx, ly, lz = (self._sx(v) for v in cb_xyz)
+            if lx or ly:
+                q = self._quat_concat(q, Q.euler_to_quat(lx, ly, 0))
+            if lz:
+                q = self._quat_concat(q, Q.euler_to_quat(0, 0, lz))
         m = self.quatfn(q)
         s = self.old_scale[jnt]
         t = self.old_trans[jnt]
@@ -400,24 +417,23 @@ class FootFK:
         cz = fp.fmuls(0.5, fp.fadds(root_t[1], cur[2][3]))
         return cx, cz
 
-    def head_top(self, px, py, pz, facing, lean=0, body_lean=None):
-        """Link's ``mHeadTopPos`` for the pose LAST posed by this driver -- ``cMtx_multVec(
-        anmMtx(CL_JNT_HEAD_JNT_e), head_offset)`` at d_a_player_main.cpp:11592, written right
-        after the SAME exec-pass ``mpCLModel->calc()`` (:11591) ``setCollision`` reads, so the
-        base/lean call convention is identical to :meth:`body_co_center` (same worldBase, same
-        new-lean BODY_CHN twist, same proc-init zero-lean handling by the caller). Consumed by
-        Tetra's look-at as ``dNpc_playerEyePos``'s Y (x/z are overwritten with Link's
-        ``current.pos``). Returns the full (x, y, z); pass the REAL ``py`` (the Y is the
-        payload). Requires ``body_co`` mode (joint 15 is posed with the neck-chain extras)."""
+    def head_mtx(self, px, py, pz, facing, lean=0, body_lean=None, neck=None):
+        """The WORLD head anm matrix (``getAnmMtx(CL_JNT_HEAD_JNT_e)``, 3x4) for the pose LAST
+        posed by this driver -- the exec-pass matrix :meth:`head_top` multiplies and the one the
+        NEXT frame's ``setNeckAngle`` (:11571, before that frame's calc) measures its current head
+        angles from. Same base/lean conventions as :meth:`body_co_center`. ``neck`` = the head
+        jointBeforeCB ``local_38`` twist ``(m3564.y, m3564.z, m3564.x)`` (d_a_player_main.cpp:270;
+        `land.neck_look.NeckLook.local_38`); None/zeros = untwisted (the pre-model behavior)."""
         if not (self.body_co and self.world):
-            raise RuntimeError("head_top needs body_co=True on the Python world FK path")
+            raise RuntimeError("head_mtx needs body_co=True on the Python world FK path")
         base, _ = fk.world_base(fp.f32(px), fp.f32(py), fp.f32(pz), int(facing) & 0xFFFF,
                                 int(lean) & 0xFFFF)
         lv = int(lean if body_lean is None else body_lean) & 0xFFFF
         body_x = -(lv - 0x10000 if lv >= 0x8000 else lv)
         cur = base
         for jnt in HEAD_CHAIN:
-            m = self._local_from_old(jnt, body_x=body_x if jnt == 2 else 0)
+            m = self._local_from_old(jnt, body_x=body_x if jnt == 2 else 0,
+                                     cb_xyz=neck if jnt == 15 else None)
             if jnt in BODY_CO_SSC:
                 ps = self.old_scale.get(self.parent[jnt])
                 if ps is not None and (ps[0] != 1.0 or ps[1] != 1.0 or ps[2] != 1.0):
@@ -427,7 +443,21 @@ class FootFK:
                         m[r][1] = fp.fmuls(m[r][1], inv)
                         m[r][2] = fp.fmuls(m[r][2], inv)
             cur = fk.mtx_concat(cur, m)
-        return tuple(fk.mtx_mult_vec(cur, HEAD_TOP_OFF))
+        return cur
+
+    def head_top(self, px, py, pz, facing, lean=0, body_lean=None, neck=None):
+        """Link's ``mHeadTopPos`` for the pose LAST posed by this driver -- ``cMtx_multVec(
+        anmMtx(CL_JNT_HEAD_JNT_e), head_offset)`` at d_a_player_main.cpp:11592, written right
+        after the SAME exec-pass ``mpCLModel->calc()`` (:11591) ``setCollision`` reads, so the
+        base/lean call convention is identical to :meth:`body_co_center` (same worldBase, same
+        new-lean BODY_CHN twist, same proc-init zero-lean handling by the caller). Consumed by
+        Tetra's look-at as ``dNpc_playerEyePos``'s Y (x/z are overwritten with Link's
+        ``current.pos``). Returns the full (x, y, z); pass the REAL ``py`` (the Y is the
+        payload). Requires ``body_co`` mode (joint 15 is posed with the neck-chain extras).
+        ``neck`` = the head-look twist, as in :meth:`head_mtx`."""
+        return tuple(fk.mtx_mult_vec(
+            self.head_mtx(px, py, pz, facing, lean=lean, body_lean=body_lean, neck=neck),
+            HEAD_TOP_OFF))
 
     def _waist_world(self, local):
         """WORLD translate of the WAIST joint (30) for the pose being drawn: the base->waist

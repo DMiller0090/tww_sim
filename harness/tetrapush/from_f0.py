@@ -163,14 +163,26 @@ def _computed_center(link, init_frame=False):
     return (float(cx), float(cz))
 
 
-def _computed_head_top(link, init_frame=False):
+def _computed_head_mtx(link, init_frame=False, neck=None):
+    """The exec-pass WORLD head anm matrix (`FootFK.head_mtx`) -- identical base/lean conventions
+    to `_computed_center` (new-lean BODY_CHN twist, proc-init zero base lean). ``neck`` = the
+    jointBeforeCB head twist ``local_38`` (`NeckLook.local_38()`), None = untwisted. The cached
+    previous-frame value of THIS matrix is what the next frame's setNeckAngle measures (:11571
+    runs before that frame's calc, so it reads the LAST calc's head matrix)."""
+    return link._foot.ff.head_mtx(link.pos_x, link.pos_y, link.pos_z,
+                                  link.facing, 0 if init_frame else link._draw_lean,
+                                  body_lean=_s16(link.m351C) >> 1, neck=neck)
+
+
+def _computed_head_top(link, init_frame=False, neck=None):
     """Link's ``mHeadTopPos`` AS the exec pass writes it (d_a_player_main.cpp:11592, right after
     the SAME ``mpCLModel->calc()`` setCollision reads) -- identical base/lean conventions to
     `_computed_center` (new-lean BODY_CHN twist, proc-init zero base lean). The Y is what Tetra's
-    look-at consumes as ``dNpc_playerEyePos``; x/z are overwritten with Link's current.pos."""
+    look-at consumes as ``dNpc_playerEyePos``; x/z are overwritten with Link's current.pos.
+    ``neck`` = the head-look twist (`NeckLook.local_38()`); the <=0.96 u tier-frame Y shift."""
     return link._foot.ff.head_top(link.pos_x, link.pos_y, link.pos_z,
                                   link.facing, 0 if init_frame else link._draw_lean,
-                                  body_lean=_s16(link.m351C) >> 1)
+                                  body_lean=_s16(link.m351C) >> 1, neck=neck)
 
 
 def _cc_settled_center(exec_center, tetra_xz):
@@ -273,7 +285,7 @@ class FreeRun:
     point -- unmodeled, same status as eyePos; keep-last semantics like ``eye``)."""
 
     def __init__(self, seed_row, *, seed_nspeed=None, seed_old_pose=None, computed_pose=True,
-                 camera=None, zl1=None):
+                 camera=None, zl1=None, neck=None):
         e = seed_row
         self.link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
         self.computed_pose = bool(computed_pose)
@@ -291,6 +303,16 @@ class FreeRun:
         if zl1 is not None and not self.computed_pose:
             raise ValueError("zl1 mode needs computed_pose (mHeadTopPos comes from the posed FK)")
         self._eye_next = tuple(zl1.eye) if zl1 is not None else None
+        # neck (a seeded `land.neck_look.NeckLook`): Link's head-look m3564; feeds only the posed
+        # head matrix / mHeadTopPos. See knowledge/mechanics/link-head-look.md.
+        self.neck = neck
+        if neck is not None and not self.computed_pose:
+            raise ValueError("neck mode needs computed_pose (m3564 measures the posed head matrix)")
+        self._head_mtx = None
+        if neck is not None:
+            # The f0 exec head matrix (state 2 is a mid-proc MOVE cruise -- not an init frame),
+            # twisted by the SEED m3564: what f1's setNeckAngle measures.
+            self._head_mtx = _computed_head_mtx(self.link, neck=neck.local_38())
         self._tattn = None
         self._prev_raw = None
         self.csangle = camera.angleY if camera is not None else e['csangle']
@@ -329,10 +351,15 @@ class FreeRun:
             if self.zl1 is not None:
                 raise ValueError("eye injection and a wired zl1 look model are mutually exclusive")
             link._atn_actor_eye = (eye[0], eye[-1])
+            if len(eye) == 3:
+                self._eye_next = tuple(eye)      # keep-last 3D eye (the neck model's look target)
         elif self.zl1 is not None:
             # the modeled end-of-previous-frame eyePos (Link's re-aim reads Tetra's LAST setMtx)
             link._atn_actor_eye = (self._eye_next[0], self._eye_next[2])
         tetra_pre = (self.tx, self.ty, self.tz)
+        # setNeckAngle reads the frame-START m34DE (:11287 is in the execute prologue) --
+        # capture it BEFORE the step; see knowledge/mechanics/link-head-look.md.
+        m34de_neck = link.m34de
         link.step(*_step_args(inp))
         # proc *_init (commonProcInit shape_angle.z=0) runs on the first frame whose pause-read
         # mCurProc differs from the previous frame's -- the post-step state stream is that boundary.
@@ -371,10 +398,22 @@ class FreeRun:
             ck = center
         self.pend_link, self.pend_tetra = full_depth_push(ck, (self.tx, self.tz))
 
+        # setNeckAngle m3564: measure the CACHED previous head matrix, chase toward the look
+        # target, twist THIS frame's head pose (knowledge/mechanics/link-head-look.md).
+        nk = None
+        if self.neck is not None:
+            look = self.neck.select_look_pos(
+                (link.pos_x, link.pos_y, link.pos_z), self._eye_next, m34de_neck,
+                link._atn.locked, link._atn.list_present)
+            self.neck.update(self._head_mtx, m34de_neck, link.state, look)
+            nk = self.neck.local_38()
+            self._head_mtx = _computed_head_mtx(link, init_frame=init_frame, neck=nk)
+            row['sim_m3564'] = (self.neck.x, self.neck.y, self.neck.z)
+
         # Zl1 execute: after Link, before the camera Run (eye feeds NEXT frame's re-aim,
         # tattn THIS frame's camera; target = exec-pass mHeadTopPos). tetra-look.md has the laws.
         if self.zl1 is not None:
-            ht = _computed_head_top(link, init_frame=init_frame)
+            ht = _computed_head_top(link, init_frame=init_frame, neck=nk)
             eye_k, tattn_k = self.zl1.step(
                 pos_pre=tetra_pre, pos_post=(self.tx, self.ty, self.tz),
                 link_pos=(link.pos_x, link.pos_y, link.pos_z), link_head_top_y=ht[1])
@@ -411,7 +450,7 @@ class FreeRun:
 
 def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None,
            centers='injected', eyes=None, seed_old_pose=None, camera=None, tattns=None,
-           zl1=None):
+           zl1=None, neck=None):
     """Run the coupled from-f0 replay and diff BOTH actors vs the live capture, frame by frame.
 
     ``frames``   -- the live-capture rows (the cyl fixture), each ``{proc, csangle, link:{pos, facing,
@@ -456,6 +495,11 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
                     ``tattns`` injections with the modeled Tetra look-at (mutually exclusive with
                     them). Computed mode only. Each row then also carries ``sim_eye``,
                     ``sim_tattn``, ``sim_head_top``.
+    ``neck``     -- a SEEDED `land.neck_look.NeckLook` (the live f0 ``m3564``,
+                    ``fixtures/courtyard_m3564.json`` f0): models Link's own head-look twist
+                    (setNeckAngle), so ``sim_head_top`` carries the tier-frame Y shift Tetra's
+                    elevation chase consumes. Computed mode only. Each row then also carries
+                    ``sim_m3564``.
 
     Link's Co centre and csangle are injected from ``frames`` each frame; Tetra is a tracked XZ point
     moved by the full-depth plow. Returns a list of per-frame dicts: ``f``, live/sim ``proc``,
@@ -465,7 +509,8 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         upto = len(frames)
 
     run = FreeRun(frames[entry], seed_nspeed=seed_nspeed, seed_old_pose=seed_old_pose,
-                  computed_pose=centers in ('computed', 'diag'), camera=camera, zl1=zl1)
+                  computed_pose=centers in ('computed', 'diag'), camera=camera, zl1=zl1,
+                  neck=neck)
     if pre_inputs is not None:
         pi = pre_inputs[-1] if isinstance(pre_inputs, (list, tuple)) and pre_inputs and \
             isinstance(pre_inputs[0], (list, tuple, dict)) else pre_inputs

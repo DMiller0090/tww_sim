@@ -205,6 +205,7 @@ deliberately unported.
 | `_notes/tetrapush-chain_probe.py` | (gitignored) Session-16 breakpoint probe: FULL 3x4 nodeMtx for the neck-chain joints [0,1,2,3,4,14] at each JP-setCollision hit + `mBodyAngle`/`m351C`/`m34F2/F4`/`m34C2`/`m35E0`/`m35B8` at hit time. The joint-by-joint diff that pinned all four exec-pose laws. Companion `_notes/tetrapush-setframe_probe.py`: the J3DModel BASE TR mtx + `m_old_fdata` morf state + under-blend packs at the f1-f3 hits (the init-frame zero-lean base + the true morf cadence). |
 | `fixtures/courtyard_zl1look.json` | Session-20 live ground truth (single-stepped f0..f44): Tetra's FULL look-at state per frame -- the `dNpc_JntCtrl_c` block (chased angles + clamped targets), the McaMorf ctrl (frame/morfs), the look timers (`f7B8/f7BA/f7BC`), anim number, half-angle twists, eyePos/tattn/pos, and Link's `mHeadTopPos`. The `tests/test_zl1_look.py` gate + the `Zl1Look.seed_from_row` shape. Probe `_notes/tetrapush-zl1look_probe.py`; companion `_notes/tetrapush-m3564_probe.json` (Link's head-look state -- the named open gap). |
 | `../anim/extract_zl1.py` | Extract Tetra's `zl.bdl` skeleton + the stt-3 BCKs (wait03/look/wait) from `Zl.arc` (TWW-JP) to the gitignored `_generated/anim/zl1_{skeleton,anims}.json` -- the `core.npc_zl1_look` FK data (same policy as Link's `parse_bck`/`parse_bmd`). |
+| `fixtures/courtyard_m3564.json` | Session-21 live ground truth (single-stepped f0..f44, baked from `_notes/tetrapush-m3564_probe.py`): Link's head-look `m3564` + `m34DE`/`m34C3`/`m34E2` + `mHeadTopPos` per frame. The `tests/test_neck_look.py` gate + the `NeckLook` f0 seed. Pinned the m34DE frame-START timing + the (3, 0x1000, 0x100) chase knobs (the f0..f5 decay). |
 | `_notes/tetrapush-camoracle_probe.py` | (gitignored) Session-18 land-camera ORACLE probe: run A re-captured with the FULL dCamera_c block (0x520 B, incl. mEventFlags/mCurStyle/mCurType), player status words, attention lockstate, both actors' `attention_info.position`, and the pad main-stick angle. Baked to `fixtures/courtyard_cam_oracle.json` (the `test_land_cam.py` gate). |
 | `_notes/tetrapush-eyeindep_probe.py` | (gitignored) Session-17 A/B probe: two 120-frame runs from slot 2 diverging only in post-f48 inputs; logs both actors + csangle + the RAW `dCamera_c` block (0x450 B/frame). DISPROVED the eyePos input-independence shortcut (offsets diverge f51, both runs stt 3); run A doubles as the extended csangle + camera-spring ground truth (f0..f120) for the camera port, and run B pins the stt-3->4 follow flip (crossed 230 at f63, stt 4 at f75). `.json` beside it. |
 | `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5), `_notes/tetrapush-retarget_probe.py` (session 11), `_notes/tetrapush-seed_probe.py` (session 12: reads the hidden f0 seed fields -- mNormalSpeed/mDirection/attention -- that pinned the true-f0 seed as a speedF-lags-mNormalSpeed gap), and `_notes/tetrapush-{upper_probe,anmmtx_probe}.py` (session 13: the upper anim part / mBodyAngle state and the live `mpNodeMtx` root+neck matrices + `.json` dumps -- the ground truth behind the body-Co FK validation + the open mCyl timing law). |
@@ -290,7 +291,8 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
   `mFrame` `z+0x78C`, half-angles `f83C/f83E` `z+0x83C/3E`, eye pre-copy `f74C` `z+0x74C`,
   last target `f758` `z+0x758`, base angle `f73E` `z+0x73E`; eyePos fopAc `+0x260`,
   `attention_info.position` `+0x274`. **Link:** `mHeadTopPos` `la+0x2BC` (= exec
-  `anmMtx(15)*(40,0,0)`, :11592); head-look `m3564` (csXyz) `la+0x3564` (the open gap).
+  `anmMtx(15)*(40,0,0)`, :11592); head-look `m3564` (csXyz) `la+0x3564` (modeled session 21,
+  `tww_sim/land/neck_look.py`).
 - **CC push + camera (session 8, live-found 2026-07-22; `this` = deref `0x803AD860` = `lp`):**
   Link body **Co cylinder centre** = `lp + 0x4064` (cXyz; radius `lp+0x4070` = 30.0, height `lp+0x4074`
   ≈ 104.6; the `lp+0x4044` block is the derived AABB, `centre ± (r,0,r)`/`+(0,h,0)` -- how the centre was
@@ -692,16 +694,27 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             below). `capture_push seed` now also captures her hidden look state (the seed
             fixture's `zl1` block -> `Zl1Look.seed_from_row`). 474 offline green, land goldens
             byte-identical.
-      - [ ] **Link's own head-look `m3564` (the last known model gap).** `jointBeforeCB` twists
-            Link's HEAD joint by `m3564` (set from the attention look updater,
-            d_a_player_main.cpp ~:9060-9170: target = the locked actor's eyePos, chased
-            `cLib_addCalcAngleS(.., 3, 0x1000, 0x100)`, clamps r27 in [-10000, 8000]). Live
-            (`_notes/tetrapush-m3564_probe.json`): zero through every roll, swings to -2492 on
-            the untarget tier + backslide (f19-27), a decaying residual f0-4. Unmodeled it costs
-            <=0.96 u of mHeadTopPos.y there -> Tetra's elevation chase shifts -> the <=16-BAM
-            facing echo on Link's re-aim frames in the self-contained replay (physics otherwise
-            0-ULP). Model it decomp-first to make novel-input facing exact on tier frames; then
-            the search.
+      - [x] **Link's own head-look `m3564` -- MODELED + 0-TOLERANCE GATED (session 21); the
+            model-gap list is EMPTY.** Truth page:
+            [`knowledge/mechanics/link-head-look.md`](../../knowledge/mechanics/link-head-look.md).
+            `tww_sim/land/neck_look.NeckLook` ports `setNeckAngle` (:8938-9169) decomp-first: the
+            proc-table mode-flag gate (0x80 procs look, rolls/turns chase 0), the lock-or-list
+            look-pos selection through the +-0x6000 m34DE cone (with `AttentionLock.list_present`
+            -- the stock/free timing whose one-frame hole IS the probe's f21 chase-to-0), the
+            prev-frame head-matrix measure (`FootFK.head_mtx`, the jointBeforeCB two-concat twist),
+            the absXZ<30 yaw freeze (the tier-frame razor: f19-21 y = 60/-3/0 exact), the
+            [-10000,8000]/+-14336 clamps, and the (3, 0x1000, 0x100) half-angle chase. Two
+            live-pinned timing laws: **m34DE at setNeckAngle is the frame-START facing** (:11287
+            is in the execute prologue, before the proc dispatch :11402), and the head matrix
+            measured is the PREVIOUS frame's calc. Gates (`tests/test_neck_look.py`, fixture
+            `fixtures/courtyard_m3564.json` baked from the probe): capture-tight (diag) replay =
+            **every m3564 AND every facing f1..43 bit-exact vs live** (the <=16-BAM echo is
+            CLOSED; head-top Y <=0.96 u -> <=1e-3 u); self-contained replay = physics 0-ULP with
+            m3564 exact outside the chase window, +-16 BAM inside it (drift-quantization only --
+            every chase increment matches live). `capture_push seed` now also logs `link.m3564`
+            (the NeckLook f0 seed; fixture regen pending next live session). 478 offline green,
+            land goldens byte-identical. NEXT = **the search** (state-2 -> input seq landing
+            Tetra on a `_generated/tetra_placements.tsv` coord + the matching roll entry).
 
 ## Hard rules (inherited from the seam-clip work)
 

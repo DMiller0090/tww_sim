@@ -65,6 +65,7 @@ you can triage in one glance.
 - **How does an actor push Link (the Tetra "nudge") / cyl-cyl overlap + weight split / can it supply the extra displacement for a seam clip?** → [mechanics/actor-push.md](mechanics/actor-push.md)
 - **When/how does Tetra follow Link (follow radius, speed), and when can Link lock onto / talk to her (the region a planner must avoid)?** → [mechanics/tetra-follow.md](mechanics/tetra-follow.md)
 - **Where do Tetra's eyePos (the proc-9 re-aim target) and attention position (the camera's lock target) come from -- her look-at head chase, anims, hidden seed state?** → [mechanics/tetra-look.md](mechanics/tetra-look.md)
+- **How does Link's own head turn toward a lock-on target (the m3564 setNeckAngle twist) / what moves mHeadTopPos / why does it feed back into facing through Tetra's look-at?** → [mechanics/link-head-look.md](mechanics/link-head-look.md)
 
 ### Ocean world, refills & routing
 - **How is the sea laid out / why is only one island loaded / what's a sploosh zone / why route around quadrants?** → [mechanics/ocean-environment.md](mechanics/ocean-environment.md)

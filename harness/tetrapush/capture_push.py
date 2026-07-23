@@ -203,7 +203,10 @@ def capture_seed(out=SEED_OUT, slot=2):
                   travel=r.u16(la + 0x206), facing=r.u16(la + 0x20E),
                   speedF=r.f32(la + 0x254), nspeed=r.f32(la + 0x35BC),
                   max_nspeed=r.f32(la + 0x2A8), mdir=r.u8(la + 0x34B8),
-                  m34E6=r.u16(la + 0x34E6), csangle=_csangle(r)),
+                  m34E6=r.u16(la + 0x34E6), csangle=_csangle(r),
+                  # m3564 (csXyz s16): the head-look twist residual -- the NeckLook f0 seed
+                  # (land.neck_look; at THIS f0 it is mid-decay from the prior cycle's look).
+                  m3564=[r.s16(la + 0x3564), r.s16(la + 0x3566), r.s16(la + 0x3568)]),
         # attention residual (session 12: NONE / no actor at f0 -> the sim's default AttentionLock)
         atn=dict(lock_state=(r.u8(attn + 0x18) if attn else -1),
                  actor_lock=r.u32(lp + 0x30C4)),

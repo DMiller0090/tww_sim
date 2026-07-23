@@ -46,6 +46,9 @@ class AttentionLock:
         self.FADE_FRAMES = int(fade_frames)
         self._fade = 0            # frames left in the RELEASE reticle fade (AttnFlag_40000000 timer)
         self._l_prev = False
+        # GetLockonList(0) != NULL -- the stocked lock-on CANDIDATE list (setNeckAngle's unlocked
+        # look-target source). Stock/free timing: knowledge/mechanics/link-head-look.md.
+        self.list_present = False
 
     @property
     def locked(self):
@@ -58,6 +61,7 @@ class AttentionLock:
         input already used for the ATN gate; ``target_present`` is whether a chaseable lock-on actor
         exists (the harness supplies Tetra's presence). Returns ``self`` for chaining."""
         rising = bool(l_held) and not self._l_prev        # field_0x01a == 1 (first held frame)
+        prev_state = self.state
         if self.state == NONE:
             # NONE: judgementTriggerProc on the L rising edge acquires a chaseable target (747).
             if rising and target_present:
@@ -80,4 +84,12 @@ class AttentionLock:
                 if not target_present or self._fade <= 0:
                     self.state = NONE
         self._l_prev = bool(l_held)
+        # The lock-on list, as of THIS Run: kept while locked; freed (not restocked) on the
+        # transition-to-NONE Run; NONE->NONE restocks from the chaseable-target gate.
+        if self.state in (LOCK, RELEASE):
+            self.list_present = True
+        elif prev_state != NONE:
+            self.list_present = False           # freeAttention on the transition Run
+        else:
+            self.list_present = bool(target_present)   # stockAttention every NONE-state Run
         return self
