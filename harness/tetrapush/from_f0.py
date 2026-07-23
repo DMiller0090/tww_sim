@@ -392,9 +392,8 @@ class FreeRun:
             cx = _computed_center(link, init_frame=init_frame)
             ck = _cc_settled_center(cx, (self.tx, self.tz))
             row['sim_cyl'] = ck
-            row['sim_cyl_exec'] = cx           # the pose-driven exec centre (pre-CC-settle) --
-                                               # the position-independent offset the planner
-                                               # templates consume (primitives.py)
+            row['sim_cyl_exec'] = cx           # the pose-driven exec centre (pre-CC-settle),
+                                               # a diagnostic for the centre/divergence work
         else:
             ck = None
         if center is not None:

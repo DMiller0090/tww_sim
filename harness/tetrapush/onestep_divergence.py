@@ -27,7 +27,6 @@ import json
 import math
 import struct
 
-from harness.tetrapush import seeds
 from harness.tetrapush.from_f0 import FreeRun, full_depth_push
 from tww_sim.core.fp import f32
 
