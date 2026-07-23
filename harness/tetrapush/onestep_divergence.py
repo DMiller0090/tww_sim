@@ -23,9 +23,10 @@ over f1..12 (session 14) + `perop.pos == cyl.pos` 0 ULP f0..43 (session 26), so 
 a real sim-vs-console diff, NOT single-step noise.
 
 This is the diagnostic behind `tests/test_from_f0.py::test_onestep_pos_bit_exact_from_exact_state`
-(the strict 0-ULP gate, a HARD PASS on f2..f43 as of session 27). With the console push it prints 0
-ULP everywhere except f1 (the seed-frame boundary: f0's exec centre is not offline-reconstructable).
-Run: `python -m harness.tetrapush.onestep_divergence`.
+(the strict 0-ULP gate, a HARD PASS on f1..f43 as of session 29). With the console push it prints 0
+ULP on EVERY frame f1..f43: f2..f43 from the model's own EXEC centre, and f1 (the seed frame) from
+the DETERMINISTIC perop f0->f1 push (ΔTetra) -- f0's exec centre is not pose-reconstructable, but the
+push RESULT is in the perop capture. Run: `python -m harness.tetrapush.onestep_divergence`.
 """
 import json
 import math
@@ -49,11 +50,18 @@ def rows(env):
     dtm = env['dtm']
     seed = env['seed']
     eyes = env.get('eyes')
+    perop = env.get('perop') or []
     setcol_pos = {r['f']: r['pos'] for r in env.get('setcol', [])}
     input_at = lambda k: dtm[k]['inp']
+    # the exact f0->f1 seed push = perop ΔTetra (session 29); Tetra has no foot term so her whole
+    # f0->f1 move IS the push and f0+ΔTetra == f1 bit-for-bit.
+    seed_push = None
+    if len(perop) >= 2:
+        t0 = perop[0]['entry']['tetra']['pos']; t1 = perop[1]['entry']['tetra']['pos']
+        seed_push = (t1[0] - t0[0], t1[2] - t0[2])
 
     run = FreeRun(cyl[0], seed_nspeed=seed['link']['nspeed'], computed_pose=True,
-                  seed_old_pose=seed.get('old_pose'))
+                  seed_old_pose=seed.get('old_pose'), seed_push=seed_push)
     run.pre_seed_input(input_at(0))
     link = run.link
     for k in range(1, min(44, len(cyl))):
@@ -62,8 +70,13 @@ def rows(env):
         link.pos_y = f32(prev['link']['pos'][1])
         run.tx = f32(prev['tetra']['pos'][0]); run.tz = f32(prev['tetra']['pos'][2])
         if k == 1:
-            # seed-frame boundary: f0's exec centre is not offline-reconstructable
-            run.pend_link, run.pend_tetra = full_depth_push(cyl[0]['link']['cyl'], (run.tx, run.tz))
+            if seed_push is not None:
+                # seed frame: the exact console f0->f1 push (perop ΔTetra), 0-ULP by construction
+                run.pend_tetra = (seed_push[0], seed_push[-1])
+                run.pend_link = (-seed_push[0], -seed_push[-1])
+            else:
+                # fallback (perop absent): the settled-centre approximation (~66 ULP, session 28)
+                run.pend_link, run.pend_tetra = full_depth_push(cyl[0]['link']['cyl'], (run.tx, run.tz))
         else:
             init_km1 = prev['proc'] != cyl[k - 2]['proc']
             cx = _computed_center(link, init_frame=init_km1)
@@ -92,11 +105,13 @@ def load_env():
     seed = _j('courtyard_push_seed.json')
     eye = _j('courtyard_push_eyepos.json')
     setcol = _j('courtyard_push_setcol.json')
+    perop = _j('courtyard_push_perop.json')
     if not (cyl and dtm and seed):
         raise SystemExit("Courtyard capture fixtures not present (need a live slot-2 capture)")
     return dict(cyl=cyl['frames'], dtm=dtm['frames'], seed=seed,
                 eyes=[r['eye'] for r in eye['frames']] if eye else None,
-                setcol=setcol['frames'] if setcol else [])
+                setcol=setcol['frames'] if setcol else [],
+                perop=perop['rows'] if perop else [])
 
 
 def main():

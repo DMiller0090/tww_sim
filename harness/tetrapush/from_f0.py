@@ -58,6 +58,7 @@ import math
 import struct
 import warnings
 
+from tww_sim.core.fp import f32, fadds
 from tww_sim.core.npc_zl1 import FOLLOW_ENGAGE_DIST
 from tww_sim.core.cc_push import co_move_pair, WEIGHT_LINK, WEIGHT_TETRA_V5
 from tww_sim.land.land import LandState, FRONT_ROLL, MOVE
@@ -294,6 +295,9 @@ class FreeRun:
     speedF, anim, shape_z, cyl}, tetra:{pos}}``). ``computed_pose`` seeds the drawn-pose state and
     rebuilds the Co centre from the sim's own pose each frame (the self-contained mode; requires a
     non-roll f0 seed); False = the caller must inject a settled centre via ``step(center=)``.
+    ``seed_push`` -- the exact f0->f1 Tetra CC push ``(dx, dz)`` (the deterministic perop ΔTetra,
+    `seeds.seed_push_f0`); makes the seed frame 0-ULP (see the ``seed_push`` note in `__init__`).
+    Omit for roll-entry seeds -> the settled-centre `full_depth_push` fallback.
 
     Per-frame injectables (until their models land): ``csangle`` -- the START-of-frame camera value
     (i.e. the value after the previous frame; omit to hold the last one), and ``eye`` -- the
@@ -320,7 +324,7 @@ class FreeRun:
     point -- unmodeled, same status as eyePos; keep-last semantics like ``eye``)."""
 
     def __init__(self, seed_row, *, seed_nspeed=None, seed_old_pose=None, computed_pose=True,
-                 camera=None, zl1=None, neck=None):
+                 camera=None, zl1=None, neck=None, seed_push=None):
         e = seed_row
         self.link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
         self.computed_pose = bool(computed_pose)
@@ -352,10 +356,14 @@ class FreeRun:
         self._prev_raw = None
         self.csangle = camera.angleY if camera is not None else e['csangle']
         self._follow_warned = False
-        # The SEED frame's Co centre is static initial-condition data even in computed mode
-        # (computing it needs f-1's m351C, which the seed doesn't carry); f1 on is computed. (s16)
-        c0 = e['link']['cyl']
-        self.pend_link, self.pend_tetra = full_depth_push(c0, (self.tx, self.tz))
+        # The f0->f1 SEED-frame push: the exact console ΔTetra (`seed_push`, 0-ULP by construction),
+        # else the ~66-ULP settled-centre `full_depth_push` fallback. See README ## Plan / status.
+        if seed_push is not None:
+            self.pend_tetra = (float(seed_push[0]), float(seed_push[-1]))
+            self.pend_link = (-self.pend_tetra[0], -self.pend_tetra[1])
+        else:
+            c0 = e['link']['cyl']
+            self.pend_link, self.pend_tetra = full_depth_push(c0, (self.tx, self.tz))
         self.prev_disp = self.link.state               # dispatch proc of the seed frame
 
     def pre_seed_input(self, inp):
@@ -400,8 +408,10 @@ class FreeRun:
         # mCurProc differs from the previous frame's -- the post-step state stream is that boundary.
         init_frame = link.state != self.prev_disp
         self.prev_disp = link.state
-        self.tx += self.pend_tetra[0]
-        self.tz += self.pend_tetra[1]
+        # Store Tetra's tracked point as f32 (console cXyz; SetPosCorrect's `*ppos += vec` is f32).
+        # A f64 residue survives the per-frame round but the plow amplifier explodes it (README s29).
+        self.tx = f32(self.tx + self.pend_tetra[0])
+        self.tz = f32(self.tz + self.pend_tetra[1])
 
         # FOLLOW guard: past FOLLOW_ENGAGE_DIST live Tetra enters the stt-4 follow state this
         # stt-3 plow model does not cover (README planner box) -- warn, the sim is unfaithful.
@@ -473,7 +483,6 @@ class FreeRun:
             if locked and self._tattn is None:
                 raise ValueError("the sim's attention lock is engaged but no tattn (the locked "
                                  "actor's attention_info.position) was ever injected")
-            from tww_sim.core.fp import f32, fadds
             from tww_sim.core.camera.land_cam import pad_from_raw
             attn_y = float(fadds(f32(92.5), f32(link._foot.ff.base[1][3])))
             cam_link = dict(pos=(link.pos_x, link.pos_y, link.pos_z), facing=link.facing,
@@ -488,7 +497,7 @@ class FreeRun:
 
 def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None,
            centers='injected', eyes=None, seed_old_pose=None, camera=None, tattns=None,
-           zl1=None, neck=None):
+           zl1=None, neck=None, seed_push=None):
     """Run the coupled from-f0 replay and diff BOTH actors vs the live capture, frame by frame.
 
     ``frames``   -- the live-capture rows (the cyl fixture), each ``{proc, csangle, link:{pos, facing,
@@ -538,6 +547,11 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
                     (setNeckAngle), so ``sim_head_top`` carries the tier-frame Y shift Tetra's
                     elevation chase consumes. Computed mode only. Each row then also carries
                     ``sim_m3564``.
+    ``seed_push``-- the DETERMINISTIC f0->f1 Tetra CC push ``(dx, dz)`` (from f0 seeds only):
+                    ``courtyard_push_perop.json`` ΔTetra = ``tetra[1] - tetra[0]`` (the exact
+                    console push; Tetra has no foot term so her whole f0->f1 move IS the push).
+                    Passed to `FreeRun` so the f0 seed frame is 0-ULP (see the class doc). Omit
+                    for roll-entry seeds.
 
     Link's Co centre and csangle are injected from ``frames`` each frame; Tetra is a tracked XZ point
     moved by the full-depth plow. Returns a list of per-frame dicts: ``f``, live/sim ``proc``,
@@ -548,7 +562,7 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
 
     run = FreeRun(frames[entry], seed_nspeed=seed_nspeed, seed_old_pose=seed_old_pose,
                   computed_pose=centers in ('computed', 'diag'), camera=camera, zl1=zl1,
-                  neck=neck)
+                  neck=neck, seed_push=seed_push)
     if pre_inputs is not None:
         pi = pre_inputs[-1] if isinstance(pre_inputs, (list, tuple)) and pre_inputs and \
             isinstance(pre_inputs[0], (list, tuple, dict)) else pre_inputs

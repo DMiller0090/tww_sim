@@ -34,12 +34,14 @@ def _fx(name):
 def load_env():
     """Load the locked fixture set the self-contained replay consumes. Returns a dict:
     ``cyl`` (capture frames), ``dtm`` (raw input frames), ``seed`` (state-2 hidden seed),
-    ``cam`` (camera oracle), ``look`` (Zl1 look f0 row source), ``m3564`` (NeckLook f0 source).
+    ``cam`` (camera oracle), ``look`` (Zl1 look f0 row source), ``m3564`` (NeckLook f0 source),
+    ``perop`` (the deterministic per-op capture -- its f0/f1 supply the exact f0->f1 seed push).
     Raises FileNotFoundError with the missing path (the planner needs all of them)."""
     out = {}
     for key, name in (('cyl', 'courtyard_push_cyl.json'), ('dtm', 'courtyard_push_dtm.json'),
                       ('seed', 'courtyard_push_seed.json'), ('cam', 'courtyard_cam_oracle.json'),
-                      ('look', 'courtyard_zl1look.json'), ('m3564', 'courtyard_m3564.json')):
+                      ('look', 'courtyard_zl1look.json'), ('m3564', 'courtyard_m3564.json'),
+                      ('perop', 'courtyard_push_perop.json')):
         p = _fx(name)
         if not os.path.exists(p):
             raise FileNotFoundError("planner fixture missing: %s" % p)
@@ -47,7 +49,20 @@ def load_env():
     out['cyl'] = out['cyl']['frames']
     out['dtm'] = out['dtm']['frames']
     out['look'] = out['look']['frames']
+    out['perop'] = out['perop']['rows']
     return out
+
+
+def seed_push_f0(env):
+    """The exact DETERMINISTIC f0->f1 Tetra CC push ``(dx, dz)`` for the state-2 seed, from the
+    per-op capture: ``ΔTetra = tetra[f1] - tetra[f0]``. Tetra is stt-3 / speedF 0 the whole
+    window, so her whole f0->f1 move IS the CC push -- and ``f0 + ΔTetra == f1`` bit-for-bit, so
+    this makes `FreeRun`'s seed frame 0-ULP (session 29). It is input-independent (f0 is the fixed
+    state-2 seed), so one datum serves every planner sequence. See `from_f0.FreeRun` ``seed_push``."""
+    p = env['perop']
+    t0 = p[0]['entry']['tetra']['pos']
+    t1 = p[1]['entry']['tetra']['pos']
+    return (t1[0] - t0[0], t1[2] - t0[2])
 
 
 def dtm_input_at(env):
@@ -91,9 +106,12 @@ def make_freerun(env, tetra_at=None):
     m0 = env['m3564']['frames'][0]['m3564'] if 'frames' in env['m3564'] else env['m3564'][0]['m3564']
     neck = NeckLook(x=m0[0], y=m0[1], z=m0[2])
     seed = env['seed']
+    # The exact f0->f1 seed push (perop ΔTetra) -> 0-ULP seed frame; None when Tetra is re-seated
+    # (`tetra_at`, the recorded push no longer applies) -> FreeRun's settled-centre fallback.
+    seed_push = None if tetra_at is not None else seed_push_f0(env)
     return FreeRun(seed_row, seed_nspeed=seed['link']['nspeed'],
                    seed_old_pose=seed.get('old_pose'), computed_pose=True,
-                   camera=cam, zl1=zl1, neck=neck)
+                   camera=cam, zl1=zl1, neck=neck, seed_push=seed_push)
 
 
 def load_placements(path=None):
