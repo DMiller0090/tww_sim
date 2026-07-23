@@ -53,6 +53,7 @@ you can triage in one glance.
 
 ### Camera
 - **How does camera yaw affect movement / the steering law / fine steering?** → [mechanics/camera.md](mechanics/camera.md)
+- **What drives csangle on LAND (manual camera, C-stick, L-blips)?** → [mechanics/land-camera.md](mechanics/land-camera.md)
 
 ### Culling / rendering
 - **How does TWW decide what's drawn vs culled / the view frustum / FOV-near-far / per-actor cull box / why is the culling far ≠ render far / how do I view it live?** → [mechanics/culling.md](mechanics/culling.md)

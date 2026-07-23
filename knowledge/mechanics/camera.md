@@ -9,6 +9,10 @@ F32-precision of the internal ω and the auto-flip envelope are open.
 
 ---
 
+> **Land is a different regime.** This page is the SWIM (subject-camera) yaw law. On land the
+> camera runs `manualCamera` (C-stick-commanded target, cushioned chase; L presses blip the
+> follow camera for 1 frame) - see [land-camera.md](land-camera.md).
+
 ## Why the camera matters
 
 The stick is camera-relative, so rotating the camera rotates Link's entire travel axis:
