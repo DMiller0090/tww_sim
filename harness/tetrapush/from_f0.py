@@ -47,8 +47,11 @@ live mNormalSpeed is the whole fix; f1's speedF simply catches up to the already
 Pure-sim / no calibration: the replay takes only the seed + the DTM bytes + the injected centre/csangle
 (all from the locked capture); the diff against the capture is the out-of-band gate, never in a loop.
 Pure stdlib, no Dolphin."""
+import math
 import struct
+import warnings
 
+from tww_sim.core.npc_zl1 import FOLLOW_ENGAGE_DIST
 from tww_sim.land.land import LandState, FRONT_ROLL, MOVE
 from harness.tetrapush.link_plow import recoil
 from harness.tetrapush.tetra_plow import plow_step
@@ -219,6 +222,100 @@ def _seed_link(row, csangle, seed_nspeed=None):
     return link
 
 
+class FreeRun:
+    """The NOVEL-INPUT coupled stepper -- the from-f0 replay loop with no capture rows: seed once,
+    then `step()` arbitrary raw controller inputs. This is the planner's forward model; `replay`
+    (below) is a thin wrapper that drives it with the DTM bytes and diffs against the live capture,
+    so every existing 0-ULP gate also gates this class.
+
+    ``seed_row`` is a cyl-fixture-shaped f0 row (``{proc, csangle, link:{pos, facing, travel,
+    speedF, anim, shape_z, cyl}, tetra:{pos}}``). ``computed_pose`` seeds the drawn-pose state and
+    rebuilds the Co centre from the sim's own pose each frame (the self-contained mode; requires a
+    non-roll f0 seed); False = the caller must inject a settled centre via ``step(center=)``.
+
+    Per-frame injectables (until their models land): ``csangle`` -- the START-of-frame camera value
+    (i.e. the value after the previous frame; omit to hold the last one), and ``eye`` -- the
+    end-of-previous-frame Tetra eyePos (the proc-9 re-aim target; omit to keep the last set value,
+    never-set = feet-aim)."""
+
+    def __init__(self, seed_row, *, seed_nspeed=None, seed_old_pose=None, computed_pose=True):
+        e = seed_row
+        self.link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
+        self.computed_pose = bool(computed_pose)
+        if self.computed_pose:
+            if e['proc'] == FRONT_ROLL:
+                raise ValueError("computed_pose needs the f0 (MOVE) seed -- a mid-roll seed has no "
+                                 "pre-roll pose for the entry morf")
+            _seed_pose_f0(self.link, e['link']['anim'],
+                          (int(e['link']['shape_z']) << 1) & 0xFFFF, old_pose=seed_old_pose)
+        self.tx, self.tz = e['tetra']['pos'][0], e['tetra']['pos'][2]
+        self.ty = e['tetra']['pos'][1]
+        self.csangle = e['csangle']
+        self._follow_warned = False
+        # The SEED frame's Co centre is static initial-condition data even in computed mode
+        # (computing it needs f-1's m351C, which the seed doesn't carry); f1 on is computed. (s16)
+        c0 = e['link']['cyl']
+        self.pend_link, self.pend_tetra = full_depth_push(c0, (self.tx, self.tz))
+        self.prev_disp = self.link.state               # dispatch proc of the seed frame
+
+    def pre_seed_input(self, inp):
+        """Seed the delay-1 controller buffer (the input the FIRST `step` acts on)."""
+        self.link._inbuf = [_step_args(inp)]
+
+    def step(self, inp, csangle=None, eye=None, center=None):
+        """Advance one game frame on raw input ``inp``. ``csangle``/``eye`` as in the class doc;
+        ``center`` = an injected SETTLED Co centre for this frame's outgoing push (the live-capture
+        mode) -- None uses the computed settled centre (requires ``computed_pose``). Returns the
+        sim row dict (``sim_proc``, ``sim_facing``, ``sim_shape_z``, ``sim_link``, ``sim_tetra``,
+        ``speedF``, and ``sim_cyl`` when computed)."""
+        link = self.link
+        if csangle is not None:
+            self.csangle = csangle
+        link._cam.yaw = _yaw_from_csangle(self.csangle)
+        link.set_cc_move((self.pend_link[0], 0.0, self.pend_link[1]))
+        link._atn_actor_pos = (self.tx, self.tz)       # Link Z-targets Tetra (the ATN_ACTOR tier)
+        if eye is not None:
+            link._atn_actor_eye = (eye[0], eye[-1])
+        link.step(*_step_args(inp))
+        # proc *_init (commonProcInit shape_angle.z=0) runs on the first frame whose pause-read
+        # mCurProc differs from the previous frame's -- the post-step state stream is that boundary.
+        init_frame = link.state != self.prev_disp
+        self.prev_disp = link.state
+        self.tx += self.pend_tetra[0]
+        self.tz += self.pend_tetra[1]
+
+        # FOLLOW guard: past FOLLOW_ENGAGE_DIST live Tetra enters the stt-4 follow state this
+        # stt-3 plow model does not cover (README planner box) -- warn, the sim is unfaithful.
+        if not self._follow_warned:
+            dist = math.sqrt((link.pos_x - self.tx) ** 2 + (link.pos_y - self.ty) ** 2
+                             + (link.pos_z - self.tz) ** 2)
+            if dist > FOLLOW_ENGAGE_DIST:
+                self._follow_warned = True
+                warnings.warn(
+                    "FreeRun: Link-Tetra distance %.1f u exceeds FOLLOW_ENGAGE_DIST (%.0f u) -- "
+                    "live Tetra would enter the stt-4 FOLLOW state, which this stt-3 plow model "
+                    "does NOT cover; the sim is no longer faithful from this frame on"
+                    % (dist, FOLLOW_ENGAGE_DIST))
+
+        row = dict(
+            sim_proc=link.state, sim_facing=link.facing,
+            sim_shape_z=_s16(link.m351C) >> 1,
+            sim_link=(link.pos_x, link.pos_z), sim_tetra=(self.tx, self.tz),
+            speedF=link.speedF)
+        # end-of-frame check: the push consumed producing the NEXT state uses this frame's SETTLED
+        # centre + Tetra pos (the decomp draw-phase Ccsp()->Move() order).
+        if self.computed_pose:
+            ck = _cc_settled_center(_computed_center(link, init_frame=init_frame),
+                                    (self.tx, self.tz))
+            row['sim_cyl'] = ck
+        else:
+            ck = None
+        if center is not None:
+            ck = center
+        self.pend_link, self.pend_tetra = full_depth_push(ck, (self.tx, self.tz))
+        return row
+
+
 def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None,
            centers='injected', eyes=None, seed_old_pose=None):
     """Run the coupled from-f0 replay and diff BOTH actors vs the live capture, frame by frame.
@@ -262,71 +359,37 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
     if upto is None:
         upto = len(frames)
 
-    e = frames[entry]
-    link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
-    if centers in ('computed', 'diag'):
-        if e['proc'] == FRONT_ROLL:
-            raise ValueError("centers='computed' needs the f0 (MOVE) seed -- a mid-roll seed has no "
-                             "pre-roll pose for the entry morf")
-        _seed_pose_f0(link, e['link']['anim'], (int(e['link']['shape_z']) << 1) & 0xFFFF,
-                      old_pose=seed_old_pose)
+    run = FreeRun(frames[entry], seed_nspeed=seed_nspeed, seed_old_pose=seed_old_pose,
+                  computed_pose=centers in ('computed', 'diag'))
     if pre_inputs is not None:
         pi = pre_inputs[-1] if isinstance(pre_inputs, (list, tuple)) and pre_inputs and \
             isinstance(pre_inputs[0], (list, tuple, dict)) else pre_inputs
-        link._inbuf = [_step_args(pi)]
+        run.pre_seed_input(pi)
     else:
-        link._inbuf = [_step_args(input_at(entry))]     # delay-1: state[entry+1] acts inp[entry]
-
-    tx, tz = e['tetra']['pos'][0], e['tetra']['pos'][2]
-    # The SEED frame's Co centre is static state-2 initial-condition data even in computed mode
-    # (computing it needs f-1's m351C, which the seed doesn't carry); f1 on is computed. (s16)
-    c0 = e['link']['cyl']
-    pend_link, pend_tetra = full_depth_push(c0, (tx, tz))
+        run.pre_seed_input(input_at(entry))             # delay-1: state[entry+1] acts inp[entry]
 
     out = []
-    prev_disp = link.state                         # dispatch proc of the seed frame
     for k in range(entry + 1, upto):
-        # inject the start-of-frame csangle (the previous frame's integrated value; C-stick neutral so
-        # the forced yaw holds), then consume the pending full-depth pushes from frame k-1's snapshot.
-        link._cam.yaw = _yaw_from_csangle(frames[k - 1]['csangle'])
-        link.set_cc_move((pend_link[0], 0.0, pend_link[1]))
-        link._atn_actor_pos = (tx, tz)             # Link Z-targets Tetra (drives the ATN_ACTOR tier)
-        if eyes is not None and k - 1 < len(eyes):
-            e = eyes[k - 1]                        # end-of-prev-frame eyePos (the re-aim target)
-            link._atn_actor_eye = (e[0], e[-1])
-        link.step(*_step_args(input_at(k)))
-        # proc *_init (commonProcInit shape_angle.z=0) runs on the first frame whose pause-read
-        # mCurProc differs from the previous frame's -- the post-step state stream is that boundary.
-        init_frame = link.state != prev_disp
-        prev_disp = link.state
-        tx += pend_tetra[0]
-        tz += pend_tetra[1]
-
         lv = frames[k]
-        row = dict(
-            f=k, sim_proc=link.state, live_proc=lv['proc'],
-            sim_facing=link.facing, live_facing=lv['link']['facing'],
-            sim_shape_z=_s16(link.m351C) >> 1, live_shape_z=lv['link'].get('shape_z'),
-            sim_link=(link.pos_x, link.pos_z), live_link=(lv['link']['pos'][0], lv['link']['pos'][2]),
-            sim_tetra=(tx, tz), live_tetra=(lv['tetra']['pos'][0], lv['tetra']['pos'][2]),
-            speedF=link.speedF, live_speedF=lv['link']['speedF'],
-            dlx=_bits(link.pos_x) - _bits(lv['link']['pos'][0]),
-            dlz=_bits(link.pos_z) - _bits(lv['link']['pos'][2]),
-            dtx=_bits(tx) - _bits(lv['tetra']['pos'][0]),
-            dtz=_bits(tz) - _bits(lv['tetra']['pos'][2]))
-        # end-of-frame k check: the push consumed producing state[k+1] uses frame-k's SETTLED centre
-        # + Tetra pos (the decomp draw-phase Ccsp()->Move() order).
+        # csangle/eye = end-of-frame-(k-1) values; the centre stays injected from the capture
+        # except in the self-contained 'computed' mode (see the FreeRun class doc).
+        eye = eyes[k - 1] if (eyes is not None and k - 1 < len(eyes)) else None
+        row = run.step(input_at(k), csangle=frames[k - 1]['csangle'], eye=eye,
+                       center=None if centers == 'computed' else lv['link']['cyl'])
+        row.update(
+            f=k, live_proc=lv['proc'], live_facing=lv['link']['facing'],
+            live_shape_z=lv['link'].get('shape_z'),
+            live_link=(lv['link']['pos'][0], lv['link']['pos'][2]),
+            live_tetra=(lv['tetra']['pos'][0], lv['tetra']['pos'][2]),
+            live_speedF=lv['link']['speedF'],
+            dlx=_bits(row['sim_link'][0]) - _bits(lv['link']['pos'][0]),
+            dlz=_bits(row['sim_link'][1]) - _bits(lv['link']['pos'][2]),
+            dtx=_bits(row['sim_tetra'][0]) - _bits(lv['tetra']['pos'][0]),
+            dtz=_bits(row['sim_tetra'][1]) - _bits(lv['tetra']['pos'][2]))
         if centers in ('computed', 'diag'):
-            ck = _cc_settled_center(_computed_center(link, init_frame=init_frame), (tx, tz))
-            row['sim_cyl'] = ck
-            row['dcx'] = _bits(ck[0]) - _bits(lv['link']['cyl'][0])
-            row['dcz'] = _bits(ck[1]) - _bits(lv['link']['cyl'][-1])
-            if centers == 'diag':
-                ck = lv['link']['cyl']      # diag: diffs only; the pushes stay injected/bit-exact
-        else:
-            ck = lv['link']['cyl']
+            row['dcx'] = _bits(row['sim_cyl'][0]) - _bits(lv['link']['cyl'][0])
+            row['dcz'] = _bits(row['sim_cyl'][1]) - _bits(lv['link']['cyl'][-1])
         out.append(row)
-        pend_link, pend_tetra = full_depth_push(ck, (tx, tz))
     return out
 
 

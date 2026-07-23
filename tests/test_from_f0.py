@@ -346,3 +346,57 @@ def test_closed_loop_computed_replay_dynamics_bit_exact(fix, seed, eyes):
                             d['sim_tetra'][1] - d['live_tetra'][1])
             assert dl < 2e-3 and dt < 2e-3, (
                 "frame %d: closed-loop position off dL=%.5f dT=%.5f" % (d['f'], dl, dt))
+
+
+def test_freerun_direct_api_matches_replay(fix, seed, eyes):
+    """`FreeRun` -- the planner's novel-input stepper -- driven DIRECTLY (no capture rows in the
+    loop) reproduces the wrapped `replay(centers='computed')` byte-for-byte. Pins the API contract
+    (`pre_seed_input` delay-1 semantics, keep-last eye injection, computed settled centres) so a
+    future wrapper-only change can't silently fork the planner path."""
+    if seed is None:
+        pytest.skip("state-2 seed fixture not present")
+    from harness.tetrapush.from_f0 import FreeRun
+    cyl_frames, dtm_frames = fix
+    input_at = _input_at(dtm_frames)
+    want = replay(cyl_frames, input_at, 0, upto=44, seed_nspeed=seed['link']['nspeed'],
+                  centers='computed', eyes=eyes, seed_old_pose=seed.get('old_pose'))
+
+    run = FreeRun(cyl_frames[0], seed_nspeed=seed['link']['nspeed'],
+                  seed_old_pose=seed.get('old_pose'))
+    run.pre_seed_input(input_at(0))
+    for w in want:
+        k = w['f']
+        eye = eyes[k - 1] if k - 1 < len(eyes) else None
+        row = run.step(input_at(k), csangle=cyl_frames[k - 1]['csangle'], eye=eye)
+        for key in ('sim_proc', 'sim_facing', 'sim_shape_z', 'sim_link', 'sim_tetra',
+                    'speedF', 'sim_cyl'):
+            assert row[key] == w[key], "frame %d: FreeRun %s %r != replay %r" % (
+                k, key, row[key], w[key])
+
+
+def test_freerun_warns_when_tetra_would_follow(fix, seed):
+    """The stt-3 plow model must WARN the first time a stepped state leaves the plow regime --
+    live Tetra flips to the stt-4 FOLLOW state (unmodeled here) once the 3D Link distance passes
+    `npc_zl1.FOLLOW_ENGAGE_DIST` (230, the gated field_34+100 law; live she flips at-or-after the
+    crossing, never before -- s17 probe: crossed 231.9 at f63, stt 4 at f75). The validated DTM
+    window (chase-and-plow, 41-85 u) must stay silent."""
+    if seed is None:
+        pytest.skip("state-2 seed fixture not present")
+    import warnings as _w
+    from harness.tetrapush.from_f0 import FreeRun
+    cyl_frames, dtm_frames = fix
+    input_at = _input_at(dtm_frames)
+
+    # The locked window never crosses the engage distance -> no warning.
+    with _w.catch_warnings():
+        _w.simplefilter("error")
+        replay(cyl_frames, input_at, 0, upto=44, seed_nspeed=seed['link']['nspeed'])
+
+    # Free-running the seed with a held UP stick walks Link away from the plowed Tetra; the
+    # first frame past 230 u must warn (and only once).
+    run = FreeRun(cyl_frames[0], seed_nspeed=seed['link']['nspeed'])
+    run.pre_seed_input((128, 255, 0, 0))
+    with pytest.warns(UserWarning, match="FOLLOW_ENGAGE_DIST"):
+        for _ in range(400):
+            run.step((128, 255, 0, 0))
+    assert run._follow_warned

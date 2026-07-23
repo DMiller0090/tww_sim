@@ -169,6 +169,29 @@ The mechanism is fully grounded (US GZLE01 line numbers; logic identical to JP):
   actor each frame. HIO params: `mAtnMove` cap 12.0 / push 5.0 / decel scale 0.5 / maxStep 7.5 /
   minStep 4.0 (vs `mAtnMoveB` 15.0 / 2.5 / 0.5 / 8.0 / 2.0).
 
+## The follow camera (csangle) -- decomp map  [session 17, recon; port OPEN]
+
+csangle (`dCam_getControledAngleY`) = `dCamera_c::mAngleY` = **the horizontal angle of
+`mEye - mCenter`, +0x8000**, re-derived EVERY frame in `dCamera_c::Run` (d_camera.cpp:905) -- NOT a
+standalone accumulator (the swim `camera_exact` target/yaw recurrence was an approximation of these
+springs in the free-cam regime; it does not transfer to land). Per frame:
+`Run -> nextMode (mode select) -> engine (mode 0 = followCamera, style 'FN08'; full L-lock
+(`LockonTruth()`, i.e. LOCK **and** RELEASE) = mode 2 = lockonCamera) -> bumpCheck (commit
+mEye/mDirection) -> mAngleY = mDirection.U().Inv()`. So during EVERY untarget cycle the camera
+alternates followCamera <-> lockonCamera with the attention lock lifetime. followCamera's yaw
+emerges from: `mCenter` chasing `relationalPos(player, offsets)`, the direction's horizontal angle
+chasing `directionOf(player).Inv()` (behind Link) at rate `m3B8` = f(MAIN-stick X via
+`dCamMath::rationalBezierRatio`, weights 1.0/0.2, cos-shaped, x stick value x 0.1), radius/pitch
+springs (FN08: near/far 300/450 @ 0.05, pitch base 25 deg @ 0.05, warmup spring 0.9), then
+`mEye += (center + dir.Xyz() - mEye) * 0.75` and `mDirection.Val(mEye - mCenter)`. The C-stick on
+land only requests mode changes (recenter mode 12 / forward peek), NOT continuous orbit.
+**Port blockers:** `rationalBezierRatio` is Nonmatching/EMPTY in the decomp (pin it live at the JP
+breakpoint), and the `cSGlobe` getter/setter fields are SWAPPED (getter `U()`/setter `V()` both hit
+`mInclination` = the horizontal yaw at globe+0x06; getter `V()`/setter `U()` hit `mAzimuth`) -- a
+port that misses this reads the wrong angle. Hidden spring state (m3AC/m398/m39C/m3A0/m3B8/m3DC/
+m3E0/m3E8, mWork @ dCamera_c+0x378) must be seeded from a live dump -- captured per frame f0..f120
+in `_notes/tetrapush-eyeindep_probe.json` (`cam_raw`, 0x450 bytes/frame).
+
 ## Tooling
 
 | File | What |
@@ -181,11 +204,12 @@ The mechanism is fully grounded (US GZLE01 line numbers; logic identical to JP):
 | `fixtures/courtyard_push_state2.json` | 51-frame session-1 ground-truth capture from state 2 (repo `fixtures/`). |
 | `tetra_plow.py` | **The Courtyard Tetra-plow LAW** (session 8): Tetra's per-frame move = the FULL Co overlap depth from Link's animated mCyl centre (`Tetra += depth·unit(Tetra−link_centre)`; `depth = 80 − dist`). `reconstruct()` predicts her whole trajectory from Link's centre path + seed. Gated `tests/test_tetra_plow.py` (frac==1.0 every frame; whole-push reconstruction <0.01 u vs live). |
 | `link_plow.py` | **The Courtyard Link-recoil LAW** (session 9): the MIRROR of `tetra_plow` -- Link's per-frame recoil = the FULL Co overlap depth AWAY from Tetra (`link += depth·unit(link_centre−Tetra)`), on top of his foot term. `recoil()`/`recoil_step()`. Gated `tests/test_link_plow.py` (frac==1.0 every push frame; recoil vector + feet reconstruction 0-ULP-within-jitter on the roll frames). Reuses `tetra_plow.plow_depth`. |
-| `from_f0.py` | **The from-f0 COUPLED replay** (session 10-12): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay(..., seed_nspeed=)`. Gated `tests/test_from_f0.py`: from the roll entry AND from **state 2 itself** (`seed_nspeed` = the measured mNormalSpeed) the replay is bit-exact f1..f44 (speedF 0-ULP, procs match, Link pos <1e-3 u), Tetra 0-ULP both cycles. |
+| `from_f0.py` | **The from-f0 COUPLED replay** (session 10-12): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay(..., seed_nspeed=)`. Session 17 refactored the loop into **`FreeRun`** -- the planner's novel-input stepper (seed once, `step()` arbitrary raw inputs; csangle/eye per-step injectables; warns if a stepped state leaves the stt-3 plow regime, dist > `FOLLOW_ENGAGE_DIST`) -- with `replay` a thin wrapper over it. Gated `tests/test_from_f0.py`: from the roll entry AND from **state 2 itself** (`seed_nspeed` = the measured mNormalSpeed) the replay is bit-exact f1..f44 (speedF 0-ULP, procs match, Link pos <1e-3 u), Tetra 0-ULP both cycles. |
 | `fixtures/courtyard_push_cyl.json` | Session-8 live ground truth: per-frame Link **mCyl Co-centre** + **csangle** + Tetra pos, single-stepped from slot 2 (`capture_push`). The Co-centre/csangle source the from-f0 replay needs. **Single-step, so cyc2 is edge-jittery** (the `_dedup` in the plow test drops the f44==f45 double-read); NOT a pinned edge oracle. |
 | `fixtures/courtyard_push_setcol.json` | Session-14 breakpoint ground truth (f1..f12): at each JP-`setCollision` hit, the nodeMtx root/neck translates + pos/anim/facing AT CALL TIME and the freshly-written **`cyl_exec`**. Pins the mCyl timing law (exec midpoint) + the half-depth settled-centre map. Source probe `_notes/tetrapush-setcol_probe.py`. |
 | `fixtures/courtyard_push_eyepos.json` | Session-15 live ground truth (single-stepped, f0..f28): Tetra's **eyePos** (fopAc `+0x260` -- her animated head-joint world pos, the `setShapeAngleToAtnActor` aim target), her feet pos, Link facing, and `mpAttnActorLockOn` per frame (non-NULL f8-f20, NULL f21+). The `replay(..., eyes=)` injection source. Probe `_notes/tetrapush-eyepos_probe.py`. |
 | `_notes/tetrapush-chain_probe.py` | (gitignored) Session-16 breakpoint probe: FULL 3x4 nodeMtx for the neck-chain joints [0,1,2,3,4,14] at each JP-setCollision hit + `mBodyAngle`/`m351C`/`m34F2/F4`/`m34C2`/`m35E0`/`m35B8` at hit time. The joint-by-joint diff that pinned all four exec-pose laws. Companion `_notes/tetrapush-setframe_probe.py`: the J3DModel BASE TR mtx + `m_old_fdata` morf state + under-blend packs at the f1-f3 hits (the init-frame zero-lean base + the true morf cadence). |
+| `_notes/tetrapush-eyeindep_probe.py` | (gitignored) Session-17 A/B probe: two 120-frame runs from slot 2 diverging only in post-f48 inputs; logs both actors + csangle + the RAW `dCamera_c` block (0x450 B/frame). DISPROVED the eyePos input-independence shortcut (offsets diverge f51, both runs stt 3); run A doubles as the extended csangle + camera-spring ground truth (f0..f120) for the camera port, and run B pins the stt-3->4 follow flip (crossed 230 at f63, stt 4 at f75). `.json` beside it. |
 | `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5), `_notes/tetrapush-retarget_probe.py` (session 11), `_notes/tetrapush-seed_probe.py` (session 12: reads the hidden f0 seed fields -- mNormalSpeed/mDirection/attention -- that pinned the true-f0 seed as a speedF-lags-mNormalSpeed gap), and `_notes/tetrapush-{upper_probe,anmmtx_probe}.py` (session 13: the upper anim part / mBodyAngle state and the live `mpNodeMtx` root+neck matrices + `.json` dumps -- the ground truth behind the body-Co FK validation + the open mCyl timing law). |
 
 Run: `python -m harness.tetrapush.capture_push frames=60` (needs Dolphin up with slot 2 = the
@@ -251,6 +275,14 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
   f0 -5.198 -- the anmmtx-probe root/neck Y offset, XZ-irrelevant); equipped item `m3562` `la+0x3562`
   (u16; 0x103 = sword DRAWN, true the whole courtyard window); `m34EC` (extra draw yaw) + `shape.x`
   `la+0x20C` both 0 all window.
+- **dCamera_c (session 17, decomp US GZLE; chain base = `[[0x803AD380]+0x34]` = `camera_class`):**
+  `dCamera_c` = `camera_class + 0x244`; `mAngleY` (cSAngle, == csangle) `+0x6C` (chain `+0x2B0`, as
+  already used); `mDirection` (cSGlobe `mEye-mCenter`) `+0x008` -- radius f32 `+0`, `mAzimuth`
+  (elevation!) s16 `+0x04`, `mInclination` (the HORIZONTAL yaw; the old RE's "+0x0E yaw") s16
+  `+0x06`; `mWork` union (follow/lockon spring state) `+0x378` (`m3AC` yaw-offset accum `+0x3AC`,
+  `m3B8` yaw rate, `m3E0` pitch gain, etc.). Engines: `followCamera` (mode 0, style `FN08`),
+  `lockonCamera` (mode 2, while `LockonTruth()`), committed by `bumpCheck`; `mAngleY` written at
+  `Run` d_camera.cpp:905. `cSGlobe` getter/setter fields are SWAPPED (see `## The follow camera`).
 - **CC push + camera (session 8, live-found 2026-07-22; `this` = deref `0x803AD860` = `lp`):**
   Link body **Co cylinder centre** = `lp + 0x4064` (cXyz; radius `lp+0x4070` = 30.0, height `lp+0x4074`
   ≈ 104.6; the `lp+0x4044` block is the derived AABB, `centre ± (r,0,r)`/`+(0,h,0)` -- how the centre was
@@ -582,15 +614,39 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
         m3730/m36B8) stands -- those were all correctly eliminated. Sword-drawn note kept: `m3562 =
         0x103` all window, physics-inert (dash/dashs identical at joints 0-4/14; only feet differ),
         may matter for the final CUT pose set.
-- [ ] **Build the planner**: state-2 config to a coupled sim (Link roll/untarget-EBS + Tetra
+- [~] **Build the planner**: state-2 config to a coupled sim (Link roll/untarget-EBS + Tetra
       plow/follow) to a search for the input sequence that lands Tetra on a genuine `tetra_placements`
       coord AND sets up the matching roll entry. Method reference: `plan_land` / the seam-clip `solver`
       (cheap predictor + exact bit-confirm, no calibration). The pose/centre pipeline is CLOSED
-      (session 16); the remaining injected quantities a novel-input planner must model or bound:
-      **csangle** (the follow-camera chase is unmodeled -- `camera_exact` covers only the C-stick
-      omega path -- but drifts slowly, ~6 BAM/frame max) and **Tetra's eyePos** (her look-at head
-      anim chasing Link -- the proc-9 re-aim target; injected from
-      `fixtures/courtyard_push_eyepos.json` today, probe range f0..f28).
+      (session 16). Session-17 state:
+      - [x] **The novel-input stepper** (`from_f0.FreeRun`): the replay loop refactored into a
+            seed-once / step-arbitrary-inputs class (computed centres; csangle/eyePos per-step
+            injectables); `replay` is now a thin wrapper over it so every existing 0-ULP gate gates
+            the planner path too, plus the direct-API gate `test_freerun_direct_api_matches_replay`.
+            **FOLLOW guard**: the stepper warns (once) the first frame the 3D Link-Tetra distance
+            exceeds `npc_zl1.FOLLOW_ENGAGE_DIST` (230) -- live Tetra flips to the UNMODELED stt-4
+            follow state at-or-after that crossing (s17 probe: crossed 231.9 f63, stt 4 f75), so a
+            plan must keep Link inside the plow regime; `test_freerun_warns_when_tetra_would_follow`.
+      - [ ] **The csangle (follow camera) model** -- the planner's critical path. The old "drifts
+            ~6 BAM/frame" note was WRONG (the capture shows up to 116 BAM/frame while the camera
+            chases the backslide, ~770 BAM over the 45-frame window; sensitivity: csangle feeds the
+            roll aim 1:1, ~2.4 u lateral Tetra drift per cycle per 100 BAM vs the 2 u-wide placement
+            band). Decomp-mapped session 17 (see `## The follow camera` below): csangle is EMERGENT
+            (the horizontal angle of `mEye - mCenter`, re-derived per frame from eye/center spring
+            dynamics), so the port is followCamera + lockonCamera + nextMode + bumpCheck, fp-faithful,
+            seeded from a live dCamera_c dump (captured: `_notes/tetrapush-eyeindep_probe.json`
+            `cam_raw`, f0..f120).
+      - [ ] **The Tetra eyePos model**. The "stt-3 disables the look-at so the eye-offset stream is
+            input-independent" shortcut (from the `setStt(3) -> field_0x84D = 0` decomp path) is
+            **DISPROVEN live** (s17, `_notes/tetrapush-eyeindep_probe.py`: two runs diverging only in
+            post-f48 inputs; the eye-minus-feet offset diverges from f51 while BOTH runs still read
+            stt 3 -- her stt-3 action re-arms `field_0x84D = 1`, the head DOES chase Link). So it
+            must be modeled: `lookBack` -> `dNpc_JntCtrl_c::lookAtTarget_2` (d_npc.cpp:828-915;
+            target = `dNpc_playerEyePos(-20)` = player head-top height over feet XZ; head/backbone
+            chase `cLib_addCalcAngleL(.., 4, step, 4)`, step 0x1000/0x0180 via `l_HIO`; clamps
+            0x18E2/0x2328/0xE71E/0xDCD8 head, 0x0BB8/0x03E8/0xF8E4/0xFC18 backbone), composed with
+            the `wait.bck` head-joint FK + the `_nodeCB_Head` half-angle twist + (20,-16,0) offset
+            (d_a_npc_zl1.cpp:166-182, :1258-1262, :1283).
 
 ## Hard rules (inherited from the seam-clip work)
 
