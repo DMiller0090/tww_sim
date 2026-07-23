@@ -400,3 +400,98 @@ def test_freerun_warns_when_tetra_would_follow(fix, seed):
         for _ in range(400):
             run.step((128, 255, 0, 0))
     assert run._follow_warned
+
+
+# ---------------------------------------------------------------- the wired land camera (s18)
+_CAM = os.path.join(_ROOT, 'fixtures', 'courtyard_cam_oracle.json')
+
+
+@pytest.fixture(scope='module')
+def cam_oracle():
+    if not os.path.exists(_CAM):
+        pytest.skip("camera oracle fixture not present")
+    return json.load(open(_CAM))
+
+
+def test_pad_decode_matches_oracle(fix, cam_oracle):
+    """`land_cam.pad_from_raw` (the raw-DTM-bytes -> camera-pad decode: PADClamp octagons +
+    JUTGamePad TStick + ClampTrigger) reproduces the live post-updatePad stick lasts 0-ULP on
+    every oracle frame the DTM covers, at the camera's delay-1 stage: pad[k] == decode(inp[k-1]).
+
+    ``main_angle`` is asserted against inp[k] instead: the oracle's value is a PROBE-TIMING
+    SHIFT (the camera block's stick lasts were read from the frozen dCamera_c copy, but
+    mMainStickAngle was read from the live JUTGamePad struct, which the single-step's next poll
+    had already advanced) -- decoding the raw bytes proves the shift exactly. main_angle is
+    DMC-only and inert at status 0, so the wired camera feeds the honest delay-1 value."""
+    from tww_sim.core.camera.land_cam import pad_from_raw
+    cyl_frames, dtm_frames = fix
+    inp_at = {fr['f']: fr['inp'] for fr in dtm_frames}
+    checked = 0
+    for fr in cam_oracle['frames']:
+        k = fr['f']
+        # f45 is the movie's last delivered group; f46+ of the oracle run was driven by a
+        # different (probe-injected) input stream the DTM fixture does not carry.
+        if fr['dup'] or k - 1 not in inp_at or k > 45:
+            continue
+        pad = pad_from_raw(inp_at[k - 1])
+        live = fr['pad']
+        for key in ('mx', 'my', 'mval', 'cx', 'cy', 'cval', 'trigL'):
+            assert _bits(pad[key]) == _bits(live[key]), (
+                "f%d pad.%s %r != live %r (not 0-ULP)" % (k, key, pad[key], live[key]))
+        if k in inp_at:
+            assert (pad_from_raw(inp_at[k])['main_angle'] & 0xFFFF
+                    == live['main_angle'] & 0xFFFF), (
+                "f%d main_angle probe-shift identity broke" % k)
+        checked += 1
+    assert checked >= 40
+
+
+def test_camera_in_the_loop_replay_bit_exact(fix, seed, eyes, cam_oracle):
+    """THE session-18 wiring gate: the fully self-contained replay with the MODELED land camera
+    in the loop (`camera=` a LandCamera seeded once from the f0 oracle block -- NO injected
+    csangle stream) chains from state 2 with:
+
+      * every committed csangle f1..43 == the live capture (`frames[k]['csangle']`) AND the
+        camera oracle, EXACT (csangle is position-independent in this regime -- manual yaw moves
+        only with C-stick X and the L-blip chase targets the camera's own committed yaw -- so the
+        known amplified position noise cannot touch it);
+      * the physics rows byte-identical to the reference `centers='computed'` replay (the wired
+        camera reproduces exactly the stream the injection supplied);
+      * Link's camera-input attention position obeying the decomp law attn.y = f32(92.5 +
+        baseTR[1][3]) (`setAttentionPos` :10271) -- 0-ULP vs the oracle on f3..f9, after the
+        unmodeled m35B8 seed residue dies (f1-2, a <0.15 u center-Y transient) and before the
+        closed-loop position noise reaches pos.y's last bits (f10+, <=2e-5)."""
+    if seed is None:
+        pytest.skip("state-2 seed fixture not present")
+    from tww_sim.core.camera.land_cam import LandCamera, seed_from_block
+    cyl_frames, dtm_frames = fix
+    input_at = _input_at(dtm_frames)
+    ora = {fr['f']: fr for fr in cam_oracle['frames']}
+    n_tattn = max(ora) + 1
+    tattns = [ora[k]['tattn'] if k in ora else None for k in range(n_tattn)]
+
+    cam = seed_from_block(LandCamera(), bytes.fromhex(cam_oracle['seed_cam_raw']))
+    assert cam.angleY == cyl_frames[0]['csangle'], "oracle seed block != cyl fixture f0 csangle"
+    rows = replay(cyl_frames, input_at, 0, upto=44, seed_nspeed=seed['link']['nspeed'],
+                  centers='computed', eyes=eyes, seed_old_pose=seed.get('old_pose'),
+                  camera=cam, tattns=tattns)
+    ref = replay(cyl_frames, input_at, 0, upto=44, seed_nspeed=seed['link']['nspeed'],
+                 centers='computed', eyes=eyes, seed_old_pose=seed.get('old_pose'))
+    assert len(rows) == len(ref) >= 40
+    for rc, rr in zip(rows, ref):
+        k = rc['f']
+        assert rc['sim_csangle'] == cyl_frames[k]['csangle'], (
+            "f%d: wired-camera csangle %d != live %d" % (k, rc['sim_csangle'],
+                                                         cyl_frames[k]['csangle']))
+        if k in ora and not ora[k]['dup']:
+            assert rc['sim_csangle'] == ora[k]['expect']['csangle'], (
+                "f%d: wired-camera csangle %d != oracle %d" % (
+                    k, rc['sim_csangle'], ora[k]['expect']['csangle']))
+        for key in ('sim_proc', 'speedF', 'sim_facing', 'sim_shape_z', 'sim_link',
+                    'sim_tetra', 'sim_cyl'):
+            assert rc[key] == rr[key], (
+                "f%d: %s diverged from the injected-csangle reference" % (k, key))
+        if 3 <= k <= 9 and k in ora and not ora[k]['dup']:
+            assert _bits(rc['sim_attn_y']) == _bits(ora[k]['link']['attn'][1]), (
+                "f%d: attn.y law %r != live %r (not 0-ULP)" % (
+                    k, rc['sim_attn_y'], ora[k]['link']['attn'][1]))

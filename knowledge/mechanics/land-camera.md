@@ -72,6 +72,37 @@ Style parameters are per-room-type: the port carries the two styles the courtyar
 flags u16 @+0x7C, name @+0x80). No BG collision is modeled (open-floor regime; the oracle
 proves no line check fired in the window).
 
+## Wired into the coupled replay (session 19)
+
+`from_f0.FreeRun(camera=)` runs a seeded `LandCamera` in the closed loop in place of the
+injected csangle stream (`land_cam.seed_from_block` seeds it once from the f0 oracle block).
+Gate: `tests/test_from_f0.py::test_camera_in_the_loop_replay_bit_exact` - every committed
+csangle f1..43 matches live exactly and the physics rows are byte-identical to the
+injected-csangle reference. The camera's per-frame inputs, all from the sim's own state:
+
+- **Pad**: the camera reads the polled `g_mDoCPd` pad, the attention's delay-1 stage - feed it
+  the SAME delay-1 raw DTM bytes the physics acts on, decoded by `land_cam.pad_from_raw`
+  (PADClamp octagons: main 15/72/40 div 54, sub 15/59/31 div 42; JUTGamePad TStick unit-circle
+  clamp; ClampTrigger 30/180 div 150). Gated 0-ULP vs the oracle's post-updatePad stick lasts
+  (`test_pad_decode_matches_oracle`). The oracle's `main_angle` is a probe-timing shift (it
+  decodes the NEXT frame's raw bytes; the single-step's next poll had already advanced the live
+  JUTGamePad struct) - DMC-only, inert at status 0.
+- **The game latches poll index 2** of a DTM frame's 4-poll group, not poll 0: live-pinned on
+  the window's only two non-uniform groups (f25 substickX polls 98,98,99,99 with the camera
+  consuming 99; f26 99,99,99,105 consuming 99 - index 2 is the unique consistent choice).
+  `harness/tetrapush/dtm_inputs.py` extracts poll 2 accordingly.
+- **Link's attention position** (the center-chase target): `setAttentionPos`
+  (`d_a_player_main.cpp:10271`, right after `setCollision`) - on plain land
+  `attn = (pos.x, f32(92.5 + baseTR[1][3]), pos.z)`, the J3D base translate Y = pos.y plus the
+  `m35B8` footBgCheck lift. The replay does not run the m35B8 decay (no ground bookkeeping), so
+  an f0 with live residue (state 2: -5.198, dead by f3) gives a 2-frame, <0.15 u center-Y
+  transient - invisible to csangle, whose yaw target moves only with C-stick X (and the L-blip
+  chase targets the camera's own committed yaw), which is exactly why csangle survives the
+  closed loop's amplified position noise bit-exactly.
+- **Lock windows**: `LockonTruth()` = the sim's own `AttentionLock.locked`; the locked actor's
+  `attention_info.position` (`tattn` - Tetra's animated look-at point, distinct from her feet
+  AND from eyePos) is still an injected stream, same status as the open eyePos model.
+
 ## Gotchas (hard-won)
 
 - **The zeldaret decomp is unusable for these functions.** `manualCamera` is an empty stub;
@@ -101,5 +132,7 @@ proves no line check fired in the window).
   blips last 1 frame).
 - Player status words (`status0/status1`) are inputs, 0 throughout the oracle window; a
   regime that sets them (swim, hang, first-person) needs the override branches filled in.
-- Feeding the planner: wire `LandCamera` into `from_f0.FreeRun` in place of the injected
-  csangle stream (the [Tetra-push planner](../../harness/tetrapush/README.md#plan--status)).
+- Trigger decode mid-values (raw 31..179) never occur in the oracle window - the ClampTrigger
+  scaling is decode-unvalidated between the 0.0 and 1.0 endpoints.
+- The Tetra `tattn` stream (lock windows) is injected, not modeled - it falls with the
+  [Tetra-push planner](../../harness/tetrapush/README.md#plan--status)'s open eyePos model.

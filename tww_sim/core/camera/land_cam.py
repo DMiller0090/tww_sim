@@ -92,6 +92,105 @@ def stick_ratio(pos):
     return -1.0
 
 
+# ---------------------------------------------------------------- pad decode
+def pad_from_raw(inp):
+    """The camera ``pad`` dict from one RAW controller input (dict with ``stickX``/``stickY``/
+    ``substickX``/``substickY``/``triggerL``, bytes 0..255) -- the decoded JUTGamePad state
+    ``dCamera_c::updatePad`` stores (main/C stick floats + trigger + ``mMainStickAngle``).
+
+    The camera reads the polled ``g_mDoCPd`` pad, the SAME pipeline stage as the attention's
+    delay-1 L -- in a DTM replay feed it the delay-1 raw input the physics acts on, never the
+    physics' delay-2 acted pad. Decode: PADClamp octagon (main 15/72/40 div 54, sub 15/59/31
+    div 42) + JUTGamePad TStick::update (STICK_MODE_1: unit-circle clamp, value capped at 1),
+    trigger ClampTrigger 30/180 div 150. Gated 0-ULP against the live oracle's post-updatePad
+    stick lasts by tests/test_from_f0.py (trigger mid-values 31..179 never occur in the oracle
+    window and are decode-unvalidated; ``main_angle`` is DMC-only and inert at status 0)."""
+    from ..mathlib import clamp_stick, _clamped_angle_s16
+    mx_i, my_i = clamp_stick(int(inp['stickX']) - 128, int(inp['stickY']) - 128, 72, 40, 15)
+    mx = f32(mx_i / 54.0)
+    my = f32(my_i / 54.0)
+    mval = f32(math.sqrt(f32(f32(mx * mx) + f32(my * my))))
+    if mval > 1.0:
+        mx = f32(mx / mval)
+        my = f32(my / mval)
+        mval = f32(1.0)
+    ang = _clamped_angle_s16(mx_i, my_i, 54.0)
+    cx_i, cy_i = clamp_stick(int(inp.get('substickX', 128)) - 128,
+                             int(inp.get('substickY', 128)) - 128, 59, 31, 15)
+    cx = f32(cx_i / 42.0)
+    cy = f32(cy_i / 42.0)
+    cval = f32(math.sqrt(f32(f32(cx * cx) + f32(cy * cy))))
+    if cval > 1.0:
+        cx = f32(cx / cval)
+        cy = f32(cy / cval)
+        cval = f32(1.0)
+    t = int(inp.get('triggerL', 0))
+    t = 0 if t <= 30 else (min(t, 180) - 30)
+    return dict(mx=float(mx), my=float(my), mval=float(mval),
+                cx=float(cx), cy=float(cy), cval=float(cval),
+                trigL=float(f32(t / 150.0)), main_angle=ang)
+
+
+# ---------------------------------------------------------------- block seed
+def _bf(b, o):
+    return struct.unpack(">f", b[o:o + 4])[0]
+
+
+def _bs(b, o):
+    return struct.unpack(">h", b[o:o + 2])[0]
+
+
+def _bi(b, o):
+    return struct.unpack(">i", b[o:o + 4])[0]
+
+
+def _bu(b, o):
+    return struct.unpack(">I", b[o:o + 4])[0]
+
+
+def _bv3(b, o):
+    return tuple(struct.unpack(">3f", b[o:o + 12]))
+
+
+def seed_from_block(cam, b):
+    """Seed a LandCamera from a raw live ``dCamera_c`` block (>= 0x510 bytes from the camera
+    base; the oracle fixture's ``seed_cam_raw``). Only the land-loop state is read: committed
+    globe/center/eye/fovy/angleY, the view cache, the mode machinery, pad lasts, and the
+    manual-work union (valid when the seed frame is mode 12)."""
+    cam.dir = SGlobe(_bf(b, 0x08), _bs(b, 0x0C), _bs(b, 0x0E), formal=False)
+    cam.center = _bv3(b, 0x10)
+    cam.eye = _bv3(b, 0x1C)
+    cam.fovy = _bf(b, 0x38)
+    cam.angleY = struct.unpack(">H", b[0x6C:0x6E])[0]
+    cam.vc_dir = SGlobe(_bf(b, 0x3C), _bs(b, 0x40), _bs(b, 0x42), formal=False)
+    cam.vc_center = _bv3(b, 0x44)
+    cam.vc_eye = _bv3(b, 0x50)
+    cam.vc_fovy = _bf(b, 0x60)
+    cam.cur_mode = _bi(b, 0x13C)
+    cam.m144 = _bi(b, 0x144)
+    cam.m100, cam.m101, cam.m102 = b[0x100], b[0x101], b[0x102]
+    cam.m108 = _bu(b, 0x108)
+    cam.m110 = b[0x110]
+    cam.m11C = _bu(b, 0x11C)
+    cam.flags = _bu(b, 0x50C)
+    cam.m184 = _bi(b, 0x184)
+    cam.mx, cam.my, cam.mval = _bf(b, 0x154), _bf(b, 0x158), _bf(b, 0x15C)
+    cam.cx, cam.cy, cam.cval = _bf(b, 0x16C), _bf(b, 0x170), _bf(b, 0x174)
+    cam.trigL = _bf(b, 0x190)
+    cam.m19A, cam.m19B = b[0x19A], b[0x19B]
+    cam.w_delta = _bv3(b, 0x37C)
+    cam.w_target = _bv3(b, 0x388)
+    cam.w_m394 = _bf(b, 0x394)
+    cam.w_m398 = _bf(b, 0x398)
+    cam.w_m3A0 = b[0x3A0]
+    cam.w_m3A4 = _bf(b, 0x3A4)
+    cam.w_glob = SGlobe(_bf(b, 0x3A8), _bs(b, 0x3AC), _bs(b, 0x3AE), formal=False)
+    cam.w_m3B0 = _bf(b, 0x3B0)
+    cam.w_m3B4 = _bf(b, 0x3B4)
+    cam.cur_style = TYPE_JUMP[cam.cur_mode]
+    return cam
+
+
 # ---------------------------------------------------------------- the camera
 class LandCamera:
     """The dCamera_c land loop. Drive with per-frame ``step(pad, link, attn)``.

@@ -23,7 +23,10 @@ Two modelling shortcuts, both deliberate (see README "## Plan / status" from-f0 
     injection; the coupling code here is unchanged by that swap.
   * `csangle` is INJECTED per frame (`_cam.yaw` forced, C-stick neutral) rather than integrated from
     the substick -- the "inject the camera, don't model it" convention (the frozen-cam shortcut the
-    tier test uses, generalised to the captured per-frame value).
+    tier test uses, generalised to the captured per-frame value). SUPERSEDED when a `camera=` is
+    passed (session 18): a seeded `core.camera.land_cam.LandCamera` replaces the injection, driven
+    by the raw DTM substick + the sim's own Link/attention state (see the `FreeRun` class doc);
+    only the Tetra eyePos/tattn streams remain injected.
 
 VALIDATED (`tests/test_from_f0.py`), seeded at the FIRST roll entry: the replay now CHAINS bit-exact
 through cycle 2's roll -- f4..f44 is 0-ULP (every speedF, every proc, Link pos <1.4e-4 u), covering
@@ -236,9 +239,29 @@ class FreeRun:
     Per-frame injectables (until their models land): ``csangle`` -- the START-of-frame camera value
     (i.e. the value after the previous frame; omit to hold the last one), and ``eye`` -- the
     end-of-previous-frame Tetra eyePos (the proc-9 re-aim target; omit to keep the last set value,
-    never-set = feet-aim)."""
+    never-set = feet-aim).
 
-    def __init__(self, seed_row, *, seed_nspeed=None, seed_old_pose=None, computed_pose=True):
+    ``camera`` -- a SEEDED `LandCamera` (`land_cam.seed_from_block` off the f0 oracle block): the
+    csangle injection is replaced by the modeled camera, stepped at the END of each frame from the
+    sim's OWN post-step Link state (the game order: player execute -> camera Run; the physics of
+    frame k+1 reads the csangle committed at frame k). The camera consumes the same delay-1 raw
+    input the physics acts on (`pad_from_raw`; it needs the REAL substick bytes, which stay
+    physics-neutral -- `_step_args` keeps feeding LandState a neutral C-stick), the sim's own
+    attention lock for `LockonTruth()`, and Link's `attention_info.position` via the decomp law
+    ``attn = (pos.x, f32(92.5 + baseTR[1][3]), pos.z)`` (`setAttentionPos`, d_a_player_main.cpp
+    :10271, runs right after setCollision -- the sim's posed `ff.base` IS that base matrix).
+    KNOWN SEED GAP: the sim does not run the `m35B8` footBgCheck decay (no ground bookkeeping in
+    this replay), so at an f0 with live m35B8 residue (state 2: -5.198 dying by f3) the attn Y is
+    up to ~2.7 u high for the first two frames -- a <0.15 u camera-CENTER-Y transient through the
+    0.05 cushion, invisible to csangle (the yaw target moves ONLY with C-stick X, and the blip
+    chase targets the camera's own committed yaw -- csangle is position-independent in this
+    regime, which is exactly why it is a commanded input channel for the planner).
+    While the sim's lock is engaged the camera needs the locked actor's attention position:
+    inject it per step via ``tattn`` (Tetra's `attention_info.position`, her animated look-at
+    point -- unmodeled, same status as eyePos; keep-last semantics like ``eye``)."""
+
+    def __init__(self, seed_row, *, seed_nspeed=None, seed_old_pose=None, computed_pose=True,
+                 camera=None):
         e = seed_row
         self.link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
         self.computed_pose = bool(computed_pose)
@@ -250,7 +273,10 @@ class FreeRun:
                           (int(e['link']['shape_z']) << 1) & 0xFFFF, old_pose=seed_old_pose)
         self.tx, self.tz = e['tetra']['pos'][0], e['tetra']['pos'][2]
         self.ty = e['tetra']['pos'][1]
-        self.csangle = e['csangle']
+        self.camera = camera
+        self._tattn = None
+        self._prev_raw = None
+        self.csangle = camera.angleY if camera is not None else e['csangle']
         self._follow_warned = False
         # The SEED frame's Co centre is static initial-condition data even in computed mode
         # (computing it needs f-1's m351C, which the seed doesn't carry); f1 on is computed. (s16)
@@ -261,16 +287,24 @@ class FreeRun:
     def pre_seed_input(self, inp):
         """Seed the delay-1 controller buffer (the input the FIRST `step` acts on)."""
         self.link._inbuf = [_step_args(inp)]
+        self._prev_raw = inp
 
-    def step(self, inp, csangle=None, eye=None, center=None):
-        """Advance one game frame on raw input ``inp``. ``csangle``/``eye`` as in the class doc;
-        ``center`` = an injected SETTLED Co centre for this frame's outgoing push (the live-capture
-        mode) -- None uses the computed settled centre (requires ``computed_pose``). Returns the
-        sim row dict (``sim_proc``, ``sim_facing``, ``sim_shape_z``, ``sim_link``, ``sim_tetra``,
-        ``speedF``, and ``sim_cyl`` when computed)."""
+    def step(self, inp, csangle=None, eye=None, center=None, tattn=None):
+        """Advance one game frame on raw input ``inp``. ``csangle``/``eye``/``tattn`` as in the
+        class doc; ``center`` = an injected SETTLED Co centre for this frame's outgoing push (the
+        live-capture mode) -- None uses the computed settled centre (requires ``computed_pose``).
+        Returns the sim row dict (``sim_proc``, ``sim_facing``, ``sim_shape_z``, ``sim_link``,
+        ``sim_tetra``, ``speedF``, ``sim_cyl`` when computed, and ``sim_csangle`` -- the camera
+        value the NEXT frame's physics will read -- when a camera is wired)."""
         link = self.link
         if csangle is not None:
+            if self.camera is not None:
+                raise ValueError("csangle injection and a wired camera are mutually exclusive")
             self.csangle = csangle
+        if self.camera is not None and self._prev_raw is None:
+            raise ValueError("camera mode needs pre_seed_input (the camera reads the delay-1 pad)")
+        acted_raw = self._prev_raw
+        self._prev_raw = inp
         link._cam.yaw = _yaw_from_csangle(self.csangle)
         link.set_cc_move((self.pend_link[0], 0.0, self.pend_link[1]))
         link._atn_actor_pos = (self.tx, self.tz)       # Link Z-targets Tetra (the ATN_ACTOR tier)
@@ -313,11 +347,31 @@ class FreeRun:
         if center is not None:
             ck = center
         self.pend_link, self.pend_tetra = full_depth_push(ck, (self.tx, self.tz))
+
+        # camera Run (after the player + the CC settle, the game order): the committed csangle is
+        # what frame k+1's physics reads. See the class doc for the input laws.
+        if self.camera is not None:
+            if tattn is not None:
+                self._tattn = (tattn[0], tattn[1], tattn[2])
+            locked = link._atn.locked
+            if locked and self._tattn is None:
+                raise ValueError("the sim's attention lock is engaged but no tattn (the locked "
+                                 "actor's attention_info.position) was ever injected")
+            from tww_sim.core.fp import f32, fadds
+            from tww_sim.core.camera.land_cam import pad_from_raw
+            attn_y = float(fadds(f32(92.5), f32(link._foot.ff.base[1][3])))
+            cam_link = dict(pos=(link.pos_x, link.pos_y, link.pos_z), facing=link.facing,
+                            attn_pos=(link.pos_x, attn_y, link.pos_z))
+            attn = dict(truth=locked, lockon=locked,
+                        target_attn=self._tattn if locked else None)
+            self.csangle = self.camera.step(pad_from_raw(_raw_dict(acted_raw)), cam_link, attn)
+            row['sim_csangle'] = self.csangle
+            row['sim_attn_y'] = attn_y
         return row
 
 
 def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None,
-           centers='injected', eyes=None, seed_old_pose=None):
+           centers='injected', eyes=None, seed_old_pose=None, camera=None, tattns=None):
     """Run the coupled from-f0 replay and diff BOTH actors vs the live capture, frame by frame.
 
     ``frames``   -- the live-capture rows (the cyl fixture), each ``{proc, csangle, link:{pos, facing,
@@ -351,6 +405,12 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
                     turn lean (`_seed_pose_f0`) -- the self-contained mode the planner needs (no
                     per-frame injection; only csangle stays injected). f0-seed only. Each row then
                     also carries ``sim_cyl`` and the centre-vs-capture ULP diffs ``dcx``/``dcz``.
+    ``camera``   -- a SEEDED `LandCamera` (see the `FreeRun` class doc): replaces the per-frame
+                    csangle injection with the modeled camera driven by the sim's own state; each
+                    row then also carries ``sim_csangle`` (vs ``frames[k]['csangle']``, the live
+                    value the NEXT frame's physics read).
+    ``tattns``   -- per-frame locked-actor attention positions (camera mode; indexed by game frame,
+                    consumed on lock-window frames -- the session-18 cam oracle's ``tattn``).
 
     Link's Co centre and csangle are injected from ``frames`` each frame; Tetra is a tracked XZ point
     moved by the full-depth plow. Returns a list of per-frame dicts: ``f``, live/sim ``proc``,
@@ -360,7 +420,7 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         upto = len(frames)
 
     run = FreeRun(frames[entry], seed_nspeed=seed_nspeed, seed_old_pose=seed_old_pose,
-                  computed_pose=centers in ('computed', 'diag'))
+                  computed_pose=centers in ('computed', 'diag'), camera=camera)
     if pre_inputs is not None:
         pi = pre_inputs[-1] if isinstance(pre_inputs, (list, tuple)) and pre_inputs and \
             isinstance(pre_inputs[0], (list, tuple, dict)) else pre_inputs
@@ -374,7 +434,9 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         # csangle/eye = end-of-frame-(k-1) values; the centre stays injected from the capture
         # except in the self-contained 'computed' mode (see the FreeRun class doc).
         eye = eyes[k - 1] if (eyes is not None and k - 1 < len(eyes)) else None
-        row = run.step(input_at(k), csangle=frames[k - 1]['csangle'], eye=eye,
+        tattn = tattns[k] if (tattns is not None and k < len(tattns)) else None
+        row = run.step(input_at(k), csangle=None if camera is not None else frames[k - 1]['csangle'],
+                       eye=eye, tattn=tattn,
                        center=None if centers == 'computed' else lv['link']['cyl'])
         row.update(
             f=k, live_proc=lv['proc'], live_facing=lv['link']['facing'],
@@ -391,6 +453,19 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
             row['dcz'] = _bits(row['sim_cyl'][1]) - _bits(lv['link']['cyl'][-1])
         out.append(row)
     return out
+
+
+def _raw_dict(inp):
+    """Normalise a raw controller tuple to the dict form `pad_from_raw` reads (dicts pass through).
+    Tuple convention as `_step_args`: (sx, sy[, buttons[, trigL[, subX, subY]]])."""
+    if isinstance(inp, dict):
+        return inp
+    t = tuple(inp)
+    return dict(stickX=int(t[0]), stickY=int(t[1]),
+                buttons=int(t[2]) if len(t) > 2 else 0,
+                triggerL=int(t[3]) if len(t) > 3 else 0,
+                substickX=int(t[4]) if len(t) > 4 else 128,
+                substickY=int(t[5]) if len(t) > 5 else 128)
 
 
 def _step_args(inp):

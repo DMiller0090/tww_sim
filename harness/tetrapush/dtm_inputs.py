@@ -88,9 +88,16 @@ def find_f0(port0):
 def frame_input(port0, g):
     """The (stickX, stickY, buttons, triggerL, cStickX, cStickY) for DTM game-frame g, clamped to
     the last frame past the movie end (free-run holds the final input). buttons in the PAD_BUTTON
-    convention LandState.step expects: A=0x100, B=0x200, L=0x40."""
+    convention LandState.step expects: A=0x100, B=0x200, L=0x40.
+
+    Reads POLL INDEX 2 of the frame's 4-poll group: the game's once-per-frame JUTGamePad read
+    latches the mid-frame poll, not poll 0 -- live-pinned by the session-18 camera oracle on the
+    only two non-uniform groups in the window (f25 polls read substickX 98,98,99,99 and the live
+    camera consumed 99; f26 read 99,99,99,105 and live consumed 99 -- index 2 is the unique
+    consistent choice). Every other group in the window is uniform, so this only changes moving-
+    C-stick edge frames."""
     ngf = len(port0) // 4
-    fl, sx, sy, cx, cy, tl = port0[min(g, ngf - 1) * 4]
+    fl, sx, sy, cx, cy, tl = port0[min(g, ngf - 1) * 4 + 2]
     btn = (0x100 if fl & 0x02 else 0) | (0x200 if fl & 0x04 else 0) | (0x40 if fl & 0x400 else 0)
     return dict(stickX=sx, stickY=sy, buttons=btn, triggerL=tl, substickX=cx, substickY=cy)
 
@@ -99,10 +106,15 @@ def build(dtm=DTM_DEFAULT, cap_path=None, out=OUT_DEFAULT, nframes=56, write=Tru
     """Bake fixtures/courtyard_push_dtm.json: {F0, seed, frames:[{f, inp, live, tetra}]}.
 
     ``cap_path`` = the session-2 full-pad live capture (push_full.json) supplying the ground-truth
-    per-frame Link/Tetra states; if None, only the inputs are baked (no ground truth to validate)."""
+    per-frame Link/Tetra states. If None and the output fixture already exists, its live/tetra/seed
+    rows are PRESERVED and only the inputs are re-extracted (the session-2 capture file is gone;
+    the baked ground truth in the fixture is the surviving copy)."""
     port0 = load_port0(dtm)
     f0 = find_f0(port0)
     cap = json.load(open(cap_path))['frames'] if cap_path else None
+    prev = None
+    if cap is None and os.path.exists(out):
+        prev = json.load(open(out))
     frames = []
     for i in range(nframes):
         row = dict(f=i, inp=frame_input(port0, f0 + i))
@@ -114,15 +126,24 @@ def build(dtm=DTM_DEFAULT, cap_path=None, out=OUT_DEFAULT, nframes=56, write=Tru
                                # ground truth (see README ## The CC split / ## Addresses).
                                cyl=c['link'].get('cyl'), csangle=c.get('csangle'))
             row['tetra'] = dict(pos=c['tetra']['pos'], stt=c['tetra']['stt'], speedF=c['tetra']['speedF'])
+        elif prev is not None and i < len(prev['frames']):
+            p = prev['frames'][i]
+            for key in ('live', 'tetra'):
+                if key in p:
+                    row[key] = p[key]
         frames.append(row)
     seed = None
     if cap is not None:
         s = cap[0]
         seed = dict(proc=s['proc'], link=s['link'], tetra=s['tetra'])
+    elif prev is not None:
+        seed = prev.get('seed')
     fix = dict(source=os.path.basename(dtm), F0=f0, nframes=nframes,
                note="cap f == DTM game-frame F0+f; delivered decode == captured pad (0 mismatch f0..f45); "
                     "movie ends at group %d (f45), f46+ free-run holds stick 111,111. Edge frames are "
-                    "+-1 jitter-ambiguous (single-stepped capture); flip MAGNITUDES are jitter-safe." % (
+                    "+-1 jitter-ambiguous (single-stepped capture); flip MAGNITUDES are jitter-safe. "
+                    "inp = poll index 2 of the frame's 4-poll group (the game's latched poll; "
+                    "live-pinned s18 via the camera oracle -- only moving-C-stick edge frames differ)." % (
                         len(port0) // 4 - 1),
                seed=seed, frames=frames)
     if write:

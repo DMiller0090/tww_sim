@@ -2,7 +2,7 @@
  "source": "GZLJ01.s02.dtm",
  "F0": 44974,
  "nframes": 56,
- "note": "cap f == DTM game-frame F0+f; delivered decode == captured pad (0 mismatch f0..f45); movie ends at group 45018 (f45), f46+ free-run holds stick 111,111. Edge frames are +-1 jitter-ambiguous (single-stepped capture); flip MAGNITUDES are jitter-safe.",
+ "note": "cap f == DTM game-frame F0+f; delivered decode == captured pad (0 mismatch f0..f45); movie ends at group 45018 (f45), f46+ free-run holds stick 111,111. Edge frames are +-1 jitter-ambiguous (single-stepped capture); flip MAGNITUDES are jitter-safe. inp = poll index 2 of the frame's 4-poll group (the game's latched poll; live-pinned s18 via the camera oracle -- only moving-C-stick edge frames differ).",
  "seed": {
   "proc": 6,
   "link": {
@@ -837,7 +837,7 @@
     "stickY": 128,
     "buttons": 64,
     "triggerL": 255,
-    "substickX": 98,
+    "substickX": 99,
     "substickY": 100
    },
    "live": {
