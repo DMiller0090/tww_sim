@@ -233,6 +233,9 @@ deliberately unported.
 | `../anim/extract_zl1.py` | Extract Tetra's `zl.bdl` skeleton + the stt-3 BCKs (wait03/look/wait) from `Zl.arc` (TWW-JP) to the gitignored `_generated/anim/zl1_{skeleton,anims}.json` -- the `core.npc_zl1_look` FK data (same policy as Link's `parse_bck`/`parse_bmd`). |
 | `fixtures/courtyard_m3564.json` | Session-21 live ground truth (single-stepped f0..f44, baked from `_notes/tetrapush-m3564_probe.py`): Link's head-look `m3564` + `m34DE`/`m34C3`/`m34E2` + `mHeadTopPos` per frame. The `tests/test_neck_look.py` gate + the `NeckLook` f0 seed. Pinned the m34DE frame-START timing + the (3, 0x1000, 0x100) chase knobs (the f0..f5 decay). |
 | `onestep_divergence.py` | **The 0-ULP divergence diagnostic** (session 24; console push session 27): reset the sim to the EXACT captured state[k-1] each frame, feed the console push (`cc_push_pair` on the model exec centre), step once, report the per-axis sim-vs-live position divergence in ULP + abs-u. The human-readable form of `tests/test_from_f0.py::test_onestep_pos_bit_exact_from_exact_state`. Now prints 0 ULP everywhere except f1 (the seed-frame boundary). CLI `python -m harness.tetrapush.onestep_divergence`. |
+| `seeds.py` | **The planner SEED FACTORY** (session 22, restored + verified on the 0-ULP model session 28): `make_freerun` builds the fully self-contained `FreeRun` (camera + Zl1 look + NeckLook wired, no injections -- the session-21 gate config) from the locked fixtures; `load_placements` loads the 288 genuine `tetra_placements.tsv` coords; `dtm_input_at` is the movie-window input accessor; `load_env` loads the fixture set. `make_freerun(tetra_at=)` re-seats Tetra's seed for clean no-contact template rollouts. Pure fixture plumbing (no model content). |
+| `primitives.py` | **The planner PRIMITIVE LAYER** (session 22, restored session 28): decomposes the bit-exact `FreeRun` window into the search's reusable pieces -- `window_records` (the instrumented rollout: per frame proc/speedF/facing/feet/exec-centre/recoil/plow/depth), `find_cycles` (the cycle spans), `cycle_template` (one cycle in the AIM frame -- foot term + exec-centre offset), and `input_macro`/`macro_inputs` (the cycle's raw-input pattern, stick bytes abstracted so a cycle re-aims to any world angle via `plan_land._primitives.stick_for_bearing`). CLI prints the cycle table + rigidity + the drift diagnostic. Gated `tests/test_planner_primitives.py` (structural). |
+| `feasibility.py` | **The COARSE-FEASIBILITY report** (session 28): from the bit-exact 2-cycle window, answers "can a few push cycles herd Tetra the full ~960 u to the genuine-coord cluster, in-regime?" -- directional (herd bearing vs target bearing), per-cycle reach, and the plow-regime bound. VERDICT: CONFIRMED (0.2 deg direction match, ~3 cycles, dist 40-85 u < engage 230). All numbers recomputed live. CLI `python -m harness.tetrapush.feasibility`. |
 | `_notes/tetrapush-camoracle_probe.py` | (gitignored) Session-18 land-camera ORACLE probe: run A re-captured with the FULL dCamera_c block (0x520 B, incl. mEventFlags/mCurStyle/mCurType), player status words, attention lockstate, both actors' `attention_info.position`, and the pad main-stick angle. Baked to `fixtures/courtyard_cam_oracle.json` (the `test_land_cam.py` gate). |
 | `_notes/tetrapush-eyeindep_probe.py` | (gitignored) Session-17 A/B probe: two 120-frame runs from slot 2 diverging only in post-f48 inputs; logs both actors + csangle + the RAW `dCamera_c` block (0x450 B/frame). DISPROVED the eyePos input-independence shortcut (offsets diverge f51, both runs stt 3); run A doubles as the extended csangle + camera-spring ground truth (f0..f120) for the camera port, and run B pins the stt-3->4 follow flip (crossed 230 at f63, stt 4 at f75). `.json` beside it. |
 | `_notes/tetrapush-reticle_probe.py` | (gitignored) Live per-frame dump of the attention lock lifetime: `mLockOnState`, `mpAttnActorLockOn`, `field_0x01a`, and the reticle `YJ_DELETE` frame ctrl. The ground truth behind the session-6 `FADE_FRAMES=10` + delay-1 findings. Also `_notes/tetrapush-{live_lock_probe,bp_setnormalspeedf,verify_2frame}.py` (session 5), `_notes/tetrapush-retarget_probe.py` (session 11), `_notes/tetrapush-seed_probe.py` (session 12: reads the hidden f0 seed fields -- mNormalSpeed/mDirection/attention -- that pinned the true-f0 seed as a speedF-lags-mNormalSpeed gap), and `_notes/tetrapush-{upper_probe,anmmtx_probe}.py` (session 13: the upper anim part / mBodyAngle state and the live `mpNodeMtx` root+neck matrices + `.json` dumps -- the ground truth behind the body-Co FK validation + the open mCyl timing law). |
@@ -658,14 +661,58 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
         m3730/m36B8) stands -- those were all correctly eliminated. Sword-drawn note kept: `m3562 =
         0x103` all window, physics-inert (dash/dashs identical at joints 0-4/14; only feet differ),
         may matter for the final CUT pose set.
-- [ ] **Build the planner** -- NOT STARTED (honest reset, session 24). The search for the input
-      sequence that lands Tetra on a genuine `tetra_placements` coord + the matching roll entry cannot
-      begin until the forward model is BIT-EXACT, which it is not: the FreeRun **dynamics** (proc,
-      speedF, facing, lean, csangle) are 0-ULP, but **position** is not (the two open bugs above). A
-      planner search on a position-drifting model would be building on sand (exactly why the
-      session-22 Phase-1/Tier-0 search scaffolding was REMOVED, below). Method reference (for when the
-      model is exact): `plan_land` / the seam-clip `solver` (cheap predictor + exact bit-confirm, no
-      calibration). The camera/look/neck sub-models ARE 0-ULP-gated and reusable:
+- [~] **Build the planner** -- STARTED (session 28); the forward model is now BIT-EXACT (session 27
+      closed position 0-ULP f2..f43), so the search foundation is being laid. The deliverable is still
+      the input sequence that lands Tetra on a genuine `tetra_placements` coord + the matching roll
+      entry. Method reference: `plan_land` / the seam-clip `solver` (cheap predictor + exact
+      bit-confirm, no calibration). The camera/look/neck sub-models ARE 0-ULP-gated and reusable.
+      Session-28 progress (below): the sound primitive layer is RESTORED + gated, coarse feasibility
+      is CONFIRMED, and the f1 seed-frame decision is made (it MATTERS -- capture f0's exec centre):
+      - [x] **The f1 seed-frame boundary MATTERS -- DECIDED with data (session 28).** The Next-step
+            question ("does the f1 seed push cost matter for the multi-cycle open-loop herd?") is
+            answered YES, decisively. The self-contained closed loop from f0 vs the deterministic
+            capture: the f1 seed-push error (~3.3e-5 u, from `full_depth_push` on the settled seed
+            centre -- f0's EXEC centre is not offline-reconstructable) grows GEOMETRICALLY at
+            ~1.35x/contact-frame -- f16 ~1e-4 u, f24 ~4e-3, f32 ~0.08, f36 ~0.52, **f43 ~4.1 u** (2
+            cycles). The genuine coords are sampled at **0.004 u**, so the f1 error exceeds placement
+            resolution within ~1 cycle and reaches multiple units by 2 cycles; over a 4-6 cycle herd it
+            is catastrophic. FIX (per the Watch-out, in-band of the hard rule -- a static seed, not
+            live feedback): capture f0's exec centre with ONE deterministic `setCollision`-breakpoint
+            read at the seed frame, and route the f0->f1 seed push through `cc_push_pair` too. Since f0
+            is the FIXED state-2 seed, that exec centre is INPUT-INDEPENDENT -- one capture is valid for
+            every sequence the planner tries. This is the next live step; it is NOT needed for coarse
+            feasibility (a ~4 u drift over 2 cycles is <1% of the ~545 u herd), only for the exact
+            multi-cycle landing.
+      - [x] **The primitive layer RESTORED on the 0-ULP model + GATED (session 28).** The session-22
+            `seeds.py` (self-contained FreeRun factory + the 288-coord `tetra_placements.tsv` loader)
+            and `primitives.py` (`window_records` = the instrumented rollout, `find_cycles`,
+            `cycle_template`, `input_macro`/`macro_inputs` = the cycle's raw-input pattern re-aimable to
+            any world angle via `plan_land._primitives.stick_for_bearing`) are back -- they run
+            unchanged against the current bit-exact `FreeRun` API. Only the premature TOLERANCE-based
+            `tier0.py` search layer stays removed (the exact confirm is FreeRun, not a `0.13 u` bound).
+            Gate `tests/test_planner_primitives.py` (5, STRUCTURAL not sim-vs-console -- the fidelity
+            is `test_from_f0`'s): the window covers f1..43, `find_cycles` recovers the 2 cycles (rolls
+            f3/f29), the roll-body FOOT term is cycle-rigid to <0.02 u (WHY a cycle is a re-aimable
+            primitive), `macro_inputs` reproduces the exact button/trigger pattern + valid bytes +
+            C-stick pinned DOWN, and the analog re-aim is faithful (<1 LSB) where the stick BITES
+            (msd>0.3; the ~4-deg residuals are all at msd~0.05 roll-body frames where facing is locked
+            and the angle is irrelevant -- a documented tier-0 property, not a bug).
+      - [x] **Coarse feasibility CONFIRMED (session 28), from the bit-exact window** (`feasibility.py`,
+            CLI `python -m harness.tetrapush.feasibility`; all numbers recomputed live so they can't
+            drift). The recorded 2-cycle window herds Tetra **544.8 u @ -161.7 deg**; the genuine-coord
+            cluster centroid is **967.5 u @ -161.5 deg** from her state-2 start -- i.e. **the natural
+            push direction already points at the clip region (0.2 deg off)**, so the plan is a
+            near-straight herd, not a steer-around (state 2 was set up for exactly this shove).
+            Per-cycle reach ~345 u (full cycle 1) -> ~3 cycles cover the ~940-984 u span; Link<->Tetra
+            distance stays **40-85 u** (well under `FOLLOW_ENGAGE_DIST` 230), so Tetra stays stt-3 (the
+            plow regime this model covers) throughout. Verdict boxes all green (direction / reach /
+            regime). A trustworthy open-loop 4+ cycle ROLLOUT waits on the f1 capture (the drift would
+            dominate past ~2 cycles); the feasibility argument here is directional + per-cycle + regime
+            off the bit-exact 2-cycle capture, which needs no long rollout.
+      Original-model-blocker context (RESOLVED session 27; kept for provenance): the search could not
+      begin while position drifted (the session-22 Phase-1/Tier-0 scaffolding was REMOVED as premature,
+      below, exactly because a position-drifting model is sand). The camera/look/neck sub-models ARE
+      0-ULP-gated and reusable:
       - [x] **The novel-input stepper** (`from_f0.FreeRun`): the replay loop refactored into a
             seed-once / step-arbitrary-inputs class (computed centres; csangle/eyePos per-step
             injectables); `replay` is now a thin wrapper over it so every existing 0-ULP gate gates
@@ -890,12 +937,21 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             deterministic `setCollision`-breakpoint read at the seed frame (f0's exec centre) -- the
             only place a further live capture would help. 476 offline pass / 5 xfail (all pre-existing,
             non-tetrapush), land goldens byte-identical, KB + code-hygiene green.
-      - [ ] **Then the search proper**: realize cycle chains as raw inputs (`macro_inputs`) and
-            confirm in FreeRun / on Dolphin (tier 2); resolve coarse feasibility (can ~4-6 cycles herd
-            her the full ~960 u?); add the walk-push nudge endgame + the entry walk-in. NOTE the
-            planner runs the closed loop from f0, so it inherits the f1 seed-frame boundary (a single
-            ~9-ULP perturbation, ~4 u after 43 frames through the plow amplifier) unless f0's exec
-            centre is captured -- decide whether that matters for the multi-cycle herd before scaling.
+      - [~] **The search proper** -- foundation laid (session 28): `macro_inputs` (cycle chains as raw
+            inputs) is restored + gated, and coarse feasibility is RESOLVED (CONFIRMED -- `feasibility.py`;
+            the natural push points 0.2 deg off the target, ~3 cycles cover the ~960 u, in-regime). The
+            f1-seed-frame question is DECIDED (it MATTERS -- see the session-28 box above): the ~3.3e-5 u
+            seed error amplifies to ~4 u over 2 cycles / catastrophic over 4-6, past the 0.004 u placement
+            resolution. STILL OPEN, in order:
+            1. **Capture f0's exec centre** (ONE deterministic `setCollision`-breakpoint read at the seed
+               frame; input-independent since f0 is the fixed state-2 seed) and route the f0->f1 push
+               through `cc_push_pair` -- so the closed loop from f0 is 0-ULP and an open-loop multi-cycle
+               rollout is trustworthy. This is the next LIVE step (s26 traps apply: advance+breakpoint
+               never `resume`; launch DETACHED; TWW-JP.iso + MMU=True).
+            2. **The exact aim-per-cycle search**: stitch re-aimed cycles (the removed `tier0.build_template`
+               stitch is in git history), rank in a cheap predictor, bit-confirm each candidate in FreeRun
+               (tier 1) then DTM (tier 2). Land Tetra on a genuine coord + arrange the matching final roll
+               entry (the two are coupled). Add the walk-push nudge endgame + the entry walk-in.
 
 ## Hard rules (inherited from the seam-clip work)
 
