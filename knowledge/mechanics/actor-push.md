@@ -16,7 +16,7 @@ and the roll-stab was live-reproduced at the corner - aim/wall-hold/bonk confirm
 **Source:** decomp `dCcS::SetPosCorrect` / `dCcS::GetRank` / `rank_tbl` (`d_cc_s.cpp:138/153/180`),
 `cM3d_Cross_CylCyl` (`c_m3d.cpp:1553`), `cCcD_Stts::PlusCcMove` (`c_cc_d.cpp`), `daPy_lk_c::posMove`
 + `daPy_lk_c::setCollision` (`d_a_player_main.cpp:9748`) + player/Tetra weights (`:11233`,
-`d_a_npc_zl1.cpp`). Constants: [reference/constants.md](../reference/constants.md#collision-actor-co-push).
+`d_a_npc_zl1.cpp`). Constants: [reference/constants-npc.md](../reference/constants-npc.md#collision-actor-co-push).
 
 ---
 
@@ -185,6 +185,6 @@ hold the overlap for exactly the frame before the clip.
 ## See also
 - [mechanics/seam-clip.md](seam-clip.md) - the wall-corner clip this push feeds; `min_f32_clip` reachability.
 - [mechanics/collision.md](collision.md) - the DZB wall mesh and the `CrrPos` wall barriers.
-- [reference/constants.md](../reference/constants.md#collision-actor-co-push) - cylinder radii/heights, ranks.
+- [reference/constants-npc.md](../reference/constants-npc.md#collision-actor-co-push) - cylinder radii/heights, ranks.
 - [history/tetra-push-massprop-superseded.md](../history/tetra-push-massprop-superseded.md) - the
  superseded mass-proportional (cCcS, 0.538, R=50) model and why it was wrong.

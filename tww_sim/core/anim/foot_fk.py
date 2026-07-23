@@ -52,9 +52,12 @@ def _shared_anim_data(anms, chains):
 CHAIN_JOINTS = [0, 1, 29, 30, 31, 32, 33, 34, 36, 37, 38, 39]
 MORF_START, MORF_END = 0, 0x2A          # initOldFrameMorf(2.4, 0, 0x2A) joint range
 # body-Co mode (setCollision root/neck midpoint, body_co=True): the neck-chain joints beyond the
-# foot set (body_chn..neck_jnt); all < MORF_END so the oldframe-morf covers them like the feet.
-BODY_CO_EXTRA = [2, 3, 4, 14]
+# foot set (body_chn..neck_jnt) plus the head (15, for mHeadTopPos / head_top); all < MORF_END so
+# the oldframe-morf covers them like the feet.
+BODY_CO_EXTRA = [2, 3, 4, 14, 15]
 NECK_CHAIN = [0, 1, 2, 3, 4, 14]
+HEAD_CHAIN = [0, 1, 2, 3, 4, 14, 15]
+HEAD_TOP_OFF = (40.0, 0.0, 0.0)     # head_offset (d_a_player_main.cpp:11589)
 # J3D segment-scale-compensation joints on the neck chain (scale_compensate=1): mDoExt_setJ3DData
 # (m_Do_ext.cpp:47) row-scales their local 3x3 by 1/parentS. See harness/tetrapush/README.md (s16).
 BODY_CO_SSC = (3, 4, 14)
@@ -396,6 +399,35 @@ class FootFK:
         cx = fp.fmuls(0.5, fp.fadds(root_t[0], cur[0][3]))
         cz = fp.fmuls(0.5, fp.fadds(root_t[1], cur[2][3]))
         return cx, cz
+
+    def head_top(self, px, py, pz, facing, lean=0, body_lean=None):
+        """Link's ``mHeadTopPos`` for the pose LAST posed by this driver -- ``cMtx_multVec(
+        anmMtx(CL_JNT_HEAD_JNT_e), head_offset)`` at d_a_player_main.cpp:11592, written right
+        after the SAME exec-pass ``mpCLModel->calc()`` (:11591) ``setCollision`` reads, so the
+        base/lean call convention is identical to :meth:`body_co_center` (same worldBase, same
+        new-lean BODY_CHN twist, same proc-init zero-lean handling by the caller). Consumed by
+        Tetra's look-at as ``dNpc_playerEyePos``'s Y (x/z are overwritten with Link's
+        ``current.pos``). Returns the full (x, y, z); pass the REAL ``py`` (the Y is the
+        payload). Requires ``body_co`` mode (joint 15 is posed with the neck-chain extras)."""
+        if not (self.body_co and self.world):
+            raise RuntimeError("head_top needs body_co=True on the Python world FK path")
+        base, _ = fk.world_base(fp.f32(px), fp.f32(py), fp.f32(pz), int(facing) & 0xFFFF,
+                                int(lean) & 0xFFFF)
+        lv = int(lean if body_lean is None else body_lean) & 0xFFFF
+        body_x = -(lv - 0x10000 if lv >= 0x8000 else lv)
+        cur = base
+        for jnt in HEAD_CHAIN:
+            m = self._local_from_old(jnt, body_x=body_x if jnt == 2 else 0)
+            if jnt in BODY_CO_SSC:
+                ps = self.old_scale.get(self.parent[jnt])
+                if ps is not None and (ps[0] != 1.0 or ps[1] != 1.0 or ps[2] != 1.0):
+                    for r in range(3):
+                        inv = fp.fdivs(1.0, ps[r])
+                        m[r][0] = fp.fmuls(m[r][0], inv)
+                        m[r][1] = fp.fmuls(m[r][1], inv)
+                        m[r][2] = fp.fmuls(m[r][2], inv)
+            cur = fk.mtx_concat(cur, m)
+        return tuple(fk.mtx_mult_vec(cur, HEAD_TOP_OFF))
 
     def _waist_world(self, local):
         """WORLD translate of the WAIST joint (30) for the pose being drawn: the base->waist

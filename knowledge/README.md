@@ -26,7 +26,7 @@ you can triage in one glance.
 ### Basics
 - **What is superswimming / potential vs true speed?** → [mechanics/overview.md](mechanics/overview.md)
 - **What does <term> mean?** (csangle, ESS, head-bob, x598, …) → [reference/glossary.md](reference/glossary.md)
-- **What is the value of <constant>?** → [reference/constants.md](reference/constants.md)
+- **What is the value of <constant>?** → [reference/constants.md](reference/constants.md) (NPC/actor Co-push + Zl1 look values: [reference/constants-npc.md](reference/constants-npc.md))
 - **How do I run the sim / planner / a live test?** → [reference/commands.md](reference/commands.md)
 
 ### Charging, ESS, neutral, decay
@@ -64,6 +64,7 @@ you can triage in one glance.
 - **Why do seam clips work (walking/rolling through a wall corner) / the float-precision root cause / why ≥~36 u + corner >90° + vertical walls / how do I predict one?** → [mechanics/seam-clip.md](mechanics/seam-clip.md)
 - **How does an actor push Link (the Tetra "nudge") / cyl-cyl overlap + weight split / can it supply the extra displacement for a seam clip?** → [mechanics/actor-push.md](mechanics/actor-push.md)
 - **When/how does Tetra follow Link (follow radius, speed), and when can Link lock onto / talk to her (the region a planner must avoid)?** → [mechanics/tetra-follow.md](mechanics/tetra-follow.md)
+- **Where do Tetra's eyePos (the proc-9 re-aim target) and attention position (the camera's lock target) come from -- her look-at head chase, anims, hidden seed state?** → [mechanics/tetra-look.md](mechanics/tetra-look.md)
 
 ### Ocean world, refills & routing
 - **How is the sea laid out / why is only one island loaded / what's a sploosh zone / why route around quadrants?** → [mechanics/ocean-environment.md](mechanics/ocean-environment.md)

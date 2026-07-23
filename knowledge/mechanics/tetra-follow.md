@@ -20,7 +20,7 @@ decomp-exact; its live reticle confirmation is still open (see Open below). Part
 `check_distace` + `check_flontofplayer` (`d_attention.cpp`) + `dist_table` (`d_att_dist.cpp`),
 `fopAcM_posMoveF`/`calcSpeed`/`posMove` (`f_op_actor_mng.cpp`), `cLib_addCalcAngleS`/`cLib_chaseF`/
 `cLib_targetAngleY` (`c_lib.cpp`). Shared Co-push cylinder/weight constants:
-[reference/constants.md#collision-actor-co-push](../reference/constants.md#collision-actor-co-push).
+[reference/constants-npc.md#collision-actor-co-push](../reference/constants-npc.md#collision-actor-co-push).
 
 ---
 
@@ -139,5 +139,5 @@ These are un-versioned source literals → the GZLJ01 (JP) values equal the deco
   (cylinder/weight/rank; [[tetra-push-model]]).
 - [strategy/seam-clip-solver.md](../strategy/seam-clip-solver.md) - the seam-clip pipeline (Phase C
   needs this Tetra counterpart state).
-- [reference/constants.md#collision-actor-co-push](../reference/constants.md#collision-actor-co-push)
+- [reference/constants-npc.md#collision-actor-co-push](../reference/constants-npc.md#collision-actor-co-push)
   - shared Co-push cylinder/weight/rank constants.

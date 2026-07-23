@@ -25,8 +25,10 @@ Two modelling shortcuts, both deliberate (see README "## Plan / status" from-f0 
     the substick -- the "inject the camera, don't model it" convention (the frozen-cam shortcut the
     tier test uses, generalised to the captured per-frame value). SUPERSEDED when a `camera=` is
     passed (session 18): a seeded `core.camera.land_cam.LandCamera` replaces the injection, driven
-    by the raw DTM substick + the sim's own Link/attention state (see the `FreeRun` class doc);
-    only the Tetra eyePos/tattn streams remain injected.
+    by the raw DTM substick + the sim's own Link/attention state (see the `FreeRun` class doc).
+    Session 20 closed the LAST injected streams: a seeded `core.npc_zl1_look.Zl1Look` (`zl1=`)
+    replaces the Tetra eyePos/tattn injections with the modeled look-at head -- with `camera=` +
+    `zl1=` the replay consumes ONLY the static f0 seeds + the raw DTM bytes.
 
 VALIDATED (`tests/test_from_f0.py`), seeded at the FIRST roll entry: the replay now CHAINS bit-exact
 through cycle 2's roll -- f4..f44 is 0-ULP (every speedF, every proc, Link pos <1.4e-4 u), covering
@@ -161,6 +163,16 @@ def _computed_center(link, init_frame=False):
     return (float(cx), float(cz))
 
 
+def _computed_head_top(link, init_frame=False):
+    """Link's ``mHeadTopPos`` AS the exec pass writes it (d_a_player_main.cpp:11592, right after
+    the SAME ``mpCLModel->calc()`` setCollision reads) -- identical base/lean conventions to
+    `_computed_center` (new-lean BODY_CHN twist, proc-init zero base lean). The Y is what Tetra's
+    look-at consumes as ``dNpc_playerEyePos``; x/z are overwritten with Link's current.pos."""
+    return link._foot.ff.head_top(link.pos_x, link.pos_y, link.pos_z,
+                                  link.facing, 0 if init_frame else link._draw_lean,
+                                  body_lean=_s16(link.m351C) >> 1)
+
+
 def _cc_settled_center(exec_center, tetra_xz):
     """The pause-boundary mCyl -- the value the gated plow laws consume (`courtyard_push_cyl.json`
     `link.cyl`): the scene CC pass's IMMEDIATE SetPosCorrect write moves Link's registered Co
@@ -261,7 +273,7 @@ class FreeRun:
     point -- unmodeled, same status as eyePos; keep-last semantics like ``eye``)."""
 
     def __init__(self, seed_row, *, seed_nspeed=None, seed_old_pose=None, computed_pose=True,
-                 camera=None):
+                 camera=None, zl1=None):
         e = seed_row
         self.link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
         self.computed_pose = bool(computed_pose)
@@ -274,6 +286,11 @@ class FreeRun:
         self.tx, self.tz = e['tetra']['pos'][0], e['tetra']['pos'][2]
         self.ty = e['tetra']['pos'][1]
         self.camera = camera
+        # zl1 (a seeded Zl1Look) replaces the eye + tattn injections -- see the class doc.
+        self.zl1 = zl1
+        if zl1 is not None and not self.computed_pose:
+            raise ValueError("zl1 mode needs computed_pose (mHeadTopPos comes from the posed FK)")
+        self._eye_next = tuple(zl1.eye) if zl1 is not None else None
         self._tattn = None
         self._prev_raw = None
         self.csangle = camera.angleY if camera is not None else e['csangle']
@@ -309,7 +326,13 @@ class FreeRun:
         link.set_cc_move((self.pend_link[0], 0.0, self.pend_link[1]))
         link._atn_actor_pos = (self.tx, self.tz)       # Link Z-targets Tetra (the ATN_ACTOR tier)
         if eye is not None:
+            if self.zl1 is not None:
+                raise ValueError("eye injection and a wired zl1 look model are mutually exclusive")
             link._atn_actor_eye = (eye[0], eye[-1])
+        elif self.zl1 is not None:
+            # the modeled end-of-previous-frame eyePos (Link's re-aim reads Tetra's LAST setMtx)
+            link._atn_actor_eye = (self._eye_next[0], self._eye_next[2])
+        tetra_pre = (self.tx, self.ty, self.tz)
         link.step(*_step_args(inp))
         # proc *_init (commonProcInit shape_angle.z=0) runs on the first frame whose pause-read
         # mCurProc differs from the previous frame's -- the post-step state stream is that boundary.
@@ -348,10 +371,26 @@ class FreeRun:
             ck = center
         self.pend_link, self.pend_tetra = full_depth_push(ck, (self.tx, self.tz))
 
+        # Zl1 execute: after Link, before the camera Run (eye feeds NEXT frame's re-aim,
+        # tattn THIS frame's camera; target = exec-pass mHeadTopPos). tetra-look.md has the laws.
+        if self.zl1 is not None:
+            ht = _computed_head_top(link, init_frame=init_frame)
+            eye_k, tattn_k = self.zl1.step(
+                pos_pre=tetra_pre, pos_post=(self.tx, self.ty, self.tz),
+                link_pos=(link.pos_x, link.pos_y, link.pos_z), link_head_top_y=ht[1])
+            self._eye_next = eye_k
+            self._tattn = tattn_k
+            row['sim_eye'] = eye_k
+            row['sim_tattn'] = tattn_k
+            row['sim_head_top'] = ht
+
         # camera Run (after the player + the CC settle, the game order): the committed csangle is
         # what frame k+1's physics reads. See the class doc for the input laws.
         if self.camera is not None:
             if tattn is not None:
+                if self.zl1 is not None:
+                    raise ValueError("tattn injection and a wired zl1 look model are mutually "
+                                     "exclusive")
                 self._tattn = (tattn[0], tattn[1], tattn[2])
             locked = link._atn.locked
             if locked and self._tattn is None:
@@ -371,7 +410,8 @@ class FreeRun:
 
 
 def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None,
-           centers='injected', eyes=None, seed_old_pose=None, camera=None, tattns=None):
+           centers='injected', eyes=None, seed_old_pose=None, camera=None, tattns=None,
+           zl1=None):
     """Run the coupled from-f0 replay and diff BOTH actors vs the live capture, frame by frame.
 
     ``frames``   -- the live-capture rows (the cyl fixture), each ``{proc, csangle, link:{pos, facing,
@@ -411,6 +451,11 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
                     value the NEXT frame's physics read).
     ``tattns``   -- per-frame locked-actor attention positions (camera mode; indexed by game frame,
                     consumed on lock-window frames -- the session-18 cam oracle's ``tattn``).
+    ``zl1``      -- a SEEDED `core.npc_zl1_look.Zl1Look` (`Zl1Look.seed_from_row` off the
+                    ``fixtures/courtyard_zl1look.json`` f0 row): replaces BOTH the ``eyes`` and
+                    ``tattns`` injections with the modeled Tetra look-at (mutually exclusive with
+                    them). Computed mode only. Each row then also carries ``sim_eye``,
+                    ``sim_tattn``, ``sim_head_top``.
 
     Link's Co centre and csangle are injected from ``frames`` each frame; Tetra is a tracked XZ point
     moved by the full-depth plow. Returns a list of per-frame dicts: ``f``, live/sim ``proc``,
@@ -420,7 +465,7 @@ def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None
         upto = len(frames)
 
     run = FreeRun(frames[entry], seed_nspeed=seed_nspeed, seed_old_pose=seed_old_pose,
-                  computed_pose=centers in ('computed', 'diag'), camera=camera)
+                  computed_pose=centers in ('computed', 'diag'), camera=camera, zl1=zl1)
     if pre_inputs is not None:
         pi = pre_inputs[-1] if isinstance(pre_inputs, (list, tuple)) and pre_inputs and \
             isinstance(pre_inputs[0], (list, tuple, dict)) else pre_inputs

@@ -138,22 +138,8 @@ See [mechanics/seam-clip.md](../mechanics/seam-clip.md) for how these produce th
 
 ## Collision (actor Co push)
 
-The actor-vs-actor "Co" push (a [Tetra nudge](../mechanics/actor-push.md)). Distinct from the wall
-cylinder above. All live-confirmed on GZLJ01 (2026-07-06).
-
-| Constant | Value | Meaning | Source |
-|----------|-------|---------|--------|
-| Link Co radius | **30.0** (walking/rolling); 50.0 only if `checkGrabWear()` | Link body Co cylinder radius | decomp `daPy_lk_c::setCollision` (d_a_player_main.cpp:9762/9760) |
-| Link Co height | **≈107** walking (`40.1 + neck−toe`); 81.25 in FRONT_ROLL | Link body Co cylinder height | decomp same fn (:9794/9780) |
-| Link Co center | midpoint(root_jnt, neck_jnt) XZ; toe_jnt Y (feet in FRONT_ROLL) | animation-driven, **not** `current.pos` | decomp same fn (:9753/9792) |
-| Tetra Co radius / height | **50.0 / 140.0**, center = `current.pos` | Tetra (`Zl1`) body Co cylinder | live read |
-| Link weight / rank | **120** → rank **5** | `mStts.SetWeight(120)`; `dCcS::GetRank` | decomp `:11233`, `d_cc_s.cpp:153` |
-| Tetra weight / rank | **0x8C=140** → rank **5** (the `field_0x84F==5` variant; else 0xFF→10) | live read | decomp `d_a_npc_zl1.cpp:428` |
-| Push share (rank 5 vs 5) | **0.50 / 0.50** | `rank_tbl[5][5]=50` → Link takes 0.50× depth, Tetra recoils 0.50× | decomp `d_cc_s.cpp:138`, live |
-| Co deadzone | **1e-5** (`cM3d_IsZero(cross_len)`) | `dCcS::SetPosCorrect` skip threshold (base `cCcS` uses 1/125) | decomp `d_cc_s.cpp:190` |
-
-The **game uses `dCcS::SetPosCorrect`** (virtual override, JP 0x800AB1E4), whose weight split is the
-`rank_tbl` above - NOT the base `cCcS` mass-proportional split (JP 0x8024101C, never fires live).
+MOVED: the actor-vs-actor Co-push constants (cylinders, weights, the rank split) and the Zl1
+look-at constants live in [constants-npc.md](constants-npc.md) (split 2026-07-23, size cap).
 
 <a id="land-sword-cut-roll-stab"></a>
 ## Land sword-cut (roll stab)

@@ -136,6 +136,30 @@ def _snap(r, tetra, fi):
 SEED_OUT = os.path.join(_rb, 'fixtures', 'courtyard_push_seed.json')
 
 
+def _zl1_look_row(r, z):
+    """Tetra's hidden LOOK-AT state, in the `fixtures/courtyard_zl1look.json` row shape (the
+    `core.npc_zl1_look.Zl1Look.seed_from_row` input; same field map as
+    `_notes/tetrapush-zl1look_probe.py`). ``z`` = the Zl1 actor base (find_tetra)."""
+    morf_p = r.u32(z + 0x330)
+    return dict(
+        jnt=dict(angles=[[r.s16(z + 0x290), r.s16(z + 0x292)],
+                         [r.s16(z + 0x294), r.s16(z + 0x296)]],
+                 trn=r.u8(z + 0x29A),
+                 f2c=r.s16(z + 0x2BC), f2e=r.s16(z + 0x2BE),
+                 f30=r.s16(z + 0x2C0), f32=r.s16(z + 0x2C2)),
+        morf=dict(frame=r.f32(morf_p + 0x68), cur=r.f32(morf_p + 0x74),
+                  prev=r.f32(morf_p + 0x78), step=r.f32(morf_p + 0x7C),
+                  end=r.s16(morf_p + 0x60), rate=r.f32(morf_p + 0x64)),
+        f849=r.s8(z + 0x849), f84d=r.s8(z + 0x84D), stt=r.s8(z + 0x84B),
+        f7b8=r.s16(z + 0x7B8), f7ba=r.s16(z + 0x7BA), f7bc=r.s16(z + 0x7BC),
+        f7c3=r.s8(z + 0x7C3), mframe=r.f32(z + 0x78C),
+        f83c=r.s16(z + 0x83C), f83e=r.s16(z + 0x83E),
+        eye=[r.f32(z + 0x260), r.f32(z + 0x264), r.f32(z + 0x268)],
+        tattn=[r.f32(z + 0x274), r.f32(z + 0x278), r.f32(z + 0x27C)],
+        pos=[r.f32(z + 0x1F8), r.f32(z + 0x1FC), r.f32(z + 0x200)],
+        travel=r.u16(z + 0x206), facing=r.u16(z + 0x20E))
+
+
 def capture_seed(out=SEED_OUT, slot=2):
     """Capture the COMPLETE state-2 seed (f0) in ONE deterministic read -- no single-stepping, so no
     bug#2 edge jitter. This is the from-f0 replay's seed AND the planner's initial condition: it adds
@@ -144,11 +168,15 @@ def capture_seed(out=SEED_OUT, slot=2):
     -24.574, mNormalSpeed -24.982), so seeding `nspeed = speedF` -- as the replay did -- leaves f1-f2
     off; seeding `nspeed` from mNormalSpeed makes the whole from-f0 chain bit-exact. Also records the
     attention state (lock/actor) + mDirection/m34E6 for provenance (all match the sim defaults at this
-    seed: mDir DIR_NONE, no lock -- confirmed live, session 12). Self-contained: reads Link only (no
-    find_tetra); Tetra's f0 pos already lives in the cyl fixture the replay pairs this with."""
+    seed: mDir DIR_NONE, no lock -- confirmed live, session 12). Session 20 adds the **Zl1 LOOK
+    block** (`zl1`): Tetra's hidden look-at state -- the dNpc_JntCtrl_c angles/targets, the McaMorf
+    frame ctrl + morfs, the look timers (f7B8/f7BA/f7BC), the anim number, the half-angle twists,
+    and her eyePos -- the `core.npc_zl1_look.Zl1Look.seed_from_row` seed (needs `find_tetra`, so
+    the seed capture now does the _execute-trap + reload dance the frame capture does)."""
     import dolphin_mem as D
     D.control_pipe_quiet("pause")
     D.control_pipe_quiet("savestate", {"action": "load", "slot": int(slot)})
+    tetra = find_tetra_instance(D, reload_slot=int(slot))
     r = _rdr(D)
     lp = r.u32(LINK_PTR_ADDR)
     la = lp - 0xD8
@@ -179,7 +207,8 @@ def capture_seed(out=SEED_OUT, slot=2):
         # attention residual (session 12: NONE / no actor at f0 -> the sim's default AttentionLock)
         atn=dict(lock_state=(r.u8(attn + 0x18) if attn else -1),
                  actor_lock=r.u32(lp + 0x30C4)),
-        old_pose=old_pose)
+        old_pose=old_pose,
+        zl1=_zl1_look_row(r, tetra))
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, 'w') as f:
         json.dump(seed, f, indent=1)
