@@ -106,6 +106,10 @@ class NeckLook:
         self.y = _s16(int(y))
         self.z = _s16(int(z))
 
+    def clone(self):
+        """A deep copy (all state is three s16 scalars) -- for planner/beam-search node branching."""
+        return NeckLook(self.x, self.y, self.z)
+
     def local_38(self):
         """The jointBeforeCB HEAD twist tuple ``(m3564.y, m3564.z, m3564.x)`` (:270)."""
         return (self.y, self.z, self.x)

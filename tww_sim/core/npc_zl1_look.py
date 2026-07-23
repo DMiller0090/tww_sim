@@ -163,6 +163,16 @@ class Zl1JntCtrl:
         self.f2c = self.f2e = self.f30 = self.f32 = 0
         self.turn_step = TURN_STEP_POS
 
+    def clone(self):
+        """A deep copy for planner/beam-search branching (the ``angles`` list-of-lists is copied;
+        the rest are immutable scalars)."""
+        c = Zl1JntCtrl()
+        c.angles = [list(a) for a in self.angles]
+        c.trn, c.head_lock, c.bbone_lock = self.trn, self.head_lock, self.bbone_lock
+        c.f2c, c.f2e, c.f30, c.f32 = self.f2c, self.f2e, self.f30, self.f32
+        c.turn_step = self.turn_step
+        return c
+
     # mMax/MinAngles[i][j] -- i 0 head / 1 backbone, j 0 x / 1 y (setParam order, d_npc.cpp:128)
     _MAX = ((MAX_HEAD_X, MAX_HEAD_Y), (MAX_BB_X, MAX_BB_Y))
     _MIN = ((MIN_HEAD_X, MIN_HEAD_Y), (MIN_BB_X, MIN_BB_Y))
@@ -290,6 +300,19 @@ class Zl1Morf:
                 self.old_quat[j['index']] = Q.euler_to_quat(r[0], r[1], r[2])
                 self.old_trans[j['index']] = tuple(_f(v) for v in j['translate'])
 
+    def clone(self):
+        """A copy that SHARES the immutable anim data (``anms``, ``sk``, the current ``anm`` row)
+        and copies the mutable ctrl state -- for planner/beam-search branching without re-loading
+        or deep-copying the FK tables (deepcopy of those is what makes a whole-object copy slow)."""
+        c = Zl1Morf.__new__(Zl1Morf)
+        c.anms, c.sk, c.anm = self.anms, self.sk, self.anm
+        for s in ('attr', 'start', 'end', 'loop', 'rate', 'frame', 'state',
+                  'cur_morf', 'prev_morf', 'morf_step'):
+            setattr(c, s, getattr(self, s))
+        c.old_quat = dict(self.old_quat)
+        c.old_trans = dict(self.old_trans)
+        return c
+
     def set_anm(self, name, morf=ANM_MORF, speed=ANM_SPEED):
         """McaMorf::setAnm via dNpc_setAnmFNDirect (start 0, end -1 -> frameMax, loop mode from
         the prm row -- LOOP for both regime anims)."""
@@ -381,6 +404,15 @@ class Zl1Look:
         self.counter = 0             # g_Counter.mCounter0 (parity for the look-anim 7BA seed)
         self.rng_horizon = False     # True once a cLib_getRndValue re-seed was needed (unmodelable)
         self.angle_y = 0             # her current.angle.y (stt-3: constant; the setMtx base yaw)
+
+    def clone(self):
+        """A deep copy for planner/beam-search branching: the mutable jnt/morf state is cloned
+        (the morf SHARES the FK tables -- see `Zl1Morf.clone`); scalars/tuples are immutable."""
+        c = Zl1Look.__new__(Zl1Look)
+        c.__dict__.update(self.__dict__)
+        c.jnt = self.jnt.clone()
+        c.morf = self.morf.clone()
+        return c
 
     @classmethod
     def seed_from_row(cls, row, counter=0):

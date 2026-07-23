@@ -366,6 +366,33 @@ class FreeRun:
             self.pend_link, self.pend_tetra = full_depth_push(c0, (self.tx, self.tz))
         self.prev_disp = self.link.state               # dispatch proc of the seed frame
 
+    def clone(self):
+        """A deep copy for the planner beam search: branch the coupled state without re-running the
+        rollout from state 2. `LandState.clone` shares the immutable `AnimData`; the camera / zl1 /
+        neck each `clone()` (sharing their own immutable FK tables) -- so a clone is ~1 ms, not the
+        ~60 ms a whole-object `deepcopy` costs (which copies every FK table). A cloned run stepped
+        with the same inputs as its parent stays bit-identical (gated `tests/test_search.py`).
+
+        Everything else is a scalar or an immutable tuple (pos points, pends, the cached head
+        matrix, the raw-input dict which `step` never mutates) -- shared by reference is correct."""
+        c = FreeRun.__new__(FreeRun)
+        c.link = self.link.clone()
+        c.computed_pose = self.computed_pose
+        c.tx, c.tz, c.ty = self.tx, self.tz, self.ty
+        c.camera = self.camera.clone() if self.camera is not None else None
+        c.zl1 = self.zl1.clone() if self.zl1 is not None else None
+        c._eye_next = self._eye_next
+        c.neck = self.neck.clone() if self.neck is not None else None
+        c._head_mtx = self._head_mtx
+        c._tattn = self._tattn
+        c._prev_raw = self._prev_raw
+        c.csangle = self.csangle
+        c._follow_warned = self._follow_warned
+        c.pend_link = self.pend_link
+        c.pend_tetra = self.pend_tetra
+        c.prev_disp = self.prev_disp
+        return c
+
     def pre_seed_input(self, inp):
         """Seed the delay-1 controller buffer (the input the FIRST `step` acts on)."""
         self.link._inbuf = [_step_args(inp)]

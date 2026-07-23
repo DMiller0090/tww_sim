@@ -204,6 +204,17 @@ class LandCamera:
     status0/status1: the dComIfGp player status words (default 0 = plain land movement).
     """
 
+    def clone(self):
+        """A deep copy for planner/beam-search node branching: every field is a scalar or an
+        immutable tuple except the three mutable ``SGlobe``s, which are ``.copy()``-ed. Additive;
+        the camera has no shared immutable tables so this is cheap."""
+        c = LandCamera.__new__(LandCamera)
+        c.__dict__.update(self.__dict__)
+        c.dir = self.dir.copy()
+        c.vc_dir = self.vc_dir.copy()
+        c.w_glob = self.w_glob.copy()
+        return c
+
     def __init__(self, floor_y=0.16326504945755005):
         self.floor_y = f32(floor_y)
         # committed
