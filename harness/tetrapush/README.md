@@ -771,19 +771,44 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             magnifying a ~1e-5 u/frame residual that sits at the single-step fixtures' own f32 noise
             floor. The FK matrix, the sqrt, the plow/recoil math, and the seed are each correct to
             that resolution.
-      - [ ] **THE REMAINING <=1-ULP HUNT (the real planner blocker):** collapsing the closed loop to
-            true 0-ULP means pinning the last <=1-ULP op(s) in the **DASH/ROLL foot-term + recoil
-            path** (the roll-entry frames inject the biggest residual; the `calc_transform`/Hermite
-            entry-morf sub-ULP is the #1 concrete lead, already documented in `quat.py`). The
-            single-step fixtures resolve only to ~1e-5 u, so localizing a <=1-ULP op needs a per-op
-            LIVE capture (breakpoint the foot toe / `m_cc_move` / the roll root-motion delta across
-            f1..f43, the way `setcol` pinned the exec centre) -- offline ground truth is at the noise
-            floor. **Open question for the planner (decide before the hunt):** the ~1.35x amplifier is
-            plausibly a REAL chaotic sensitivity of the chase-and-plow (session-22 finding 2: 11 BAM
-            at cycle 1 flips cycle 2's band), in which case NO bit-faithful-but-not-bit-IDENTICAL model
-            can predict >~1 cycle open-loop, and the planner should trust the sim for ~1 cycle +
-            confirm multi-cycle chains via DTM-on-Dolphin (tier 2 = the real hardware), with tier-0 for
-            the coarse envelope -- rather than chase a possibly-irreducible last ULP.
+      - [x] **STRATEGY DECIDED (session 24, Dereck): 0-ULP is the bar, non-negotiable** -- "we must
+            have 0 ULP or else this tool is worthless." This CLOSES the session-23 open question: NO
+            tier-2-envelope / trust-~1-cycle escape. The planner stays pure-sim-from-state-2 (the hard
+            rule), which the multi-cycle deliverable (~4-6 cycles to herd Tetra ~960 u, the placements
+            coupled to the final roll entry) FORCES to be bit-identical -- the ~1.35x amplifier makes
+            open-loop multi-cycle prediction explode with ANY residual. Directive: capture the
+            live/offline divergences as concrete TEST CASES, then drive each to 0.
+      - [x] **DIVERGENCE TEST CASES BUILT + the residual ATTRIBUTED to TWO bugs (session 24), all
+            offline.** The one-step-from-EXACT-state gate (`tests/test_from_f0.py::
+            test_onestep_pos_bit_exact_from_exact_state`, xfail-strict) pins the Link divergence at
+            0 ULP: live pos is breakpoint-exact (`setcol.pos == cyl.pos`), so the ~5-56-ULP z error is
+            REAL sim-vs-console. The per-frame table is `python -m harness.tetrapush.onestep_divergence`
+            (worst 56 ULP ~1.3e-5 u at f4; 28/43 z frames diverge). **The split (decisive, no live
+            needed):** Tetra has NO foot term (stt-3, speedF 0), so her pos-delta isolates the push law
+            -- it diverges ~9 ULP with **no roll-entry spike**, while Link's has the spike (f3-5,
+            56 ULP, decaying with the morf). So:
+            * **BUG #1 -- the push/recoil law** (both actors, ~few ULP): the Courtyard replay uses the
+              session-9 DERIVED `full_depth_push` (`link_plow.recoil` + `tetra_plow.plow_step`: TWO
+              separate `fsqrt`; and `full_depth_push` returns Tetra's move as an f64 `new-minus-old`
+              while Link's is a direct f32 delta -> the two are NOT exact opposites, ~1 ULP off), NOT
+              the decomp-faithful `cc_push.co_move_pair` (ONE dist, obj1/obj2 moves exact-opposite,
+              `sum==0` live-confirmed). Gates (both xfail-strict):
+              `test_tetra_push_bit_exact_from_exact_state` (push vs live Tetra, no foot confound) +
+              `test_full_depth_push_recoil_is_exact_opposite_of_tetra` (the Newton's-3rd-law
+              self-consistency invariant -- a pure code bug, no live needed). **Fix = compute the push
+              the console's way** (`co_move_pair` math on the right centres, f32 Tetra tracking).
+            * **BUG #2 -- Link's roll-entry foot term** (Link only, f3-5 spike): the sim omits a
+              foot-position delta during the entry morf that the console has (the `calc_transform`/
+              Hermite jnt0 lead in `quat.py`). Isolate it cleanly AFTER bug #1 (once the recoil is
+              bit-exact, Link's residual IS the foot term).
+      - [ ] **THE LIVE PER-OP CAPTURE (the fix ground truth -- NEXT):** the single-step cyl fixture
+            resolves only to ~1e-5 u (== the residual size), so validating either fix to true 0-ULP
+            needs a breakpoint capture, the way `setcol` pinned the exec centre: at `posMove`
+            (JP `0x80106514`) / after the CC pass, read **both actors' `m_cc_move`** (Link `lp+0x3FE8`,
+            Tetra her `mStts+0x00`) = bug-#1 truth, AND **Link's `current.pos` right after the foot
+            application, before the cc-consume** (or `m3598`) across f1..f43 = bug-#2 truth. Then port
+            `co_move_pair`-faithful push + the entry-morf foot term decomp-first, flip the xfail gates
+            to hard passes, and confirm the closed-loop drift collapses.
       - [ ] **Then the search proper**: realize cycle chains as raw inputs (`macro_inputs`) and
             confirm in FreeRun / on Dolphin (tier 2); resolve coarse feasibility (can ~4-6 cycles herd
             her the full ~960 u?); add the walk-push nudge endgame + the entry walk-in.

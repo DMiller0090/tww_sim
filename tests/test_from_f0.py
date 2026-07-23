@@ -407,6 +407,115 @@ def test_onestep_error_bounded_from_exact_state(fix, seed, eyes):
     assert worst <= 128
 
 
+@pytest.mark.xfail(strict=True, reason="OPEN 0-ULP gap (session 24): the DASH/ROLL foot-term "
+                   "sub-ULP. One-step-from-exact-state pos diverges from live by up to 56 ULP "
+                   "(~1.3e-5 u) in z, concentrated at the roll-entry morf frames f3-f5 (56/22 decaying "
+                   "with the morf rate = the calc_transform/Hermite entry-morf, quat.py) plus a small "
+                   "f1-f2 MOVE-backslide residue (5-7 ULP). x reads 0 ULP only because its f32 quantum "
+                   "at ~1335 u (~1.2e-4 u) is coarser than the residual. This is the planner blocker: "
+                   "the plow feedback (~1.35x/contact-frame) amplifies it to the 93-u closed-loop drift.")
+def test_onestep_pos_bit_exact_from_exact_state(fix, seed, eyes):
+    """THE 0-ULP DIVERGENCE GATE (session 24) -- the hard bar: from the EXACT captured state[k-1],
+    stepping once must reproduce live pos[k] BIT-FOR-BIT (0 ULP), every frame, every axis.
+
+    This is the strict form of `test_onestep_error_bounded_from_exact_state` (which asserts only
+    BOUNDED). The live pos is true console ground truth (breakpoint-captured; `setcol.pos == cyl.pos`
+    to 0 ULP over f1..12, so the divergence is real sim-vs-console, not single-step noise). Because
+    the outgoing recoil is fed from the EXACT fixture centre, the pos divergence IS the coupled
+    step's own error (Link's foot term + the applied recoil law). Collects the WHOLE divergent-frame
+    set into the failure message so the xfail records the full picture, not just the first frame.
+
+    Currently XFAILS (the open gap). Regenerate the human-readable per-frame ULP table with
+    `python -m harness.tetrapush.onestep_divergence`. When the diverging op is pinned (per-op live
+    capture, session 24+) and fixed, this flips to a hard PASS and the xfail marker comes off."""
+    if seed is None:
+        pytest.skip("state-2 seed fixture not present")
+    from harness.tetrapush.from_f0 import FreeRun, full_depth_push
+    from tww_sim.core.fp import f32
+    cyl_frames, dtm_frames = fix
+    input_at = _input_at(dtm_frames)
+
+    run = FreeRun(cyl_frames[0], seed_nspeed=seed['link']['nspeed'], computed_pose=True,
+                  seed_old_pose=seed.get('old_pose'))
+    run.pre_seed_input(input_at(0))
+    link = run.link
+    diverged = []
+    for k in range(1, 44):
+        prev = cyl_frames[k - 1]
+        link.pos_x = f32(prev['link']['pos'][0]); link.pos_z = f32(prev['link']['pos'][2])
+        run.tx = f32(prev['tetra']['pos'][0]); run.tz = f32(prev['tetra']['pos'][2])
+        run.pend_link, run.pend_tetra = full_depth_push(prev['link']['cyl'], (run.tx, run.tz))
+        eye = eyes[k - 1] if (eyes is not None and k - 1 < len(eyes)) else None
+        row = run.step(input_at(k), csangle=cyl_frames[k - 1]['csangle'], eye=eye,
+                       center=cyl_frames[k]['link']['cyl'])
+        lv = cyl_frames[k]['link']
+        ex = abs(_bits(row['sim_link'][0]) - _bits(lv['pos'][0]))
+        ez = abs(_bits(row['sim_link'][1]) - _bits(lv['pos'][2]))
+        if ex or ez:
+            diverged.append((k, cyl_frames[k]['proc'], ex, ez))
+    assert not diverged, "one-step pos != live (0 ULP required); divergent frames [f,proc,xULP,zULP]: " \
+        + ", ".join("[f%d p%d x%d z%d]" % d for d in diverged)
+
+
+@pytest.mark.xfail(strict=True, reason="OPEN 0-ULP gap (session 24), BUG #1 of 2: the push/recoil "
+                   "law. Tetra has NO foot term (stt-3, speedF 0) so her pos-delta isolates the push "
+                   "vector -- it diverges from live by up to ~9 ULP in z, no roll-entry spike (that "
+                   "spike is Link-only = BUG #2, the foot term). The Courtyard replay uses the "
+                   "session-9 DERIVED full_depth_push (link_plow.recoil + tetra_plow.plow_step: two "
+                   "separate fsqrt, and full_depth_push returns Tetra's move as an f64 new-minus-old "
+                   "while Link's is a direct f32 delta), NOT the decomp-faithful cc_push.co_move_pair "
+                   "(one dist, exact-opposite obj1/obj2 moves). Fix = compute the push the console's "
+                   "way; validate 0-ULP vs a per-op live m_cc_move capture (the cyl fixture Tetra pos "
+                   "resolves only to ~1e-5 u, at the residual size).")
+def test_tetra_push_bit_exact_from_exact_state(fix):
+    """THE PUSH-LAW 0-ULP DIVERGENCE GATE (session 24). Tetra's motion is PURELY the CC push (she has
+    no foot term -- stt-3, speedF 0, the whole window), so stepping the push from the EXACT captured
+    Link Co centre + Tetra pos and comparing to live Tetra pos isolates the push/recoil law with NO
+    foot-term confound (unlike the Link one-step gate). Currently XFAILS (bug #1). Diagnostic:
+    the `link recoil == -tetra push` self-consistency invariant below + the per-frame table in
+    `harness.tetrapush.onestep_divergence`."""
+    from harness.tetrapush.from_f0 import full_depth_push
+    from tww_sim.core.fp import f32
+    cyl_frames, _ = fix
+    diverged = []
+    for k in range(1, 44):
+        prev = cyl_frames[k - 1]
+        ptx, ptz = f32(prev['tetra']['pos'][0]), f32(prev['tetra']['pos'][2])
+        _rl, (tdx, tdz) = full_depth_push(prev['link']['cyl'], (ptx, ptz))
+        sim_tx = f32(ptx + tdx); sim_tz = f32(ptz + tdz)
+        lv = cyl_frames[k]['tetra']['pos']
+        ex = abs(_bits(sim_tx) - _bits(lv[0]))
+        ez = abs(_bits(sim_tz) - _bits(lv[2]))
+        if ex or ez:
+            diverged.append((k, cyl_frames[k]['proc'], ex, ez))
+    assert not diverged, "Tetra push != live (0 ULP required); divergent frames [f,proc,xULP,zULP]: " \
+        + ", ".join("[f%d p%d x%d z%d]" % d for d in diverged)
+
+
+@pytest.mark.xfail(strict=True, reason="OPEN 0-ULP gap (session 24): full_depth_push does not return "
+                   "the Link recoil and Tetra push as exact opposites -- the recoil is a direct f32 "
+                   "delta (fmuls(dx,ff)) while the Tetra move is an f64 new-minus-old (f32(tx-rlx)-tx), "
+                   "so they differ by ~1 ULP where Tetra's coord is large. Newton's third law in the "
+                   "CC resolution says they MUST be equal and opposite (cc_push.co_move_pair is; "
+                   "sum==0 live-confirmed). Fix with bug #1.")
+def test_full_depth_push_recoil_is_exact_opposite_of_tetra(fix):
+    """SELF-CONSISTENCY (session 24): for a single Co pair the two actors eject equal-and-opposite --
+    Link's recoil delta must be the exact negative of Tetra's push delta (bit-for-bit), the way the
+    decomp `cc_push.co_move_pair` guarantees. `full_depth_push` currently violates this by ~1 ULP
+    (the f32-delta vs f64-new-minus-old asymmetry), independent of any live capture. Currently XFAILS."""
+    from harness.tetrapush.from_f0 import full_depth_push
+    cyl_frames, _ = fix
+    bad = []
+    for k in range(0, 43):
+        e = cyl_frames[k]
+        (rlx, rlz), (tdx, tdz) = full_depth_push(
+            e['link']['cyl'], (e['tetra']['pos'][0], e['tetra']['pos'][2]))
+        if _bits(rlx) != _bits(-tdx) or _bits(rlz) != _bits(-tdz):
+            bad.append((k, _bits(rlx) - _bits(-tdx), _bits(rlz) - _bits(-tdz)))
+    assert not bad, "recoil != -push (bit-for-bit); frames [k,xULP,zULP]: " \
+        + ", ".join("[%d %+d %+d]" % b for b in bad)
+
+
 def test_freerun_direct_api_matches_replay(fix, seed, eyes):
     """`FreeRun` -- the planner's novel-input stepper -- driven DIRECTLY (no capture rows in the
     loop) reproduces the wrapped `replay(centers='computed')` byte-for-byte. Pins the API contract
