@@ -1,31 +1,36 @@
-"""The Courtyard from-f0 coupled replay, live-gated against the locked RAM capture.
+"""The Courtyard from-f0 coupled replay, live-gated against the locked RAM capture -- 0-ULP.
 
 `harness/tetrapush/from_f0` wires BOTH gated plow laws (`link_plow` = Link's full-depth recoil,
 `tetra_plow` = Tetra's full-depth push) into a closed-loop `LandState` replay driven by the real DTM
-controller bytes, with Link's animated mCyl Co centre + csangle injected per frame from the capture.
-This gate proves the coupling is bit-exact where the sim's proc physics are already modelled:
+controller bytes. This gate proves the coupling is bit-exact where the sim's proc physics are modelled.
 
-  * Seeded at the FIRST roll entry, cycle 1 -- the FRONT_ROLL, the 2-frame ATN_ACTOR untarget tier
-    (the -25.727 flip + the -25.452 body2), and the following MOVE backslide -- reproduces the live
-    Link speedF 0-ULP every frame, and his position within the injected-cyl single-step capture
-    precision (<1e-3 u). This is the full-depth CC coupling running through the whole cycle.
-  * Tetra's full-depth plow, composed from state 2 (f0) with the injected centres, reproduces her
-    WHOLE trajectory to within a handful of ULP over the plow window (both cycles) -- 0-ULP.
+TEST-RIGOR POLICY (`[[zero-ulp-tests-only]]`, Dereck's hard rule, session 24): every sim-vs-console
+assertion in this file is `_bits(sim) == _bits(live)` (0 ULP) or it is deleted. There are NO
+`err < eps` position/plow tolerances -- a ~5-56 ULP/step position residual hid under "within capture
+precision" gates for ~15 sessions until the multi-cycle plow amplifier (~1.35x/contact-frame) blew it
+up to a 93-u closed-loop drift. So:
+  * The DYNAMICS (proc, speedF, facing, lean, csangle, the wired-camera attn.y, setcol centre) are
+    genuinely bit-exact and asserted `_bits == _bits` here.
+  * The POSITION bar is the three `xfail(strict)` divergence gates at the bottom -- the two open bugs
+    (#1 the push/recoil law, #2 Link's roll-entry foot term). They are 0-ULP against the DETERMINISTIC
+    setcol breakpoint capture (`setcol.pos == cyl.pos` to 0 ULP over f1..12), NOT the single-stepped
+    cyl fixture (which by policy may gate edge-robust dynamics but MUST NOT set the position bar).
+  * A handful of non-fidelity checks survive, each explicitly relabelled: the bounded-error /
+    amplification regression guardrail, and the FreeRun-vs-replay API contract.
 
-The three fixtures are the locked live capture: `courtyard_push_cyl.json` supplies the per-frame Link
-Co centre + csangle + both actors' live positions; `courtyard_push_dtm.json` supplies the raw
-controller bytes; `courtyard_push_seed.json` supplies the state-2 seed's HIDDEN mNormalSpeed (a
-deterministic single read, no single-step jitter). All are captured from slot 2 and IMMUTABLE. The
-gated range (f<=23 / f<=43) is BEFORE the cyc2 f44 double-read, so no dedup is needed there.
+The fixtures are the locked live capture, all from slot 2 and IMMUTABLE: `courtyard_push_cyl.json`
+(per-frame Link Co centre + csangle + both actors' positions, single-stepped); `courtyard_push_dtm.json`
+(raw controller bytes); `courtyard_push_seed.json` (the state-2 seed's HIDDEN mNormalSpeed, a
+deterministic single read); `courtyard_push_setcol.json` (the session-14 setCollision breakpoint reads,
+deterministic). The gated range (f<=23 / f<=43) is BEFORE the cyc2 f44 double-read.
 
-The TRUE f0 seed (state 2) is CLOSED (session 12, `test_true_f0_seed_bit_exact`): seeded at f0 with the
-measured mNormalSpeed, the replay is bit-exact from the first stepped frame. The gap was that at f0
-speedF LAGS mNormalSpeed a frame and the replay seeded `nspeed = speedF`; the fix seeds nspeed from the
-live mNormalSpeed (mDirection + the attention state already match the sim defaults at f0). The whole
-from-f0 chain -- roll-entry-seeded AND state-2-seeded -- is now bit-exact through cycle 2's roll.
+The TRUE f0 seed (state 2) is CLOSED for the DYNAMICS (session 12, `test_true_f0_seed_bit_exact`):
+seeded at f0 with the measured mNormalSpeed, the replay's every speedF/proc is bit-exact from the first
+stepped frame (the gap was seeding `nspeed = speedF` when at f0 speedF LAGS mNormalSpeed a frame). The
+whole from-f0 chain -- roll-entry-seeded AND state-2-seeded -- is dynamics-bit-exact through cycle 2's
+roll; position is the open 0-ULP gap gated below.
 """
 import json
-import math
 import os
 import struct
 
@@ -52,18 +57,6 @@ def fix():
     cyl = json.load(open(_CYL))
     dtm = json.load(open(_DTM))
     return cyl['frames'], dtm['frames']
-
-
-def _dedup(frames):
-    """Drop the single-step DOUBLE-READ frames (cyc2 f44==f45 -- the capture re-sampling one game
-    frame; bit-identical in BOTH Link's Co centre and Tetra's pos). Matches test_{link,tetra}_plow."""
-    out = [frames[0]]
-    for f in frames[1:]:
-        p = out[-1]
-        if f['link']['cyl'] == p['link']['cyl'] and f['tetra']['pos'] == p['tetra']['pos']:
-            continue
-        out.append(f)
-    return out
 
 
 @pytest.fixture(scope='module')
@@ -109,31 +102,19 @@ def test_cyc1_rollentry_untarget_flip(fix):
     assert flip['speedF'] < -25.7 and body2['speedF'] < -25.4, "the hot ATN-tier flip did not land"
 
 
-def test_cyc1_rollentry_link_pos_within_capture_precision(fix):
-    """Link's position through cycle 1 tracks live to within the injected-cyl single-step capture
-    precision (<1e-3 u every frame; the residual IS the captured Co centre's own read precision, not a
-    model error -- speedF is 0-ULP). This is the full-depth recoil (`link_plow`) closing the loop on
-    Link's own path."""
-    cyl_frames, dtm_frames = fix
-    entry = next(i for i, f in enumerate(cyl_frames) if f['proc'] == _FRONT_ROLL)
-    rows = replay(cyl_frames, _input_at(dtm_frames), entry, upto=24)
-    for d in rows:
-        err = math.hypot(d['sim_link'][0] - d['live_link'][0], d['sim_link'][1] - d['live_link'][1])
-        assert err < 1e-3, "frame %d: Link pos off by %.6f u (> capture precision)" % (d['f'], err)
-
-
 def test_chained_replay_through_cyc2_roll_bit_exact(fix):
     """THE full chained replay (session 11): seeded at the first roll entry, the sim runs UNBROKEN
     through cycle 1 AND the backslide->roll-setup transition AND cycle 2's roll -- f4..f44 -- with
-    every Link speedF 0-ULP, every proc matching live, and Link's position within the injected-cyl
-    capture precision. This closes the backslide->roll-setup blocker: the +18 re-target flip lands on
-    the right frame (f28, -25.15 -> +18.574) and cycle 2's roll triggers on the right frame (f29),
-    because the DTM-driven replay runs at input_delay=1 (the DTM stream IS the polled pad, one pipeline
-    stage in -- live-probed s11: m34E8/roll/soft-L all land 1 frame after the DTM).
+    every Link speedF 0-ULP and every proc matching live. This closes the backslide->roll-setup
+    blocker: the +18 re-target flip lands on the right frame (f28, -25.15 -> +18.574) and cycle 2's
+    roll triggers on the right frame (f29), because the DTM-driven replay runs at input_delay=1 (the
+    DTM stream IS the polled pad, one pipeline stage in -- live-probed s11: m34E8/roll/soft-L all land
+    1 frame after the DTM).
 
-    Gated range stops at f44 -- BEFORE the cyl fixture's single-step-jittered cyc2 untarget (f45+, a
-    known capture corruption, session 8; the DTM fixture has the clean -25.74 flip there). The chained
-    physics through the second roll is what this proves."""
+    DYNAMICS ONLY (0-ULP): proc + speedF. Position is NOT asserted here -- its 0-ULP bar is
+    `test_onestep_pos_bit_exact_from_exact_state` (the position residual, the 2 open bugs). Gated range
+    stops at f44 -- BEFORE the cyl fixture's single-step-jittered cyc2 untarget (f45+, a known capture
+    corruption, session 8; the DTM fixture has the clean -25.74 flip there)."""
     cyl_frames, dtm_frames = fix
     entry = next(i for i, f in enumerate(cyl_frames) if f['proc'] == _FRONT_ROLL)
     rows = replay(cyl_frames, _input_at(dtm_frames), entry, upto=45)
@@ -149,15 +130,13 @@ def test_chained_replay_through_cyc2_roll_bit_exact(fix):
         assert _bits(d['speedF']) == _bits(d['live_speedF']), (
             "frame %d: sim speedF %.9f != live %.9f (not 0-ULP)" % (
                 d['f'], d['speedF'], d['live_speedF']))
-        err = math.hypot(d['sim_link'][0] - d['live_link'][0], d['sim_link'][1] - d['live_link'][1])
-        assert err < 1e-3, "frame %d: Link pos off by %.6f u (> capture precision)" % (d['f'], err)
 
 
 def test_true_f0_seed_bit_exact(fix, seed):
     """THE true f0 seed (session 12): seeded at STATE 2 itself (f0, proc MOVE) with the live-measured
-    mNormalSpeed (`courtyard_push_seed.json` link.nspeed), the from-f0 replay is bit-exact from the
-    FIRST stepped frame -- f1..f44 every Link speedF 0-ULP, every proc matching live, Link pos within
-    the injected-cyl capture precision (<1e-3 u). This closes the last from-f0 gap.
+    mNormalSpeed (`courtyard_push_seed.json` link.nspeed), the from-f0 replay's DYNAMICS are bit-exact
+    from the FIRST stepped frame -- f1..f44 every Link speedF 0-ULP, every proc matching live. This
+    closes the last from-f0 dynamics gap (position's 0-ULP bar is the divergence gate below).
 
     Root cause (session 12, live-probed `_notes/tetrapush-seed_probe.py`): at f0 Link is mid-transition
     out of the prior cycle's untarget, where speedF LAGS mNormalSpeed a frame (speedF -24.574,
@@ -186,23 +165,6 @@ def test_true_f0_seed_bit_exact(fix, seed):
         assert _bits(d['speedF']) == _bits(d['live_speedF']), (
             "frame %d: sim speedF %.9f != live %.9f (not 0-ULP)" % (
                 d['f'], d['speedF'], d['live_speedF']))
-        err = math.hypot(d['sim_link'][0] - d['live_link'][0], d['sim_link'][1] - d['live_link'][1])
-        assert err < 1e-3, "frame %d: Link pos off by %.6f u (> capture precision)" % (d['f'], err)
-
-
-def test_tetra_full_depth_from_f0_bit_exact(fix):
-    """Tetra's full-depth plow, composed from state 2 (f0) with the injected Co centres, reproduces
-    her WHOLE trajectory to within a handful of ULP over the plow window (f1..f43, both cycles). Her
-    motion is a deterministic function of Link's centre path -- independent of Link's own sim, so this
-    validates from f0 even while the Link-side setup transition is still open."""
-    cyl_frames, dtm_frames = fix
-    frames = _dedup(cyl_frames)
-    rows = replay(frames, _input_at(dtm_frames), 0, upto=44)
-    for d in rows:
-        err = math.hypot(d['sim_tetra'][0] - d['live_tetra'][0], d['sim_tetra'][1] - d['live_tetra'][1])
-        assert abs(d['dtx']) <= 16 and abs(d['dtz']) <= 16, (
-            "frame %d: Tetra off by (%d, %d) ULP -- not 0-ULP" % (d['f'], d['dtx'], d['dtz']))
-        assert err < 1e-3, "frame %d: Tetra pos off by %.6f u" % (d['f'], err)
 
 
 _SETCOL = os.path.join(_ROOT, 'fixtures', 'courtyard_push_setcol.json')
@@ -216,12 +178,13 @@ def setcol():
 
 
 def test_settled_center_law_half_depth(fix, setcol):
-    """The mCyl TIMING law (session 14, breakpoint-pinned): the pause-boundary mCyl the gated plow
-    laws consume equals setCollision's execute-pass midpoint PLUS the scene CC pass's immediate
-    half-depth SetPosCorrect write away from Tetra (the plain decomp 50/50 rank split). Gate:
-    `_cc_settled_center(cyl_exec(k), tetra(k))` reproduces the capture's `link.cyl` on every probed
-    frame to capture precision. This is also the closure of the session-9 "2x doubling" sub-puzzle:
-    full-depth-from-the-settled-centre == half-depth-from-the-exec-centre, same numbers."""
+    """The mCyl TIMING law (session 14, breakpoint-pinned) -- 0-ULP vs the DETERMINISTIC setcol
+    capture. The pause-boundary mCyl the gated plow laws consume equals setCollision's execute-pass
+    midpoint PLUS the scene CC pass's immediate half-depth SetPosCorrect write away from Tetra (the
+    plain decomp 50/50 rank split). `_cc_settled_center(cyl_exec(k), tetra(k))` reproduces the
+    capture's `link.cyl` BIT-FOR-BIT on every setcol-probed frame (f1..12, where the deterministic
+    breakpoint `cyl` equals the settled centre exactly). Also the closure of the session-9 "2x
+    doubling" sub-puzzle: full-depth-from-the-settled-centre == half-depth-from-the-exec-centre."""
     from harness.tetrapush.from_f0 import _cc_settled_center
     cyl_frames, _ = fix
     for r in setcol:
@@ -229,21 +192,24 @@ def test_settled_center_law_half_depth(fix, setcol):
         fx = cyl_frames[k]['link']['cyl']
         t = cyl_frames[k]['tetra']['pos']
         sx, sz = _cc_settled_center((r['cyl_exec'][0], r['cyl_exec'][2]), (t[0], t[2]))
-        d = math.hypot(sx - fx[0], sz - fx[-1])
-        assert d < 2e-4, "frame %d: settled centre off %.6f u" % (k, d)
+        assert _bits(sx) == _bits(fx[0]) and _bits(sz) == _bits(fx[-1]), (
+            "frame %d: settled centre (%r, %r) != live (%r, %r) -- not 0-ULP" % (
+                k, sx, sz, fx[0], fx[-1]))
 
 
 def test_setcollision_is_execute_time_midpoint(setcol):
     """setCollision's write IS the plain root/neck nodeMtx midpoint at call time (execute-pass
-    matrices, post-posMove pre-CC-push base) -- read at the JP 0x8011a670 breakpoint, <=6.1e-5 u on
-    every probed frame (proc-7, the roll entry, and the roll bodies). The draw-pass matrices the
-    session-13 offline fits compared against are a DIFFERENT base -- never use pause-boundary
-    nodeMtx as the setCollision source."""
+    matrices, post-posMove pre-CC-push base) -- read at the JP 0x8011a670 breakpoint, BIT-FOR-BIT
+    (0 ULP) on every probed frame f1..12 (proc-7, the roll entry, and the roll bodies): the midpoint
+    `0.5*(root+neck)` equals the freshly-written `cyl_exec` exactly. The draw-pass matrices the
+    session-13 offline fits compared against are a DIFFERENT base -- never use pause-boundary nodeMtx
+    as the setCollision source. Deterministic capture -> a legit 0-ULP gate."""
     for r in setcol:
         mx = 0.5 * (r['root'][0] + r['neck'][0])
         mz = 0.5 * (r['root'][2] + r['neck'][2])
-        d = math.hypot(mx - r['cyl_exec'][0], mz - r['cyl_exec'][2])
-        assert d < 1e-4, "frame %d: exec midpoint off %.6f u" % (r['f'], d)
+        assert _bits(mx) == _bits(r['cyl_exec'][0]) and _bits(mz) == _bits(r['cyl_exec'][2]), (
+            "frame %d: exec midpoint (%r, %r) != cyl_exec (%r, %r) -- not 0-ULP" % (
+                r['f'], mx, mz, r['cyl_exec'][0], r['cyl_exec'][2]))
 
 
 _EYES = os.path.join(_ROOT, 'fixtures', 'courtyard_push_eyepos.json')
@@ -275,55 +241,22 @@ def test_facing_and_lean_bit_exact_with_eye_aim(fix, seed, eyes):
             "frame %d: sim facing %d != live %d" % (d['f'], d['sim_facing'], d['live_facing']))
         assert d['sim_shape_z'] == d['live_shape_z'], (
             "frame %d: sim lean %d != live %d" % (d['f'], d['sim_shape_z'], d['live_shape_z']))
-    by_f = {d['f']: d for d in rows}
-    # the frames the feet-aim/ghost-re-aim errors used to dominate: now centre-exact to <=0.02 u.
-    for k in (19, 20, 26, 27, 28):
-        r = by_f[k]
-        fx = cyl_frames[k]['link']['cyl']
-        d = math.hypot(r['sim_cyl'][0] - fx[0], r['sim_cyl'][1] - fx[-1])
-        assert d < 2e-2, "frame %d: computed centre off %.5f u (re-aim regression)" % (k, d)
-
-
-def test_computed_centers_track_on_settled_roll_frames(fix, seed, eyes):
-    """The self-contained centre pipeline (FK exec midpoint + the half-depth settled-centre law),
-    diagnosed OPEN-LOOP (diag mode: pushes stay injected, so the trajectory is the gated bit-exact
-    one; the computed centre is compared per frame). With the session-16 exec-pose laws -- the
-    NEW-lean BODY_CHN twist (mBodyAngle.z is re-set by setMoveSlantAngle BEFORE mpCLModel->calc,
-    :11559-11591), J3D segment-scale-compensation on the neck chain (the dash bck scales
-    stomach_jnt.x; mDoExt_setJ3DData:47), the signed body_x euler quantization, and the proc-init
-    base lean (commonProcInit zeroes shape_angle.z :5841 BEFORE setWorldMatrix; setMoveSlantAngle
-    restores it after) -- the computed centre matches the capture on EVERY frame f1..43 to
-    <3e-4 u (the cyl fixture's own single-step precision). No open pose gaps remain in-window."""
-    if seed is None:
-        pytest.skip("state-2 seed fixture not present")
-    cyl_frames, dtm_frames = fix
-    rows = replay(cyl_frames, _input_at(dtm_frames), 0, upto=44,
-                  seed_nspeed=seed['link']['nspeed'], centers='diag', eyes=eyes,
-                  seed_old_pose=seed.get('old_pose'))
-    for r in rows:
-        fx = cyl_frames[r['f']]['link']['cyl']
-        d = math.hypot(r['sim_cyl'][0] - fx[0], r['sim_cyl'][1] - fx[-1])
-        assert d < 3e-4, "frame %d: computed centre off %.6f u" % (r['f'], d)
-    # and the diag run must not perturb the gated replay: procs + speedF stay live-exact
-    for d in rows:
-        assert d['sim_proc'] == d['live_proc'], "diag mode changed the trajectory (f%d)" % d['f']
-        assert d['speedF'] == d['live_speedF'], "diag mode changed speedF (f%d)" % d['f']
 
 
 def test_closed_loop_computed_replay_dynamics_bit_exact(fix, seed, eyes):
-    """The self-contained replay's DYNAMICS are bit-exact (session 16); its POSITION is NOT (still a
-    tolerance here -- see `test_onestep_pos_bit_exact_from_exact_state`, the open 0-ULP gap; this
-    test's `<2e-3 u` position check is one of the tolerance gates slated for the 0-ULP rewrite,
-    `[[zero-ulp-tests-only]]`). `centers='computed'` (Link's Co centre rebuilt every frame from the
-    sim's OWN pose; only the static state-2 seed, the DTM bytes, csangle, and the Tetra eye stream are
-    consumed) chains from STATE 2 with every proc, speedF, facing, and lean BIT-EXACT vs live f1..f43,
-    through both rolls, both untarget tiers, and the whole coupled plow. Positions amplify the
-    per-step residual (~1e-4 u/frame) through the plow feedback (depth = 80 - dist, ~1.35x/frame,
-    an unstable amplifier; the drift is DIFFERENTIAL, e_link ~ -e_tetra), so the position check here
-    is the PRE-AMPLIFICATION window: <2e-3 u over f1..10. The same noise perturbs the proc-9 eye-aim
-    bearing (a bearing to a point ~30 u away, from a position with the amplified noise), so facing
-    carries a few-BAM echo on f20-28 (measured max +6); lean stays 0-ULP (its addCalc sawtooth
-    quantizes the echo away)."""
+    """The self-contained replay's DYNAMICS are bit-exact (session 16), asserted 0-ULP here.
+    `centers='computed'` (Link's Co centre rebuilt every frame from the sim's OWN pose; only the
+    static state-2 seed, the DTM bytes, csangle, and the Tetra eye stream are consumed) chains from
+    STATE 2 with every proc 0-ULP-matching live and every speedF + lean BIT-FOR-BIT vs live f1..f43,
+    through both rolls, both untarget tiers, and the whole coupled plow.
+
+    POSITION and FACING are NOT asserted here (per `[[zero-ulp-tests-only]]`): the closed-loop
+    position amplifies the per-step residual (~1e-4 u/frame) through the plow feedback (depth =
+    80 - dist, ~1.35x/frame -- an unstable amplifier; the drift is DIFFERENTIAL, e_link ~ -e_tetra),
+    and that noise perturbs the proc-9 eye-aim bearing so facing carries a few-BAM echo (f20-28). Both
+    are DOWNSTREAM of the two open position bugs -- their 0-ULP bar is
+    `test_onestep_pos_bit_exact_from_exact_state`, and facing goes bit-exact self-contained once that
+    closes (the LAW is already 0-ULP -- `test_facing_and_lean_bit_exact_with_eye_aim`, diag mode)."""
     if seed is None:
         pytest.skip("state-2 seed fixture not present")
     cyl_frames, dtm_frames = fix
@@ -333,25 +266,23 @@ def test_closed_loop_computed_replay_dynamics_bit_exact(fix, seed, eyes):
     for d in rows:
         assert d['sim_proc'] == d['live_proc'], (
             "frame %d: closed-loop proc %d != live %d" % (d['f'], d['sim_proc'], d['live_proc']))
-        assert d['speedF'] == d['live_speedF'], (
-            "frame %d: closed-loop speedF %r != live %r" % (d['f'], d['speedF'], d['live_speedF']))
-        df = (d['sim_facing'] - d['live_facing']) & 0xFFFF
-        df = df - 0x10000 if df >= 0x8000 else df
-        assert abs(df) <= 16, (
-            "frame %d: closed-loop facing %d != live %d" % (d['f'], d['sim_facing'], d['live_facing']))
+        assert _bits(d['speedF']) == _bits(d['live_speedF']), (
+            "frame %d: closed-loop speedF %r != live %r (not 0-ULP)" % (
+                d['f'], d['speedF'], d['live_speedF']))
         assert d['sim_shape_z'] == d['live_shape_z'], (
             "frame %d: closed-loop lean %d != live %d" % (d['f'], d['sim_shape_z'], d['live_shape_z']))
-        if d['f'] <= 10:
-            dl = math.hypot(d['sim_link'][0] - d['live_link'][0],
-                            d['sim_link'][1] - d['live_link'][1])
-            dt = math.hypot(d['sim_tetra'][0] - d['live_tetra'][0],
-                            d['sim_tetra'][1] - d['live_tetra'][1])
-            assert dl < 2e-3 and dt < 2e-3, (
-                "frame %d: closed-loop position off dL=%.5f dT=%.5f" % (d['f'], dl, dt))
 
 
 def test_onestep_error_bounded_from_exact_state(fix, seed, eyes):
-    """THE RE-DIAGNOSIS (session 23): the coupled STEP FUNCTION is bit-faithful; the closed-loop
+    """NON-FIDELITY REGRESSION GUARDRAIL (relabelled per `[[zero-ulp-tests-only]]`): this is NOT a
+    0-ULP gate and makes no fidelity claim -- the 0-ULP position bar is the strict twin below,
+    `test_onestep_pos_bit_exact_from_exact_state`. This one asserts only that the one-step-from-exact-
+    state error stays BOUNDED and non-accumulating (<=128 ULP z, <=4 ULP x), which is what proves the
+    closed-loop blow-up is AMPLIFICATION of a floor-level residual, not a gross step-function bug. Its
+    job is to fail loudly if a future change makes the per-step error explode while the strict gate is
+    still a known-open xfail (a regression the xfail can't catch, since it's already failing).
+
+    THE RE-DIAGNOSIS (session 23): the coupled STEP FUNCTION is bit-faithful; the closed-loop
     position drift is an AMPLIFICATION instability, NOT an FK matrix bug.
 
     Session 22 named the blocker "the FK 0-ULP hunt -- make `FootFK.body_co_center` fp-faithful."

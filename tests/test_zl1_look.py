@@ -10,12 +10,15 @@ eye position, and the attention position, f1..f44, 0 ULP, no tolerances.
 
 The wiring gates then run the fully SELF-CONTAINED from-f0 replay (computed centres + wired
 camera + wired Zl1Look -- ZERO per-frame injections, only the static f0 seed + the raw DTM
-bytes) and require the physics byte-identical to the injected-streams reference and the
-committed csangles still live-exact. eye/tattn there track the SIM's Tetra (the known amplified
-common-mode capture-noise drift, ~1.35x/frame -- README session-16 box), so they are bounded,
-not 0-ULP, vs live; the f1-f4 head-top Y residue is the KNOWN unmodeled m35B8 seed decay (same
-class as the camera attn-Y transient, README session-19 box) and is downstream-inert (eye Y is
-never consumed: the re-aim uses XZ only, the camera consumes tattn).
+bytes) and require the DYNAMICS (proc/speedF/lean/csangle) 0-ULP and the wired setAttention law
+internally consistent 0-ULP.
+
+TEST-RIGOR POLICY (`[[zero-ulp-tests-only]]`): self-contained eye/tattn/facing/head-top-Y track
+the SIM's noise-drifted Tetra (the amplified common-mode capture-noise drift, ~1.35x/frame --
+README session-16 box), so they are NOT bit-exact vs live -- they are DOWNSTREAM of the two open
+position bugs. The old bounded tolerances on them are DELETED (a tolerance there hides the
+residual); the LAWS are gated 0-ULP against LIVE inputs by `test_look_replay_bit_exact_vs_live`,
+and the self-contained values green once the position bugs close.
 
 Skips (like test_from_f0) when the dev-supplied fixtures/_generated data are absent.
 """
@@ -149,7 +152,14 @@ def test_zl1_in_the_loop_replay_dynamics_bit_exact(look_fix, replay_env):
         Facing returns to live-exact in cyc2's facing-locked roll.
 
     Positions carry the known amplified common-mode capture noise (README session-16 box) and
-    are gated by the from_f0 suite, not here."""
+    are gated by the from_f0 suite, not here.
+
+    DYNAMICS ONLY (0-ULP): proc, speedF, lean, csangle. FACING is NOT asserted here -- self-contained
+    it carries the eye-aim echo (the modeled eye is anchored at the SIM's noise-drifted Tetra), which
+    is DOWNSTREAM of the two open position bugs (`[[zero-ulp-tests-only]]`); the look/re-aim LAW itself
+    is gated 0-ULP by `test_look_replay_bit_exact_vs_live` (fed live inputs) and the facing goes
+    self-contained-exact once the position bugs close (`test_from_f0::test_onestep_pos_bit_exact_
+    from_exact_state`)."""
     rows = _self_contained_rows(look_fix, replay_env)
     cyl = replay_env[0]
     assert len(rows) >= 40
@@ -165,20 +175,20 @@ def test_zl1_in_the_loop_replay_dynamics_bit_exact(look_fix, replay_env):
         assert rc['sim_csangle'] == lv['csangle'], (
             "f%d: csangle %d != live %d with the zl1 model wired" % (
                 k, rc['sim_csangle'], lv['csangle']))
-        echo = ((rc['sim_facing'] - lv['link']['facing'] + 0x8000) & 0xFFFF) - 0x8000
-        assert abs(echo) <= 16, "f%d facing echo %+d BAM beyond the documented envelope" % (
-            k, echo)
 
 
 def test_zl1_in_the_loop_streams_track_live(look_fix, replay_env):
-    """The self-contained replay's modeled streams: tattn obeys the setAttention law on the
-    SIM's own Tetra 0-ULP every frame (internal consistency -- the law itself is live-gated by
-    the model gate), head-top Y tracks live to the noise envelope once the (unmodeled,
-    downstream-inert) m35B8 seed residue dies (f1-f4), and the eye-minus-feet OFFSET -- the
-    common-mode-cancelled comparison -- tracks live through the first full cycle (<=0.1 u,
-    f5..f25; beyond that the pair's amplified drift bends the look bearings themselves and the
-    offset is sim-consistent, not live-comparable). NOISE bounds, not law tolerances -- the LAW
-    is gated 0-ULP by `test_look_replay_bit_exact_vs_live`."""
+    """The self-contained replay's wired setAttention law is INTERNALLY CONSISTENT 0-ULP: on the
+    SIM's own Tetra, tattn == (sim_tx, f32(seed_ty + 140), sim_tz) bit-for-bit every frame -- proving
+    the wired path fires the law on the sim state. The law's LIVE fidelity is gated 0-ULP (fed live
+    inputs) by `test_look_replay_bit_exact_vs_live`.
+
+    NOTE (`[[zero-ulp-tests-only]]`): the old head-top-Y (<=1.2 u) and eye-minus-feet-offset (<=0.1 u)
+    NOISE bounds were DELETED. Self-contained, the eye anchors at the sim's noise-drifted Tetra and
+    head-top Y carries the unmodeled m35B8 seed residue -- both DOWNSTREAM of the two open position
+    bugs, so a tolerance there hides the residual rather than gating anything. Those quantities are
+    0-ULP against LIVE inputs in the model gate; their self-contained values green once the position
+    bugs close (`test_from_f0::test_onestep_pos_bit_exact_from_exact_state`)."""
     from tww_sim.core.fp import f32, fadds
     fr = look_fix
     ty = fr[0]['pos'][1]
@@ -187,23 +197,7 @@ def test_zl1_in_the_loop_streams_track_live(look_fix, replay_env):
         k = rc['f']
         if k >= len(fr):
             break
-        zk = fr[k]
-        # internal tattn law: (sim_tx, f32(seed_ty + 140), sim_tz), 0-ULP on the sim's state
+        # internal tattn law: (sim_tx, f32(seed_ty + 140), sim_tz), 0-ULP on the sim's own state
         assert rc['sim_tattn'][0] == rc['sim_tetra'][0]
         assert rc['sim_tattn'][2] == rc['sim_tetra'][1]
         assert _ulp(rc['sim_tattn'][1], fadds(f32(ty), f32(140.0))) == 0
-        if k >= 5:
-            # f19-27 = the unmodeled m3564 window (Link's own head-look; README planner box):
-            # <=0.96 u of head-top Y there. Elsewhere the law holds to the noise floor.
-            lim = 1.2 if 19 <= k <= 27 else 1e-3   # absolute u (ULPs blow up near the y~0 tuck)
-            dht = rc['sim_head_top'][1] - zk['link']['head_top'][1]
-            assert abs(dht) <= lim, (
-                "f%d: head-top Y %r vs live %r beyond the envelope (%.1e > %.1e)" % (
-                    k, rc['sim_head_top'][1], zk['link']['head_top'][1], abs(dht), lim))
-        if 5 <= k <= 25:
-            for i, j in ((0, 0), (2, 2)):
-                off_m = rc['sim_eye'][i] - (rc['sim_tetra'][0] if i == 0 else rc['sim_tetra'][1])
-                off_l = zk['eye'][i] - zk['pos'][j]
-                assert abs(off_m - off_l) <= 0.1, (
-                    "f%d: eye offset[%d] %.5f vs live %.5f beyond the envelope" % (
-                        k, i, off_m, off_l))

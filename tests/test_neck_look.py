@@ -8,16 +8,19 @@ lock-on-list timing with no fixture dependency. The wiring gates run the from-f0
 wired camera + Zl1Look + NeckLook in BOTH modes:
 
   * **diag mode** (`centers='diag'`: computed pose for the FK, live-injected Co centres, so
-    positions stay capture-tight) -- the 0-TOLERANCE model gate: every m3564 f1..43 == the live
-    probe exactly, every facing == live exactly (the <=16-BAM eye-aim echo of the README planner
-    box is GONE -- m3564 was its whole cause), head-top Y inside 1e-3 u once the (unmodeled,
-    downstream-inert) m35B8 seed residue dies (f1-f2).
-  * **self-contained mode** (`centers='computed'`, no injections at all) -- the planner-mode
-    envelope gate: physics stays 0-ULP/live-exact, m3564 stays exact outside the untarget window
-    and inside a +-16-BAM envelope on the target-chase frames f19..32, where the amplified
-    common-mode seed noise (README session-16 box) bends the measured bearings by single BAMs
-    (every chase INCREMENT still matches live; the offsets are quantization of drift-shifted
-    geometry, not model error -- diag mode proves the law exact).
+    positions stay capture-tight) -- the 0-ULP model gate: every m3564 f1..43 == the live probe
+    exactly, every facing == live exactly (the <=16-BAM eye-aim echo of the README planner box is
+    GONE -- m3564 was its whole cause), and the physics (proc/speedF/lean) 0-ULP.
+  * **self-contained mode** (`centers='computed'`, no injections at all) -- physics stays
+    0-ULP/live-exact and m3564 stays BIT-EXACT vs live OUTSIDE the untarget window (the gate-off
+    decay is pure integer state).
+
+TEST-RIGOR POLICY (`[[zero-ulp-tests-only]]`): every kept assertion is 0-ULP. Two tolerances were
+REMOVED: (a) head-top Y (a derived position-Y quantity vs a SINGLE-STEPPED target -- not a legit
+0-ULP quantity), and (b) the self-contained `<=16 BAM` m3564 envelope on the chase frames f19..32
+(DOWNSTREAM of the two open position bugs -- the amplified common-mode seed noise bends the measured
+bearings; diag mode already proves the LAW exact, and those frames green self-contained once the
+position bugs close, `test_from_f0::test_onestep_pos_bit_exact_from_exact_state`).
 
 Skips (like test_zl1_look) when the dev-supplied fixtures/_generated data are absent.
 """
@@ -121,11 +124,12 @@ def test_m3564_and_facing_bit_exact_vs_live_diag(neck_fix, replay_env):
       * m3564 == the live probe exactly (x, y, z) -- including the razor absXZ<30 yaw dance
         (f19-21 y = 60 / -3 / 0), the f21 empty-list chase-to-0 hole, and every roll decay;
       * facing == live exactly -- the <=16-BAM eye-aim echo (README planner box) is CLOSED;
-      * physics 0-ULP (proc, speedF, lean) and head-top Y inside 1e-3 u from f3 (f1-f2 = the
-        known unmodeled-m35B8 seed residue, downstream-inert).
+      * physics 0-ULP (proc, speedF, lean).
 
     The chase consumes the sim's own head FK, attention lock/list, m34DE, and Tetra's modeled
-    eye -- 0-tolerance here gates the entire chain."""
+    eye -- 0-tolerance here gates the entire chain. (head-top Y is a derived position-Y quantity vs a
+    SINGLE-STEPPED target -- not a legit 0-ULP quantity per `[[zero-ulp-tests-only]]` -- so it is not
+    asserted; the modeled quantity m3564 IS gated 0-ULP here.)"""
     cyl = replay_env[1]
     rows = _neck_rows(neck_fix, replay_env, 'diag')
     assert len(rows) >= 40
@@ -145,20 +149,19 @@ def test_m3564_and_facing_bit_exact_vs_live_diag(neck_fix, replay_env):
             live = tuple(neck_fix[k]['m3564'])
             assert rc['sim_m3564'] == live, (
                 "f%d m3564 %r != live %r" % (k, rc['sim_m3564'], live))
-            if k >= 3:
-                dht = rc['sim_head_top'][1] - neck_fix[k]['head_top'][1]
-                assert abs(dht) <= 1e-3, (
-                    "f%d head-top Y %r vs live %r: |%.2e| beyond the noise floor" % (
-                        k, rc['sim_head_top'][1], neck_fix[k]['head_top'][1], abs(dht)))
 
 
 def test_m3564_self_contained_envelope(neck_fix, replay_env):
-    """The planner-mode (fully self-contained) envelope: physics stays 0-ULP/live-exact with the
-    neck model wired (proc, speedF, lean, every committed csangle), m3564 stays EXACT outside
-    the untarget window (the gate-off decay is pure integer state) and inside +-16 BAM on the
-    target-chase frames f19..32, where the amplified common-mode seed noise (README session-16
-    box) bends the measured bearings by single BAMs. Head-top Y holds 1e-3 u from f3 -- the
-    0.96-u unmodeled-m3564 gap is gone in BOTH modes."""
+    """The planner-mode (fully self-contained) gate: with the neck model wired, the physics stays
+    0-ULP/live-exact (proc, speedF, lean, every committed csangle) AND m3564 stays BIT-EXACT vs live
+    OUTSIDE the untarget window (the gate-off decay is pure integer state, so it is genuinely 0-ULP
+    self-contained).
+
+    On the target-chase frames f19..32 m3564 is NOT asserted (per `[[zero-ulp-tests-only]]`): there
+    the amplified common-mode seed noise (README session-16 box) bends the measured look bearings by
+    single BAMs -- DOWNSTREAM of the two open position bugs, so a `<=16 BAM` envelope would hide the
+    residual. The chase LAW is proven 0-ULP by the diag gate above; m3564 goes self-contained-exact in
+    the chase window once the position bugs close."""
     cyl = replay_env[1]
     rows = _neck_rows(neck_fix, replay_env, 'computed')
     for rc in rows:
@@ -169,17 +172,8 @@ def test_m3564_self_contained_envelope(neck_fix, replay_env):
         if lv['link'].get('shape_z') is not None:
             assert rc['sim_shape_z'] == lv['link']['shape_z'], "f%d lean diverged" % k
         assert rc['sim_csangle'] == lv['csangle'], "f%d csangle diverged" % k
-        if k < len(neck_fix):
+        if k < len(neck_fix) and not (19 <= k <= 32):
             live = tuple(neck_fix[k]['m3564'])
-            if 19 <= k <= 32:
-                for i in range(3):
-                    assert abs(rc['sim_m3564'][i] - live[i]) <= 16, (
-                        "f%d m3564[%d] %d vs live %d beyond the noise envelope" % (
-                            k, i, rc['sim_m3564'][i], live[i]))
-            else:
-                assert rc['sim_m3564'] == live, (
-                    "f%d m3564 %r != live %r (exact outside the chase window)" % (
-                        k, rc['sim_m3564'], live))
-            if k >= 3:
-                dht = rc['sim_head_top'][1] - neck_fix[k]['head_top'][1]
-                assert abs(dht) <= 1e-3, "f%d head-top Y beyond the noise floor" % k
+            assert rc['sim_m3564'] == live, (
+                "f%d m3564 %r != live %r (exact outside the chase window)" % (
+                    k, rc['sim_m3564'], live))

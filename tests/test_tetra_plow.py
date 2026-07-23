@@ -3,23 +3,34 @@
 `harness/tetrapush/tetra_plow` encodes the measured push law -- Tetra's per-frame displacement is the
 FULL Co-cylinder overlap depth computed from Link's animated mCyl centre (Tetra takes 100 %, Link's
 share 0). This gate feeds the law the RAM-captured Link Co centres (fixtures/courtyard_push_cyl.json,
-single-stepped from slot 2) and asserts:
+single-stepped from slot 2).
 
-  * frac = tetra_move / depth == 1.0 (Tetra absorbs the full overlap), every push frame; and
-  * reconstructing her whole trajectory from Link's centre path + her seed tracks the live capture to
-    <0.01 u over the full push.
+TEST-RIGOR POLICY (`[[zero-ulp-tests-only]]`): the plow LAW's fidelity is asserted at the 0-ULP bar
+(`_bits(sim) == _bits(live)`), never a `err < eps` tolerance. Because the only fixture here is the
+SINGLE-STEPPED cyl capture (which by policy may not set the position bar), the per-frame law gate is
+`xfail(strict)` -- 0-ULP is the target, blocked on the two open push bugs + a deterministic per-op
+`m_cc_move` capture (README `## Plan / status`). Its clean twin against the buggy replay wrapper is
+`test_from_f0.py::test_tetra_push_bit_exact_from_exact_state`.
+
+The one non-fidelity check that survives is the REGIME discriminator `test_tetra_absorbs_full_overlap`
+(frac == 1.0, not 0.5): it distinguishes the full-depth ejection from a 50/50 split -- a qualitative
+finding, so a loose bound is correct and it is explicitly NOT a 0-ULP gate.
 
 This isolates the Tetra side of the coupled dynamics (the plow) from Link's own physics, and is the
-predictor the planner uses once Link's mCyl-centre path is modelled offline. The Link Co centre is the
-RAM ground truth here; a `move_co_center` model would replace it. See harness/tetrapush/README.md.
+predictor the planner uses once Link's mCyl-centre path is modelled offline. See harness/tetrapush/README.md.
 """
 import json
 import math
 import os
+import struct
 
 import pytest
 
-from harness.tetrapush.tetra_plow import plow_depth, plow_step, reconstruct
+from harness.tetrapush.tetra_plow import plow_depth, plow_step
+
+
+def _bits(x):
+    return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
 _FIX = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     'fixtures', 'courtyard_push_cyl.json')
@@ -61,9 +72,11 @@ def _push_frames(frames):
 
 
 def test_tetra_absorbs_full_overlap(cyl):
-    """frac = tetra_move / depth == 1.0 on every push frame: Tetra takes the FULL Co overlap depth
-    (Link's push share is 0), the opposite of the 50/50 following-Tetra split. This is the core
-    live finding; a 50/50 split would read ~0.5 here."""
+    """REGIME DISCRIMINATOR (not a fidelity gate, `[[zero-ulp-tests-only]]` category (a)):
+    frac = tetra_move / depth == 1.0 on every push frame, i.e. Tetra takes the FULL Co overlap depth
+    (Link's push share is 0), the opposite of the 50/50 following-Tetra split. This is a QUALITATIVE
+    finding -- a 50/50 split would read ~0.5 -- so the loose bound distinguishing 1.0 from 0.5 is
+    correct and intended. The plow LAW's 0-ULP fidelity is `test_plow_step_bit_exact_vs_live` below."""
     frames = cyl['frames']
     push = _push_frames(frames)
     assert len(push) >= 30, "expected the full ~40-frame push, got %d plow frames" % len(push)
@@ -77,30 +90,26 @@ def test_tetra_absorbs_full_overlap(cyl):
             i, frac, depth, move)
 
 
-def test_plow_step_matches_live_each_frame(cyl):
-    """One plow step from each frame's live Tetra pos + Link centre reproduces the NEXT frame's live
-    Tetra pos (isolates the law from any drift accumulation)."""
+@pytest.mark.xfail(strict=True, reason="OPEN 0-ULP gap (session 24), BUG #1: the standalone plow law. "
+                   "One plow_step from each frame's live Tetra pos + Link centre must reproduce the "
+                   "NEXT frame's live Tetra pos BIT-FOR-BIT (0 ULP). It diverges by a few ULP -- the "
+                   "push/recoil law bug (two separate fsqrt; the push-vector fp order). The clean f32 "
+                   "formulation lives here (vs the buggy f64-delta wrapper the replay uses -- see "
+                   "test_from_f0::test_tetra_push_bit_exact_from_exact_state). ALSO: the cyl fixture is "
+                   "SINGLE-STEPPED (may not set the position bar); true validation needs the "
+                   "deterministic per-op m_cc_move capture (README ## Plan / status).")
+def test_plow_step_bit_exact_vs_live(cyl):
+    """THE plow-LAW 0-ULP gate: one plow step from each frame's live Tetra pos + Link centre must
+    reproduce the NEXT frame's live Tetra pos bit-for-bit (isolates the law from drift accumulation).
+    Currently XFAILS (bug #1). Collects the whole divergent set into the message."""
     frames = cyl['frames']
+    diverged = []
     for i in _push_frames(frames):
         f, n = frames[i], frames[i + 1]
         tx, tz = plow_step(f['link']['cyl'], (f['tetra']['pos'][0], f['tetra']['pos'][2]))
-        err = math.hypot(tx - n['tetra']['pos'][0], tz - n['tetra']['pos'][2])
-        assert err < 0.01, "frame %d: plow_step off by %.4f u" % (i, err)
-
-
-def test_reconstruct_whole_push(cyl):
-    """Reconstruct Tetra's ENTIRE trajectory from ONLY Link's per-frame Co centres + her seed. The
-    herd is a deterministic function of Link's centre path -- exactly what the planner predicts."""
-    frames = cyl['frames']
-    n = len(frames) - 1
-    centers = [frames[i]['link']['cyl'] for i in range(n)]
-    t0 = (frames[0]['tetra']['pos'][0], frames[0]['tetra']['pos'][2])
-    recon = reconstruct(centers, t0)
-    maxerr = 0.0
-    for i in range(n):
-        # only compare while Tetra is still being plowed (stt 3, no self-motion)
-        if frames[i]['tetra']['stt'] != 3 or abs(frames[i]['tetra']['speedF']) > 1e-6:
-            break
-        live = frames[i + 1]['tetra']['pos']
-        maxerr = max(maxerr, math.hypot(recon[i][0] - live[0], recon[i][1] - live[2]))
-    assert maxerr < 0.02, "trajectory reconstruction drifted %.4f u from live" % maxerr
+        ex = abs(_bits(tx) - _bits(n['tetra']['pos'][0]))
+        ez = abs(_bits(tz) - _bits(n['tetra']['pos'][2]))
+        if ex or ez:
+            diverged.append((i, ex, ez))
+    assert not diverged, "plow_step != live (0 ULP required); frames [f,xULP,zULP]: " \
+        + ", ".join("[f%d x%d z%d]" % d for d in diverged)

@@ -16,6 +16,14 @@ jitter-free capture. The lock is driven target_present=True from the roll entry 
 window is the intended mid-roll re-pulse; the initial directional L is before the seed), so the
 AttentionLock RELEASE fade -- not an oracle -- is what keeps the actor lock alive to the roll exit.
 
+TEST-RIGOR POLICY (`[[zero-ulp-tests-only]]`): the flip magnitude is a 0-ULP `_bits == _bits` gate;
+the STRUCTURE (2-frame proc-9 tier, un-zeroed pure-momentum backslide) is asserted structurally /
+0-ULP. The body2 + backslide MAGNITUDES cannot be bit-exact from this BARE MID-ROLL seed (approximate
+csangle/travel), so no `err < eps` live-magnitude tolerance is asserted -- their 0-ULP fidelity is
+gated from the coupled from-f0 replay (the exact seed): `test_from_f0.py::{test_cyc1_rollentry_
+untarget_flip, test_cyc1_rollentry_speedF_bit_exact}`. The proc-9-vs-MOVE magnitude window is a
+non-fidelity discriminator, explicitly labelled.
+
 Purely additive: with no driven lock every land golden is byte-identical (tests/test_atn_actor.py).
 """
 import json
@@ -121,11 +129,12 @@ def test_untarget_2frame_tier(push, cycle):
     (`FADE_FRAMES`), and the attention's L-input delay is 1 (vs physics INPUT_DELAY=2) -- so proc 9
     runs 2 body frames driven by the REAL AttentionLock, with NO RAM-timeline injection.
 
-    body2 is NOT yet bit-exact from the mid-roll seed (~0.0024 residual: csangle=39432 and
-    travel/target are seeded approximately, so the ATN turn-chase cos term is slightly off); its
-    ULP-exact value awaits the from-f0 coupled replay. So we assert the STRUCTURE (exactly 2 proc-9
-    body frames), that body2 is a proc-9 ATN step (~0.27, distinguishable from the MOVE ~0.011 decel),
-    and that it matches the fixture's own body2 within the mid-roll-seed residual."""
+    STRUCTURE ONLY here (no fidelity tolerance, `[[zero-ulp-tests-only]]`): exactly 2 consecutive
+    proc-9 body frames, and body2 is a proc-9 ATN step -- distinguishable from a MOVE decel by its
+    MAGNITUDE (~0.27 vs ~0.011). That magnitude window is a proc-9-vs-MOVE DISCRIMINATOR, category (a)
+    non-fidelity, not a 0-ULP claim. The body2 MAGNITUDE's 0-ULP fidelity is asserted from the coupled
+    from-f0 replay (which has the exact seed the mid-roll bare seed here lacks):
+    `test_from_f0.py::test_cyc1_rollentry_untarget_flip` (body2 -25.452238082885742, bit-exact)."""
     frames = push['frames']
     entry = _roll_entries(frames)[cycle]
     traj = _replay_from_roll(frames, entry, nsteps=22)
@@ -138,18 +147,9 @@ def test_untarget_2frame_tier(push, cycle):
 
     flip = traj[body9[0]][2]
     body2 = traj[body9[1]][2]
-    # body2 decays the flip by the gentle mAtnMove term, NOT the MOVE decel -> proves proc 9 (not the
-    # MOVE foot path) ran it: a MOVE frame would drop only ~0.011, an ATN body2 drops ~0.27.
+    # PROC-9-VS-MOVE DISCRIMINATOR (not fidelity): an ATN body2 decays the flip ~0.27 (the gentle
+    # mAtnMove term), a MOVE frame only ~0.011 -> the window proves proc 9 (not MOVE) ran it.
     assert 0.20 < (body2 - flip) < 0.35, "body2 must be a proc-9 ATN step, got d=%.5f" % (body2 - flip)
-
-    # Fixture body2 = the frame right after its (argmin) flip -- located BY VALUE so the cycle-2
-    # single-step capture +1 shift ([[run-dtm-1frame-jitter]]) doesn't matter (the sim is the clean one).
-    win = list(range(entry, min(entry + 22, len(frames))))
-    fi = min(win, key=lambda i: frames[i]['live']['speedF'])
-    body2_live = frames[fi + 1]['live']['speedF']
-    assert abs(body2 - body2_live) < 0.003, (
-        "cycle %d body2 %.6f vs fixture %.6f (residual %.5f exceeds the mid-roll-seed budget)"
-        % (cycle, body2, body2_live, body2 - body2_live))
 
 
 def test_chase_acquires_mid_roll_not_at_state2(push):
@@ -189,9 +189,12 @@ def test_untarget_backslide_unzeroed(push, cycle):
     rest path and returned speedF=0 (probe: cyc1 f22-25 read 0.0 vs live ~-25.44). The step_atn /
     enter_wait_idle / enter_single paths already set it; step_single_anim now does too.
 
-    With the fix the backslide is pure momentum -- m3598==0 so speedF == mNormalSpeed EXACTLY (a
-    structural, seed-independent check) -- and it tracks the live decay within the same mid-roll-seed
-    budget body2 carries (ULP-exactness of the magnitude awaits the from-f0 replay)."""
+    With the fix the backslide is pure momentum -- m3598==0 so speedF == mNormalSpeed EXACTLY, a
+    structural, seed-independent 0-ULP invariant. That is what this asserts (plus not-zeroed). The
+    backslide MAGNITUDE's 0-ULP fidelity vs live is asserted from the coupled from-f0 replay (exact
+    seed): `test_from_f0.py::test_cyc1_rollentry_speedF_bit_exact` (every speedF 0-ULP, incl. the
+    backslide). This bare mid-roll seed can't set that bar (`[[zero-ulp-tests-only]]`), so no
+    live-magnitude tolerance is asserted here."""
     frames = push['frames']
     entry = _roll_entries(frames)[cycle]
     traj = _replay_from_roll(frames, entry, nsteps=26)
@@ -211,26 +214,10 @@ def test_untarget_backslide_unzeroed(push, cycle):
         back.append((i, sp, ns))
     assert len(back) >= 4, "expected a run of MOVE backslide frames after the tier, got %d" % len(back)
 
-    # (1) un-zeroed + pure momentum: NOT the cold-path 0, and speedF == mNormalSpeed bit-for-bit.
+    # un-zeroed + pure momentum: NOT the cold-path 0, and speedF == mNormalSpeed bit-for-bit (0-ULP).
     for i, sp, ns in back:
         assert abs(sp) > 25.0, (
             "cycle %d backslide f%d collapsed to %r (the cold `not started` path zero)" % (cycle, i, sp))
         assert _bits(sp) == _bits(ns), (
             "cycle %d backslide f%d speedF %r != mNormalSpeed %r (m3598 should be 0 -> pure momentum)"
             % (cycle, i, sp, ns))
-
-    # (2) tracks live within the mid-roll-seed budget. Align by VALUE (cyc2 has the +1 capture shift):
-    # live flip = argmin speedF, body2 = flip+1, backslide starts flip+2; compare only clean MOVE frames.
-    win = range(entry, min(entry + 26, len(frames)))
-    fi = min(win, key=lambda j: frames[j]['live']['speedF'])
-    compared = 0
-    for n, (i, sp, _ns) in enumerate(back):
-        j = fi + 2 + n
-        if j >= len(frames) or frames[j]['live']['proc'] != MOVE:
-            break
-        live_sp = frames[j]['live']['speedF']
-        assert abs(sp - live_sp) < 0.003, (
-            "cycle %d backslide sim f%d %.6f vs live f%d %.6f (residual %.5f > mid-roll-seed budget)"
-            % (cycle, i, sp, j, live_sp, sp - live_sp))
-        compared += 1
-    assert compared >= 3, "expected to compare >=3 clean backslide frames against live, got %d" % compared

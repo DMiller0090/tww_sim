@@ -787,6 +787,31 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               foot-position delta during the entry morf that the console has (the `calc_transform`/
               Hermite jnt0 lead in `quat.py`). Isolate it cleanly AFTER bug #1 (once the recoil is
               bit-exact, Link's residual IS the foot term).
+      - [x] **ALL tetra-push tests REWRITTEN to 0-ULP (session 25, `[[zero-ulp-tests-only]]`).** Every
+            sim-vs-console assertion across `tests/test_{from_f0,tetra_plow,link_plow,tetra_untarget,
+            atn_actor,land_cam,zl1_look,neck_look}.py` is now `_bits==_bits` (0 ULP), `xfail(strict)`
+            where blocked, or deleted -- there are NO `err < eps` position/plow fidelity tolerances
+            left (the class that hid the 5-56 ULP residual for ~15 sessions). Concretely: (a) the two
+            DETERMINISTIC-capture tolerances flipped to true 0-ULP `==` (measured: `setCollision` exec
+            midpoint and the settled-centre half-depth law are BIT-EXACT vs the setcol breakpoint over
+            f1..12); (b) the standalone plow law got a 0-ULP `xfail(strict)` gate
+            (`test_plow_step_bit_exact_vs_live` -- the clean f32 twin of the buggy `full_depth_push`
+            wrapper); (c) the dynamics gates (chained/f0-seed replays, closed-loop, the zl1/neck
+            wiring) were STRIPPED of their tacked-on position/facing tolerances and now assert only
+            the genuinely-0-ULP dynamics (proc/speedF/facing/lean/csangle/m3564/tattn); (d) six
+            redundant single-step position trackers were DELETED (Link-pos, Tetra-pos cumulative,
+            computed-centre, reconstruct, and the two link-recoil tests whose comparison target was a
+            lossy `math.sin` reconstruction -- superseded by the session-24 divergence gates); (e) the
+            surviving non-fidelity checks are each explicitly RELABELLED -- the frac==1.0 full-vs-half
+            REGIME discriminators, the proc-9-vs-MOVE step-magnitude discriminator, the fixture-identity
+            guard, and the bounded-error/amplification REGRESSION GUARDRAIL. The position 0-ULP bar is
+            now the three session-24 `xfail(strict)` divergence gates + the new plow gate; when the two
+            bugs close (via the live per-op capture below) they auto-flip to hard passes. 472 offline
+            passed, 9 xfailed (was 479 passed / fewer xfails: -6 deleted, +1 pass->xfail, +2 new 0-ULP
+            `==`); land goldens byte-identical, KB gates green. The rollstab `cc_stepper`/`cc_rollstab`
+            were reviewed and hold NO sim-vs-console fidelity tolerances (already 0-ULP where they
+            compare to console; their remaining bounds are model-algebra/meaningfulness), so they were
+            left as-is.
       - [ ] **THE LIVE PER-OP CAPTURE (the fix ground truth -- NEXT):** the single-step cyl fixture
             resolves only to ~1e-5 u (== the residual size), so validating either fix to true 0-ULP
             needs a breakpoint capture, the way `setcol` pinned the exec centre: at `posMove`
