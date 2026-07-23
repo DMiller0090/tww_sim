@@ -34,24 +34,49 @@ FreeRun, never by the commanded aim: a plan is defined by its raw bytes and Free
 outcome. (This is why the self-consistency gate feeds the RECORDED C-stick -- only then does a
 re-aimed cycle reproduce the recorded window 0-ULP; see `tests/test_search.py`.)
 
-THE OPEN BLOCKER -- CYCLE CHAINING (session 30). The re-aimed cycle reproduces cycle 1 from state 2
-bit-exact and herds Tetra 324 u (the recorded resonance), but a SECOND cycle does NOT chain under a
-pinned C-stick: cycle 1 leaves Link facing ~toward the now-plowed-ahead Tetra, so the next re-target's
-held L RE-ACQUIRES the attention lock (Tetra is in the front cone) and Link stays in the proc-9 locked
-slide -- no clean roll, and he slides out of the plow regime. The recorded run avoided this via its
-C-stick CAMERA motion (which shapes the re-target facing / the acquisition cone), and a pinned-C-stick
-plan discards that. A lockless variant (no L) DOES roll every cycle but plows only ~77 u (without the
-lock the roll facing is not pinned to the aim, so it grazes Tetra) and still turns instead of rolling
-on cycle 2. So a strong, chainable herd needs the attention lock AND per-cycle camera (C-stick)
-management -- the next increment. `beam_search` therefore currently reaches ONE cycle (it finds the
-resonance, then prunes cycle 2 as out-of-regime / rolless); `chain` reproduces the diagnosis.
+CYCLE CHAINING -- RE-DIAGNOSED (session 31). The session-30 story ("chaining needs C-stick camera
+management") was WRONG about the lever. The re-aimed macro's failure to chain is NOT the C-stick: the
+recorded window's csangle barely moves (~28 BAM over f20..28), and feeding the recorded C-stick only
+"fixes" chaining as a byte-quantization artifact (the ~655 BAM csangle offset perturbs a razor-margin
+cone gate). The REAL chaining gate is the inter-roll MOVE-backslide facing turn: the next re-target's
+held L re-acquires the attention lock (-> proc-9 slide, no roll, drift out of regime) UNLESS Tetra has
+exited the +-0x4000 (90 deg) front cone by the L-pulse frame. The recorded run clears it by ~2600 BAM;
+the pinned macro misses by ~145 BAM (chaotic sensitivity -- the session-22 finding).
 
-The deliverable (README `## Plan / status`): the input sequence from state 2 that lands Tetra on a
-genuine `tetra_placements.tsv` coord AND arranges the matching final roll entry. This module builds
-the exact search FOUNDATION (rollout, clone, reachability, the beam scaffold); cycle chaining, then
-the exact placement (walk-push nudge endgame) + the entry walk-in, follow.
+THE FRAME-MINIMAL PATH (Dereck, session 31 -- `[[tetrapush-frame-minimal]]`). This is a speedrun:
+minimize total frames, not just "reach a coord". Two facts reframe chaining:
+  * The roll is an A-roll (`a_pressed`, PAD 0x100), and `_roll_init` snaps `facing = target` (the stick
+    world-target). So a TURNAROUND-ROLL -- face away from Tetra, then A + stick-toward-Tetra -- rolls
+    THROUGH her in one frame WITHOUT the attention lock or the cone gate (it also dodges the console
+    talk cone, `[[turnaround-roll-tech]]`). It fires only from a GROUNDED proc (MOVE/ATN_MOVE), NOT the
+    proc-9 untarget slide (`state.py` grounded set), so it is available ~2 frames after the untarget
+    tier drops back to MOVE. Dereck's proposed optimal chain: roll through Tetra -> mid-roll L for the
+    -25.7 EBS -> the EBS backslide REPOSITIONS Link back NE (behind Tetra along the herd bearing) ->
+    A-turnaround-roll SW through her again. The EBS backslide is the reposition, not dead time.
+  * Tetra is stt-3 (she does NOT self-locomote; she waits where the last plow left her, until dist >
+    FOLLOW_ENGAGE_DIST 230 flips her to stt-4). So chaining has no time pressure from HER -- the only
+    cost is FRAMES, so minimize the inter-roll gap.
+DEEP vs GRAZE is the crux (see `turnaround` CLI). An immediate A-roll GRAZES (min_ovl ~66, snowplows
+Tetra ahead, cyc2 adds only ~64 u) and NO roll aim fixes it (swept at reposition 0, min_ovl bottoms at
+~66 regardless): at dist ~59 Link and Tetra CO-MOVE SW at ~equal speed through the roll, so the gap
+never closes. Depth is a POSITIONING problem, not an aim problem. The recorded human cyc2 plows DEEP
+(min_ovl ~40, +185 u) because its ~8-frame CURVED backslide (facing turns 37548->16140 WHILE backing
+up) lands Link NE of Tetra at a cut-THROUGH approach before the roll.
 
-Pure stdlib, no Dolphin. CLI: ``python -m harness.tetrapush.search {selfcheck|reach|sweep|chain}``.
+THE FRAME-MINIMAL LEVER (Dereck, session 31): the human's ~8-frame face-away turn is the suboptimal
+part. The roll snaps `facing = target = decode(stick) + 0x8000 + csangle`, and csangle is a per-frame
+input, so PRECISE CAMERA control reorients Link ~180 deg in ONE frame -- collapsing the ~8-frame
+reposition-turn to ~1. So the search knob is the MINIMAL (camera-assisted) reposition that places Link
+NE of Tetra for the deepest through-roll, chained -- with total FRAMES the objective. The recorded
+2-cycle human playback (f0..44) is the feasibility ORACLE for this, not the target.
+
+The deliverable (README `## Plan / status`): the FRAME-MINIMAL input sequence from state 2 that lands
+Tetra on a genuine `tetra_placements.tsv` coord AND arranges the matching final roll entry. This module
+builds the exact search FOUNDATION (rollout, clone, reachability, the beam scaffold); the frame-minimal
+turnaround-roll chain, then the exact placement (walk-push nudge endgame) + the entry walk-in, follow.
+
+Pure stdlib, no Dolphin. CLI:
+``python -m harness.tetrapush.search {selfcheck|reach|sweep|chain|herd|turnaround}``.
 """
 import math
 
@@ -502,6 +527,103 @@ def _cmd_herd(env):
           "discrete roll-plows. Objective = sustain/deepen overlap + forward drive.")
 
 
+def cyc1_to_untarget(env, *, aim=None, recs=None, macro=None):
+    """Run cycle 1 (recorded macro re-aimed to ``aim``, pinned C-stick) from state 2 and STOP on the
+    first MOVE (proc 6) frame after the proc-9 untarget tier -- i.e. the earliest GROUNDED frame from
+    which an A-turnaround-roll can fire (the proc-9 slide is not in `state.py`'s grounded set). Returns
+    ``(run, aim)``; ``run`` is left at that frame."""
+    recs = recs if recs is not None else P.window_records(env)
+    if macro is None:
+        macro, a1 = canonical_cycle(env, recs)
+    else:
+        _, a1 = canonical_cycle(env, recs)
+    aim = a1 if aim is None else (int(aim) & 0xFFFF)
+    run = seeds.make_freerun(env)
+    run.pre_seed_input(_frame_input(macro[0], aim, run.csangle))
+    seen9 = False
+    for j in range(1, CYCLE_PERIOD):
+        row = run.step(_frame_input(macro[j], aim, run.csangle))
+        if row['sim_proc'] == 9:
+            seen9 = True
+        elif seen9 and row['sim_proc'] == 6:
+            break
+    return run, aim
+
+
+def turnaround_reroll(run, *, reposition=0, aim_at_tetra=True, aim=None, max_frames=24):
+    """From a GROUNDED post-untarget ``run``, optionally coast ``reposition`` EBS-backslide frames
+    (main stick along the current facing, no L -- the -25.7 slide that repositions Link NE of Tetra),
+    then fire an A-turnaround-roll: A (PAD 0x100) held 2 frames (delay-1 safe) + full stick toward
+    Tetra (or fixed world ``aim``). `_roll_init` snaps facing to that target, so Link rolls THROUGH
+    Tetra without the attention lock. Advances a CLONE (leaves ``run`` untouched); returns a dict:
+    ``rolled``, ``min_ovl`` (tightest Link<->Tetra during the roll -- overlap DEPTH, < 80 == contact),
+    ``roll_frames``, ``tetra`` (x, z), ``run`` (the advanced clone)."""
+    from tww_sim.land.plan_land._primitives import stick_for_bearing
+    r = run.clone()
+    for _ in range(reposition):
+        sx, sy = stick_for_bearing(r.link.facing, r.csangle, msd=0.3)
+        r.step(dict(stickX=sx, stickY=sy, buttons=0, triggerL=0, substickX=128, substickY=0))
+    rolled = False
+    min_ovl = None
+    roll_frames = 0
+    for k in range(max_frames):
+        b = _dir_bam(r.tx - r.link.pos_x, r.tz - r.link.pos_z) if aim_at_tetra \
+            else (int(aim) & 0xFFFF)
+        sx, sy = stick_for_bearing(b, r.csangle, msd=1.0)
+        btn = 0x100 if k < 2 else 0                      # A on the first two delivered frames
+        row = r.step(dict(stickX=sx, stickY=sy, buttons=btn, triggerL=0,
+                          substickX=128, substickY=0))
+        if row['sim_proc'] == FRONT_ROLL:
+            rolled = True
+            roll_frames += 1
+            d = math.hypot(row['sim_link'][0] - row['sim_tetra'][0],
+                           row['sim_link'][1] - row['sim_tetra'][1])
+            min_ovl = d if min_ovl is None else min(min_ovl, d)
+        elif rolled:
+            break                                        # roll ended
+    return dict(rolled=rolled, min_ovl=min_ovl, roll_frames=roll_frames,
+                tetra=(r.tx, r.tz), run=r)
+
+
+def _cmd_turnaround(env):
+    """Reproduce the session-31 turnaround-roll finding (Dereck's frame-minimal chain guess). Run
+    cyc1 to the untarget, then fire an A-turnaround-roll toward Tetra after `reposition` EBS frames,
+    sweeping `reposition`. Shows: the A-roll DOES fire from the grounded post-untarget MOVE (no lock,
+    no cone gate), but an immediate re-roll GRAZES (min_ovl ~65-85) -- Link snowplows Tetra ahead --
+    whereas the recorded human cyc2 plows DEEP (min_ovl ~40) after its ~8-frame backslide slides Link
+    NE of Tetra. The frame-minimal knob = fewest reposition frames for the deepest through-roll."""
+    import warnings
+    warnings.simplefilter('ignore')
+    recs = P.window_records(env)
+    macro, aim1 = canonical_cycle(env, recs)
+    t0 = env['cyl'][0]['tetra']['pos']
+    run, _ = cyc1_to_untarget(env, aim=aim1, recs=recs, macro=macro)
+    d0 = math.hypot(run.link.pos_x - run.tx, run.link.pos_z - run.tz)
+    print("cyc1 -> untarget: proc=%d facing=%d speedF=%.2f Tetra(%.1f,%.1f) dist=%.1f herd=%.1f"
+          % (run.link.state, run.link.facing, run.link.speedF, run.tx, run.tz, d0,
+             math.hypot(run.tx - t0[0], run.tz - t0[2])))
+    print("\nA-turnaround-roll toward Tetra after N EBS-backslide reposition frames:")
+    print("  repos  rolled  roll_f  min_ovl  Tetra_end        herd    +cyc2")
+    herd0 = math.hypot(run.tx - t0[0], run.tz - t0[2])
+    for repos in range(0, 11):
+        res = turnaround_reroll(run, reposition=repos)
+        te = res['tetra']
+        herd = math.hypot(te[0] - t0[0], te[1] - t0[2])
+        print("  %3d    %s      %3d    %s  (%.1f,%.1f)  %6.1f  %+6.1f" % (
+            repos, "Y" if res['rolled'] else ".", res['roll_frames'],
+            ("%5.1f" % res['min_ovl']) if res['min_ovl'] is not None else "  -  ",
+            te[0], te[1], herd, herd - herd0))
+    # the recorded human cyc2 (f29..44) DEEP-overlap reference (the oracle Dereck pointed to)
+    rec = rollout_recorded(env, upto=45, recs=recs)
+    c2 = [row for row in rec['rows'] if 29 <= row['f'] <= 44 and row['proc'] == FRONT_ROLL]
+    if c2:
+        print("\n  human oracle cyc2 roll (f29..44): min_ovl %.1f u over %d roll frames "
+              "(DEEP -- the backslide first put Link NE of Tetra)"
+              % (min(r['dist'] for r in c2), len(c2)))
+    print("\nThe A-roll fires from the grounded post-untarget MOVE (no lock / no cone gate); depth "
+          "(herd-per-frame) is the search knob -- see the module docstring / `[[tetrapush-frame-minimal]]`.")
+
+
 def main(argv):
     env = seeds.load_env()
     cmd = argv[0] if argv else 'selfcheck'
@@ -516,9 +638,11 @@ def main(argv):
         _cmd_chain(env)
     elif cmd == 'herd':
         _cmd_herd(env)
+    elif cmd == 'turnaround':
+        _cmd_turnaround(env)
     else:
         print("usage: python -m harness.tetrapush.search {selfcheck|reach|sweep [cycles=N beam=N "
-              "cone=BAM step=BAM]|chain|herd}")
+              "cone=BAM step=BAM]|chain|herd|turnaround}")
 
 
 if __name__ == '__main__':

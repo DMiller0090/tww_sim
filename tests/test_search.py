@@ -162,6 +162,22 @@ def test_beam_search_reaches_first_cycle(env):
     assert herd > 300.0, "beam cycle-1 best herd only %.1f u" % herd
 
 
+def test_turnaround_reroll_fires_from_grounded(env, recs):
+    """CAPABILITY (session 31): the A-turnaround-roll re-rolls THROUGH Tetra from the grounded
+    post-untarget MOVE -- no attention lock, no cone gate. `cyc1_to_untarget` stops at the first MOVE
+    after the proc-9 untarget; `turnaround_reroll` (A held 2 frames + full stick toward Tetra, which
+    `_roll_init` snaps facing to) then enters FRONT_ROLL. This is the frame-minimal chaining primitive
+    (Dereck, `[[tetrapush-frame-minimal]]`); its overlap DEPTH (the herd-per-frame) is the open search
+    knob -- an immediate re-roll only grazes (min_ovl ~66), NOT gated as an invariant here."""
+    macro, aim1 = S.canonical_cycle(env, recs)
+    run, _ = S.cyc1_to_untarget(env, aim=aim1, recs=recs, macro=macro)
+    assert run.link.state in (6, 7), "cyc1_to_untarget did not land on a grounded MOVE proc"
+    res = S.turnaround_reroll(run, reposition=0)
+    assert res['rolled'] and res['roll_frames'] > 0, "the A-turnaround-roll did not fire a FRONT_ROLL"
+    assert res['min_ovl'] is not None and res['min_ovl'] < 120.0, \
+        "the re-roll never contacted Tetra (min_ovl %s)" % res['min_ovl']
+
+
 def test_lockless_macro_strips_L(env, recs):
     """STRUCTURAL: `lockless_macro` removes the L button (0x40) and analog triggerL from every frame
     (the lockless roll-herd probe for the chaining work) and leaves the rest untouched."""
