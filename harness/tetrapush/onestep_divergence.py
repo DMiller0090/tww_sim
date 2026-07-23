@@ -12,22 +12,26 @@ if _d not in sys.path:
 # <<< repo bootstrap
 """onestep_divergence -- the human-readable per-frame ONE-STEP live/offline divergence table.
 
-The 0-ULP hunt's diagnostic (session 24). Reset the sim to the EXACT captured state[k-1] each frame,
-feed the EXACT fixture Co centre for the outgoing push, step ONCE, and report the per-axis
-sim-vs-live position divergence in ULP and absolute u. Because the recoil is fed exact, the pos
-divergence IS the coupled step's own error (Link's foot term + the applied recoil law).
+The 0-ULP hunt's diagnostic (session 24; updated session 27 to the console push). Reset the sim to
+the EXACT captured state[k-1] each frame, feed the CONSOLE push (`cc_push_pair` on the model's own
+EXEC centre -- the decomp 50/50 half-depth split) for the incoming recoil, step ONCE, and report the
+per-axis sim-vs-live position divergence in ULP and absolute u. The pos divergence IS the coupled
+step's own error (Link's foot term + the applied push law).
 
 The live pos is true console ground truth: breakpoint-captured, and `setcol.pos == cyl.pos` to 0 ULP
-over f1..12 (session 14), so a nonzero ULP here is a real sim-vs-console diff, NOT single-step noise.
+over f1..12 (session 14) + `perop.pos == cyl.pos` 0 ULP f0..43 (session 26), so a nonzero ULP here is
+a real sim-vs-console diff, NOT single-step noise.
 
 This is the diagnostic behind `tests/test_from_f0.py::test_onestep_pos_bit_exact_from_exact_state`
-(the strict 0-ULP gate, currently xfail). Run: `python -m harness.tetrapush.onestep_divergence`.
+(the strict 0-ULP gate, a HARD PASS on f2..f43 as of session 27). With the console push it prints 0
+ULP everywhere except f1 (the seed-frame boundary: f0's exec centre is not offline-reconstructable).
+Run: `python -m harness.tetrapush.onestep_divergence`.
 """
 import json
 import math
 import struct
 
-from harness.tetrapush.from_f0 import FreeRun, full_depth_push
+from harness.tetrapush.from_f0 import (FreeRun, cc_push_pair, full_depth_push, _computed_center)
 from tww_sim.core.fp import f32
 
 
@@ -55,11 +59,17 @@ def rows(env):
     for k in range(1, min(44, len(cyl))):
         prev = cyl[k - 1]
         link.pos_x = f32(prev['link']['pos'][0]); link.pos_z = f32(prev['link']['pos'][2])
+        link.pos_y = f32(prev['link']['pos'][1])
         run.tx = f32(prev['tetra']['pos'][0]); run.tz = f32(prev['tetra']['pos'][2])
-        run.pend_link, run.pend_tetra = full_depth_push(prev['link']['cyl'], (run.tx, run.tz))
+        if k == 1:
+            # seed-frame boundary: f0's exec centre is not offline-reconstructable
+            run.pend_link, run.pend_tetra = full_depth_push(cyl[0]['link']['cyl'], (run.tx, run.tz))
+        else:
+            init_km1 = prev['proc'] != cyl[k - 2]['proc']
+            cx = _computed_center(link, init_frame=init_km1)
+            run.pend_link, run.pend_tetra = cc_push_pair(cx, (run.tx, run.tz))
         eye = eyes[k - 1] if (eyes is not None and k - 1 < len(eyes)) else None
-        row = run.step(input_at(k), csangle=cyl[k - 1]['csangle'], eye=eye,
-                       center=cyl[k]['link']['cyl'])
+        row = run.step(input_at(k), csangle=cyl[k - 1]['csangle'], eye=eye)
         lv = cyl[k]['link']
         ex = _ulp(row['sim_link'][0], lv['pos'][0])
         ez = _ulp(row['sim_link'][1], lv['pos'][2])

@@ -1,16 +1,18 @@
 """The Courtyard from-f0 (and roll-entry) COUPLED replay -- the full-depth CC coupling wired together.
 
 This is the last piece before the planner: seed a closed-loop `LandState` (Link) + a tracked Tetra
-point at state 2 (or a roll entry), drive Link with the REAL DTM controller bytes, and apply BOTH
-gated plow laws each frame:
+point at state 2 (or a roll entry), drive Link with the REAL DTM controller bytes, and apply the
+CONSOLE CC push each frame (`cc_push_pair` = `cc_push.co_move_pair` = `dCcS::SetPosCorrect`):
 
-  * `link_plow.recoil`  -- Link recoils the FULL Co-overlap depth AWAY from Tetra (his own slowdown),
-  * `tetra_plow.plow_step` -- Tetra is shoved the FULL depth AWAY from Link (the herd),
+  * Link recoils obj1's half of the overlap AWAY from Tetra (his own slowdown),
+  * Tetra is shoved obj2's half AWAY from Link (the herd) -- the EXACT opposite of Link's recoil,
 
-each computed from Link's ANIMATED mCyl Co centre. Both eject the full `cross_len` (the mirror pair,
-2*depth total separation per frame -- the live 41-85 u chase-and-plow). Tetra is stt-3 the WHOLE
+both the decomp 50/50 rank split (Link weight 120 / Tetra-v5 0x8C, both rank 5) computed from Link's
+ANIMATED mCyl Co EXEC centre. This is 0-ULP vs the deterministic per-op ΔTetra (f2..f43, session 27),
+superseding the session-8/9 DERIVED full-depth-from-SETTLED laws (`tetra_plow.plow_step` /
+`link_plow.recoil`, ~1e-5 u off -- the retired laws, see `tetra_plow`). Tetra is stt-3 the WHOLE
 Courtyard window (pure plow, speedF 0 -- see the cyl-fixture timeline), so she is a bare XZ point
-moved by `tetra_plow`; there is no follow leg to model here.
+moved by the push; there is no follow leg to model here.
 
 This is the COURTYARD-SPECIFIC full-depth coupling. It does NOT touch the general FOLLOWING-Tetra
 sandbox (`harness/rollstab/cc_stepper` + `core/cc_push.co_move_pair`, a gated 50/50) -- that stays the
@@ -57,8 +59,10 @@ import struct
 import warnings
 
 from tww_sim.core.npc_zl1 import FOLLOW_ENGAGE_DIST
+from tww_sim.core.cc_push import co_move_pair, WEIGHT_LINK, WEIGHT_TETRA_V5
 from tww_sim.land.land import LandState, FRONT_ROLL, MOVE
 from harness.tetrapush.link_plow import recoil
+from harness.tetrapush.tetra_plow import LINK_CO_R, TETRA_CO_R, _CO_H
 
 
 def _bits(x):
@@ -71,20 +75,46 @@ def _yaw_from_csangle(csangle):
     return (int(csangle) - 0x8000) & 0xFFFF
 
 
-def full_depth_push(link_center, tetra_xz):
-    """The Courtyard full-depth CC push for one frame: returns ``((link_dx, link_dz), (tetra_dx,
-    tetra_dz))`` -- Link's recoil (`link_plow.recoil`, the full Co-overlap depth AWAY from Tetra)
-    and Tetra's push (the full depth AWAY from Link), computed from Link's Co centre ``link_center``
-    (x, z or x, y, z) and Tetra's feet ``tetra_xz``.
+def cc_push_pair(exec_center, tetra_xz):
+    """THE console CC push for one Courtyard frame (bug-#1 fix, session 27), from Link's
+    EXECUTE-pass Co centre ``exec_center`` (x, z or x, y, z) and Tetra's feet ``tetra_xz``.
 
-    The two are EXACT bit-for-bit opposites: a single same-rank Co pair ejects equal-and-opposite
-    (Newton's third law in the CC resolution -- `cc_push.co_move_pair`'s vec1/vec2 sum to 0,
-    live-confirmed). Tetra's push is therefore ``-recoil`` (an exact f32 sign flip of the same
-    delta), NOT the old ``tetra_plow.plow_step`` new-minus-old form (which recomputed the new pos in
-    f64 and subtracted the original, differing from Link's direct f32 delta by ~1 ULP where Tetra's
-    coord is large -- the session-24 bug-#1 self-consistency violation). This is still the
-    full-depth-from-SETTLED-centre framing (numerically the exec-centre half-depth to ~1e-5 u); the
-    remaining exec-vs-settled ~few-ULP gap vs the console needs the per-op `m_cc_move` capture."""
+    This is the decomp-faithful push -- `cc_push.co_move_pair` == `dCcS::SetPosCorrect`: ONE fused
+    dist, the plain 50/50 rank split (Link weight 120 / Tetra-v5 0x8C, both rank 5), obj1/obj2 moved
+    EXACT-opposite by ``0.5 * cross_len`` along the centre-to-centre line. Returns ``((link_dx,
+    link_dz), (tetra_dx, tetra_dz))`` -- Link's recoil (obj1, AWAY from Tetra) and Tetra's push
+    (obj2, AWAY from Link), both the HALF-depth split of the overlap.
+
+    It supersedes `full_depth_push` (full-depth from the SETTLED centre) as the push law: the two
+    agree only to ~1e-5 u, and ONLY the exec-centre half-depth split is 0-ULP vs the console --
+    `co_move_pair(cyl_exec)` reproduces the deterministic per-op ΔTetra (`courtyard_push_perop.json`)
+    BIT-FOR-BIT on f2..f43 (verified session 27), where `full_depth_push(settled)` (fused or not)
+    is 1-9 ULP off. The settled-centre `full_depth_push` remains ONLY the SEED-frame (f0->f1)
+    fallback, since f0's exec centre is not offline-reconstructable (the seed doesn't carry f-1's
+    lean/morf residue -- see `_seed_pose_f0` and README `## Plan / status`)."""
+    ex, ez = float(exec_center[0]), float(exec_center[-1])
+    tx, tz = float(tetra_xz[0]), float(tetra_xz[-1])
+    (l1, _l2, l3), (v1, _v2, v3) = co_move_pair(
+        (ex, 0.0, ez), LINK_CO_R, _CO_H, (tx, 0.0, tz), TETRA_CO_R, _CO_H,
+        WEIGHT_LINK, WEIGHT_TETRA_V5)
+    return (float(l1), float(l3)), (float(v1), float(v3))
+
+
+def full_depth_push(link_center, tetra_xz):
+    """The SEED-frame (f0->f1) fallback push from the SETTLED centre: returns ``((link_dx, link_dz),
+    (tetra_dx, tetra_dz))`` -- Link's recoil (`link_plow.recoil`, the full Co-overlap depth AWAY from
+    Tetra) and Tetra's push (the full depth AWAY from Link), computed from Link's SETTLED Co centre
+    ``link_center`` (x, z or x, y, z) and Tetra's feet ``tetra_xz``.
+
+    The two are EXACT bit-for-bit opposites (Newton's third law: a single same-rank Co pair ejects
+    equal-and-opposite -- `cc_push.co_move_pair`'s vec1/vec2 sum to 0). Tetra's push is ``-recoil``
+    (an exact f32 sign flip of the same delta), NOT the old ``tetra_plow.plow_step`` new-minus-old
+    form (session-24 bug-#1 self-consistency violation).
+
+    This is the full-depth-from-SETTLED-centre framing -- numerically the exec-centre half-depth to
+    only ~1e-5 u, so it is NOT 0-ULP vs the console (`cc_push_pair` on the exec centre is). It
+    survives ONLY as the seed-frame (f0->f1) push: f0's exec centre needs f-1's lean/morf, which the
+    seed frame doesn't carry, so the settled centre is the best offline datum for that one frame."""
     rlx, rlz = recoil(link_center, tetra_xz)
     return (float(rlx), float(rlz)), (float(-rlx), float(-rlz))
 
@@ -200,8 +230,8 @@ def _cc_settled_center(exec_center, tetra_xz):
     unit(exec(k) - tetra(k))`` exactly, which also equals ``recoil(fix(k), tetra(k))`` -- the "full
     depth from the settled centre" framing the gated laws use. (This closes the session-9 "2x
     doubling" sub-puzzle: both actors take the plain 0.5*cross_len split of the EXEC-centre overlap;
-    measured against the SETTLED centre it reads as the full depth.) fp-faithful mirror of
-    `tetra_plow.plow_step` with the half factor, directed away from Tetra."""
+    measured against the SETTLED centre it reads as the full depth.) It is a diagnostic/reporting
+    value (`sim_cyl`) -- the push itself is `cc_push_pair` on the exec centre, not this."""
     from harness.tetrapush.tetra_plow import plow_depth
     from tww_sim.core.collision import is_zero, fsqrt
     from tww_sim.core.fp import f32, fsubs, fadds, fmuls, fdivs
@@ -391,19 +421,20 @@ class FreeRun:
             sim_shape_z=_s16(link.m351C) >> 1,
             sim_link=(link.pos_x, link.pos_z), sim_tetra=(self.tx, self.tz),
             speedF=link.speedF)
-        # end-of-frame check: the push consumed producing the NEXT state uses this frame's SETTLED
-        # centre + Tetra pos (the decomp draw-phase Ccsp()->Move() order).
+        # The push consumed producing the NEXT state (decomp draw-phase Ccsp()->Move() order): the
+        # CONSOLE push `cc_push_pair` on this frame's EXEC centre (bug-#1 fix; see its docstring).
         if self.computed_pose:
             cx = _computed_center(link, init_frame=init_frame)
-            ck = _cc_settled_center(cx, (self.tx, self.tz))
-            row['sim_cyl'] = ck
-            row['sim_cyl_exec'] = cx           # the pose-driven exec centre (pre-CC-settle),
-                                               # a diagnostic for the centre/divergence work
-        else:
-            ck = None
+            row['sim_cyl'] = _cc_settled_center(cx, (self.tx, self.tz))
+            row['sim_cyl_exec'] = cx           # the pose-driven exec centre (drives the push)
         if center is not None:
-            ck = center
-        self.pend_link, self.pend_tetra = full_depth_push(ck, (self.tx, self.tz))
+            # injected SETTLED centre (the live-capture 'injected' mode): approximate full-depth push
+            self.pend_link, self.pend_tetra = full_depth_push(center, (self.tx, self.tz))
+        elif self.computed_pose:
+            # self-contained: the console push from the model's own EXEC centre (0-ULP)
+            self.pend_link, self.pend_tetra = cc_push_pair(cx, (self.tx, self.tz))
+        else:
+            raise ValueError("step() needs either an injected center= or computed_pose")
 
         # setNeckAngle m3564: measure the CACHED previous head matrix, chase toward the look
         # target, twist THIS frame's head pose (knowledge/mechanics/link-head-look.md).

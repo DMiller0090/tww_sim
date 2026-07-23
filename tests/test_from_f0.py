@@ -11,12 +11,22 @@ precision" gates for ~15 sessions until the multi-cycle plow amplifier (~1.35x/c
 up to a 93-u closed-loop drift. So:
   * The DYNAMICS (proc, speedF, facing, lean, csangle, the wired-camera attn.y, setcol centre) are
     genuinely bit-exact and asserted `_bits == _bits` here.
-  * The POSITION bar is the three `xfail(strict)` divergence gates at the bottom -- the two open bugs
-    (#1 the push/recoil law, #2 Link's roll-entry foot term). They are 0-ULP against the DETERMINISTIC
-    setcol breakpoint capture (`setcol.pos == cyl.pos` to 0 ULP over f1..12), NOT the single-stepped
-    cyl fixture (which by policy may gate edge-robust dynamics but MUST NOT set the position bar).
-  * A handful of non-fidelity checks survive, each explicitly relabelled: the bounded-error /
-    amplification regression guardrail, and the FreeRun-vs-replay API contract.
+  * The POSITION bar is the two one-step-from-EXACT-state gates
+    (`test_onestep_pos_bit_exact_from_exact_state` for Link, `test_tetra_push_bit_exact_from_exact_state`
+    for Tetra). Both are HARD PASSES on f2..f43 as of session 27 (bug #1 closed): stepping once from
+    the exact captured state with the CONSOLE push (`cc_push_pair` on the model's EXEC centre)
+    reproduces the DETERMINISTIC per-op capture (`courtyard_push_perop.json`, `posMove` breakpoint,
+    proven == the cyl fixture 0-ULP f0..43) BIT-FOR-BIT. f1 is the seed-frame boundary (f0's exec
+    centre is not offline-reconstructable) and is not asserted.
+  * SESSION-27 FINDING: the session-24 "two bugs" collapsed to ONE. Bug #1 was the push/recoil law
+    computed the DERIVED full-depth-from-SETTLED way (`full_depth_push`, ~1e-5 u off) instead of the
+    console's half-depth-from-EXEC `co_move_pair`. Fixing it made Link's position 0-ULP too -- so the
+    "roll-entry foot term" (bug #2) was that same recoil error measured through Link's pos (larger at
+    roll entry, where the geometry ramps), NOT a separate foot-term bug. Link's foot term was exact
+    all along (recoil is independently pinned to Tetra's deterministic ΔTetra, so no compensating
+    error is possible).
+  * A handful of non-fidelity checks survive, each explicitly relabelled: the FreeRun-vs-replay API
+    contract and the wired-camera / pad-decode gates.
 
 The fixtures are the locked live capture, all from slot 2 and IMMUTABLE: `courtyard_push_cyl.json`
 (per-frame Link Co centre + csangle + both actors' positions, single-stepped); `courtyard_push_dtm.json`
@@ -262,13 +272,16 @@ def test_closed_loop_computed_replay_dynamics_bit_exact(fix, seed, eyes):
     STATE 2 with every proc 0-ULP-matching live and every speedF + lean BIT-FOR-BIT vs live f1..f43,
     through both rolls, both untarget tiers, and the whole coupled plow.
 
-    POSITION and FACING are NOT asserted here (per `[[zero-ulp-tests-only]]`): the closed-loop
-    position amplifies the per-step residual (~1e-4 u/frame) through the plow feedback (depth =
-    80 - dist, ~1.35x/frame -- an unstable amplifier; the drift is DIFFERENTIAL, e_link ~ -e_tetra),
-    and that noise perturbs the proc-9 eye-aim bearing so facing carries a few-BAM echo (f20-28). Both
-    are DOWNSTREAM of the two open position bugs -- their 0-ULP bar is
-    `test_onestep_pos_bit_exact_from_exact_state`, and facing goes bit-exact self-contained once that
-    closes (the LAW is already 0-ULP -- `test_facing_and_lean_bit_exact_with_eye_aim`, diag mode)."""
+    POSITION and FACING are NOT asserted here (per `[[zero-ulp-tests-only]]`): the closed loop drifts
+    off the SEED-frame boundary. With bug #1 fixed (session 27) the per-frame push is 0-ULP f2..f43,
+    so the ~93-u drift the session-24 xfails cited COLLAPSED to ~4 u -- what remains is the single f1
+    seed-frame push (from f0's exec centre, not offline-reconstructable, ~9 ULP) amplified through the
+    plow feedback (depth = 80 - dist, ~1.35x/contact-frame; the drift is DIFFERENTIAL, e_link ~
+    -e_tetra), which also perturbs the proc-9 eye-aim bearing so facing carries a few-BAM echo. The
+    per-step 0-ULP bar (which the closed loop's drift is DOWNSTREAM of) is
+    `test_onestep_pos_bit_exact_from_exact_state` -- a HARD PASS on f2..f43. Closing the closed loop
+    to 0-ULP would need f0's exec centre (one deterministic `setCollision`-breakpoint read at the
+    seed frame); the LAW is already 0-ULP (`test_facing_and_lean_bit_exact_with_eye_aim`, diag)."""
     if seed is None:
         pytest.skip("state-2 seed fixture not present")
     cyl_frames, dtm_frames = fix
@@ -285,70 +298,56 @@ def test_closed_loop_computed_replay_dynamics_bit_exact(fix, seed, eyes):
             "frame %d: closed-loop lean %d != live %d" % (d['f'], d['sim_shape_z'], d['live_shape_z']))
 
 
-def test_onestep_error_bounded_from_exact_state(fix, seed, eyes):
-    """NON-FIDELITY REGRESSION GUARDRAIL (relabelled per `[[zero-ulp-tests-only]]`): this is NOT a
-    0-ULP gate and makes no fidelity claim -- the 0-ULP position bar is the strict twin below,
-    `test_onestep_pos_bit_exact_from_exact_state`. This one asserts only that the one-step-from-exact-
-    state error stays BOUNDED and non-accumulating (<=128 ULP z, <=4 ULP x), which is what proves the
-    closed-loop blow-up is AMPLIFICATION of a floor-level residual, not a gross step-function bug. Its
-    job is to fail loudly if a future change makes the per-step error explode while the strict gate is
-    still a known-open xfail (a regression the xfail can't catch, since it's already failing).
+def _onestep_console_push(cyl_frames, dtm_frames, seed, eyes):
+    """Shared driver for the two one-step-from-EXACT-state 0-ULP gates (session 27). Each frame: reset
+    the sim to the EXACT captured state[k-1] (pos + Tetra), feed the CONSOLE push
+    (`cc_push_pair` on the MODEL's computed EXEC centre at k-1 -- the decomp 50/50 half-depth split),
+    step ONCE, and yield the sim's resulting pos[k]. This isolates the coupled step's OWN error from
+    accumulation. The model's exec centre is bit-exact given the exact pos (== `courtyard_push_setcol.
+    json`'s breakpoint `cyl_exec`, 0 ULP f1..12), so the push it feeds is console-exact.
 
-    THE RE-DIAGNOSIS (session 23): the coupled STEP FUNCTION is bit-faithful; the closed-loop
-    position drift is an AMPLIFICATION instability, NOT an FK matrix bug.
+    f1 (k==1) is the SEED-frame boundary: its incoming push comes from f0's exec centre, which the
+    seed frame does not carry (`from_f0._seed_pose_f0` -- no f-1 lean/morf), so it falls back to
+    `full_depth_push` on the settled seed centre. It is flagged `seed_frame=True` and NOT asserted by
+    the callers (the sole non-0-ULP frame; ~9 ULP z). Every other frame f2..f43 (42 consecutive) is
+    driven by the model's own exec centre and yields 0-ULP.
 
-    Session 22 named the blocker "the FK 0-ULP hunt -- make `FootFK.body_co_center` fp-faithful."
-    That is misdiagnosed: `body_co_center` is already BIT-EXACT given exact input (the computed exec
-    centre equals `courtyard_push_setcol.json`'s breakpoint `cyl_exec` to 0 ULP on every frame f1..12
-    when fed the breakpoint-exact pos). The console `sqrtf` (MSL `frsqrte` + 3 double Newton steps +
-    f32 cast, math.h:89) was also RULED OUT -- it is bit-identical to a correctly-rounded `math.sqrt`
-    over the loop's whole dist_sq range, so the plow sqrt is not the residual either.
-
-    The real situation, proven here: reset the sim to the EXACT captured state each frame (pos + Tetra
-    + the push from the fixture centre), step ONCE, and the one-step Link-position error stays BOUNDED
-    and NON-accumulating -- <=64 ULP in z (~1.5e-5 u), largest at the roll-entry morf frames (k3..k5,
-    the known `calc_transform`/Hermite entry-morf sub-ULP flagged in `core/anim/quat.py`), single-digit
-    ULP elsewhere; x is 0 ULP throughout (its coarse f32 quantum at ~1335 hides the same ~1e-5 u
-    residual that shows at small-magnitude z). facing + speedF are bit-exact every frame. So each
-    component (foot FK, recoil, plow, centre FK) is correct to the single-step fixture's f32 noise
-    floor; the `centers='computed'` blow-up (test above) is the plow feedback (depth = 80 - dist,
-    ~1.35x/contact-frame -- an unstable amplifier) magnifying those floor-level residuals. Closing it
-    to true 0-ULP needs the last <=1-ULP op(s) in the DASH/ROLL foot-term + recoil path pinned against
-    a per-op live capture (the single-step fixtures resolve only to ~1e-5 u); the FK matrix is not it."""
-    if seed is None:
-        pytest.skip("state-2 seed fixture not present")
-    from harness.tetrapush.from_f0 import FreeRun, full_depth_push
+    Yields ``{k, proc, seed_frame, sim_link, sim_tetra}``."""
+    from harness.tetrapush.from_f0 import (FreeRun, cc_push_pair, full_depth_push,
+                                           _computed_center)
     from tww_sim.core.fp import f32
-    cyl_frames, dtm_frames = fix
     input_at = _input_at(dtm_frames)
-
     run = FreeRun(cyl_frames[0], seed_nspeed=seed['link']['nspeed'], computed_pose=True,
                   seed_old_pose=seed.get('old_pose'))
     run.pre_seed_input(input_at(0))
     link = run.link
-    worst = 0
     for k in range(1, 44):
         prev = cyl_frames[k - 1]
-        # reset to the EXACT captured state[k-1], recompute the outgoing push from the exact
-        # fixture centre + Tetra -> isolates the ONE-STEP error from pure accumulation.
         link.pos_x = f32(prev['link']['pos'][0]); link.pos_z = f32(prev['link']['pos'][2])
+        link.pos_y = f32(prev['link']['pos'][1])
         run.tx = f32(prev['tetra']['pos'][0]); run.tz = f32(prev['tetra']['pos'][2])
-        run.pend_link, run.pend_tetra = full_depth_push(prev['link']['cyl'], (run.tx, run.tz))
+        seed_frame = (k == 1)
+        if seed_frame:
+            run.pend_link, run.pend_tetra = full_depth_push(
+                cyl_frames[0]['link']['cyl'], (run.tx, run.tz))
+        else:
+            # exec centre at k-1 from the model (pose at k-1, exact pos just reset). init frame =
+            # whether k-1 dispatched a proc *_init (commonProcInit zeroes the base lean).
+            init_km1 = prev['proc'] != cyl_frames[k - 2]['proc']
+            cx = _computed_center(link, init_frame=init_km1)
+            run.pend_link, run.pend_tetra = cc_push_pair(cx, (run.tx, run.tz))
         eye = eyes[k - 1] if (eyes is not None and k - 1 < len(eyes)) else None
-        row = run.step(input_at(k), csangle=cyl_frames[k - 1]['csangle'], eye=eye,
-                       center=cyl_frames[k]['link']['cyl'])
-        lv = cyl_frames[k]['link']
-        assert row['sim_proc'] == cyl_frames[k]['proc'], "frame %d: one-step proc diverged" % k
-        assert _bits(row['speedF']) == _bits(lv['speedF']), "frame %d: one-step speedF diverged" % k
-        assert row['sim_facing'] == lv['facing'], "frame %d: one-step facing diverged" % k
-        ex = abs(_bits(row['sim_link'][0]) - _bits(lv['pos'][0]))
-        ez = abs(_bits(row['sim_link'][1]) - _bits(lv['pos'][2]))
-        assert ex <= 4, "frame %d: one-step x error %d ULP (a real step bug, not noise)" % (k, ex)
-        worst = max(worst, ez)
-        assert ez <= 128, "frame %d: one-step z error %d ULP -- step function bug, not amplification" % (k, ez)
-    # sanity: the one-step floor is TINY next to the closed-loop drift it feeds (thousands of ULP
-    # by mid-window) -- proving the drift is amplification, not a per-step error.
-    assert worst <= 128
+        # NO center= : the OUTGOING push is recomputed by the model (irrelevant -- overwritten next
+        # iteration); only the INCOMING pend we set above is consumed this step.
+        row = run.step(input_at(k), csangle=cyl_frames[k - 1]['csangle'], eye=eye)
+        yield dict(k=k, proc=cyl_frames[k]['proc'], seed_frame=seed_frame,
+                   sim_link=row['sim_link'], sim_tetra=row['sim_tetra'])
+
+
+def _perop_pos(perop):
+    """Deterministic per-op positions keyed by frame idx: ``{k: {'link':(x,y,z), 'tetra':(x,y,z)}}``."""
+    return {r['idx']: dict(link=r['entry']['pos'], tetra=r['entry']['tetra']['pos'])
+            for r in perop if r.get('entry')}
 
 
 def test_perop_confirms_cyl_positions_are_deterministic(fix, perop):
@@ -379,88 +378,80 @@ def test_perop_confirms_cyl_positions_are_deterministic(fix, perop):
     assert not bad, "per-op breakpoint capture disagrees with the cyl fixture: " + ", ".join(bad)
 
 
-@pytest.mark.xfail(strict=True, reason="OPEN 0-ULP gap (session 24): the DASH/ROLL foot-term "
-                   "sub-ULP. One-step-from-exact-state pos diverges from live by up to 56 ULP "
-                   "(~1.3e-5 u) in z, concentrated at the roll-entry morf frames f3-f5 (56/22 decaying "
-                   "with the morf rate = the calc_transform/Hermite entry-morf, quat.py) plus a small "
-                   "f1-f2 MOVE-backslide residue (5-7 ULP). x reads 0 ULP only because its f32 quantum "
-                   "at ~1335 u (~1.2e-4 u) is coarser than the residual. This is the planner blocker: "
-                   "the plow feedback (~1.35x/contact-frame) amplifies it to the 93-u closed-loop drift.")
-def test_onestep_pos_bit_exact_from_exact_state(fix, seed, eyes):
-    """THE 0-ULP DIVERGENCE GATE (session 24) -- the hard bar: from the EXACT captured state[k-1],
-    stepping once must reproduce live pos[k] BIT-FOR-BIT (0 ULP), every frame, every axis.
+def test_onestep_pos_bit_exact_from_exact_state(fix, seed, eyes, perop):
+    """THE 0-ULP DIVERGENCE GATE (session 24; FLIPPED to a HARD PASS session 27 -- bug #1 closed):
+    from the EXACT captured state[k-1], stepping once with the CONSOLE push (`cc_push_pair` on the
+    model's own EXEC centre) reproduces the DETERMINISTIC per-op pos[k] BIT-FOR-BIT (0 ULP) on every
+    frame the model can compute the incoming exec centre -- f2..f43 (42 consecutive frames), Link's
+    full coupled position (foot term + recoil).
 
-    This is the strict form of `test_onestep_error_bounded_from_exact_state` (which asserts only
-    BOUNDED). The live pos is true console ground truth (breakpoint-captured; `setcol.pos == cyl.pos`
-    to 0 ULP over f1..12, so the divergence is real sim-vs-console, not single-step noise). Because
-    the outgoing recoil is fed from the EXACT fixture centre, the pos divergence IS the coupled
-    step's own error (Link's foot term + the applied recoil law). Collects the WHOLE divergent-frame
-    set into the failure message so the xfail records the full picture, not just the first frame.
+    Target = `courtyard_push_perop.json` (the `posMove`-breakpoint capture, proven == the cyl fixture
+    0-ULP f0..43 by `test_perop_confirms_cyl_positions_are_deterministic`) -- a DETERMINISTIC bar per
+    `[[zero-ulp-tests-only]]`, not the single-stepped fixture.
 
-    Currently XFAILS (the open gap). Regenerate the human-readable per-frame ULP table with
-    `python -m harness.tetrapush.onestep_divergence`. When the diverging op is pinned (per-op live
-    capture, session 24+) and fixed, this flips to a hard PASS and the xfail marker comes off."""
+    Session-27 finding -- ONE bug, not two: the session-24 xfail blamed a "DASH/ROLL foot-term
+    sub-ULP" (a supposed bug #2, the f3-5 spike). It was misdiagnosed. The spike was the RECOIL error
+    (bug #1: the push was the DERIVED full-depth-from-SETTLED `full_depth_push`, ~1e-5 u off, larger
+    at roll entry where the geometry ramps) measured THROUGH Link's position. Feeding the console
+    push (`cc_push_pair` on the exec centre) makes Link's one-step position 0-ULP -- his foot term
+    was exact all along (the recoil is independently pinned to Tetra's deterministic ΔTetra, so no
+    compensating error is possible). f1 is the seed-frame boundary (f0's exec centre is not
+    offline-reconstructable) and is not asserted. Per-frame ULP table:
+    `python -m harness.tetrapush.onestep_divergence`."""
     if seed is None:
         pytest.skip("state-2 seed fixture not present")
-    from harness.tetrapush.from_f0 import FreeRun, full_depth_push
-    from tww_sim.core.fp import f32
+    if perop is None:
+        pytest.skip("per-op deterministic capture not present")
     cyl_frames, dtm_frames = fix
-    input_at = _input_at(dtm_frames)
-
-    run = FreeRun(cyl_frames[0], seed_nspeed=seed['link']['nspeed'], computed_pose=True,
-                  seed_old_pose=seed.get('old_pose'))
-    run.pre_seed_input(input_at(0))
-    link = run.link
+    pos = _perop_pos(perop)
     diverged = []
-    for k in range(1, 44):
-        prev = cyl_frames[k - 1]
-        link.pos_x = f32(prev['link']['pos'][0]); link.pos_z = f32(prev['link']['pos'][2])
-        run.tx = f32(prev['tetra']['pos'][0]); run.tz = f32(prev['tetra']['pos'][2])
-        run.pend_link, run.pend_tetra = full_depth_push(prev['link']['cyl'], (run.tx, run.tz))
-        eye = eyes[k - 1] if (eyes is not None and k - 1 < len(eyes)) else None
-        row = run.step(input_at(k), csangle=cyl_frames[k - 1]['csangle'], eye=eye,
-                       center=cyl_frames[k]['link']['cyl'])
-        lv = cyl_frames[k]['link']
-        ex = abs(_bits(row['sim_link'][0]) - _bits(lv['pos'][0]))
-        ez = abs(_bits(row['sim_link'][1]) - _bits(lv['pos'][2]))
+    checked = 0
+    for r in _onestep_console_push(cyl_frames, dtm_frames, seed, eyes):
+        if r['seed_frame'] or r['k'] not in pos:
+            continue
+        lv = pos[r['k']]['link']
+        ex = abs(_bits(r['sim_link'][0]) - _bits(lv[0]))
+        ez = abs(_bits(r['sim_link'][1]) - _bits(lv[2]))
+        checked += 1
         if ex or ez:
-            diverged.append((k, cyl_frames[k]['proc'], ex, ez))
-    assert not diverged, "one-step pos != live (0 ULP required); divergent frames [f,proc,xULP,zULP]: " \
+            diverged.append((r['k'], r['proc'], ex, ez))
+    assert checked >= 40, "expected f2..f43 covered, got %d" % checked
+    assert not diverged, "one-step Link pos != deterministic (0 ULP required); frames [f,proc,xULP,zULP]: " \
         + ", ".join("[f%d p%d x%d z%d]" % d for d in diverged)
 
 
-@pytest.mark.xfail(strict=True, reason="OPEN 0-ULP gap (session 24), BUG #1 of 2: the push/recoil "
-                   "law. Tetra has NO foot term (stt-3, speedF 0) so her pos-delta isolates the push "
-                   "vector -- it diverges from live by up to ~9 ULP in z, no roll-entry spike (that "
-                   "spike is Link-only = BUG #2, the foot term). The Courtyard replay uses the "
-                   "session-9 DERIVED full_depth_push (link_plow.recoil + tetra_plow.plow_step: two "
-                   "separate fsqrt, and full_depth_push returns Tetra's move as an f64 new-minus-old "
-                   "while Link's is a direct f32 delta), NOT the decomp-faithful cc_push.co_move_pair "
-                   "(one dist, exact-opposite obj1/obj2 moves). Fix = compute the push the console's "
-                   "way; validate 0-ULP vs a per-op live m_cc_move capture (the cyl fixture Tetra pos "
-                   "resolves only to ~1e-5 u, at the residual size).")
-def test_tetra_push_bit_exact_from_exact_state(fix):
-    """THE PUSH-LAW 0-ULP DIVERGENCE GATE (session 24). Tetra's motion is PURELY the CC push (she has
-    no foot term -- stt-3, speedF 0, the whole window), so stepping the push from the EXACT captured
-    Link Co centre + Tetra pos and comparing to live Tetra pos isolates the push/recoil law with NO
-    foot-term confound (unlike the Link one-step gate). Currently XFAILS (bug #1). Diagnostic:
-    the `link recoil == -tetra push` self-consistency invariant below + the per-frame table in
-    `harness.tetrapush.onestep_divergence`."""
-    from harness.tetrapush.from_f0 import full_depth_push
-    from tww_sim.core.fp import f32
-    cyl_frames, _ = fix
+def test_tetra_push_bit_exact_from_exact_state(fix, seed, eyes, perop):
+    """THE PUSH-LAW 0-ULP DIVERGENCE GATE (session 24; FLIPPED to a HARD PASS session 27 -- bug #1
+    closed). Tetra's motion is PURELY the CC push (no foot term -- stt-3, speedF 0, the whole
+    window), so her one-step position isolates the push/recoil law with NO foot-term confound. From
+    the EXACT captured state[k-1], the console push (`cc_push_pair` on the model's EXEC centre)
+    reproduces the DETERMINISTIC per-op Tetra pos[k] BIT-FOR-BIT on f2..f43.
+
+    This is the model-driven twin of `test_tetra_plow.py::test_console_push_bit_exact_vs_deterministic`
+    (which uses the setcol breakpoint exec centre directly, covering f1..12). Here the model's own
+    computed exec centre carries it to f43 -- proving the model reproduces the exec centre 0-ULP
+    beyond the setcol range. f1 is the seed-frame boundary (not asserted). The recoil == -push
+    Newton invariant is `test_full_depth_push_recoil_is_exact_opposite_of_tetra` (a pure-code check
+    on the seed-fallback `full_depth_push`)."""
+    if seed is None:
+        pytest.skip("state-2 seed fixture not present")
+    if perop is None:
+        pytest.skip("per-op deterministic capture not present")
+    cyl_frames, dtm_frames = fix
+    pos = _perop_pos(perop)
     diverged = []
-    for k in range(1, 44):
-        prev = cyl_frames[k - 1]
-        ptx, ptz = f32(prev['tetra']['pos'][0]), f32(prev['tetra']['pos'][2])
-        _rl, (tdx, tdz) = full_depth_push(prev['link']['cyl'], (ptx, ptz))
-        sim_tx = f32(ptx + tdx); sim_tz = f32(ptz + tdz)
-        lv = cyl_frames[k]['tetra']['pos']
-        ex = abs(_bits(sim_tx) - _bits(lv[0]))
-        ez = abs(_bits(sim_tz) - _bits(lv[2]))
+    checked = 0
+    for r in _onestep_console_push(cyl_frames, dtm_frames, seed, eyes):
+        if r['seed_frame'] or r['k'] not in pos:
+            continue
+        lv = pos[r['k']]['tetra']
+        ex = abs(_bits(r['sim_tetra'][0]) - _bits(lv[0]))
+        ez = abs(_bits(r['sim_tetra'][1]) - _bits(lv[2]))
+        checked += 1
         if ex or ez:
-            diverged.append((k, cyl_frames[k]['proc'], ex, ez))
-    assert not diverged, "Tetra push != live (0 ULP required); divergent frames [f,proc,xULP,zULP]: " \
+            diverged.append((r['k'], r['proc'], ex, ez))
+    assert checked >= 40, "expected f2..f43 covered, got %d" % checked
+    assert not diverged, "one-step Tetra push != deterministic (0 ULP required); frames [f,proc,xULP,zULP]: " \
         + ", ".join("[f%d p%d x%d z%d]" % d for d in diverged)
 
 
@@ -471,9 +462,10 @@ def test_full_depth_push_recoil_is_exact_opposite_of_tetra(fix):
     guarantees (vec1/vec2 sum to 0, live-confirmed). `full_depth_push` used to violate this by ~1 ULP
     (a direct f32 recoil delta vs an f64 new-minus-old Tetra move); it now returns Tetra's push as the
     exact f32 sign flip `-recoil` off the SAME dist/pushFactor, so the invariant holds with no live
-    capture. This is a PURE-CODE 0-ULP gate (no fixture-precision dependence). The remaining exec-vs-
-    settled ~few-ULP push gap vs the console is a SEPARATE part of bug #1 -- see
-    `test_tetra_push_bit_exact_from_exact_state` (blocked on the per-op live `m_cc_move` capture)."""
+    capture. This is a PURE-CODE 0-ULP gate (no fixture-precision dependence). `full_depth_push` is
+    now the SEED-frame (f0->f1) fallback only (session 27); the console push law that closed bug #1's
+    exec-vs-settled gap is `cc_push_pair` (`test_tetra_push_bit_exact_from_exact_state`, now a hard
+    pass). The invariant still matters: the seed-frame push must eject equal-and-opposite too."""
     from harness.tetrapush.from_f0 import full_depth_push
     cyl_frames, _ = fix
     bad = []

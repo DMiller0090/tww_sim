@@ -1,23 +1,25 @@
-"""The Courtyard Tetra-plow law, live-gated against the RAM ground truth.
+"""The Courtyard Tetra push law, gated against the DETERMINISTIC RAM ground truth -- 0-ULP.
 
-`harness/tetrapush/tetra_plow` encodes the measured push law -- Tetra's per-frame displacement is the
-FULL Co-cylinder overlap depth computed from Link's animated mCyl centre (Tetra takes 100 %, Link's
-share 0). This gate feeds the law the RAM-captured Link Co centres (fixtures/courtyard_push_cyl.json,
-single-stepped from slot 2).
+Tetra's per-frame displacement IS the CC push (she has no foot term -- stt-3, speedF 0, the whole
+window), so this file isolates the push law from Link's own physics. The law is
+`from_f0.cc_push_pair` (`cc_push.co_move_pair` = `dCcS::SetPosCorrect`): the decomp 50/50 rank split
+of the Co overlap, computed from Link's EXECUTE-pass Co centre (session 27, bug-#1 fix). It replaced
+the session-8/9 DERIVED full-depth-from-SETTLED law (`tetra_plow.plow_step`, now retired), which was
+only ~1e-5 u equal to the console (1-9 ULP off ΔTetra).
 
-TEST-RIGOR POLICY (`[[zero-ulp-tests-only]]`): the plow LAW's fidelity is asserted at the 0-ULP bar
-(`_bits(sim) == _bits(live)`), never a `err < eps` tolerance. Because the only fixture here is the
-SINGLE-STEPPED cyl capture (which by policy may not set the position bar), the per-frame law gate is
-`xfail(strict)` -- 0-ULP is the target, blocked on the two open push bugs + a deterministic per-op
-`m_cc_move` capture (README `## Plan / status`). Its clean twin against the buggy replay wrapper is
-`test_from_f0.py::test_tetra_push_bit_exact_from_exact_state`.
+TEST-RIGOR POLICY (`[[zero-ulp-tests-only]]`): fidelity is asserted at the 0-ULP bar
+(`_bits(sim) == _bits(live)`), against DETERMINISTIC breakpoint captures only:
+  * `test_console_push_bit_exact_vs_deterministic` -- the push LAW gate: `cc_push_pair` on the
+    setCollision EXEC centre (`courtyard_push_setcol.json`, f1..12) reproduces the per-op ΔTetra
+    (`courtyard_push_perop.json`) BIT-FOR-BIT. Two deterministic captures, no model, no
+    single-stepped data. The f13+ frames (needing the model's computed exec centre) are gated by
+    `test_from_f0.py::test_tetra_push_bit_exact_from_exact_state`; f1's push comes from f0's exec
+    centre, a static-initial-condition boundary the seed frame does not carry.
 
-The one non-fidelity check that survives is the REGIME discriminator `test_tetra_absorbs_full_overlap`
-(frac == 1.0, not 0.5): it distinguishes the full-depth ejection from a 50/50 split -- a qualitative
-finding, so a loose bound is correct and it is explicitly NOT a 0-ULP gate.
-
-This isolates the Tetra side of the coupled dynamics (the plow) from Link's own physics, and is the
-predictor the planner uses once Link's mCyl-centre path is modelled offline. See harness/tetrapush/README.md.
+The one non-fidelity check is the REGIME discriminator `test_tetra_absorbs_full_overlap` (frac ==
+1.0, not 0.5): it distinguishes the full ejection (measured against the SETTLED centre) from a 50/50
+split -- a qualitative finding, so a loose bound is correct and it is explicitly NOT a 0-ULP gate.
+See harness/tetrapush/README.md "The CC split (Courtyard push)".
 """
 import json
 import math
@@ -26,14 +28,18 @@ import struct
 
 import pytest
 
-from harness.tetrapush.tetra_plow import plow_depth, plow_step
+from harness.tetrapush.tetra_plow import plow_depth
+from harness.tetrapush.from_f0 import cc_push_pair
+from tww_sim.core.fp import f32
 
 
 def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
-_FIX = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    'fixtures', 'courtyard_push_cyl.json')
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_FIX = os.path.join(_ROOT, 'fixtures', 'courtyard_push_cyl.json')
+_PEROP = os.path.join(_ROOT, 'fixtures', 'courtyard_push_perop.json')
+_SETCOL = os.path.join(_ROOT, 'fixtures', 'courtyard_push_setcol.json')
 
 
 def _dedup(frames):
@@ -76,7 +82,9 @@ def test_tetra_absorbs_full_overlap(cyl):
     frac = tetra_move / depth == 1.0 on every push frame, i.e. Tetra takes the FULL Co overlap depth
     (Link's push share is 0), the opposite of the 50/50 following-Tetra split. This is a QUALITATIVE
     finding -- a 50/50 split would read ~0.5 -- so the loose bound distinguishing 1.0 from 0.5 is
-    correct and intended. The plow LAW's 0-ULP fidelity is `test_plow_step_bit_exact_vs_live` below."""
+    correct and intended (the full ejection is the SETTLED-centre framing of the console's half-depth-
+    from-EXEC split). The push LAW's 0-ULP fidelity is `test_console_push_bit_exact_vs_deterministic`
+    below."""
     frames = cyl['frames']
     push = _push_frames(frames)
     assert len(push) >= 30, "expected the full ~40-frame push, got %d plow frames" % len(push)
@@ -90,26 +98,52 @@ def test_tetra_absorbs_full_overlap(cyl):
             i, frac, depth, move)
 
 
-@pytest.mark.xfail(strict=True, reason="OPEN 0-ULP gap (session 24), BUG #1: the standalone plow law. "
-                   "One plow_step from each frame's live Tetra pos + Link centre must reproduce the "
-                   "NEXT frame's live Tetra pos BIT-FOR-BIT (0 ULP). It diverges by a few ULP -- the "
-                   "push/recoil law bug (two separate fsqrt; the push-vector fp order). The clean f32 "
-                   "formulation lives here (vs the buggy f64-delta wrapper the replay uses -- see "
-                   "test_from_f0::test_tetra_push_bit_exact_from_exact_state). ALSO: the cyl fixture is "
-                   "SINGLE-STEPPED (may not set the position bar); true validation needs the "
-                   "deterministic per-op m_cc_move capture (README ## Plan / status).")
-def test_plow_step_bit_exact_vs_live(cyl):
-    """THE plow-LAW 0-ULP gate: one plow step from each frame's live Tetra pos + Link centre must
-    reproduce the NEXT frame's live Tetra pos bit-for-bit (isolates the law from drift accumulation).
-    Currently XFAILS (bug #1). Collects the whole divergent set into the message."""
-    frames = cyl['frames']
+@pytest.fixture(scope='module')
+def perop():
+    if not os.path.exists(_PEROP):
+        pytest.skip("per-op posMove-breakpoint capture not present")
+    return {r['idx']: r['entry'] for r in json.load(open(_PEROP))['rows'] if r.get('entry')}
+
+
+@pytest.fixture(scope='module')
+def setcol():
+    if not os.path.exists(_SETCOL):
+        pytest.skip("setCollision breakpoint fixture not present (session-14 probe)")
+    return {s['f']: s for s in json.load(open(_SETCOL))['frames']}
+
+
+def test_console_push_bit_exact_vs_deterministic(perop, setcol):
+    """THE push-LAW 0-ULP gate (session 27; flipped from the session-24 `plow_step` xfail). The
+    console CC push -- `cc_push_pair` (`cc_push.co_move_pair` = `dCcS::SetPosCorrect`) on the
+    DETERMINISTIC setCollision EXEC centre -- reproduces the DETERMINISTIC per-op ΔTetra
+    BIT-FOR-BIT (0 ULP) on every frame an exec centre is captured (f1->f2 .. f12->f13). Tetra has no
+    foot term, so her per-frame move IS the push, isolating the law with no foot confound.
+
+    Two deterministic breakpoint captures only (`[[zero-ulp-tests-only]]`): the exec centre from
+    `courtyard_push_setcol.json` (JP setCollision 0x8011a670, f1..12) and both actors' `current.pos`
+    from `courtyard_push_perop.json` (JP posMove 0x80106514, f0..43). No model, no single-stepped
+    data. This is the standalone twin of `test_from_f0.py::test_tetra_push_bit_exact_from_exact_state`
+    (which drives the MODEL's computed exec centre to cover f13..f43). f1's push comes from f0's exec
+    centre -- a static-initial-condition boundary the seed frame does not carry (README `## Plan /
+    status`), so it is not covered by either gate.
+
+    This overturns the session-24 framing: the push law is NOT a few ULP off; it is EXACT. The
+    session-24 residual was `full_depth_push` on the SETTLED centre (the retired derived law), only
+    ~1e-5 u equal to this half-depth-from-EXEC split."""
     diverged = []
-    for i in _push_frames(frames):
-        f, n = frames[i], frames[i + 1]
-        tx, tz = plow_step(f['link']['cyl'], (f['tetra']['pos'][0], f['tetra']['pos'][2]))
-        ex = abs(_bits(tx) - _bits(n['tetra']['pos'][0]))
-        ez = abs(_bits(tz) - _bits(n['tetra']['pos'][2]))
-        if ex or ez:
-            diverged.append((i, ex, ez))
-    assert not diverged, "plow_step != live (0 ULP required); frames [f,xULP,zULP]: " \
-        + ", ".join("[f%d x%d z%d]" % d for d in diverged)
+    for k in sorted(setcol):
+        if (k + 1) not in perop:
+            continue
+        ex = setcol[k]['cyl_exec']
+        tk = perop[k]['tetra']['pos']
+        tk1 = perop[k + 1]['tetra']['pos']
+        (_link), (tdx, tdz) = cc_push_pair((ex[0], ex[2]), (tk[0], tk[2]))
+        sim_tx = f32(f32(tk[0]) + tdx)
+        sim_tz = f32(f32(tk[2]) + tdz)
+        exu = abs(_bits(sim_tx) - _bits(tk1[0]))
+        ezu = abs(_bits(sim_tz) - _bits(tk1[2]))
+        if exu or ezu:
+            diverged.append((k, exu, ezu))
+    assert len(setcol) >= 10, "expected the f1..12 setCollision exec centres"
+    assert not diverged, "console push != deterministic ΔTetra (0 ULP required); " \
+        "frames [exec_k,xULP,zULP]: " + ", ".join("[f%d x%d z%d]" % d for d in diverged)
