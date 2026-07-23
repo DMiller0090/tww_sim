@@ -37,7 +37,22 @@ log line). Two more traps:
   OSD, it is never logged). MMU stays on, always (Dereck's standing requirement).
 - **A movie-anchored state needs its movie active before the load**: from a stopped instance,
   `play <StateSaves/GZLJ01.s02.dtm> game=<TWW-JP.iso>`, wait for `running/playing:true`, then
-  `loadstate 2` (lands paused at frame 89952). This fork does not sync MMU from DTM headers.
+  `loadstate 2` (lands paused at frame 89952). This fork does not sync MMU from DTM headers. The pipe
+  command is **`playmovie`** (`{"path":..,"game":..}`); the CLI `play` maps to it.
+- **A breakpoint-driven capture MUST step with `advance`, NEVER `resume`** (session 26, hard-won). On
+  this movie-anchored state a bare `resume` lets the DTM free-run to its end and **Dolphin cleanly
+  EXITS** (the same "clean exit" signature as the wrong-iso trap, but here caused by the free-run) --
+  no crash dump, the process is just gone. Set the code breakpoint, then `advance frames=1` in a loop:
+  the bp fires once per game frame (at posMove, ~2 advances apart -- a boundary halt then the posMove
+  halt), Dolphin survives the whole window, and the frame count is PINNED by the bp (immune to any
+  single-step edge jitter). `capture_push` proved `advance` safe over 60 frames; `_notes/tetrapush-
+  perop_probe.py` is the advance+breakpoint template.
+- **Launch Dolphin DETACHED so it survives across separate shell commands** (session 26). A Dolphin
+  launched by a short-lived helper (`subprocess.Popen` from a script that then exits, or an
+  `ensure_running` invoked as its own command) dies with that command -- the next command finds no
+  process. Launch it with PowerShell `Start-Process` (fully detached), verify it persists into a
+  separate command, THEN drive it. (`ensure_running` still works when ONE long-lived process launches
+  AND does all the work, e.g. `run_tests.py`.)
 
 ## The setup (measured live, 2026-07-21)
 
@@ -201,6 +216,7 @@ deliberately unported.
 | `from_f0.py` | **The from-f0 COUPLED replay** (session 10-12): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay(..., seed_nspeed=)`. Session 17 refactored the loop into **`FreeRun`** -- the planner's novel-input stepper (seed once, `step()` arbitrary raw inputs; eye/tattn per-step injectables; warns if a stepped state leaves the stt-3 plow regime, dist > `FOLLOW_ENGAGE_DIST`) -- with `replay` a thin wrapper over it. Session 19 wired the MODELED land camera in (`camera=` a seeded `LandCamera`), replacing the csangle injection entirely (see the planner box). Gated `tests/test_from_f0.py`: from the roll entry AND from **state 2 itself** (`seed_nspeed` = the measured mNormalSpeed) the replay is bit-exact f1..f44 (speedF 0-ULP, procs match, Link pos <1e-3 u), Tetra 0-ULP both cycles. |
 | `fixtures/courtyard_push_cyl.json` | Session-8 live ground truth: per-frame Link **mCyl Co-centre** + **csangle** + Tetra pos, single-stepped from slot 2 (`capture_push`). The Co-centre/csangle source the from-f0 replay needs. **Single-step, so cyc2 is edge-jittery** (the `_dedup` in the plow test drops the f44==f45 double-read); NOT a pinned edge oracle. |
 | `fixtures/courtyard_push_setcol.json` | Session-14 breakpoint ground truth (f1..f12): at each JP-`setCollision` hit, the nodeMtx root/neck translates + pos/anim/facing AT CALL TIME and the freshly-written **`cyl_exec`**. Pins the mCyl timing law (exec midpoint) + the half-depth settled-centre map. Source probe `_notes/tetrapush-setcol_probe.py`. |
+| `fixtures/courtyard_push_perop.json` | **Session-26 DETERMINISTIC per-op ground truth (f0..f43)**: both actors' `current.pos` (+ proc/facing/travel/speedF/shape_z/anim/csangle/`cyl`/`cc_move`/Tetra stt) read at the JP `posMove` (0x80106514) breakpoint, ONE hit per game frame (the bp pins the frame count -- immune to single-step edge jitter). PROVES the cyl POSITIONS are exact 0-ULP over the whole window (`test_perop_confirms_cyl_positions_are_deterministic`), so the two open push/foot bugs are REAL sim-vs-console residuals, not fixture noise. Tetra has no foot term (stt-3), so her per-frame push = ΔTetra (bug-#1 truth); Link's foot term = ΔLink + ΔTetra (recoil = −ΔTetra, same-rank Newton) -- deterministically a CONSTANT 26.0 u/frame during each roll, with the entry-morf RAMP at roll-start (bug #2). Source probe `_notes/tetrapush-perop_probe.py` (advance+breakpoint, NEVER resume). |
 | `fixtures/courtyard_push_eyepos.json` | Session-15 live ground truth (single-stepped, f0..f28): Tetra's **eyePos** (fopAc `+0x260` -- her animated head-joint world pos, the `setShapeAngleToAtnActor` aim target), her feet pos, Link facing, and `mpAttnActorLockOn` per frame (non-NULL f8-f20, NULL f21+). The `replay(..., eyes=)` injection source. Probe `_notes/tetrapush-eyepos_probe.py`. |
 | `_notes/tetrapush-chain_probe.py` | (gitignored) Session-16 breakpoint probe: FULL 3x4 nodeMtx for the neck-chain joints [0,1,2,3,4,14] at each JP-setCollision hit + `mBodyAngle`/`m351C`/`m34F2/F4`/`m34C2`/`m35E0`/`m35B8` at hit time. The joint-by-joint diff that pinned all four exec-pose laws. Companion `_notes/tetrapush-setframe_probe.py`: the J3DModel BASE TR mtx + `m_old_fdata` morf state + under-blend packs at the f1-f3 hits (the init-frame zero-lean base + the true morf cadence). |
 | `fixtures/courtyard_zl1look.json` | Session-20 live ground truth (single-stepped f0..f44): Tetra's FULL look-at state per frame -- the `dNpc_JntCtrl_c` block (chased angles + clamped targets), the McaMorf ctrl (frame/morfs), the look timers (`f7B8/f7BA/f7BC`), anim number, half-angle twists, eyePos/tattn/pos, and Link's `mHeadTopPos`. The `tests/test_zl1_look.py` gate + the `Zl1Look.seed_from_row` shape. Probe `_notes/tetrapush-zl1look_probe.py`; companion `_notes/tetrapush-m3564_probe.json` (Link's head-look state -- the named open gap). |
@@ -812,14 +828,39 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             were reviewed and hold NO sim-vs-console fidelity tolerances (already 0-ULP where they
             compare to console; their remaining bounds are model-algebra/meaningfulness), so they were
             left as-is.
-      - [ ] **THE LIVE PER-OP CAPTURE (the fix ground truth -- NEXT):** the single-step cyl fixture
-            resolves only to ~1e-5 u (== the residual size), so validating either fix to true 0-ULP
-            needs a breakpoint capture, the way `setcol` pinned the exec centre: at `posMove`
-            (JP `0x80106514`) / after the CC pass, read **both actors' `m_cc_move`** (Link `lp+0x3FE8`,
-            Tetra her `mStts+0x00`) = bug-#1 truth, AND **Link's `current.pos` right after the foot
-            application, before the cc-consume** (or `m3598`) across f1..f43 = bug-#2 truth. Then port
-            `co_move_pair`-faithful push + the entry-morf foot term decomp-first, flip the xfail gates
-            to hard passes, and confirm the closed-loop drift collapses.
+      - [x] **BUG #1's SELF-CONSISTENCY part CLOSED OFFLINE (session 26).** `full_depth_push` now
+            returns Tetra's push as `-recoil` (an exact f32 sign flip off the SAME dist/pushFactor)
+            instead of the old f64 new-minus-old, so Link recoil and Tetra push are EXACT bit-for-bit
+            opposites (Newton's 3rd law for the same-rank Co pair, `cc_push.co_move_pair` sum==0).
+            `test_full_depth_push_recoil_is_exact_opposite_of_tetra` flipped from `xfail` to a HARD
+            PASS; every dynamics gate stayed 0-ULP, land goldens byte-identical. This is a pure-code
+            fix (no live capture). The remaining exec-vs-settled push gap + the foot term are the two
+            gates below.
+      - [x] **THE LIVE PER-OP CAPTURE -- DELIVERED (session 26); it OVERTURNS the "noise floor" framing.**
+            Baked `fixtures/courtyard_push_perop.json` (probe `_notes/tetrapush-perop_probe.py`): both
+            actors' `current.pos` read at the JP `posMove` (0x80106514) breakpoint, one hit per game
+            frame f0..f43 (DETERMINISTIC -- the bp pins the frame count). **KEY FINDING: this
+            breakpoint capture matches the single-stepped cyl fixture BIT-FOR-BIT (0 ULP) at EVERY
+            frame f0..f43, both actors** (`test_perop_confirms_cyl_positions_are_deterministic`, hard
+            pass). So the cyl POSITIONS were exact deterministic ground truth all along (not just the
+            setcol-confirmed f1..12); the ~5-56 ULP one-step divergence is a REAL sim-vs-console
+            residual, not the "~1e-5 u single-step noise floor" the session-24 xfails cited. The two
+            bugs are therefore pure OFFLINE code bugs -- no more live capture is needed to fix them.
+            Method notes (hard-won, in "## Live setup"): a bare `resume` free-runs the movie -> Dolphin
+            cleanly EXITS; step with `advance` + breakpoint. `m_cc_move` (`lp+0x3FE8`) reads 0 even at
+            posMove entry (the push lands via immediate `current.pos` writes in the CC pass, not a
+            deferred move), so the push is measured from POSITIONS: Tetra has no foot term (stt-3) so
+            her push = ΔTetra (bug-#1 truth); Link's foot term = ΔLink + ΔTetra -- deterministically a
+            CONSTANT 26.0 u/frame during each roll with the entry-morf RAMP at roll-start (18.5->26.0),
+            i.e. bug #2 = the `calc_transform`/Hermite jnt0 entry-morf, laid bare.
+      - [ ] **PORT THE TWO FIXES (NEXT -- fully offline, unblocked):** (bug #1) compute the push the
+            console's way -- `co_move_pair` on the model's EXEC centre `cx` (half-depth split) instead
+            of `full_depth_push` on the settled centre (full-depth-from-settled = the exec half-depth
+            only to ~1e-5 u); validate vs perop's ΔTetra. (bug #2) the entry-morf foot term (the roll's
+            constant 26.0 has an entry ramp the sim under-shoots by up to 56 ULP at f3-5). Validate both
+            against `courtyard_push_perop.json` (deterministic), flip `test_onestep_pos_bit_exact_from_
+            exact_state` / `test_tetra_push_bit_exact_from_exact_state` / `test_plow_step_bit_exact_vs_
+            live` from xfail to hard passes, confirm the closed-loop drift collapses.
       - [ ] **Then the search proper**: realize cycle chains as raw inputs (`macro_inputs`) and
             confirm in FreeRun / on Dolphin (tier 2); resolve coarse feasibility (can ~4-6 cycles herd
             her the full ~960 u?); add the walk-push nudge endgame + the entry walk-in.

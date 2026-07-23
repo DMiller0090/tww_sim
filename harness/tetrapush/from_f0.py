@@ -59,7 +59,6 @@ import warnings
 from tww_sim.core.npc_zl1 import FOLLOW_ENGAGE_DIST
 from tww_sim.land.land import LandState, FRONT_ROLL, MOVE
 from harness.tetrapush.link_plow import recoil
-from harness.tetrapush.tetra_plow import plow_step
 
 
 def _bits(x):
@@ -73,15 +72,21 @@ def _yaw_from_csangle(csangle):
 
 
 def full_depth_push(link_center, tetra_xz):
-    """The Courtyard full-depth CC push for one frame, as the two gated laws: returns
-    ``((link_dx, link_dz), (tetra_dx, tetra_dz))`` -- Link's recoil (`link_plow.recoil`, full depth
-    away from Tetra) and Tetra's move (`tetra_plow.plow_step` delta, full depth away from Link),
-    computed from Link's Co centre ``link_center`` (x, z or x, y, z) and Tetra's feet ``tetra_xz``.
-    The two are exact opposites of the same magnitude (both eject the full `cross_len`)."""
-    tx, tz = float(tetra_xz[0]), float(tetra_xz[-1])
-    rlx, rlz = recoil(link_center, (tx, tz))
-    ntx, ntz = plow_step(link_center, (tx, tz))
-    return (float(rlx), float(rlz)), (float(ntx) - tx, float(ntz) - tz)
+    """The Courtyard full-depth CC push for one frame: returns ``((link_dx, link_dz), (tetra_dx,
+    tetra_dz))`` -- Link's recoil (`link_plow.recoil`, the full Co-overlap depth AWAY from Tetra)
+    and Tetra's push (the full depth AWAY from Link), computed from Link's Co centre ``link_center``
+    (x, z or x, y, z) and Tetra's feet ``tetra_xz``.
+
+    The two are EXACT bit-for-bit opposites: a single same-rank Co pair ejects equal-and-opposite
+    (Newton's third law in the CC resolution -- `cc_push.co_move_pair`'s vec1/vec2 sum to 0,
+    live-confirmed). Tetra's push is therefore ``-recoil`` (an exact f32 sign flip of the same
+    delta), NOT the old ``tetra_plow.plow_step`` new-minus-old form (which recomputed the new pos in
+    f64 and subtracted the original, differing from Link's direct f32 delta by ~1 ULP where Tetra's
+    coord is large -- the session-24 bug-#1 self-consistency violation). This is still the
+    full-depth-from-SETTLED-centre framing (numerically the exec-centre half-depth to ~1e-5 u); the
+    remaining exec-vs-settled ~few-ULP gap vs the console needs the per-op `m_cc_move` capture."""
+    rlx, rlz = recoil(link_center, tetra_xz)
+    return (float(rlx), float(rlz)), (float(-rlx), float(-rlz))
 
 
 def _seed_pose_f0(link, anim_frame, m351c, old_pose=None):

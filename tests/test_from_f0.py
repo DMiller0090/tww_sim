@@ -42,6 +42,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CYL = os.path.join(_ROOT, 'fixtures', 'courtyard_push_cyl.json')
 _DTM = os.path.join(_ROOT, 'fixtures', 'courtyard_push_dtm.json')
 _SEED = os.path.join(_ROOT, 'fixtures', 'courtyard_push_seed.json')
+_PEROP = os.path.join(_ROOT, 'fixtures', 'courtyard_push_perop.json')
 
 _FRONT_ROLL = 30
 
@@ -64,6 +65,17 @@ def seed():
     if not os.path.exists(_SEED):
         return None
     return json.load(open(_SEED))
+
+
+@pytest.fixture(scope='module')
+def perop():
+    """The session-26 DETERMINISTIC per-op capture (`_notes/tetrapush-perop_probe.py`): both actors'
+    positions read at the JP `posMove` (0x80106514) breakpoint, one hit per game frame f0..f43 (the
+    breakpoint pins the frame count -- immune to any single-step edge jitter). This is the deterministic
+    position ground truth `[[zero-ulp-tests-only]]` requires."""
+    if not os.path.exists(_PEROP):
+        return None
+    return json.load(open(_PEROP))['rows']
 
 
 def _input_at(dtm_frames):
@@ -339,6 +351,34 @@ def test_onestep_error_bounded_from_exact_state(fix, seed, eyes):
     assert worst <= 128
 
 
+def test_perop_confirms_cyl_positions_are_deterministic(fix, perop):
+    """DETERMINISM PROOF (session 26): the per-op `posMove`-breakpoint capture and the single-stepped
+    cyl fixture are two INDEPENDENT live captures (different stepping paths), yet both actors' positions
+    agree BIT-FOR-BIT (0 ULP) at every game frame f0..f43. So the cyl POSITIONS are exact deterministic
+    ground truth over the WHOLE window (not just the setcol-confirmed f1..12) -- the "single-step ~1e-5 u
+    noise floor" that the session-24 xfails cited does NOT apply to this held-stick push window, and the
+    ~5-56 ULP one-step divergence is a REAL sim-vs-console residual (bugs #1/#2), not fixture noise. This
+    makes the per-op fixture the deterministic position bar the two open bugs are gated against."""
+    if perop is None:
+        pytest.skip("per-op capture fixture not present (need a live slot-2 breakpoint capture)")
+    cyl_frames, _ = fix
+    bad = []
+    for r in perop:
+        e = r.get('entry')
+        if e is None:
+            continue
+        k = r['idx']
+        if k >= len(cyl_frames):
+            break
+        lc, tc = cyl_frames[k]['link']['pos'], cyl_frames[k]['tetra']['pos']
+        lp, tp = e['pos'], e['tetra']['pos']
+        for lbl, a, b in (('Lx', lp[0], lc[0]), ('Lz', lp[2], lc[2]),
+                          ('Tx', tp[0], tc[0]), ('Tz', tp[2], tc[2])):
+            if _bits(a) != _bits(b):
+                bad.append("f%d %s %+d ULP" % (k, lbl, _bits(a) - _bits(b)))
+    assert not bad, "per-op breakpoint capture disagrees with the cyl fixture: " + ", ".join(bad)
+
+
 @pytest.mark.xfail(strict=True, reason="OPEN 0-ULP gap (session 24): the DASH/ROLL foot-term "
                    "sub-ULP. One-step-from-exact-state pos diverges from live by up to 56 ULP "
                    "(~1.3e-5 u) in z, concentrated at the roll-entry morf frames f3-f5 (56/22 decaying "
@@ -424,17 +464,16 @@ def test_tetra_push_bit_exact_from_exact_state(fix):
         + ", ".join("[f%d p%d x%d z%d]" % d for d in diverged)
 
 
-@pytest.mark.xfail(strict=True, reason="OPEN 0-ULP gap (session 24): full_depth_push does not return "
-                   "the Link recoil and Tetra push as exact opposites -- the recoil is a direct f32 "
-                   "delta (fmuls(dx,ff)) while the Tetra move is an f64 new-minus-old (f32(tx-rlx)-tx), "
-                   "so they differ by ~1 ULP where Tetra's coord is large. Newton's third law in the "
-                   "CC resolution says they MUST be equal and opposite (cc_push.co_move_pair is; "
-                   "sum==0 live-confirmed). Fix with bug #1.")
 def test_full_depth_push_recoil_is_exact_opposite_of_tetra(fix):
-    """SELF-CONSISTENCY (session 24): for a single Co pair the two actors eject equal-and-opposite --
-    Link's recoil delta must be the exact negative of Tetra's push delta (bit-for-bit), the way the
-    decomp `cc_push.co_move_pair` guarantees. `full_depth_push` currently violates this by ~1 ULP
-    (the f32-delta vs f64-new-minus-old asymmetry), independent of any live capture. Currently XFAILS."""
+    """SELF-CONSISTENCY (session 24; CLOSED session 26, offline -- bug #1's Newton's-3rd-law part):
+    for a single same-rank Co pair the two actors eject equal-and-opposite -- Link's recoil delta is
+    the exact negative of Tetra's push delta (bit-for-bit), the way the decomp `cc_push.co_move_pair`
+    guarantees (vec1/vec2 sum to 0, live-confirmed). `full_depth_push` used to violate this by ~1 ULP
+    (a direct f32 recoil delta vs an f64 new-minus-old Tetra move); it now returns Tetra's push as the
+    exact f32 sign flip `-recoil` off the SAME dist/pushFactor, so the invariant holds with no live
+    capture. This is a PURE-CODE 0-ULP gate (no fixture-precision dependence). The remaining exec-vs-
+    settled ~few-ULP push gap vs the console is a SEPARATE part of bug #1 -- see
+    `test_tetra_push_bit_exact_from_exact_state` (blocked on the per-op live `m_cc_move` capture)."""
     from harness.tetrapush.from_f0 import full_depth_push
     cyl_frames, _ = fix
     bad = []
