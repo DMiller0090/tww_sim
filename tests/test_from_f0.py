@@ -315,10 +315,11 @@ def test_closed_loop_computed_replay_dynamics_bit_exact(fix, seed, eyes):
     (`centers='computed'` -- Link's Co centre rebuilt every frame from the sim's OWN pose; only the
     static state-2 seed, the DTM bytes, csangle, and the Tetra eye stream are consumed) chains from
     STATE 2 with every proc, speedF, facing, and lean BIT-EXACT vs live f1..f43, through both rolls,
-    both untarget tiers, and the whole coupled plow. Positions amplify the capture's own ~1e-4
-    single-step noise through the plow feedback (depth = 80 - dist, ~1.35x/frame -- common-mode:
-    Link and Tetra drift TOGETHER, their relative geometry and hence all contact dynamics stay
-    exact), so the position gate is the PRE-AMPLIFICATION window: <2e-3 u over f1..10. The same
+    both untarget tiers, and the whole coupled plow. Positions amplify the exec-centre FK residual
+    (~1e-4 u/frame) through the plow feedback (depth = 80 - dist, ~1.35x/frame; session 22 measured
+    the mode as DIFFERENTIAL -- e_link ~ -e_tetra, so the late-window contact dynamics drift too;
+    see test_tier0.test_drift_is_differential_not_common_mode), so the position gate is the
+    PRE-AMPLIFICATION window: <2e-3 u over f1..10. The same
     noise perturbs the proc-9 eye-aim bearing (a bearing to a point ~30 u away, from a position
     with the amplified noise), so facing carries a few-BAM echo on f20-28 (measured max +6); lean
     stays 0-ULP (its addCalc sawtooth quantizes the echo away)."""

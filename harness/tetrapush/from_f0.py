@@ -389,9 +389,12 @@ class FreeRun:
         # end-of-frame check: the push consumed producing the NEXT state uses this frame's SETTLED
         # centre + Tetra pos (the decomp draw-phase Ccsp()->Move() order).
         if self.computed_pose:
-            ck = _cc_settled_center(_computed_center(link, init_frame=init_frame),
-                                    (self.tx, self.tz))
+            cx = _computed_center(link, init_frame=init_frame)
+            ck = _cc_settled_center(cx, (self.tx, self.tz))
             row['sim_cyl'] = ck
+            row['sim_cyl_exec'] = cx           # the pose-driven exec centre (pre-CC-settle) --
+                                               # the position-independent offset the planner
+                                               # templates consume (primitives.py)
         else:
             ck = None
         if center is not None:
