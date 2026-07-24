@@ -236,6 +236,7 @@ deliberately unported.
 | `seeds.py` | **The planner SEED FACTORY** (session 22, restored session 28, f1-closed session 29): `make_freerun` builds the fully self-contained `FreeRun` (camera + Zl1 look + NeckLook wired, no injections -- the session-21 gate config) from the locked fixtures, now passing the exact f0->f1 seed push (`seed_push_f0` = the perop ΔTetra) so the rollout is 0-ULP in POSITION from f1 (verified: the `make_freerun` self-contained rollout is 0-ULP vs perop over the whole DTM window); `load_placements` loads the 288 genuine `tetra_placements.tsv` coords; `dtm_input_at` is the movie-window input accessor; `load_env` loads the fixture set (incl. `perop`). `make_freerun(tetra_at=)` re-seats Tetra's seed for clean no-contact template rollouts (falls back to the settled-centre approximation, since the recorded push no longer applies). Pure fixture plumbing (no model content). |
 | `primitives.py` | **The planner PRIMITIVE LAYER** (session 22, restored session 28): decomposes the bit-exact `FreeRun` window into the search's reusable pieces -- `window_records` (the instrumented rollout: per frame proc/speedF/facing/feet/exec-centre/recoil/plow/depth), `find_cycles` (the cycle spans), `cycle_template` (one cycle in the AIM frame -- foot term + exec-centre offset), and `input_macro`/`macro_inputs` (the cycle's raw-input pattern, stick bytes abstracted so a cycle re-aims to any world angle via `plan_land._primitives.stick_for_bearing`). CLI prints the cycle table + rigidity + the drift diagnostic. Gated `tests/test_planner_primitives.py` (structural). |
 | `search.py` | **The exact aim-per-cycle SEARCH foundation** (session 30): `rollout(env, aims)` stitches re-aimed push-cycle macros (`canonical_cycle` = the 26-frame roll-to-roll unit) through the 0-ULP `FreeRun` (C-stick pinned DOWN; main stick re-aimed per frame from the LIVE csangle; the aim is NOMINAL, the achieved landing is read back). `FreeRun.clone` (~0.025 ms, shares anim tables) is the beam branch; `reach_one_cycle` maps the per-cycle reach (the RESONANCE at the recorded aim, ~324 u); `beam_search` is the clone-branched beam ranked by nearest-genuine-coord dist, regime-pruned, each candidate a real FreeRun rollout. CLI `python -m harness.tetrapush.search {selfcheck\|reach\|sweep\|chain\|herd\|turnaround}` -- `selfcheck` proves the 0-ULP round-trip, `herd` shows the CONTINUOUS overlap-push, `chain` reproduces the old re-aimed-macro cycle-chaining blocker, and **`turnaround`** (session 31) reproduces the FRAME-MINIMAL turnaround-roll finding (`cyc1_to_untarget` + `turnaround_reroll`: the A-roll re-rolls THROUGH Tetra from the grounded post-untarget MOVE with no lock/cone gate; an immediate re-roll GRAZES min_ovl ~66 vs the human oracle's DEEP ~40, so the search knob is the minimal camera-assisted reposition, `[[tetrapush-frame-minimal]]`). Gated `tests/test_search.py` (0-ULP: recorded replay, macro re-aim, clone; structural: clean cycle, resonance, beam cycle-1, turnaround-roll fires). |
+| `reposition.py` | **The FRAME-MINIMAL reposition primitives** (session 33; Dereck's live steers): `HerdLine` (herd axis + `lead`/`on_line_ok` = the STEER-#1 past-Tetra prune, Link must stay behind her), `l_release_early` (STEER-#2/#3: release the mid-roll lock-L 1 frame early -> a 1-frame untarget tier -> the backslide retains **-25.727** vs the human's -25.454), `turnaround` (the 1-frame INSTANT 180 facing-snap out of the EBS via a precise csangle, `move.py:115`, speed preserved), and `frame_min_reroll` (turnaround -> proc-7 flip -> talk-safe +26 roll, a ~3-frame reposition vs the human's ~10). CLI `python -m harness.tetrapush.reposition {verify\|retain\|chain}` -- `verify` shows the human stays 40-85 u behind Tetra, `retain` shows the -25.727 retention, `chain` runs the frame-minimal cycles (currently OVERSHOOTS -- the roll leaves Link ~15 u off-line: the on-line reposition SEARCH is the open blocker). Gated `tests/test_reposition.py` (5). |
 | `feasibility.py` | **The COARSE-FEASIBILITY report** (session 28): from the bit-exact 2-cycle window, answers "can a few push cycles herd Tetra the full ~960 u to the genuine-coord cluster, in-regime?" -- directional (herd bearing vs target bearing), per-cycle reach, and the plow-regime bound. VERDICT: CONFIRMED (0.2 deg direction match, ~3 cycles, dist 40-85 u < engage 230). All numbers recomputed live. CLI `python -m harness.tetrapush.feasibility`. |
 | `_notes/tetrapush-camoracle_probe.py` | (gitignored) Session-18 land-camera ORACLE probe: run A re-captured with the FULL dCamera_c block (0x520 B, incl. mEventFlags/mCurStyle/mCurType), player status words, attention lockstate, both actors' `attention_info.position`, and the pad main-stick angle. Baked to `fixtures/courtyard_cam_oracle.json` (the `test_land_cam.py` gate). |
 | `_notes/tetrapush-eyeindep_probe.py` | (gitignored) Session-17 A/B probe: two 120-frame runs from slot 2 diverging only in post-f48 inputs; logs both actors + csangle + the RAW `dCamera_c` block (0x450 B/frame). DISPROVED the eyePos input-independence shortcut (offsets diverge f51, both runs stt 3); run A doubles as the extended csangle + camera-spring ground truth (f0..f120) for the camera port, and run B pins the stt-3->4 follow flip (crossed 230 at f63, stt 4 at f75). `.json` beside it. |
@@ -1072,6 +1073,48 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
                 primitives (L held late in a corner-aimed roll -> untarget -> on-line backslide). THEN
                 exact placement (walk-push nudge) + entry walk-in + tier-2 DTM. NO further live capture
                 is needed for the forward model.
+            - **SESSION 33 -- the FRAME-MINIMAL reposition PRIMITIVES built + gated
+              (`harness/tetrapush/reposition.py`, `tests/test_reposition.py` (5)); Dereck taught the
+              tech live and CORRECTED the session-32 "reverse backs Link up-herd" premise.** Every
+              mechanic verified in the 0-ULP `FreeRun`:
+              1. **STEER #1 -- prune "past Tetra".** `HerdLine` (herd axis = Tetra-start -> genuine-coord
+                 centroid, -161.5 deg) + `lead` (Link's signed along-herd position vs Tetra: <0 =
+                 behind = valid pursuit, >0 = OVERTAKEN). The human stays 40-85 u BEHIND her every frame
+                 (`verify` CLI); a straight roll that overtakes shoves her sideways -> herd freezes, so
+                 `on_line_ok` prunes it. The search prunes only regime+talk before this -- past-Tetra is
+                 the missing prune.
+              2. **STEER #2/#3 -- retain -25.727, don't settle for -25.45.** The human's untarget is a
+                 2-frame proc-9 tier (body1 flips +26 -> -25.727; body2 adds the +0.275 ATN accel term
+                 `ATN_SPD*msd(0.0556)*cos` -> -25.454). RELEASING the mid-roll lock-L ONE frame early
+                 (`l_release_early`) drops the actor-lock a dispatch-frame sooner -> a 1-frame tier -> the
+                 backslide inherits -25.727 (decays ~0.011/f). The L-release frame is a search variable.
+                 (A truly-neutral stick does NOT help -- proc-6 MOVE with a neutral stick BRAKES to 0 in
+                 ~5 frames; the human's slight held stick sustains the EBS glide.)
+              3. **The 1-frame INSTANT 180 TURNAROUND (`turnaround`), csangle-dependent.** In the
+                 untarget EBS facing sits ~exactly 0x8000 from travel; holding ESS-down (or a diagonal
+                 ESS) with a PRECISE csangle sets the want-angle so the facing chase steps ACROSS travel
+                 -> `temp*temp2 <= 0` -> `facing = travel` in ONE frame (`move.py:109-116`), speed
+                 PRESERVED (cos(target-travel)~1, -25.727 held). Wide csangle snap window (~14k BAM, not
+                 knife-edge; off it you get a MOVE_TURN reversal). csangle is the camera lever
+                 (manualCamera C-stick); generalises to diagonal ESS + matching diagonal csangle. This
+                 REPLACES the human's ~8-frame curved backslide-turn with 1 frame.
+              4. **The tight cycle = turnaround(1f) -> proc-7 flip(2f) -> talk-safe +26 roll.** After the
+                 turnaround Link faces AWAY from Tetra (up-herd); holding L + stick toward her (she is OUT
+                 of the cone) fires the proc-7 DIR_BACKWARD flip (-25.7 -> ~+23, the "1 frame > +17"),
+                 then the A-roll is TALK-SAFE (facing away at the press, `a_press_is_talk` False) and
+                 clamps to +26 (not the +5 graze). A ~3-frame reposition vs the human's ~10.
+              - **THE BLOCKER (the on-line reposition SEARCH -- "smart enough search space", Dereck).**
+                The +26 roll travels ~400 u over ~15 frames; it stays a PURSUIT (dist 40-85, Link never
+                overtakes) ONLY if Link is ON the herd line DIRECTLY behind Tetra so the Co-cyl plows her
+                straight ahead continuously (the human's self-stabiliser). The hand-composed `frame_min_
+                reroll` leaves Link ~15 u LATERALLY off-line, so the straight roll crosses her path and
+                OVERSHOOTS (lead -53 -> +285, `chain` CLI OVERTOOK). Aiming ALONG the herd line (not her
+                instant bearing) fixes the direction but not the lateral offset. NEXT = SEARCH the
+                reposition params (turnaround csangle, `nflip`, roll aim, L-release/`release_at`, and the
+                C-stick that realises the csangle) to place Link on-line behind her; prune past-Tetra +
+                talk + regime; chain via `FreeRun.clone`; score herd/frame. The primitives + prunes are
+                built and gated -- this is the remaining search. THEN exact placement + entry walk-in +
+                tier-2 DTM. NO further live capture is needed for the forward model.
 
 ## Hard rules (inherited from the seam-clip work)
 
