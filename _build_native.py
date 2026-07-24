@@ -18,9 +18,9 @@ _SOURCES = {
     "_collc": "tww_sim/core/_collc.pyx",
     "_shovec": "tww_sim/core/_shovec.pyx",
 }
-# _shovec's sweep_par uses OpenMP (prange); MSVC flag. Exactness is untouched: /openmp does not
-# change FP codegen, and every op is an explicit <float> cast.
-_OMP = {"_shovec": ["/openmp"]}
+# _shovec's sweep_par and _anmc's CourtyardFleet.run_par use OpenMP (prange); MSVC flag. Exactness
+# is untouched: /openmp does not change FP codegen, and every op is an explicit <float> cast.
+_OMP = {"_shovec": ["/openmp"], "_anmc": ["/openmp"]}
 
 sel = [a for a in sys.argv[1:] if a in _SOURCES]
 exts = [Extension(_SOURCES[k].replace("/", ".").rsplit(".pyx", 1)[0].replace(".pyx", ""),

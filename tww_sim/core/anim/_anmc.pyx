@@ -21,17 +21,18 @@ from libc.string cimport memcpy
 from libc.math cimport (sqrt as _c_sqrt, hypot as _c_hypot, atan2 as _c_atan2,
                         fabs as _c_fabs, copysign as _c_copysign, fmod as _c_fmod,
                         rint as _c_rint, floor as _c_floor)
+from cython.parallel cimport prange, parallel
 
 # ---- single-precision primitives (identical to _fpc.pyx) -------------------------------------
-cdef inline double f32(double x) nogil: return <double><float>x
-cdef inline double fmuls(double a, double b) nogil: return <double><float>(a * b)
-cdef inline double fadds(double a, double b) nogil: return <double><float>(a + b)
-cdef inline double fsubs(double a, double b) nogil: return <double><float>(a - b)
-cdef inline double fdivs(double a, double b) nogil: return <double><float>(a / b)
-cdef inline double fmadds(double a, double b, double c) nogil: return <double><float>(a * b + c)
-cdef inline double fmsubs(double a, double b, double c) nogil: return <double><float>(a * b - c)
-cdef inline double fnmadds(double a, double b, double c) nogil: return <double><float>(-(a * b + c))
-cdef inline double fnmsubs(double a, double b, double c) nogil: return <double><float>(-(a * b - c))
+cdef inline double f32(double x) noexcept nogil: return <double><float>x
+cdef inline double fmuls(double a, double b) noexcept nogil: return <double><float>(a * b)
+cdef inline double fadds(double a, double b) noexcept nogil: return <double><float>(a + b)
+cdef inline double fsubs(double a, double b) noexcept nogil: return <double><float>(a - b)
+cdef inline double fdivs(double a, double b) noexcept nogil: return <double><float>(a / b)
+cdef inline double fmadds(double a, double b, double c) noexcept nogil: return <double><float>(a * b + c)
+cdef inline double fmsubs(double a, double b, double c) noexcept nogil: return <double><float>(a * b - c)
+cdef inline double fnmadds(double a, double b, double c) noexcept nogil: return <double><float>(-(a * b + c))
+cdef inline double fnmsubs(double a, double b, double c) noexcept nogil: return <double><float>(-(a * b - c))
 
 # ---- console BAM cos/sin tables (populated by init_tables from mathlib) -----------------------
 cdef double COS_TABLE[4096]
@@ -71,13 +72,13 @@ def init_atan_table(table):
     _ATAN_READY = True
 
 
-cdef inline long long _atab(double a, double b) nogil:
+cdef inline long long _atab(double a, double b) noexcept nogil:
     """U_GetAtanTable(a, b): _ATN_TABLE[(int)f32(f32(a/b) * 1024)]."""
     cdef int idx = <int>f32(fmuls(fdivs(a, b), 1024.0))
     return <long long>_ATAN_TABLE[idx]
 
 
-cdef long long _cm_atan2s_c(double f0, double f1) nogil:
+cdef long long _cm_atan2s_c(double f0, double f1) noexcept nogil:
     """cM_atan2s (c_math.cpp:118). Bit-exact port of mathlib.cM_atan2s."""
     f0 = f32(f0); f1 = f32(f1)
     cdef double a0 = f0 if f0 >= 0.0 else -f0
@@ -106,10 +107,10 @@ def cm_atan2s(f0, f1):
     return _cm_atan2s_c(f0, f1)
 
 
-cdef inline double jma_cos(long long a) nogil:
+cdef inline double jma_cos(long long a) noexcept nogil:
     return COS_TABLE[(a & 0xFFFF) >> 4]
 
-cdef inline double jma_sin(long long a) nogil:
+cdef inline double jma_sin(long long a) noexcept nogil:
     return SIN_TABLE[(a & 0xFFFF) >> 4]
 
 
@@ -118,7 +119,7 @@ cdef unsigned int _FRES_BASE[32]
 cdef unsigned int _FRES_DEC[32]
 cdef bint _FRES_INIT = False
 
-cdef void _init_fres() nogil:
+cdef void _init_fres() noexcept nogil:
     global _FRES_INIT
     cdef unsigned int base[32]
     cdef unsigned int dec[32]
@@ -144,13 +145,13 @@ cdef void _init_fres() nogil:
         _FRES_DEC[i] = dec[i]
     _FRES_INIT = True
 
-cdef inline unsigned long long _d2u(double x) nogil:
+cdef inline unsigned long long _d2u(double x) noexcept nogil:
     return (<unsigned long long*>&x)[0]
 
-cdef inline double _u2d(unsigned long long u) nogil:
+cdef inline double _u2d(unsigned long long u) noexcept nogil:
     return (<double*>&u)[0]
 
-cdef double _fres(double x) nogil:
+cdef double _fres(double x) noexcept nogil:
     """Hardware fres estimate of x (no Newton). Bit-identical to quat._fres."""
     if not _FRES_INIT:
         _init_fres()
@@ -175,7 +176,7 @@ cdef double _fres(double x) nogil:
     out |= ((base - (dec * (i % 1024) + 1) // 2) << 29)
     return _u2d(out)
 
-cdef inline double _recip2(double denom) nogil:
+cdef inline double _recip2(double denom) noexcept nogil:
     """2/denom via fres + one Newton refine + *2 (PSMTXQuat asm)."""
     cdef double est = f32(_fres(denom))
     cdef double r = fmuls(est, fnmsubs(denom, est, 2.0))
@@ -183,11 +184,11 @@ cdef inline double _recip2(double denom) nogil:
 
 
 # ---- euler s16 -> quaternion (JMAEulerToQuat, non-fused) --------------------------------------
-cdef inline long long _half(long long a) nogil:
+cdef inline long long _half(long long a) noexcept nogil:
     # C `s16/2` truncates toward zero (Python's // truncates toward -inf, so replicate that here).
     return a // 2 if a >= 0 else -((-a) // 2)
 
-cdef void _euler_to_quat_c(long long rx, long long ry, long long rz, double* out) nogil:
+cdef void _euler_to_quat_c(long long rx, long long ry, long long rz, double* out) noexcept nogil:
     """out[0..3] = (w,x,y,z). Bit-exact core of quat.euler_to_quat."""
     cdef double c0 = jma_cos(_half(rx)), c1 = jma_cos(_half(ry)), c2 = jma_cos(_half(rz))
     cdef double s0 = jma_sin(_half(rx)), s1 = jma_sin(_half(ry)), s2 = jma_sin(_half(rz))
@@ -206,7 +207,7 @@ def euler_to_quat(rx, ry, rz):
 
 
 # ---- quaternion lerp (JMAQuatLerp: f32 dot, sign-flip, f64 lerp -> f32) ------------------------
-cdef void _quat_lerp_c(double* a, double* b, double t, double* out) nogil:
+cdef void _quat_lerp_c(double* a, double* b, double t, double* out) noexcept nogil:
     """out[0..3] = lerp(a,b,t). a/b are (w,x,y,z). Bit-exact core of quat.quat_lerp."""
     cdef double aw = a[0], ax = a[1], ay = a[2], az = a[3]
     cdef double bw = b[0], bx = b[1], by = b[2], bz = b[3]
@@ -230,7 +231,7 @@ def quat_lerp(a, b, t):
 
 
 # ---- quaternion concat (mDoMtx_QuatConcat: plain f64 products, single f32 round) ---------------
-cdef void _quat_concat_c(double* a, double* b, double* out) nogil:
+cdef void _quat_concat_c(double* a, double* b, double* out) noexcept nogil:
     """out = a (x) b (Hamilton product). a/b/out are (w,x,y,z). Bit-exact core of
     foot_fk.FootFK._quat_concat -- each component is a plain f64 expression rounded ONCE to f32
     (the products of f32 inputs are exact in f64, so the single round matches the game). out may
@@ -244,7 +245,7 @@ cdef void _quat_concat_c(double* a, double* b, double* out) nogil:
 
 
 # ---- PSMTXQuat (retail paired-single asm), fres scale mode ------------------------------------
-cdef void _psmtx_quat_c(double* q, double* m) nogil:
+cdef void _psmtx_quat_c(double* q, double* m) noexcept nogil:
     """m[0..11] = 3x4 rotation matrix (row-major, trans cols = m[3],m[7],m[11] set to 0) from
     q=(w,x,y,z) via the retail PSMTXQuat asm, fres scale. Line-for-line core of quat.psmtx_quat."""
     cdef double w = q[0], x = q[1], y = q[2], z = q[3]
@@ -342,7 +343,7 @@ def blend_joint(i0, i1, double ratio, double rate, bint apply_morf,
 
 
 # ---- 3x4 matrix concat / mult-vec (PSMTXConcat / PSMTXMultVec) --------------------------------
-cdef void _concat_c(double* a, double* b, double* out) nogil:
+cdef void _concat_c(double* a, double* b, double* out) noexcept nogil:
     """out = a*b (3x4 affine, row-major 12 doubles), fused accumulation. out must not alias a or b."""
     cdef int i, j, r
     for i in range(3):
@@ -538,7 +539,7 @@ def init_rank_table(tbl):
     _RANK_READY = True
 
 
-cdef inline int _get_rank_c(int w) nogil:
+cdef inline int _get_rank_c(int w) noexcept nogil:
     """dCcS::GetRank (d_cc_s.cpp:153): raw weight u8 -> rank 0..10."""
     w = w & 0xFF
     if w == 0xFF: return 10
@@ -554,7 +555,7 @@ cdef inline int _get_rank_c(int w) nogil:
     return 0
 
 
-cdef inline double _cc_fsqrt(double a) nogil:
+cdef inline double _cc_fsqrt(double a) noexcept nogil:
     return f32(_c_sqrt(f32(a)))
 
 
@@ -612,7 +613,7 @@ def co_move_pair_xz(double c1x, double c1z, double r1, double h1,
 
 # ---- Hermite interpolation (s16 asm path + f32 path) ------------------------------------------
 cdef double _hermite_s16_c(double t, double time0, double value0, double tan0,
-                           double time1, double value1, double tan1) nogil:
+                           double time1, double value1, double tan1) noexcept nogil:
     """s16 rotation Hermite (J3DAnimation.cpp:342-363 asm). Bit-exact core of j3d_eval.hermite_s16."""
     cdef double f0 = time0
     cdef double f3 = time1
@@ -637,7 +638,7 @@ cdef double _hermite_s16_c(double t, double time0, double value0, double tan0,
     return fout
 
 cdef double _hermite_f32_c(double frame, double time0, double value0, double tan0,
-                           double time1, double value1, double tan1) nogil:
+                           double time1, double value1, double tan1) noexcept nogil:
     """f32 scale/translate Hermite (JMAHermiteInterpolation). Bit-exact core of j3d_eval.hermite_f32."""
     cdef double length = fsubs(time1, time0)
     cdef double f9 = fsubs(frame, time0)
@@ -653,7 +654,7 @@ cdef double _hermite_f32_c(double frame, double time0, double value0, double tan
     return fadds(fadds(fadds(a, b), c), d)
 
 # ---- worldBase + PSMTXInverse (per-frame foot-FK base build) ----------------------------------
-cdef void _psmtx_inverse_c(double* m, double* inv) nogil:
+cdef void _psmtx_inverse_c(double* m, double* inv) noexcept nogil:
     """PSMTXInverse (dolphin/mtx/mtx.c:404): cofactor/det inverse, det reciprocal via fres + one
     Newton refine. Bit-exact core of fk.psmtx_inverse. m/inv are row-major 3x4 (12 doubles)."""
     cdef double m00 = m[0], m01 = m[1], m02 = m[2], m03 = m[3]
@@ -721,12 +722,12 @@ _CJALL[12]=2; _CJALL[13]=3; _CJALL[14]=4; _CJALL[15]=14; _CJALL[16]=15
 # l_toe / l_heel in Lfoot-joint local space (fk.L_TOE / L_HEEL, d_a_player_main_data.inc:18-19).
 cdef double _TOE_X = 6.0, _TOE_Y = 3.25, _HEEL_X = -6.0, _HEEL_Y = 3.25
 
-cdef inline long long _as_s32c(long long x) nogil:
+cdef inline long long _as_s32c(long long x) noexcept nogil:
     # (s32) cast: reinterpret the low 32 bits as signed (two's complement), then widen.
     cdef unsigned int u = <unsigned int>x
     return <long long><int>u
 
-cdef double _keyframe_interp_c(double frame, int cnt, int tt, double* data, int base, int is_s16) nogil:
+cdef double _keyframe_interp_c(double frame, int cnt, int tt, double* data, int base, int is_s16) noexcept nogil:
     """Endpoint clamp + bisect + Hermite (J3DGetKeyFrameInterpolation[S]). Bit-exact core of
     j3d_eval._keyframe_interp; `data` holds the flat track (rot values are stored as exact doubles)."""
     cdef int stride = 3 if tt == 0 else 4
@@ -752,7 +753,7 @@ cdef double _keyframe_interp_c(double frame, int cnt, int tt, double* data, int 
         return _hermite_s16_c(frame, data[p], data[p+1], data[p+3], data[p+4], data[p+5], data[p+6])
     return _hermite_f32_c(frame, data[p], data[p+1], data[p+3], data[p+4], data[p+5], data[p+6])
 
-cdef inline void _mv_c(double* m, double vx, double vy, double vz, double* out) nogil:
+cdef inline void _mv_c(double* m, double vx, double vy, double vz, double* out) noexcept nogil:
     """PSMTXMultVec: out[0..2] = m * (vx,vy,vz) with the ps_sum0 grouping."""
     cdef int i, r
     cdef double pa, pb
@@ -811,7 +812,7 @@ def init_anim_consts(meta_max, meta_attr, hio):
 
 
 cdef void _fc_update(int attr, double start, double end, double loop,
-                     double* frame, double* rate) nogil:
+                     double* frame, double* rate) noexcept nogil:
     """J3DFrameCtrl::update: frame += rate then wrap/clamp per attribute (f32). Bit-exact port of
     anim_state.FrameCtrl.update. The loop-guard subtractions are f64 (like Python), the frame math f32."""
     cdef double fr = fadds(frame[0], rate[0])
@@ -846,6 +847,13 @@ cdef void _fc_update(int attr, double start, double end, double loop,
         if fr < start:
             fr = start; rt = -rt
     frame[0] = fr; rate[0] = rt
+
+
+cdef inline int _meta_at(int* m, int anim, int slot, int srt, int axis, int fld) noexcept nogil:
+    """Flat index into AnimData._meta[20][17][3][3][3] (via the raw pointer cached on PoseEngine),
+    so the nogil pose path reaches the keyframe metadata without a void*->AnimData cast (which this
+    Cython refcounts, forbidden under nogil)."""
+    return m[((((anim * 17 + slot) * 3 + srt) * 3 + axis) * 3) + fld]
 
 
 cdef class AnimData:
@@ -920,6 +928,17 @@ cdef class PoseEngine:
     AnimData + the per-instance MUTABLE state (old pose, morf counter, worldBase). One per FootFK; cheap
     to build per clone (no keyframe re-copy). Call set_pos() then pose_toe() per frame."""
     cdef AnimData data
+    # Raw C pointers into the (immutable, `data`-owned) AnimData arrays, cached under the GIL in
+    # __cinit__. The nogil pose path reads THESE, never `data` itself -- a void*->AnimData cast
+    # refcounts, which is forbidden without the GIL.
+    cdef int* _meta_p               # flat &data._meta[0][0][0][0][0]
+    cdef double** _sdata_p          # &data._sdata[0]
+    cdef double** _rdata_p          # &data._rdata[0]
+    cdef double** _tdata_p          # &data._tdata[0]
+    cdef int* _dec_p                # &data._dec[0]
+    cdef int* _chain39_p            # &data._chain39[0]
+    cdef int* _chain34_p            # &data._chain34[0]
+    cdef int _n39c, _n34c
     cdef double _oldq[12][4]
     cdef double _oldt[12][3]
     cdef double _olds[12][3]
@@ -958,6 +977,16 @@ cdef class PoseEngine:
     def __cinit__(self, AnimData data):
         cdef int i
         self.data = data
+        # cache raw C pointers to the immutable AnimData arrays (GIL held here) for the nogil path
+        self._meta_p = &data._meta[0][0][0][0][0]
+        self._sdata_p = &data._sdata[0]
+        self._rdata_p = &data._rdata[0]
+        self._tdata_p = &data._tdata[0]
+        self._dec_p = &data._dec[0]
+        self._chain39_p = &data._chain39[0]
+        self._chain34_p = &data._chain34[0]
+        self._n39c = data._n39
+        self._n34c = data._n34
         for i in range(12):
             self._has_old[i] = False
         for i in range(5):
@@ -1029,17 +1058,20 @@ cdef class PoseEngine:
         return (self._fc0_frame, self._fc1_frame, self._m_counter, self._m_f8, self._m_rate,
                 self._m_f10, self._m_f14, self._prev_f312, self._m35B4, self._a_ratio, self._m3598)
 
-    def set_pos(self, px, py, pz, facing):
-        """Set Link's world pose for the frame about to be posed: build worldBase + m37B4 into C
-        (was fk.world_base + a Python list round-trip per frame). Flat ground: base = transS.ZXYrotM(Y)."""
-        cdef long long fc = (<long long>facing) & 0xFFFF
+    cdef void _set_pos_c(self, double px, double py, double pz, long long facing) noexcept nogil:
+        cdef long long fc = facing & 0xFFFF
         cdef double c = jma_cos(fc), s = jma_sin(fc), ns = f32(-s)
         self._base[0] = c;   self._base[1] = 0.0; self._base[2] = s;   self._base[3] = f32(px)
         self._base[4] = 0.0; self._base[5] = 1.0; self._base[6] = 0.0; self._base[7] = f32(py)
         self._base[8] = ns;  self._base[9] = 0.0; self._base[10] = c;  self._base[11] = f32(pz)
         _psmtx_inverse_c(self._base, self._inv)
 
-    cdef void _init_morf(self, double i_morf) nogil:
+    def set_pos(self, px, py, pz, facing):
+        """Set Link's world pose for the frame about to be posed: build worldBase + m37B4 into C
+        (was fk.world_base + a Python list round-trip per frame). Flat ground: base = transS.ZXYrotM(Y)."""
+        self._set_pos_c(<double>px, <double>py, <double>pz, (<long long>facing) & 0xFFFF)
+
+    cdef void _init_morf(self, double i_morf) noexcept nogil:
         i_morf = f32(i_morf)
         if i_morf > 0.0:
             self._m_counter = i_morf
@@ -1051,7 +1083,7 @@ cdef class PoseEngine:
         else:
             self._m_counter = self._m_f8 = self._m_rate = self._m_f10 = self._m_f14 = 0.0
 
-    cdef void _morf_dec(self) nogil:
+    cdef void _morf_dec(self) noexcept nogil:
         if not (self._m_counter > 0.0):
             return
         self._m_counter = fsubs(self._m_counter, 1.0)
@@ -1065,26 +1097,26 @@ cdef class PoseEngine:
             self._m_rate = 0.0
 
     cdef void _calc_transform_c(self, int anim, int slot, double frame,
-                                double* scale, long long* rot, double* trans):
-        cdef AnimData d = self.data
-        cdef int axis, cnt, off, tt, dec = d._dec[anim]
+                                double* scale, long long* rot, double* trans) noexcept nogil:
+        cdef int* m = self._meta_p
+        cdef int axis, cnt, off, tt, dec = self._dec_p[anim]
         cdef double v
-        cdef double* sd = d._sdata[anim]
-        cdef double* rd = d._rdata[anim]
-        cdef double* td = d._tdata[anim]
+        cdef double* sd = self._sdata_p[anim]
+        cdef double* rd = self._rdata_p[anim]
+        cdef double* td = self._tdata_p[anim]
         for axis in range(3):
-            cnt = d._meta[anim][slot][0][axis][0]
-            off = d._meta[anim][slot][0][axis][1]
-            tt = d._meta[anim][slot][0][axis][2]
+            cnt = _meta_at(m, anim, slot, 0, axis, 0)
+            off = _meta_at(m, anim, slot, 0, axis, 1)
+            tt = _meta_at(m, anim, slot, 0, axis, 2)
             if cnt == 0:
                 scale[axis] = 1.0
             elif cnt == 1:
                 scale[axis] = f32(sd[off])
             else:
                 scale[axis] = _keyframe_interp_c(frame, cnt, tt, sd, off, 0)
-            cnt = d._meta[anim][slot][1][axis][0]
-            off = d._meta[anim][slot][1][axis][1]
-            tt = d._meta[anim][slot][1][axis][2]
+            cnt = _meta_at(m, anim, slot, 1, axis, 0)
+            off = _meta_at(m, anim, slot, 1, axis, 1)
+            tt = _meta_at(m, anim, slot, 1, axis, 2)
             if cnt == 0:
                 rot[axis] = 0
             elif cnt == 1:
@@ -1092,9 +1124,9 @@ cdef class PoseEngine:
             else:
                 v = _keyframe_interp_c(frame, cnt, tt, rd, off, 1)
                 rot[axis] = _as_s32c((<long long>v) << dec)
-            cnt = d._meta[anim][slot][2][axis][0]
-            off = d._meta[anim][slot][2][axis][1]
-            tt = d._meta[anim][slot][2][axis][2]
+            cnt = _meta_at(m, anim, slot, 2, axis, 0)
+            off = _meta_at(m, anim, slot, 2, axis, 1)
+            tt = _meta_at(m, anim, slot, 2, axis, 2)
             if cnt == 0:
                 trans[axis] = 0.0
             elif cnt == 1:
@@ -1103,7 +1135,7 @@ cdef class PoseEngine:
                 trans[axis] = _keyframe_interp_c(frame, cnt, tt, td, off, 0)
 
     cdef void _chain_fk(self, double* base, double* inv, int* chain, int n,
-                        double* local, double* out) nogil:
+                        double* local, double* out) noexcept nogil:
         """out = inv * (base * local[chain[0]] * ... * local[chain[n-1]]). `local` is 12 slots x 12."""
         cdef double bufA[12]
         cdef double bufB[12]
@@ -1118,7 +1150,7 @@ cdef class PoseEngine:
         _concat_c(inv, cur, out)
 
     cdef void _pose_toe_core(self, int m0, int m1, double f0, double f1, double ratio,
-                             double i_morf, double* toes):
+                             double i_morf, double* toes) noexcept nogil:
         """Pose all 12 chain joints (blend m0@f0 with m1@f1, oldframe-morf, PSMTXQuat, scale/trans),
         FK both feet from the worldBase set by set_pos(), remove the base with m37B4, and fill
         toes[0..11] = [Rtoe, Ltoe, Rheel, Lheel] x (x,y,z) (index 0 = right jnt39, 1 = left jnt34).
@@ -1211,9 +1243,8 @@ cdef class PoseEngine:
 
         cdef double cur39[12]
         cdef double cur34[12]
-        cdef AnimData d = self.data
-        self._chain_fk(self._base, self._inv, d._chain39, d._n39, local, cur39)
-        self._chain_fk(self._base, self._inv, d._chain34, d._n34, local, cur34)
+        self._chain_fk(self._base, self._inv, self._chain39_p, self._n39c, local, cur39)
+        self._chain_fk(self._base, self._inv, self._chain34_p, self._n34c, local, cur34)
 
         _mv_c(cur39, _TOE_X, _TOE_Y, 0.0, toes + 0)
         _mv_c(cur34, _TOE_X, _TOE_Y, 0.0, toes + 3)
@@ -1375,7 +1406,7 @@ cdef class PoseEngine:
         self._fc1_start = 0.0; self._fc1_end = 1.0; self._fc1_loop = 0.0
         self._fc1_rate = 0.0; self._fc1_frame = 0.0
 
-    cdef void _anim_set_move(self, double f27, double f28, double f25, int r27, int r28, int r29):
+    cdef void _anim_set_move(self, double f27, double f28, double f25, int r27, int r28, int r29) noexcept nogil:
         """daPy_lk_c::setMoveAnime (12723): r27->MOVE0, r28->MOVE1 at ratio f27; preserve phase, set the
         two frame-ctrl rates. i_morf is vestigial here (the FK morf is driven by FootSpeedF). Port of
         UnderAnimState._set_move_anime."""
@@ -1400,7 +1431,7 @@ cdef class PoseEngine:
         self._fc1_loop = 0.0 if self._fc1_rate >= 0.0 else f26
         self._move0 = r27; self._move1 = r28; self._m34C3 = r29
 
-    cdef void _anim_blend_move(self, double nspeed, double cos):
+    cdef void _anim_blend_move(self, double nspeed, double cos) noexcept nogil:
         """setBlendMoveAnime flat free-walk path (2966). Port of UnderAnimState._set_blend_move_anime."""
         cdef double an = fmuls(nspeed, cos)
         if an < 0.0:
@@ -1419,7 +1450,7 @@ cdef class PoseEngine:
             self._anim_set_move(1.0, _H_48, _H_48, C_DASH, C_DASH, 1)
             self._m3598 = 0.0
 
-    cdef void _anim_atn_side(self, double f31, bint is_left):
+    cdef void _anim_atn_side(self, double f31, bint is_left) noexcept nogil:
         """setBlendAtnMoveAnime side branch (3343). Port of UnderAnimState._set_atn_side_anime."""
         cdef double f1, f28
         cdef int m0, m1
@@ -1444,7 +1475,7 @@ cdef class PoseEngine:
             self._anim_set_move(1.0, _ATN_2C, _ATN_2C, m0, m0, 4)
             self._m3598 = 0.0
 
-    cdef void _anim_atn_back(self, double dvar7):
+    cdef void _anim_atn_back(self, double dvar7) noexcept nogil:
         """setBlendAtnBackMoveAnime (3217). Port of UnderAnimState._set_atn_back_anime."""
         cdef double f1
         if dvar7 < _ATNB_1C:
@@ -1460,7 +1491,7 @@ cdef class PoseEngine:
             self._m3598 = 0.0
 
     cdef double _foot_speedf_c(self, double nspeed, double msd, int m0, int m1,
-                               double f0, double f1, double ratio, double m3598, double morf):
+                               double f0, double f1, double ratio, double m3598, double morf) noexcept nogil:
         """posMoveFromFootPos: pose the foot (m0@f0, m1@f1, oldframe-morf `morf`), take the 1-frame
         delayed toe delta + compose speedF, then shift the toe stream. Port of foot_speedf._foot_speedf."""
         cdef double cur[12]
@@ -1480,6 +1511,9 @@ cdef class PoseEngine:
     def w_step(self, double nspeed, double msd, double anim_nspeed, bint has_anim):
         """One walk (MOVE / MOVE_TURN tail) frame. Port of FootSpeedF.step. `has_anim` splits the
         anim-blend speed from the position speed (procMoveTurn_init(1))."""
+        return self._w_step_c(nspeed, msd, anim_nspeed, has_anim)
+
+    cdef double _w_step_c(self, double nspeed, double msd, double anim_nspeed, bint has_anim) noexcept nogil:
         nspeed = f32(nspeed)
         msd = f32(msd)
         cdef double an = f32(anim_nspeed) if has_anim else nspeed
@@ -1520,6 +1554,10 @@ cdef class PoseEngine:
     def w_step_atn(self, double nspeed, double msd, int direction, double f31,
                    double morf, bint has_morf):
         """One ATN_MOVE frame. Port of FootSpeedF.step_atn."""
+        return self._w_step_atn_c(nspeed, msd, direction, f31, morf, has_morf)
+
+    cdef double _w_step_atn_c(self, double nspeed, double msd, int direction, double f31,
+                              double morf, bint has_morf) noexcept nogil:
         nspeed = f32(nspeed)
         msd = f32(msd)
         self._started = True
@@ -1542,6 +1580,9 @@ cdef class PoseEngine:
         Sets _started (getOldFrameFlg analog) like w_step_atn/w_enter_single do -- so a MOVE backslide
         after the proc-9 tier does not take w_step's cold nspeed<=0 rest path and return 0. Golden-inert
         (every real single-anim proc enters via w_enter_single, which already sets it)."""
+        return self._w_step_single_c(nspeed, msd)
+
+    cdef double _w_step_single_c(self, double nspeed, double msd) noexcept nogil:
         nspeed = f32(nspeed)
         msd = f32(msd)
         self._started = True
@@ -1558,6 +1599,10 @@ cdef class PoseEngine:
     def w_enter_single(self, int code, double morf, double start, double end,
                        double rate, bint has_morf):
         """setSingleMoveAnime entry (12794). Port of FootSpeedF.enter_single + UnderAnimState.set_single."""
+        self._w_enter_single_c(code, morf, start, end, rate, has_morf)
+
+    cdef void _w_enter_single_c(self, int code, double morf, double start, double end,
+                                double rate, bint has_morf) noexcept nogil:
         self._move0 = code; self._move1 = -1; self._m34C3 = 0; self._a_ratio = 0.0
         cdef double frame = fsubs(end, 0.001) if rate < 0.0 else start
         self._fc0_attr = _MATTR[code]
@@ -1572,6 +1617,9 @@ cdef class PoseEngine:
 
     def w_enter_wait_idle(self, double ratio, int r27_code, double morf, double msd):
         """WAIT idle-proc turn-step re-pose after a WAIT_TURN pivot. Port of FootSpeedF.enter_wait_idle."""
+        return self._w_enter_wait_idle_c(ratio, r27_code, morf, msd)
+
+    cdef double _w_enter_wait_idle_c(self, double ratio, int r27_code, double morf, double msd) noexcept nogil:
         self._started = True
         self._anim_set_move(ratio, _H_38, _ATN_28, C_WAITS, r27_code, 2)
         self._m3598 = 0.0
@@ -1607,6 +1655,9 @@ cdef class PoseEngine:
         self._foot_speedf_c(0.0, f32(msd), self._move0, self._move1,
                             self._fc0_frame, self._fc1_frame, self._a_ratio, self._m3598, -1.0)
         return 0.0
+
+    cdef void _w_set_pending_c(self, double v) noexcept nogil:
+        self._pending_morf = v; self._has_pending = True
 
     def w_set_pending(self, v):
         """land.py sets FootSpeedF._pending_morf directly on some proc transitions; route into C."""
@@ -1691,7 +1742,7 @@ cdef class PoseEngine:
 
 
 # ---- posMoveFromFootPos composition (plant select + absXZ + smoothing + speedF) ---------------
-cdef double _sqrtf_c(double x) nogil:
+cdef double _sqrtf_c(double x) noexcept nogil:
     """std::sqrtf: frsqrte seed + 3 Newton refines in f64, then f32(x*guess). Bit-exact core of
     foot_speedf._sqrtf (a math-accurate seed matches: 3 Newton steps wash out the crude frsqrte seed)."""
     x = f32(x)
@@ -1705,7 +1756,7 @@ cdef double _sqrtf_c(double x) nogil:
     return f32(x)
 
 cdef void _foot_compose_c(double* t1, double* t2, double nspeed, double msd, double m3598,
-                          double prev_f312, double m35B4, double* out_speedF, double* out_f312) nogil:
+                          double prev_f312, double m35B4, double* out_speedF, double* out_f312) noexcept nogil:
     """posMoveFromFootPos toe->speedF core (d_a_player_main.cpp:2372+). t1/t2 = the flat 12-double
     toe arrays for the last two DRAWN frames. Writes speedF + f312. Bit-exact port of the tail of
     foot_speedf._foot_speedf (plant select on t1, 1-frame-delayed toe delta, recursive smoothing,
@@ -1752,11 +1803,11 @@ def init_cam(stick_nrm, deg2s16, s162deg):
     global _STICK_NRM, _DEG2S16, _S162DEG
     _STICK_NRM = stick_nrm; _DEG2S16 = deg2s16; _S162DEG = s162deg
 
-cdef inline long long _s16c(long long x) nogil:
+cdef inline long long _s16c(long long x) noexcept nogil:
     x &= 0xFFFF
     return x - 0x10000 if x >= 0x8000 else x
 
-cdef void _clamp_stick_c(int x, int y, int min_, int max_, int xy, int* ox, int* oy) nogil:
+cdef void _clamp_stick_c(int x, int y, int min_, int max_, int xy, int* ox, int* oy) noexcept nogil:
     """PADClamp ClampStick (Padclamp.c): per-axis dead-zone (subtract min_) + octagonal clamp (points
     outside the octagon scaled onto its edge, each axis s8-truncated). x,y are s8 (raw byte - 128).
     Params: main stick min=15/max=72/xy=40; sub (C-stick) min=15/max=59/xy=31."""
@@ -1790,7 +1841,7 @@ def cstick_normalize(csx, csy):
         posy = f32(posy / val)
     return (posx, posy)
 
-cdef double _rbr_c(double p1, double p2) nogil:
+cdef double _rbr_c(double p1, double p2) noexcept nogil:
     """dCamMath::rationalBezierRatio (double math, single-rounded result). Core of rationalBezierRatio."""
     cdef double sign = 1.0
     if p1 < 0.0:
@@ -1922,7 +1973,7 @@ def land_init_consts(c):
 
 
 cdef double _clib_addcalc(double value, double target, double scale,
-                          double max_step, double min_step) nogil:
+                          double max_step, double min_step) noexcept nogil:
     """mathlib.cLib_addCalc (f32 chase). Bit-exact port."""
     if value == target:
         return value
@@ -1947,7 +1998,7 @@ cdef double _clib_addcalc(double value, double target, double scale,
 
 
 cdef long long _clib_addcalc_angles(long long value, long long target, long long scale,
-                                    long long max_step, long long min_step) nogil:
+                                    long long max_step, long long min_step) noexcept nogil:
     """land.cLib_addCalcAngleS (s16 integer chase). Bit-exact port; C int division truncates toward
     zero (cdivision) == Python int(diff / scale)."""
     value &= 0xFFFF
@@ -1971,7 +2022,7 @@ cdef long long _clib_addcalc_angles(long long value, long long target, long long
         return target if _s16c(target - nv) >= 0 else nv
 
 
-cdef long long _cam_step_target_c(long long cam_target, double stick_x, double scale) nogil:
+cdef long long _cam_step_target_c(long long cam_target, double stick_x, double scale) noexcept nogil:
     """cam_bezier.step_cam_target core (one manualCamera azimuth update)."""
     cdef double ratio
     if stick_x >= 0.75:
@@ -1987,7 +2038,7 @@ cdef long long _cam_step_target_c(long long cam_target, double stick_x, double s
     return new & 0xFFFF
 
 
-cdef double _cstick_posx_c(int csx, int csy) nogil:
+cdef double _cstick_posx_c(int csx, int csy) noexcept nogil:
     """cam_bezier.cstick_normalize -> mStickCPosX only (the camera yaw command needs just X)."""
     cdef int px, py
     _clamp_stick_c(csx - 128, csy - 128, 15, 59, 31, &px, &py)
@@ -1999,7 +2050,7 @@ cdef double _cstick_posx_c(int csx, int csy) nogil:
     return posx
 
 
-cdef double _cstick_posy_c(int csx, int csy) nogil:
+cdef double _cstick_posy_c(int csx, int csy) noexcept nogil:
     """cam_bezier.cstick_normalize -> mStickCPosY only (the C-up-cancel subjectivity gesture)."""
     cdef int px, py
     _clamp_stick_c(csx - 128, csy - 128, 15, 59, 31, &px, &py)
@@ -2178,7 +2229,7 @@ cdef class LandCore:
         self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
 
     # --- stick layer (setStickData, 10530) ---
-    cdef void _set_stick_data(self, int sx, int sy):
+    cdef void _set_stick_data(self, int sx, int sy) noexcept nogil:
         # Faithful PADClamp octagon clamp + JUTGamePad::CStick::update (STICK_MODE_1). Bit-exact twin
         # of mathlib.main_stick_decode: msd = min(hypot(clamped)/54, 1) (f64, on-axis == the old naive
         # value); angle = (s16)(10430.379f * atan2f(mPosX, -mPosY)) on the CLAMPED+normalized vector.
@@ -2206,7 +2257,7 @@ cdef class LandCore:
             self.m34dc = (ang + 0x8000) & 0xFFFF
             self.target = (self.m34dc + self.csangle) & 0xFFFF
 
-    cdef inline int _get_dir(self, long long angle):
+    cdef inline int _get_dir(self, long long angle) noexcept nogil:
         cdef long long a = _s16c(angle)
         cdef long long aa = a if a >= 0 else -a
         if aa > 0x6000:
@@ -2218,7 +2269,7 @@ cdef class LandCore:
         return LD_FORWARD
 
     # --- setNormalSpeedF (2301), walk path ---
-    cdef void _set_normal_speed_f(self, double param_1, double param_2, double param_3, double param_4):
+    cdef void _set_normal_speed_f(self, double param_1, double param_2, double param_3, double param_4) noexcept nogil:
         cdef double dVar10 = f32(self.msd * f32(self.max_nspeed * self.msd))
         cdef double temp_f0, temp_f3, dVar6
         if dVar10 < self.nspeed:
@@ -2239,7 +2290,7 @@ cdef class LandCore:
             self.nspeed = _clib_addcalc(self.nspeed, dVar6, param_2, temp_f3, param_4)
 
     # --- setSpeedAndAngleNormal (2751), walk path ---
-    cdef void _set_speed_and_angle_normal(self, long long param_1, bint attention_lock):
+    cdef void _set_speed_and_angle_normal(self, long long param_1, bint attention_lock) noexcept nogil:
         cdef bint bVar2 = False
         cdef double dVar11, dVar9, dVar10, sp_ratio
         cdef long long sVar6, sVar7, old_facing, t1, t2
@@ -2294,7 +2345,7 @@ cdef class LandCore:
         self._set_normal_speed_f(dVar9, _L_F24, _L_F1C, _L_F20)
 
     # --- setSpeedAndAngleAtn (2851) ---
-    cdef void _set_speed_and_angle_atn(self):
+    cdef void _set_speed_and_angle_atn(self) noexcept nogil:
         if self.direction == LD_FORWARD:
             self._set_speed_and_angle_normal(_L_F0, True)
             return
@@ -2316,7 +2367,7 @@ cdef class LandCore:
         self.facing = self.m34E6
         self._set_normal_speed_f(fVar2, _L_ATN_SCL, _L_ATN_ACC, _L_ATN_DEC)
 
-    cdef void _set_speed_and_angle_atn_back(self):
+    cdef void _set_speed_and_angle_atn_back(self) noexcept nogil:
         cdef double f1
         cdef long long old
         if self.msd > 0.05:
@@ -2332,7 +2383,7 @@ cdef class LandCore:
         self.facing = self.m34E6
         self._set_normal_speed_f(f1, _L_ATNB_SCL, _L_ATNB_ACC, _L_ATNB_DEC)
 
-    cdef void _update_atn_direction(self):
+    cdef void _update_atn_direction(self) noexcept nogil:
         cdef long long iVar6 = _s16c(self.travel - self.facing)
         cdef double f2 = jma_sin(iVar6)
         cdef double fVar4 = jma_cos(iVar6)
@@ -2357,7 +2408,7 @@ cdef class LandCore:
         elif self.direction != LD_RIGHT and self.direction != LD_LEFT:
             self.direction = LD_RIGHT
 
-    cdef void _check_next_mode(self, bint l_held):
+    cdef void _check_next_mode(self, bint l_held) noexcept nogil:
         cdef int cur = self.state
         cdef long long dist
         # `_court_locked` (mpAttnActorLockOn != NULL) is set only by step_courtyard; it stays False in
@@ -2392,14 +2443,14 @@ cdef class LandCore:
             self.state = LS_MOVE
 
     # --- turn / roll / slip procs ---
-    cdef void _proc_wait_turn_init(self):
+    cdef void _proc_wait_turn_init(self) noexcept nogil:
         self.state = LS_WAIT_TURN
         self.turn_target = self.target
         self.travel = self.facing
-        self._pe.w_enter_single(C_ROT, _L_MOVE_REENTRY_MORF, 0.0, _MMAX[C_ROT],
-                                _L_WAIT_TURN_ANIM_RATE, True)
+        self._pe._w_enter_single_c(C_ROT, _L_MOVE_REENTRY_MORF, 0.0, _MMAX[C_ROT],
+                                   _L_WAIT_TURN_ANIM_RATE, True)
 
-    cdef void _proc_wait_turn(self, bint l_held):
+    cdef void _proc_wait_turn(self, bint l_held) noexcept nogil:
         self.nspeed = _clib_addcalc(self.nspeed, 0.0, _L_F24, _L_F1C, _L_F20)
         self.facing = _clib_addcalc_angles(self.facing, self.turn_target,
                                            _L_TURN_SCALE, _L_TURN_MAX, _L_TURN_MIN)
@@ -2407,9 +2458,9 @@ cdef class LandCore:
         if _s16c(self.turn_target - self.facing) == 0:
             self._check_next_mode(l_held)
 
-    cdef void _proc_move_turn_init(self, int param_1):
+    cdef void _proc_move_turn_init(self, int param_1) noexcept nogil:
         self.state = LS_MOVE_TURN
-        self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
+        self._pe._w_set_pending_c(_L_MOVE_REENTRY_MORF)
         if param_1 != 0:
             self.turn_shape_max = (_L_F0 * 4 + 0x4A56) & 0xFFFF
             self.turn_shape_min = (_L_F0 * 2) & 0xFFFF
@@ -2423,20 +2474,20 @@ cdef class LandCore:
             self.turn_shape_min = _L_F0 & 0xFFFF
             self.turn_shape_scale = 3
 
-    cdef void _proc_move_turn(self, bint l_held):
+    cdef void _proc_move_turn(self, bint l_held) noexcept nogil:
         self._set_speed_and_angle_normal(_L_F0, l_held)
         self.facing = _clib_addcalc_angles(self.facing, self.travel,
                                            self.turn_shape_scale, self.turn_shape_max, self.turn_shape_min)
         self._check_next_mode(l_held)
         if self.state == LS_MOVE:
-            self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
+            self._pe._w_set_pending_c(_L_MOVE_REENTRY_MORF)
 
-    cdef void _proc_slip_init(self):
+    cdef void _proc_slip_init(self) noexcept nogil:
         self.state = LS_SLIP
         self.nspeed = f32(self.speedF * _L_SLIP_ENTRY)
-        self._pe.w_enter_single(C_SLIP, _L_SLIP_MORF, 0.0, _MMAX[C_SLIP], _L_SLIP_ANIM_RATE, True)
+        self._pe._w_enter_single_c(C_SLIP, _L_SLIP_MORF, 0.0, _MMAX[C_SLIP], _L_SLIP_ANIM_RATE, True)
 
-    cdef void _proc_slip(self, bint l_held):
+    cdef void _proc_slip(self, bint l_held) noexcept nogil:
         self.nspeed = _clib_addcalc(self.nspeed, 0.0, _L_SLIP_DEC_SCALE,
                                     _L_SLIP_DEC_MAX, _L_SLIP_DEC_MIN)
         if _c_fabs(self.nspeed) <= 0.001:
@@ -2448,7 +2499,7 @@ cdef class LandCore:
             else:
                 self._check_next_mode(l_held)
 
-    cdef void _roll_init(self):
+    cdef void _roll_init(self) noexcept nogil:
         cdef double v = f32(f32(self.speedF * _L_ROLL_SPD) + _L_ROLL_ADD)
         cdef double cap
         if v < _L_ROLL_MIN:
@@ -2463,14 +2514,14 @@ cdef class LandCore:
         self.state = LS_FRONT_ROLL
         self.roll_frame = 0.0
         self._roll_entered = True
-        self._pe.w_enter_single(C_ROLLF, _L_ROLL_ENTRY_MORF, 0.0, _L_ROLL_END, _L_ROLL_RATE, True)
+        self._pe._w_enter_single_c(C_ROLLF, _L_ROLL_ENTRY_MORF, 0.0, _L_ROLL_END, _L_ROLL_RATE, True)
 
-    cdef void _roll_exit(self, bint l_held):
+    cdef void _roll_exit(self, bint l_held) noexcept nogil:
         self._check_next_mode(l_held)
         if self.state == LS_MOVE:
-            self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
+            self._pe._w_set_pending_c(_L_MOVE_REENTRY_MORF)
 
-    cdef void _proc_roll(self, bint l_held):
+    cdef void _proc_roll(self, bint l_held) noexcept nogil:
         if self._roll_entered:
             self._roll_entered = False
             return
@@ -2678,10 +2729,10 @@ cdef class LandCore:
         self._cbuf[3] = triggerL; self._cbuf[4] = 128; self._cbuf[5] = 128
         self._has_cbuf = True
 
-    cdef inline bint _atn_locked(self):
+    cdef inline bint _atn_locked(self) noexcept nogil:
         return self._atn_state == _ATN_LOCK or self._atn_state == _ATN_RELEASE
 
-    cdef bint _atn_target_present(self):
+    cdef bint _atn_target_present(self) noexcept nogil:
         """chaseAttention front-of-player cone gate (attention.py _atn_target_present)."""
         cdef long long bearing = _cm_atan2s_c(f32(self._tetra_x - self.pos_x),
                                               f32(self._tetra_z - self.pos_z))
@@ -2690,7 +2741,7 @@ cdef class LandCore:
             d = -d
         return d <= _ATN_FRONT_CONE_HALF
 
-    cdef void _atn_update(self, bint l_held, bint target_present):
+    cdef void _atn_update(self, bint l_held, bint target_present) noexcept nogil:
         """dAttention_c hold-mode Run (attention.py AttentionLock.update)."""
         cdef bint rising = l_held and not self._atn_l_prev
         cdef int prev_state = self._atn_state
@@ -2719,7 +2770,7 @@ cdef class LandCore:
         else:
             self._atn_list_present = target_present
 
-    cdef void _set_shape_angle_to_atn_actor(self):
+    cdef void _set_shape_angle_to_atn_actor(self) noexcept nogil:
         """setShapeAngleToAtnActor (2625): re-aim shape_angle.y at the locked actor's eyePos
         (injected _atn_eye; feet fallback). No-op while unlocked (the body2 frame past the drop)."""
         if not self._atn_locked():
@@ -2733,7 +2784,7 @@ cdef class LandCore:
         self.facing = _clib_addcalc_angles(self.facing, ta & 0xFFFF,
                                            _ATN_SHAPE_SCALE, _ATN_SHAPE_MAX, _ATN_SHAPE_MIN)
 
-    cdef void _set_speed_and_angle_atn_actor(self):
+    cdef void _set_speed_and_angle_atn_actor(self) noexcept nogil:
         """setSpeedAndAngleAtnActor (2909): the actor-lock chase (procs 8/9). Same mAtnMove family as
         the ATN path with the DIR_BACKWARD negation flip, but re-aims facing at the actor (no mDirection
         forward/backward split -- procs 8/9 always run this)."""
@@ -2752,7 +2803,7 @@ cdef class LandCore:
         self._set_shape_angle_to_atn_actor()
         self._set_normal_speed_f(f1, _L_ATN_SCL, _L_ATN_ACC, _L_ATN_DEC)
 
-    cdef void _set_move_slant_angle_c(self):
+    cdef void _set_move_slant_angle_c(self) noexcept nogil:
         """daPy_lk_c::setMoveSlantAngle (state.py _set_move_slant_angle): the MOVE turn-lean m351C.
         Uses the frame-START m34de, the current facing, and self.speedF (the actual integrated speed)."""
         cdef double thresh = f32(0.95)
@@ -2792,7 +2843,23 @@ cdef class LandCore:
         THIS frame's recoil in posMove, moves the tracked Tetra by THIS frame's push (rounded to f32
         per axis), then rebuilds the exec-pass body-Co centre (`_pe._body_co_center` off the posed
         neck chain) and computes NEXT frame's push pair (`_co_move_pair_c`). Only the eye + csangle
-        stay injected. Requires a `seed_courtyard(..., pend_link_*, pend_tetra_*)` seed."""
+        stay injected. Requires a `seed_courtyard(..., pend_link_*, pend_tetra_*)` seed.
+
+        Thin GIL wrapper over `_step_courtyard_nogil` (the whole coupled frame runs in C with the GIL
+        released; the fleet driver `prange`s that core across the search frontier -- Stage 4)."""
+        return self._step_courtyard_nogil(sx, sy, buttons, triggerL, csangle, tetra_x, tetra_z,
+                                          eye_x, eye_z, has_eye, pend_link_x, pend_link_z,
+                                          speedf_inject, has_speedf_inject, native_push)
+
+    cdef double _step_courtyard_nogil(self, int sx, int sy, int buttons, int triggerL,
+                                      long long csangle, double tetra_x, double tetra_z,
+                                      double eye_x, double eye_z, int has_eye,
+                                      double pend_link_x, double pend_link_z,
+                                      double speedf_inject, int has_speedf_inject,
+                                      int native_push) noexcept nogil:
+        """The pure-C coupled Courtyard frame (see `step_courtyard`). No Python-object interaction:
+        operates entirely on this core's C state + the bound C `PoseEngine`, so `prange` fan-out over
+        an independent fleet preserves the exact 0-ULP result of stepping each core sequentially."""
         # --- delay-1 controller buffer: act on the PREVIOUS call's input (input_delay=1) ---
         cdef int asx = self._cbuf[0], asy = self._cbuf[1], abtn = self._cbuf[2], atrig = self._cbuf[3]
         self._cbuf[0] = sx; self._cbuf[1] = sy; self._cbuf[2] = buttons; self._cbuf[3] = triggerL
@@ -2859,38 +2926,38 @@ cdef class LandCore:
             self._update_atn_direction()        # _court_locked already set above (locked gate)
         if ((proc == LS_ATN_MOVE or proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT)
                 and self.state == LS_MOVE):
-            self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
+            self._pe._w_set_pending_c(_L_MOVE_REENTRY_MORF)
 
         # --- pose + speedF (posMoveFromFootPos via the seeded fused engine) ---
-        self._pe.set_pos(self.pos_x, self.pos_y, self.pos_z, self.facing)
+        self._pe._set_pos_c(self.pos_x, self.pos_y, self.pos_z, self.facing)
         cdef double sf_native, f31, na, ratio
         cdef long long r3, r3a
         cdef int r27
         cdef bint entered, morf_on
         cdef int st_now = self.state
         if st_now == LS_FRONT_ROLL or st_now == LS_SLIP:
-            self._pe.w_step_single(self.nspeed, self.msd)
+            self._pe._w_step_single_c(self.nspeed, self.msd)
             na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
             sf_native = 0.0 if na < 0.05 else self.nspeed
         elif (proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT
               or st_now == LS_ATN_ACTOR_MOVE or st_now == LS_ATN_ACTOR_WAIT):
             f31 = f32(_c_fabs(self.nspeed) / self.max_nspeed)
             if st_now == LS_MOVE:
-                self._pe.w_step(self.nspeed, self.msd, 0.0, False)
+                self._pe._w_step_c(self.nspeed, self.msd, 0.0, False)
             else:
                 entered = not (proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT)
                 morf_on = entered or (self.direction != prev_dir)
-                self._pe.w_step_atn(self.nspeed, self.msd, self.direction, f31,
-                                    _L_MOVE_REENTRY_MORF if morf_on else 0.0, morf_on)
+                self._pe._w_step_atn_c(self.nspeed, self.msd, self.direction, f31,
+                                       _L_MOVE_REENTRY_MORF if morf_on else 0.0, morf_on)
             na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
             sf_native = 0.0 if na < 0.05 else self.nspeed
         elif st_now == LS_ATN_MOVE:
             f31 = f32(_c_fabs(self.nspeed) / self.max_nspeed)
             morf_on = (proc != LS_ATN_MOVE) or (self.direction != prev_dir)
-            sf_native = self._pe.w_step_atn(self.nspeed, self.msd, self.direction, f31,
-                                            _L_MOVE_REENTRY_MORF if morf_on else 0.0, morf_on)
+            sf_native = self._pe._w_step_atn_c(self.nspeed, self.msd, self.direction, f31,
+                                               _L_MOVE_REENTRY_MORF if morf_on else 0.0, morf_on)
         elif st_now == LS_WAIT_TURN:
-            self._pe.w_step_single(self.nspeed, self.msd)
+            self._pe._w_step_single_c(self.nspeed, self.msd)
             sf_native = 0.0
         elif proc == LS_WAIT_TURN and st_now == LS_WAIT:
             r3 = _s16c(self.facing - self.m34de)
@@ -2899,12 +2966,12 @@ cdef class LandCore:
             ratio = f32(f32(0.5) + f32(0.001 * <double>r3a))
             if ratio > 1.0:
                 ratio = 1.0
-            self._pe.w_enter_wait_idle(ratio, r27, _L_MOVE_REENTRY_MORF, self.msd)
+            self._pe._w_enter_wait_idle_c(ratio, r27, _L_MOVE_REENTRY_MORF, self.msd)
             sf_native = 0.0
         else:
-            sf_native = self._pe.w_step(self.nspeed, self.msd,
-                                        self._anim_nspeed if self._has_anim_nspeed else 0.0,
-                                        self._has_anim_nspeed)
+            sf_native = self._pe._w_step_c(self.nspeed, self.msd,
+                                           self._anim_nspeed if self._has_anim_nspeed else 0.0,
+                                           self._has_anim_nspeed)
             self._has_anim_nspeed = False
 
         self.speedF = f32(speedf_inject) if has_speedf_inject != 0 else sf_native
@@ -2950,7 +3017,144 @@ cdef class LandCore:
         return sf_native
 
 
-cdef inline long long _lldist(long long a, long long b) nogil:
+cdef inline long long _lldist(long long a, long long b) noexcept nogil:
     """cLib_distanceAngleS: |signed s16 difference|."""
     cdef long long d = _s16c(a - b)
     return d if d >= 0 else -d
+
+
+# ==== Courtyard search-frontier fleet: OpenMP prange fan-out (Stage 4) ===========================
+cdef class CourtyardFleet:
+    """A batch of INDEPENDENT `LandCore` courtyard steppers, fanned across OpenMP threads with
+    `prange` so the search frontier is advanced in parallel. Each branch's per-frame step is an
+    independent deterministic C computation on its own C state (its own `PoseEngine` clone; the
+    keyframe `AnimData` is shared read-only), so the parallel run is BIT-IDENTICAL to stepping the
+    same fleet sequentially -- 0-ULP is preserved exactly (gated in test_courtyard_fleet_native.py).
+
+    Design mirrors `_shovec.ShoveCtx.sweep_par`: a Python list keeps the cores alive, and a C
+    `void**` of borrowed pointers is read under `nogil` (`<LandCore>ptr` is a pure pointer cast --
+    no refcount, so it is nogil-safe). The whole hot loop holds NO GIL. Inputs are marshalled once
+    (under the GIL, in `set_schedule`) into flat C arrays; `run_par`/`run_seq` never touch Python."""
+    cdef list _pylist                 # keeps the LandCore refs alive
+    cdef void** _cores                # borrowed LandCore pointers (indexed under nogil)
+    cdef Py_ssize_t _n
+    cdef int* _sched                  # input schedule, flat: [.,.].,sx,sy,buttons,triggerL per (row,frame)
+    cdef long long* _csched           # csangle per (row, frame)
+    cdef int _maxf                    # frames per schedule row
+    cdef bint _shared                 # one shared schedule row for every core (bench) vs one per core
+    cdef int _native_push
+
+    def __cinit__(self, cores, int native_push=1):
+        cdef Py_ssize_t i
+        self._pylist = list(cores)
+        self._n = len(self._pylist)
+        self._native_push = native_push
+        self._sched = NULL
+        self._csched = NULL
+        self._maxf = 0
+        self._shared = False
+        self._cores = <void**>malloc(self._n * sizeof(void*))
+        if self._cores == NULL:
+            raise MemoryError()
+        for i in range(self._n):
+            if not isinstance(self._pylist[i], LandCore):
+                raise TypeError("CourtyardFleet requires LandCore instances")
+            self._cores[i] = <void*>(<LandCore>self._pylist[i])
+
+    def __dealloc__(self):
+        if self._cores != NULL:
+            free(self._cores)
+        if self._sched != NULL:
+            free(self._sched)
+        if self._csched != NULL:
+            free(self._csched)
+
+    property size:
+        def __get__(self):
+            return self._n
+
+    cdef void _alloc_sched(self, Py_ssize_t rows, int nf):
+        if self._sched != NULL:
+            free(self._sched)
+        if self._csched != NULL:
+            free(self._csched)
+        self._maxf = nf
+        self._sched = <int*>malloc(rows * nf * 4 * sizeof(int))
+        self._csched = <long long*>malloc(rows * nf * sizeof(long long))
+        if self._sched == NULL or self._csched == NULL:
+            raise MemoryError()
+
+    def set_schedule(self, schedules):
+        """Per-core input schedule. `schedules` = list (length == fleet size) of per-core frame lists;
+        each frame = (sx, sy, buttons, triggerL, csangle). All rows must share the frame count. Used
+        by the 0-ULP gate (each branch its own input stream, faithful to a real frontier)."""
+        cdef Py_ssize_t i, f
+        cdef int nf
+        if len(schedules) != self._n:
+            raise ValueError("schedule count != fleet size")
+        nf = len(schedules[0])
+        for i in range(self._n):
+            if len(schedules[i]) != nf:
+                raise ValueError("all per-core schedules must share the frame count")
+        self._alloc_sched(self._n, nf)
+        self._shared = False
+        for i in range(self._n):
+            for f in range(nf):
+                row = schedules[i][f]
+                self._sched[(i * nf + f) * 4 + 0] = <int>row[0]
+                self._sched[(i * nf + f) * 4 + 1] = <int>row[1]
+                self._sched[(i * nf + f) * 4 + 2] = <int>row[2]
+                self._sched[(i * nf + f) * 4 + 3] = <int>row[3]
+                self._csched[i * nf + f] = <long long>row[4]
+
+    def set_shared_schedule(self, frames):
+        """One schedule row cycled by EVERY core (memory O(nf), not O(n*nf)) -- the throughput bench:
+        each core runs the same DTM-window input stream from its own seeded state."""
+        cdef Py_ssize_t f
+        cdef int nf = len(frames)
+        self._alloc_sched(1, nf)
+        self._shared = True
+        for f in range(nf):
+            row = frames[f]
+            self._sched[f * 4 + 0] = <int>row[0]
+            self._sched[f * 4 + 1] = <int>row[1]
+            self._sched[f * 4 + 2] = <int>row[2]
+            self._sched[f * 4 + 3] = <int>row[3]
+            self._csched[f] = <long long>row[4]
+
+    cdef inline void _step_core_frame(self, Py_ssize_t i, int f) noexcept nogil:
+        cdef Py_ssize_t r = 0 if self._shared else i
+        cdef Py_ssize_t o = r * self._maxf + f
+        (<LandCore>self._cores[i])._step_courtyard_nogil(
+            self._sched[o * 4 + 0], self._sched[o * 4 + 1],
+            self._sched[o * 4 + 2], self._sched[o * 4 + 3],
+            self._csched[o], 0.0, 0.0, 0.0, 0.0, 0,
+            0.0, 0.0, 0.0, 0, self._native_push)
+
+    def run_seq(self, int nframes):
+        """Sequential reference: step every core `nframes` frames in order (the parallel gate's twin)."""
+        cdef Py_ssize_t i
+        cdef int f
+        if nframes > self._maxf:
+            raise ValueError("nframes exceeds schedule length")
+        for i in range(self._n):
+            for f in range(nframes):
+                self._step_core_frame(i, f)
+
+    def run_par(self, int nframes, int nthreads=0):
+        """OpenMP parallel: fan the cores across threads; each thread runs its cores' full `nframes`
+        independent runs, GIL released. Bit-identical to `run_seq`. `nthreads`==0 => OpenMP default."""
+        cdef Py_ssize_t i
+        cdef int f
+        if nframes > self._maxf:
+            raise ValueError("nframes exceeds schedule length")
+        if nthreads > 0:
+            with nogil, parallel(num_threads=nthreads):
+                for i in prange(self._n, schedule='static'):
+                    for f in range(nframes):
+                        self._step_core_frame(i, f)
+        else:
+            with nogil, parallel():
+                for i in prange(self._n, schedule='static'):
+                    for f in range(nframes):
+                        self._step_core_frame(i, f)
