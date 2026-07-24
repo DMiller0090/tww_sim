@@ -214,6 +214,10 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         s.__dict__.update(self.__dict__)
         s._inbuf = list(self._inbuf)
         s._cam = self._cam.clone()          # s16-integer camera: clone so A* nodes never alias one
+        # Mutated every step, so sharing couples branches to each other AND to the parent; the
+        # attention one silently changes the roll exit routing (proc 9 vs 6). See AttentionLock.clone.
+        s._atn = self._atn.clone()
+        s.visited = set(self.visited)
         if self._gnd is not None:
             s._gnd = self._gnd.clone()      # ground bookkeeping (m35B8 chase, probe hysteresis)
         # State-copy the stateful anim engine so the clone continues BIT-EXACTLY even MID-WALK (the

@@ -93,3 +93,15 @@ class AttentionLock:
         else:
             self.list_present = bool(target_present)   # stockAttention every NONE-state Run
         return self
+
+    def clone(self):
+        """A per-branch copy. REQUIRED by `LandState.clone`: this machine is mutated every frame and
+        it routes the roll exit (proc 9 vs 6), so a shared instance silently couples search branches
+        to each other -- and to their parent -- long after they diverge."""
+        c = AttentionLock.__new__(AttentionLock)
+        c.state = self.state
+        c.FADE_FRAMES = self.FADE_FRAMES
+        c._fade = self._fade
+        c._l_prev = self._l_prev
+        c.list_present = self.list_present
+        return c

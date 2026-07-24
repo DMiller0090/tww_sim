@@ -727,6 +727,50 @@ def junction_gates(jr, hl, frames, *, min_preroll=17.0):
     return None
 
 
+def junction_endpoints(run0, base_log, hl, base_frames, *, jn_keep=30, swing_step=1,
+                       n_swings=(2, 3, 4, 5, 6), variants=None):
+    """**The junction stage** (stage 1 of any chained cycle): from a post-roll node, sweep the
+    junction families, apply the hard gates, dedup converged endpoints, and keep ``jn_keep``.
+
+    Shared by the 2-roll chain (`cycle2_chain`) and the N-cycle herd (`full_herd.extend_cycle`) so
+    there is ONE junction stage. Returns ``([dict(run, log, jf, jv, m)], dead_counts)``.
+
+    The keep is deliberately MIXED -- half ranked by on-line-ness, half by shortness: each pure
+    ranking measurably drops real winners (s42: jf-first keeps flip-starved endpoints, |lat|-first
+    drops the only survivors)."""
+    tb = _bearing((run0.link.pos_x, run0.link.pos_z), (run0.tx, run0.tz))
+    toward = stick_for_bearing(tb, run0.csangle, msd=1.0)
+    kept, seen, dead = [], set(), {}
+    if variants is None:
+        variants = junction_variants(toward, swing_step=swing_step, n_swings=n_swings)
+    for jv in variants:
+        jr = run0.clone()
+        jlog = list(base_log)
+        jf = run_junction(jr, jv['phases'], log=jlog)
+        why = junction_gates(jr, hl, base_frames + jf)
+        if why:
+            dead[why] = dead.get(why, 0) + 1
+            continue
+        # The tag includes the LAST DELIVERED input: same physics state, different pending
+        # delay-1 input = a different flip fate at the roll-A -- collapsing them drops plans.
+        last = jlog[-1] if jlog else {}
+        tag = (round(jr.link.pos_x, 1), round(jr.link.pos_z, 1), jr.link.facing >> 4,
+               round(jr.link.speedF, 2), round(jr.tx, 1), round(jr.tz, 1),
+               jr.link.state, int(jr.csangle) >> 4,
+               last.get('stickX'), last.get('stickY'),
+               int(last.get('buttons', 0)) & S.PAD_L, bool(last.get('triggerL')))
+        if tag in seen:
+            continue
+        seen.add(tag)
+        kept.append(dict(run=jr, log=jlog, jf=jf, jv=jv, frames=base_frames + jf,
+                         m=metrics(jr, hl, base_frames + jf)))
+    kept.sort(key=lambda k: (abs(k['m']['lat']), k['jf']))
+    half = kept[:jn_keep - jn_keep // 2]
+    rest = [k for k in kept if k not in half]
+    rest.sort(key=lambda k: (k['jf'], abs(k['m']['lat'])))
+    return half + rest[:jn_keep // 2], dead
+
+
 def cycle2_chain(env, hl, *, nodes=None, c1_beam=8, half_window2=0x2800, step2=12,
                  l_windows2=((4, 7), (5, 8)), target_css=None, min_roll2=20.0,
                  swing_step=1, n_swings=(2, 3, 4, 5, 6), jn_keep=30, beam=40, verbose=False):
@@ -771,38 +815,10 @@ def cycle2_chain(env, hl, *, nodes=None, c1_beam=8, half_window2=0x2800, step2=1
     jn_dead = {}
     for node in nodes:
         run0 = node['run']
-        tb = _bearing((run0.link.pos_x, run0.link.pos_z), (run0.tx, run0.tz))
-        toward = stick_for_bearing(tb, run0.csangle, msd=1.0)
-        kept = []
-        seen = set()
-        for jv in junction_variants(toward, swing_step=swing_step, n_swings=n_swings):
-            jr = run0.clone()
-            jlog = list(node['log'])
-            jf = run_junction(jr, jv['phases'], log=jlog)
-            why = junction_gates(jr, hl, node['frames'] + jf)
-            if why:
-                jn_dead[why] = jn_dead.get(why, 0) + 1
-                continue
-            # The tag includes the LAST DELIVERED input: same physics state, different pending
-            # delay-1 input = a different flip fate at the roll-A -- collapsing them drops plans.
-            last = jlog[-1] if jlog else {}
-            tag = (round(jr.link.pos_x, 1), round(jr.link.pos_z, 1), jr.link.facing >> 4,
-                   round(jr.link.speedF, 2), round(jr.tx, 1), round(jr.tz, 1),
-                   jr.link.state, int(jr.csangle) >> 4,
-                   last.get('stickX'), last.get('stickY'),
-                   int(last.get('buttons', 0)) & S.PAD_L, bool(last.get('triggerL')))
-            if tag in seen:
-                continue
-            seen.add(tag)
-            m = metrics(jr, hl, node['frames'] + jf)
-            kept.append(dict(run=jr, log=jlog, jf=jf, jv=jv, m=m))
-        # MIXED keep -- half by on-line-ness, half by shortness: each pure ranking measurably
-        # drops real winners (s42: jf-first keeps flip-starved, |lat|-first drops the survivors).
-        kept.sort(key=lambda k: (abs(k['m']['lat']), k['jf']))
-        half = kept[:jn_keep - jn_keep // 2]
-        rest = [k for k in kept if k not in half]
-        rest.sort(key=lambda k: (k['jf'], abs(k['m']['lat'])))
-        kept = half + rest[:jn_keep // 2]
+        kept, dead = junction_endpoints(run0, node['log'], hl, node['frames'],
+                                        jn_keep=jn_keep, swing_step=swing_step, n_swings=n_swings)
+        for k_, v_ in dead.items():
+            jn_dead[k_] = jn_dead.get(k_, 0) + v_
         if verbose:
             print("  node %s: %d junction endpoints kept (dead: %s)"
                   % (node['knobs'].get('roll_bam'), len(kept),
