@@ -145,6 +145,45 @@ def test_derived_target_css_is_entry_relative(env):
     assert int(run.csangle) in F.derived_target_css(run)
 
 
+def test_endgame_report_scores_both_halves_of_the_joint_target(env, hl):
+    """The coupled endgame metric (SESSION_PROMPT milestone 2) reports BOTH the placement distance
+    (Tetra -> nearest genuine coord) and the final-clip ENTRY gap (Link -> `seeds.ENTRY_ROLL_POS/
+    FACING`, the setup the coord list is valid for). This gates the metric's shape, not a search
+    result: the entry gap is MEASURED off the named seed constant, never a magic number."""
+    dtm = seeds.dtm_input_at(env)
+    base = seeds.make_freerun(env)
+    base.pre_seed_input(dtm(0))
+    for k in range(1, 21):
+        base.step(dtm(k))
+    node = dict(run=base, log=[dtm(k) for k in range(1, 21)], frames=20)
+    eg = F.endgame_report(node, hl)
+    assert eg['placement']['dist'] >= 0.0
+    assert 0 <= eg['placement']['nearest']['idx'] < 288
+    # the entry gap is exactly the distance from Link's endpoint to the named entry constant
+    import math
+    erp = seeds.ENTRY_ROLL_POS
+    assert eg['entry_dist'] == pytest.approx(
+        math.hypot(base.link.pos_x - erp[0], base.link.pos_z - erp[1]))
+    assert -0x8000 <= eg['entry_dfacing'] < 0x8000
+
+
+def test_terminal_targeting_reduces_placement_distance_and_bit_confirms(env, hl, box):
+    """The terminal cycle drives Tetra TOWARD a genuine coord (ranked by placement distance, not
+    u/frame) and any survivor replays BIT-IDENTICALLY on a fresh `FreeRun`. Run off a cheap cycle-1
+    node (far from the cluster, but it exercises the whole glide-steer + confirm path): a few glide
+    frames must strictly reduce the Tetra-to-coord distance, staying in the plow regime, and the
+    winner's own input log must confirm 0-ULP."""
+    nodes = F.cycle1_nodes(env, hl, box, beam=3)
+    start = min(F.placement_report(n)['dist'] for n in nodes)
+    tt = F.terminal_targeting(nodes, hl, max_frames=4, beam=8)
+    best = tt['best']
+    assert tt['dist'] < start                          # the glide made real progress toward a coord
+    assert best['frames'] >= nodes[0]['frames']        # it extended a start node
+    c = F.confirm_plan(env, hl, best)
+    assert c['bit_exact'], "the terminal plan did not replay 0-ULP"
+    assert c['talk_safe'] and not best['run']._follow_warned
+
+
 @pytest.mark.slow
 def test_cycle_unit_chains_from_the_recorded_entry_and_bit_confirms(env, hl, box):
     """What IS established (s43): the generic cycle unit -- junction beam then roll -- chains a

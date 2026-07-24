@@ -598,6 +598,122 @@ def placement_report(node, placements=None):
                 dist=math.hypot(best['x'] - tx, best['z'] - tz))
 
 
+def endgame_report(node, hl, placements=None):
+    """**The COUPLED endgame metric** (SESSION_PROMPT milestone 2): the placement objective is not
+    just "Tetra near a coord" -- the coord list is valid ONLY for a specific FINAL clip entry
+    (`seeds.ENTRY_ROLL_POS/FACING`, the slot-7 turnaround-clip setup). So a plan is scored on BOTH
+    halves of the joint target:
+
+      * ``placement`` -- Tetra's distance to the nearest genuine coord (`placement_report`), the
+        thing the terminal cycle drives to zero;
+      * ``entry_dist`` / ``entry_dfacing`` -- how far Link's endpoint is from the entry the coord
+        list assumes (position u + facing BAM). MEASURED, not yet solved: the plow leaves Link ~40-85
+        u behind Tetra and near the herd line, while the entry sits up-herd and ~70 u off-line
+        (`endgame_geom`), so reaching it is a SEPARATE reposition after the herd -- this quantifies
+        that gap for the joint solve."""
+    p = placement_report(node, placements)
+    lx, lz = node['run'].link.pos_x, node['run'].link.pos_z
+    erp = seeds.ENTRY_ROLL_POS
+    return dict(placement=p, entry_dist=math.hypot(lx - erp[0], lz - erp[1]),
+                entry_dfacing=_s16(node['run'].link.facing - seeds.ENTRY_ROLL_FACING),
+                link=(lx, lz, node['run'].link.facing))
+
+
+def _placement_dist(run, placements):
+    """Tetra's distance to the nearest genuine coord, from a live run."""
+    tx, tz = run.tx, run.tz
+    return min(math.hypot(p['x'] - tx, p['z'] - tz) for p in placements)
+
+
+def _terminal_alphabet(run, hl, *, n_dirs=24, mags=(0.08, 0.2, 0.35, 0.5, 0.7, 1.0)):
+    """**The terminal glide's push-direction alphabet** -- a full-circle fan of Link push bearings at
+    SEVERAL magnitudes. Unlike the junction alphabet (low-mag ESS to preserve the -25.7 backslide,
+    plus a full-mag aim fan), the terminal needs FINE control of the plow push at MID magnitudes:
+    the deepest coord approach comes from moderate down-herd sticks that neither the ESS fan
+    (msd <= 0.10) nor the aim fan (msd 1.0) contains. Measured (`_terminal_alphabet` vs the junction
+    alphabet on the 3-cycle endpoint): the mid-mags take the terminal from 10.4 u to **2.0 u** of a
+    genuine coord -- Tetra INTO the band (along 956, lat 4). Each bearing is placed at the run's live
+    csangle via `stick_for_bearing`, so the fan is state-relative, not a byte constant."""
+    cs = int(run.csangle)
+    hb = hl.bearing_bam()
+    step = 0x10000 // int(n_dirs)
+    out = {stick_for_bearing((hb + (i - int(n_dirs) // 2) * step) & 0xFFFF, cs, msd=m)
+           for i in range(int(n_dirs)) for m in mags}
+    out.add(ESS_DOWN)
+    return list(out)
+
+
+def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
+                       n_dirs=24, verbose=False):
+    """**The TERMINAL cycle, ranked by PLACEMENT distance instead of u/frame** -- the endgame stage
+    the chain hands off to once one more full roll would OVERSHOOT the cluster.
+
+    The geometry forces this (`endgame_geom`): each full cycle herds ~280 u but only ~99 u along
+    (and a ~28 u lateral correction) separate the 3-cycle endpoint from the nearest coord, so a full
+    +26 roll lands Tetra PAST every coord -- worse than not rolling. What is controllable at this
+    range is the plow GLIDE: Link stays in contact (dist < 80) through the junction, so a metered
+    glide keeps herding Tetra down-line at ~13 u/frame AND steers her lateral (push ejects her away
+    from Link's centre, so approaching from the high-lateral side pulls her back toward the line).
+
+    So this is a per-frame BEAM (the atom is one frame's (stick, L), as in `junction_beam`) ranked by
+    the CURRENT Tetra-to-nearest-coord distance, tracking the global closest state reached at ANY
+    frame (a glide sweeps THROUGH the coord band, so the best endpoint is mid-glide, not at the
+    horizon). Returns ``dict(best, dist, per_node)`` -- the closest terminal node (with its full
+    input log, so `confirm_plan` replays it end-to-end), its coord distance, and the best per start
+    node.
+
+    **Why the prune is REGIME-ONLY, not the pursuit box** (measured, `probe_glide`): the deepest
+    approach happens AFTER Link overtakes Tetra and leaves the box -- e.g. a plain (111,111) glide off
+    the 3-cycle endpoint carries her from 74.7 u to **6.4 u**, but the minimum lands at f8 when Link
+    is already lead +18 (out of the box). The pursuit box exists to keep a posture for the NEXT roll;
+    the terminal has none, so the only hard constraint is staying in the stt-3 plow regime (Tetra must
+    not start FOLLOWING) and talk-safety (there is no A-press in a glide, so it holds trivially)."""
+    if placements is None:
+        placements, _ = seeds.load_placements()
+    best = None
+    per_node = []
+    for node in nodes:
+        d0 = _placement_dist(node['run'], placements)
+        node_best = dict(run=node['run'], log=node['log'], frames=node['frames'], dist=d0,
+                         plan=node.get('plan', []))
+        if best is None or d0 < best['dist']:
+            best = node_best
+        live = [dict(run=node['run'], log=node['log'], frames=node['frames'])]
+        for _f in range(int(max_frames)):
+            nxt, seen = [], set()
+            for nd in live:
+                for (sx, sy) in _terminal_alphabet(nd['run'], hl, n_dirs=n_dirs):
+                    for l in (0, 1):
+                        r = nd['run'].clone()
+                        d = dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
+                                 triggerL=255 if l else 0, substickX=T.CSTICK_NEUTRAL, substickY=0)
+                        r.step(d)
+                        if r._follow_warned:           # regime only -- see the docstring
+                            continue
+                        tag = (round(r.link.pos_x, 1), round(r.link.pos_z, 1),
+                               r.link.facing >> 5, round(r.link.speedF, 2),
+                               round(r.tx, 1), round(r.tz, 1))
+                        if tag in seen:
+                            continue
+                        seen.add(tag)
+                        dist = _placement_dist(r, placements)
+                        cand = dict(run=r, log=nd['log'] + [d], frames=nd['frames'] + 1, dist=dist)
+                        nxt.append(cand)
+                        if dist < best['dist']:
+                            best = dict(cand, plan=node.get('plan', []))
+                        if dist < node_best['dist']:
+                            node_best = dict(cand, plan=node.get('plan', []))
+            nxt.sort(key=lambda c: c['dist'])
+            live = nxt[:int(beam)]
+            if not live:
+                break
+        per_node.append(node_best)
+        if verbose:
+            print("    start dist %.1f -> best %.1f (%d frames)"
+                  % (d0, node_best['dist'], node_best['frames']))
+    return dict(best=best, dist=best['dist'] if best else None, per_node=per_node)
+
+
 def cluster_distance(env, hl):
     """The herd budget: how far down-herd the genuine-coord centroid sits from Tetra's start."""
     placements, _ = seeds.load_placements()
@@ -671,6 +787,38 @@ def _cmd_plan(env, hl, kw):
              p['nearest']['z'], p['dist']))
 
 
+def _cmd_endgame(env, hl, kw):
+    import time
+    placements, _ = seeds.load_placements()
+    ncyc = int(kw.get('cycles', 3))
+    print("ENDGAME: chain %d cycles, then PLACEMENT-target the terminal cycle\n" % ncyc)
+    t0 = time.perf_counter()
+    res = chain_herd(env, hl, ncycles=ncyc, beam=int(kw.get('beam', 8)),
+                     jn_keep=int(kw.get('jkeep', 6)), verbose=True)
+    if not res['best']:
+        print("\n  chain stalled; no terminal beam")
+        return
+    lastbeam = res['beams'][-1]
+    print("\n  cycle %d beam: %d nodes, best %.1f u from a coord"
+          % (ncyc, len(lastbeam), min(placement_report(n, placements)['dist'] for n in lastbeam)))
+    tt = terminal_targeting(lastbeam, hl, placements,
+                            max_frames=int(kw.get('tframes', 18)),
+                            beam=int(kw.get('tbeam', 48)), verbose=True)
+    print("\n(%.1f s)" % (time.perf_counter() - t0))
+    best = tt['best']
+    c = confirm_plan(env, hl, best)
+    eg = endgame_report(best, hl, placements)
+    print("\n  TERMINAL: Tetra %.1f u from genuine coord idx %d, in %d frames"
+          % (eg['placement']['dist'], eg['placement']['nearest']['idx'], best['frames']))
+    print("  confirm (fresh replay of its own log): bit_exact=%s talk_safe=%s -> %s"
+          % (c['bit_exact'], c['talk_safe'], 'CONFIRMED' if c['ok'] else 'NOT CONFIRMED'))
+    print("  Tetra at (%.3f, %.3f); coord idx %d at (%.3f, %.3f)"
+          % (best['run'].tx, best['run'].tz, eg['placement']['nearest']['idx'],
+             eg['placement']['nearest']['x'], eg['placement']['nearest']['z']))
+    print("  Link at (%.3f, %.3f) facing %d; final-clip ENTRY gap: %.1f u, %d BAM off facing"
+          % (eg['link'][0], eg['link'][1], eg['link'][2], eg['entry_dist'], eg['entry_dfacing']))
+
+
 def main(argv):
     import warnings
     warnings.simplefilter('ignore')
@@ -684,8 +832,10 @@ def main(argv):
         _cmd_box(env, hl)
     elif cmd == 'plan':
         _cmd_plan(env, hl, kw)
+    elif cmd == 'endgame':
+        _cmd_endgame(env, hl, kw)
     else:
-        print("usage: python -m harness.tetrapush.full_herd {sep | box | plan}")
+        print("usage: python -m harness.tetrapush.full_herd {sep | box | plan | endgame}")
 
 
 if __name__ == '__main__':
