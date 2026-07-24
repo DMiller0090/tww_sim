@@ -88,6 +88,64 @@ def test_generated_stream_reproduces_recorded_roll_bit_exact(env, which):
     assert main_stick_decode(*r['aim_generated'])[0] == main_stick_decode(*r['aim_human'])[0]
 
 
+def test_chain_generator_reproduces_recorded_window_bit_exact(env):
+    """FIDELITY for the WHOLE CHAIN (session 42): the 2-roll chain's own generators -- junction
+    phase lists (`_fit_phases`) for the inter-roll frames, `roll_stream` at fitted knobs with FAN
+    aim bytes for both rolls -- emit the human's complete recorded window f1..f44, and the replay
+    matches feeding the raw DTM 0-ULP every frame. The chain search space contains the human's
+    entire plan, junctions included."""
+    r = T.reproduces_recorded_chain(env)
+    assert r['first_diverge'] is None and r['ok']
+    assert len(r['spans']) == 2                        # both rolls emitted via roll_stream
+
+
+def test_junction_fitter_reads_the_human_junction(env):
+    """The human's inter-roll junction (f22..f27) compresses to the 4-phase shape the swing family
+    models: an ESS swing (no L), a second swing stick, the L-held re-target, the full-stick
+    pre-aim-with-L -- and every stick decodes inside the junction's own alphabets."""
+    dtm = seeds.dtm_input_at(env)
+    phases = T._fit_phases([dtm(k) for k in range(22, 28)])
+    assert phases == [(1, (128, 110), 0), (2, (111, 111), 0),
+                      (2, (110, 128), 1), (1, (211, 230), 1)]
+    ess_angles = {a for a, _b in T.ess_fan()}
+    for (_n, sxy, _l) in phases[:3]:                   # the ESS phases
+        ang, msd = main_stick_decode(*sxy)
+        assert ang in ess_angles and msd <= 0.10
+
+
+def test_ess_fan_members_decode_low_magnitude():
+    """The junction stick alphabet really is the low-magnitude reachable set: every member decodes
+    to its own angle at ESS magnitude, and the set is angle-deduped."""
+    fan = T.ess_fan()
+    assert len({a for a, _b in fan}) == len(fan)
+    for ang, b in fan:
+        got, msd = main_stick_decode(*b)
+        assert got == ang and 0.0 < msd <= 0.10
+
+
+@pytest.mark.slow
+def test_two_roll_chain_clears_the_human_bar(env):
+    """THE SESSION-42 RESULT, pinned: from state 2, the chain search finds a talk-safe on-line
+    2-roll plan whose down-herd rate BEATS the recorded human's 12.758 u/frame, and the winner
+    bit-confirms on a fresh self-contained replay of its own input log. Budgeted to the winning
+    neighbourhood (cycle-1 target_cs band + the (5,8) L window) so the gate runs in ~2 min; the
+    full search (`two_roll chain`) sweeps the derived defaults."""
+    from harness.tetrapush import two_roll as T
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    bar = T.human_baseline(env, hl)['per_frame']
+    nodes = T.cycle1_candidates(env, hl, half_window=0x2000, step=4,
+                                target_css=(38812,), beam=8)
+    out = T.cycle2_chain(env, hl, nodes=nodes, step2=8, half_window2=0x2800,
+                         jn_keep=16, swing_step=2, beam=5)
+    assert out, "no surviving 2-roll chain"
+    best = out[0]
+    assert best['m']['per_frame'] > bar
+    c = T.confirm_chain(env, hl, best)
+    assert c['ok'] and c['bit_exact'] and c['rolls'] == 2 and c['talk_safe']
+    assert c['per_frame'] == best['m']['per_frame']    # exact: same log, same frame count
+
+
 def test_main_stick_is_inert_inside_a_roll(env):
     """The measured fact the s39 cycle design rests on (and that s40 wrongly overturned): during a
     FRONT_ROLL the main stick does nothing. Pegging it to any extreme reproduces the recorded roll

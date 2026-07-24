@@ -450,6 +450,175 @@ def turnaround_and_flip(run, hl, *, nflip, flip_bam, flip_msd, ess=ESS_DOWN, log
     return dict(turned=turned, preroll=run.link.speedF, frames=1 + int(nflip))
 
 
+# --------------------------------------------------------------------------- the junction (inter-roll)
+
+_ESS_FAN_CACHE = {}
+
+
+def ess_fan(msd_max=0.10):
+    """**The junction's low-magnitude stick alphabet**: every distinct decoded angle the pad can
+    deliver at ESS magnitude (0 < msd <= ``msd_max``), enumerated from the byte grid like
+    `reachable_stick_fan` -- 64 angles at the 0.10 cap, ~1024 BAM apart. The ESS glide sticks are
+    what steer the untarget backslide (facing/travel chase) while sustaining it (a truly-neutral
+    stick brakes to 0 in ~5 frames); the human's junction sticks (128,110)/(111,111)/(110,128) all
+    decode inside this set. A coarse 8-direction compass here is exactly the s40-style narrowing
+    the containment steer forbids -- the swing want-angle is csangle-relative and fine-grained.
+
+    Returns ``[(angle_s16, (sx, sy))]`` sorted by angle (smallest-msd representative per angle)."""
+    key = float(msd_max)
+    if key in _ESS_FAN_CACHE:
+        return _ESS_FAN_CACHE[key]
+    seen = {}
+    for sx in range(88, 169):
+        for sy in range(88, 169):
+            ang, msd = main_stick_decode(sx, sy)
+            if ang is None or msd > key:
+                continue
+            if ang not in seen or msd < seen[ang][1]:
+                seen[ang] = ((sx, sy), msd)
+    _ESS_FAN_CACHE[key] = sorted((a, b) for a, (b, _m) in seen.items())
+    return _ESS_FAN_CACHE[key]
+
+
+def run_junction(run, phases, *, log=None):
+    """Execute a junction as a generic PHASE LIST ``[(n_frames, (sx, sy), l_held)]`` -- the
+    inter-roll reposition's atom. No A is ever pressed here (the roll segment owns the A press), the
+    C-stick stays neutral (csangle frozen -- roll 1's slew owns the camera). Returns frames run."""
+    frames = 0
+    for (n, (sx, sy), l) in phases:
+        for _ in range(int(n)):
+            d = dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
+                     triggerL=255 if l else 0, substickX=CSTICK_NEUTRAL, substickY=0)
+            if log is not None:
+                log.append(dict(d))
+            run.step(d)
+            frames += 1
+    return frames
+
+
+def _fit_phases(delivered):
+    """Compress a delivered input stream into the junction's phase list: consecutive frames with the
+    same (main stick, L) collapse into one ``(n, stick, l)`` phase. Total -- ANY stream with no
+    A-press fits, so junction containment holds by construction; this is the reader."""
+    phases = []
+    for d in delivered:
+        s = (int(d.get('stickX', 128)), int(d.get('stickY', 128)))
+        l = 1 if (int(d.get('buttons', 0)) & S.PAD_L) or d.get('triggerL', 0) else 0
+        if phases and phases[-1][1] == s and phases[-1][2] == l:
+            phases[-1][0] += 1
+        else:
+            phases.append([1, s, l])
+    return [tuple(p) for p in phases]
+
+
+def junction_variants(toward_bytes, *, nflips=(0, 1, 2), swing_msd=0.10, swing_step=1,
+                      n_swings=(2, 3, 4, 5), n_rets=(0, 1, 2), pres=(0, 1)):
+    """The junction families the chain search sweeps, ordered SHORTEST FIRST (so the state-dedup in
+    `cycle2_chain` keeps the fewest-frame representative of a converged endpoint):
+
+      * TURNAROUND (frame-minimal, s33/s39): 1 ESS-down frame (the instant facing snap -- fires only
+        when csangle sits in the snap window, which roll 1's ``target_cs`` slew pre-positions), then
+        ``nflip`` L-held frames stick-toward-Tetra (the proc-7 DIR_BACKWARD flip).
+      * SWING (the human's own shape): ``n_swing`` ESS frames dragging the MOVE facing chase around
+        (no L), then ``n_ret`` L-held ESS frames (re-target; Tetra now out of the +-90 cone), then an
+        optional 1-frame full-stick pre-aim with L (the human's f27). The swing stick sweeps the
+        FULL low-magnitude alphabet (`ess_fan`, ``swing_step`` thins it -- a budget knob, never a
+        resolution limit); the ret stick reuses the swing stick.
+
+    Members are generic phase lists, so the searched set is a budgeted subfamily of everything
+    `_fit_phases` can read back -- the human's junction is emittable by the FAMILY by construction
+    (`reproduces_recorded_chain` gates the whole window)."""
+    out = []
+    for nf in nflips:
+        ph = [(1, ESS_DOWN, 0)]
+        if nf:
+            ph.append((nf, toward_bytes, 1))
+        out.append(dict(kind='turnaround', phases=ph))
+    fan = ess_fan(swing_msd)[::max(1, int(swing_step))]
+    for (_ang, sd) in fan:
+        for ns in n_swings:
+            for nr in n_rets:
+                for pre in pres:
+                    ph = [(ns, sd, 0)]
+                    if nr:
+                        ph.append((nr, sd, 1))
+                    if pre:
+                        ph.append((1, toward_bytes, 1))
+                    out.append(dict(kind='swing', phases=ph))
+    out.sort(key=lambda v: sum(p[0] for p in v['phases']))
+    return out
+
+
+def reproduces_recorded_chain(env, upto=45):
+    """**The whole-window chain fidelity gate**: emit the human's ENTIRE 2-roll window f1..f44 from
+    the chain generator's own pieces -- junction phase lists (`_fit_phases`) for the inter-roll
+    frames and `roll_stream` at fitted knobs with FAN aim bytes (not his) for both rolls -- and
+    require the replay to match feeding the raw DTM **0-ULP**, both actors' positions + Link's
+    facing + proc, every frame. This is `reproduces_recorded_roll` lifted to the full chain: the
+    search's generators can express the complete recorded plan, junctions included."""
+    dtm = seeds.dtm_input_at(env)
+    rows = S.rollout_recorded(env, upto=upto)['rows']
+    proc = {r['f']: r['proc'] for r in rows}
+    rolls = _recorded_rolls(env, upto=upto)
+
+    # Each roll segment's emission span runs from its A frame to its state-6 re-entry (the frame
+    # `roll_segment` stops after); the junction owns the frames from there to the next A.
+    spans = []
+    for (a_f, entry, exit_f) in rolls:
+        end = exit_f
+        while proc.get(end + 1) is not None and proc.get(end + 1) != 6:
+            end += 1
+        end += 1                                   # the first MOVE frame back
+        spans.append((a_f, end))
+
+    def gen(k):
+        for (a_f, end) in spans:
+            if a_f <= k <= min(end, upto - 1):
+                n = end - a_f + 1
+                aim = (int(dtm(a_f).get('stickX', 128)), int(dtm(a_f).get('stickY', 128)))
+                knobs = _fit_roll_knobs([dtm(a_f + j) for j in range(min(n, upto - a_f))], aim)
+                want_ang, _ = main_stick_decode(*aim)
+                fan_aim = next((b for a, b in reachable_stick_fan(msd_min=0.0)
+                                if a == want_ang), aim)
+                return roll_stream(fan_aim, **knobs)(k - a_f)
+        # a junction frame: re-emit through the phase reader
+        j0 = k
+        while j0 > 1 and not any(a <= j0 - 1 <= e for (a, e) in spans):
+            j0 -= 1
+        nxt = min([a for (a, _e) in spans if a > k], default=upto)
+        phases = _fit_phases([dtm(j) for j in range(j0, nxt)])
+        i = k - j0
+        for (n, sxy, l) in phases:
+            if i < n:
+                return dict(stickX=sxy[0], stickY=sxy[1], buttons=S.PAD_L if l else 0,
+                            triggerL=255 if l else 0)
+            i -= n
+        raise AssertionError("junction reader fell off at f%d" % k)
+
+    base = seeds.make_freerun(env)
+    base.pre_seed_input(dtm(0))
+
+    def trace(fn):
+        r = base.clone()
+        out = []
+        for k in range(1, upto):
+            r.step(fn(k))
+            out.append((r.link.state, r.link.facing, r.link.pos_x, r.link.pos_z, r.tx, r.tz))
+        return out
+
+    def gen_input(k):
+        d = dict(gen(k))
+        rd = dtm(k)
+        d['substickX'] = rd.get('substickX', 128)
+        d['substickY'] = rd.get('substickY', 128)
+        return d
+
+    rec = trace(lambda k: dtm(k))
+    got = trace(gen_input)
+    first = next((k + 1 for k, (x, y) in enumerate(zip(rec, got)) if x != y), None)
+    return dict(ok=first is None, first_diverge=first, frames=upto - 1, spans=spans)
+
+
 # --------------------------------------------------------------------------- metrics / pruning
 
 def metrics(run, hl, frames):
@@ -526,6 +695,212 @@ def cycle1_candidates(env, hl, *, half_window=0x2000, step=1, nflips=(1, 2, 3),
     return out[:beam]
 
 
+# --------------------------------------------------------------------------- the 2-roll chain
+
+def junction_gates(jr, hl, frames, *, min_preroll=17.0):
+    """The hard junction-endpoint gates (stage 1 of the chain): in the plow regime, on-line-behind
+    (`alive`), Tetra OUT of Link's +-90 deg facing cone (the precondition for BOTH the talk-safe
+    roll-A and the proc-7 re-target flip), still near contact, the EBS glide retained, and
+    **ARMED**: a 1-frame probe step must show the proc-7 flip has FIRED (speedF >= ``min_preroll``,
+    so a roll-A pressed now inits at the full clamp(spF*1.5+0.5)=26 -- below +17 it fires weak).
+    The flip fires when a toward-Tetra stick ACTS inside proc 7, which (delay-1) needs L delivered
+    two junction frames back and the toward stick one back -- the human's own f26/f27 pattern; a
+    junction whose pending inputs cannot produce it only ever rolls at +5. Mutates nothing (probes
+    a clone). Returns the failure name or None."""
+    if jr._follow_warned:
+        return 'followed'
+    m = metrics(jr, hl, frames)
+    if not alive(m):
+        return 'offline'
+    tb = _bearing((jr.link.pos_x, jr.link.pos_z), (jr.tx, jr.tz))
+    if abs(_s16(jr.link.facing - tb)) <= 0x4000:
+        return 'in_cone'
+    if m['dist'] > 100.0:
+        return 'lost_contact'
+    if abs(jr.link.speedF) < 15.0:
+        return 'stalled'
+    probe = jr.clone()
+    probe.step(dict(stickX=128, stickY=128, buttons=0, triggerL=0,
+                    substickX=CSTICK_NEUTRAL, substickY=0))
+    if probe.link.speedF < min_preroll:
+        return 'unarmed'
+    return None
+
+
+def cycle2_chain(env, hl, *, nodes=None, c1_beam=8, half_window2=0x2800, step2=12,
+                 l_windows2=((4, 7), (5, 8)), target_css=None, min_roll2=20.0,
+                 swing_step=1, n_swings=(2, 3, 4, 5, 6), jn_keep=30, beam=40, verbose=False):
+    """**The 2-roll chain search**, two-staged so the junction sweep can be FINE while the expensive
+    roll-2 rollouts stay budgeted:
+
+      stage 1 -- from each surviving cycle-1 node, sweep the junction families
+      (`junction_variants`: the 1-frame ESS turnaround x nflip, and the human-shaped ESS swing over
+      the full low-magnitude alphabet), apply the hard gates (`junction_gates`), dedup converged
+      endpoints (fewest-frame representative wins), keep the best ``jn_keep`` per node (fewest
+      junction frames, then most on-line);
+
+      stage 2 -- from each kept endpoint, sweep the cycle-2 roll (`roll_facing_fan` x the L
+      window), prune talk-unsafe / weak-roll (< ``min_roll2``) / off-line / out-of-regime, and rank
+      every survivor by the CHAINED down-herd rate.
+
+    ``target_css`` seeds cycle 1's C-stick slew so the turnaround family's csangle snap window is
+    reachable (defaults to the herd-line bearing +- 2048 -- cs ~ the roll-1 facing is what the ESS
+    turnaround wants). Returns nodes sorted by 2-roll ``per_frame``."""
+    if target_css is None:
+        # target_cs sets the post-roll EBS travel and its viable band is ~+-300 BAM (s42 box), so
+        # the default is a fine 128-BAM grid over the camera's reachable slew band -- derived bounds.
+        cs0 = int(seeds.make_freerun(env).csangle)
+        target_css = tuple((cs0 + off) & 0xFFFF for off in range(-1536, 1537, 128))
+    if nodes is None:
+        nodes = cycle1_candidates(env, hl, half_window=0x2000, step=2,
+                                  target_css=target_css, beam=c1_beam, verbose=verbose)
+    # Dedup cycle-1 exits by state: stage 1 needs entry-state DIVERSITY, not the top-per_frame few
+    # (no junction rescues a bad entry state -- the s42 f21 experiment).
+    uniq, cseen = [], set()
+    for node in nodes:
+        r = node['run']
+        ct = (round(r.link.pos_x, 1), round(r.link.pos_z, 1), r.link.facing >> 4,
+              round(r.link.speedF, 2), round(r.tx, 1), round(r.tz, 1), int(r.csangle) >> 4)
+        if ct in cseen:
+            continue
+        cseen.add(ct)
+        uniq.append(node)
+    nodes = uniq
+    out = []
+    ntried = nr_dead = 0
+    jn_dead = {}
+    for node in nodes:
+        run0 = node['run']
+        tb = _bearing((run0.link.pos_x, run0.link.pos_z), (run0.tx, run0.tz))
+        toward = stick_for_bearing(tb, run0.csangle, msd=1.0)
+        kept = []
+        seen = set()
+        for jv in junction_variants(toward, swing_step=swing_step, n_swings=n_swings):
+            jr = run0.clone()
+            jlog = list(node['log'])
+            jf = run_junction(jr, jv['phases'], log=jlog)
+            why = junction_gates(jr, hl, node['frames'] + jf)
+            if why:
+                jn_dead[why] = jn_dead.get(why, 0) + 1
+                continue
+            # The tag includes the LAST DELIVERED input: same physics state, different pending
+            # delay-1 input = a different flip fate at the roll-A -- collapsing them drops plans.
+            last = jlog[-1] if jlog else {}
+            tag = (round(jr.link.pos_x, 1), round(jr.link.pos_z, 1), jr.link.facing >> 4,
+                   round(jr.link.speedF, 2), round(jr.tx, 1), round(jr.tz, 1),
+                   jr.link.state, int(jr.csangle) >> 4,
+                   last.get('stickX'), last.get('stickY'),
+                   int(last.get('buttons', 0)) & S.PAD_L, bool(last.get('triggerL')))
+            if tag in seen:
+                continue
+            seen.add(tag)
+            m = metrics(jr, hl, node['frames'] + jf)
+            kept.append(dict(run=jr, log=jlog, jf=jf, jv=jv, m=m))
+        # MIXED keep -- half by on-line-ness, half by shortness: each pure ranking measurably
+        # drops real winners (s42: jf-first keeps flip-starved, |lat|-first drops the survivors).
+        kept.sort(key=lambda k: (abs(k['m']['lat']), k['jf']))
+        half = kept[:jn_keep - jn_keep // 2]
+        rest = [k for k in kept if k not in half]
+        rest.sort(key=lambda k: (k['jf'], abs(k['m']['lat'])))
+        kept = half + rest[:jn_keep // 2]
+        if verbose:
+            print("  node %s: %d junction endpoints kept (dead: %s)"
+                  % (node['knobs'].get('roll_bam'), len(kept),
+                     ' '.join('%s=%d' % kv for kv in sorted(jn_dead.items()))))
+        for j in kept:
+            fan2 = roll_facing_fan(j['run'], hl.bearing_bam(), half_window2, step2)
+            for (want, aim2) in fan2:
+                for lw in l_windows2:
+                    ntried += 1
+                    rr = j['run'].clone()
+                    rlog = list(j['log'])
+                    seg = roll_segment(rr, aim2, l_window=lw, log=rlog)
+                    if seg['talk_unsafe'] or not seg['ok'] or seg['roll_speedF'] is None \
+                            or seg['roll_speedF'] < min_roll2:
+                        nr_dead += 1
+                        continue
+                    fr = node['frames'] + j['jf'] + seg['frames']
+                    m = metrics(rr, hl, fr)
+                    if not alive(m):
+                        nr_dead += 1
+                        continue
+                    out.append(dict(run=rr, log=rlog, frames=fr, m=m,
+                                    knobs=dict(c1=node['knobs'], junction=j['jv'],
+                                               jframes=j['jf'], roll2_bam=want, aim2=aim2,
+                                               l_window2=lw, roll2_facing=seg['roll_facing'],
+                                               roll2_speedF=seg['roll_speedF'])))
+    out.sort(key=lambda n: -n['m']['per_frame'])
+    if verbose:
+        print("  chain: %d roll-2 rollouts, %d dead -> %d survivors"
+              % (ntried, nr_dead, len(out)))
+    return out[:beam]
+
+
+def confirm_chain(env, hl, node):
+    """**The winner-confirmation gate**: re-run a chain node's own delivered input log on a FRESH
+    self-contained `FreeRun` (no clones, no search state) and require the endpoint to be
+    BIT-IDENTICAL to the search's node -- both actors' positions, Link's facing, csangle -- plus
+    exactly two full-speed rolls, every grounded A-press talk-safe, and the whole log in the plow
+    regime. Returns ``dict(ok, per_frame, frames, rolls, talk_safe, bit_exact)``."""
+    run = seeds.make_freerun(env)
+    dtm = seeds.dtm_input_at(env)
+    run.pre_seed_input(dtm(0))
+    rolls = 0
+    in_roll = False
+    talk_safe = True
+    for d in node['log']:
+        if S.a_press_is_talk(run, d):
+            talk_safe = False
+        run.step(d)
+        if run.link.state == FRONT_ROLL:
+            if not in_roll:
+                rolls += 1
+            in_roll = True
+        else:
+            in_roll = False
+    ref = node['run']
+    bit_exact = (run.link.pos_x == ref.link.pos_x and run.link.pos_z == ref.link.pos_z
+                 and run.link.facing == ref.link.facing and run.tx == ref.tx
+                 and run.tz == ref.tz and int(run.csangle) == int(ref.csangle))
+    frames = len(node['log'])
+    herd = hl.along(run.tx, run.tz)
+    return dict(ok=bit_exact and rolls == 2 and talk_safe and not run._follow_warned,
+                per_frame=herd / frames if frames else 0.0, frames=frames, rolls=rolls,
+                talk_safe=talk_safe, bit_exact=bit_exact)
+
+
+def _cmd_chain(env, hl, kw):
+    import time
+    b = human_baseline(env, hl)
+    print("HUMAN 2-roll bar: %.1f u / %d f = %.3f u/frame\n" % (b['herd'], b['frames'],
+                                                                b['per_frame']))
+    t0 = time.perf_counter()
+    nodes = cycle2_chain(env, hl, c1_beam=int(kw.get('c1', 48)),
+                         half_window2=int(kw.get('window', 0x2800)),
+                         step2=int(kw.get('step', 8)), swing_step=int(kw.get('swing', 2)),
+                         jn_keep=int(kw.get('jkeep', 16)),
+                         beam=int(kw.get('beam', 40)), verbose=True)
+    print("\n(%.1f s)  best 2-roll chains (bar %.3f u/f):" % (time.perf_counter() - t0,
+                                                              b['per_frame']))
+    print("   u/f    herd  frames  junction (jf)              roll2_bam spF    lead    lat")
+    for n in nodes[:15]:
+        k, m = n['knobs'], n['m']
+        jd = "%s %s" % (k['junction']['kind'], k['junction']['phases'])
+        print("  %6.3f %+7.1f  %3d   %-28s %6d %5.1f  %+6.1f %+6.1f"
+              % (m['per_frame'], m['herd'], n['frames'], jd[:28] + " (%d)" % k['jframes'],
+                 k['roll2_bam'], k['roll2_speedF'], m['lead'], m['lat']))
+    if nodes:
+        best = nodes[0]
+        verdict = "CLEARS" if best['m']['per_frame'] > b['per_frame'] else "DOES NOT CLEAR"
+        print("\n  => best 2-roll rate %.3f u/frame %s the human's %.3f"
+              % (best['m']['per_frame'], verdict, b['per_frame']))
+        c = confirm_chain(env, hl, best)
+        print("  confirm (fresh replay of the winner's own log): bit_exact=%s rolls=%d "
+              "talk_safe=%s -> %.3f u/f  %s"
+              % (c['bit_exact'], c['rolls'], c['talk_safe'], c['per_frame'],
+                 "CONFIRMED" if c['ok'] else "NOT CONFIRMED"))
+
+
 def _cmd_fan(env, hl, kw):
     import time
     b = human_baseline(env, hl)
@@ -586,6 +961,8 @@ def main(argv):
     kw = dict(kv.split('=') for kv in argv[1:] if '=' in kv)
     if cmd == 'fan':
         _cmd_fan(env, hl, kw)
+    elif cmd == 'chain':
+        _cmd_chain(env, hl, kw)
     elif cmd == 'contain':
         _cmd_contain(env)
     elif cmd == 'human':
