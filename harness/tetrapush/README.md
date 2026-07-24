@@ -736,9 +736,9 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             cycle, branching (target_cs = next roll facing) x (main-stick position) x (release), pruning
             off-line/talk-unsafe/follow, ranked frame-minimal. Bit-confirm any winner on the full
             Python `FreeRun` (realizable = C-stick-driven csangle, no injection).
-      - [~] **THE N-CYCLE CHAIN -- the generic cycle unit BUILT + GATED, and a REAL SEARCH BUG
-            fixed underneath it (session 43). The third cycle does NOT yet chain off the search's
-            own cycle-1 exit; the blocker is named and measured.** `harness/tetrapush/full_herd.py`
+      - [~] **THE N-CYCLE CHAIN RUNS: 3 cycles, 868.3 u of the 967.5 u herd in 69 frames,
+            bit-confirmed -- plus a REAL SEARCH BUG fixed underneath it (session 43).**
+            `harness/tetrapush/full_herd.py`
             generalizes s42's junction+roll unit to N cycles, every roll sweeping its OWN derived
             `target_cs` grid (cycle 2 never needed one -- nothing followed it). Gated
             `tests/test_full_herd.py` (6 fast + 1 slow). What this session established:
@@ -783,12 +783,27 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               flattest states are the ones still facing Tetra, which can never arm), so a beam of
               16 found ZERO endpoints where a beam of 12 found 162 -- a wider beam finding less is
               the tell. The frontier now ranks by CONE DEFICIT first (`_frontier_score`).
-            - **WHAT CHAINS TODAY, bit-confirmed**: off the recorded human's own cycle-1 exit the
-              generic unit chains a second roll at **12.833 u/frame over 46 frames** (talk-safe,
-              on-line, `confirm_plan` bit-identical on a fresh `FreeRun`) -- i.e. the machinery is
-              sound and independently reproduces s42-class quality. **NEXT: the third cycle off the
-              search's OWN cycle-1 exit**, now that rollability is the keep criterion; then the
-              placement endgame (`placement_report` already scores nearest genuine coord).
+            - **THE RESULT (`full_herd plan cycles=3`, 662 s, every stage bit-confirmed on a fresh
+              `FreeRun` by `confirm_plan` -- talk-safe, on-line, in the stt-3 plow regime throughout):**
+
+              | cycle | frames | herd | u/frame | remaining |
+              |-------|--------|------|---------|-----------|
+              | 1 | 21 | 275.8 | 13.135 | 691.7 |
+              | 2 | 46 | 590.9 | **12.845** (clears the 12.758 bar) | 376.7 |
+              | 3 | 69 | 868.3 | 12.584 | **99.3** |
+
+              So the chain reaches **90 % of the way to the cluster** and leaves Tetra at
+              (-1578.792, -835.603), **74.7 u from genuine coord idx 287** (-1627.424, -892.340).
+              Note the CLI labels cycle 3's 12.584 "below the human's 12.758", which is
+              apples-to-oranges: his recording is only 2 rolls / 45 frames, so there is no recorded
+              3-roll rate to compare against -- the honest statement is that the plan's first 46
+              frames clear the bar and the third cycle costs ~0.26 u/frame of average rate.
+              Off the recorded human's OWN cycle-1 exit the same unit chains at **12.833** over 46
+              frames, independently reproducing s42-class quality from a different entry.
+              **NEXT: the placement endgame** -- close the last ~99 u and land Tetra ON a genuine
+              coord with the matching final roll entry (the coupled objective; `placement_report`
+              scores the nearest coord, `seeds.ENTRY_ROLL_POS/FACING` carry the entry the list is
+              valid for). Watch the stt-3 regime bound as the herd nears the corner.
       - [x] **THE 2-ROLL BAR IS CLEARED -- 12.862 u/frame vs the human's 12.758, from state 2, in
             the full realizable sim (session 42).** The winning chain (46 frames, 591.6 u herded,
             talk-safe, on-line the whole way, lead -57.7 / lat +7.8 at exit, bit-confirmed by a

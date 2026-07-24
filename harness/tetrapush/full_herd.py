@@ -49,11 +49,11 @@ TWO THINGS THIS SESSION HAD TO FIX BEFORE ANY OF IT SEARCHED CORRECTLY
     branches corrupted each other AND their parent, permanently. Replaying one junction from a
     clone gave facing 16138, then 34819 after 25 unrelated sibling rollouts. Every beam here rests
     on clone isolation; gated by `tests/test_full_herd.py`.
-  * **The endpoint keep must be ROLLABILITY, not flatness** (`roll_probe`). Ranking junction
-    endpoints by |lat| or by fewest frames selects states from which every roll aim dies; measured
-    on one cycle-1 node, 32 of 400 endpoints were rollable and NONE were among the flattest. That
-    single ranking choice was what made the cycle-2 stage report hundreds of valid endpoints and
-    zero surviving rolls, four times over.
+  * **The endpoint keep must be ROLLABILITY, not flatness** (`roll_probe`). Flatness does not
+    predict it: over three cycle-1 nodes, 32 / 43 / 71 of 400 endpoints were rollable, and on the
+    first node none of the rollable ones were among the flattest. That single ranking choice was
+    what made the cycle-2 stage report hundreds of valid endpoints and zero surviving rolls, four
+    times over.
 
 Pure stdlib, no Dolphin. CLI: ``python -m harness.tetrapush.full_herd {sep | box | plan}``.
 """
@@ -195,11 +195,12 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     """**Is this junction endpoint ROLLABLE at all?** -- a coarse aim sweep returning the best
     surviving roll's down-herd rate, or None.
 
-    This is the endpoint keep's real criterion, and it had to be measured to be believed: ranking
-    endpoints by FLATNESS (or by fewest frames) picks states from which every roll aim dies, while
-    the rollable ones sat at |lat| ~17. On one cycle-1 node, 32 of 400 endpoints were rollable and
-    none of them were among the flattest -- which is exactly why the cycle-2 stage kept stalling
-    with hundreds of valid-looking endpoints and zero surviving rolls."""
+    This is the endpoint keep's real criterion, because FLATNESS DOES NOT PREDICT IT. Measured over
+    three cycle-1 nodes (400 endpoints probed each): 32 / 43 / 71 were rollable, and on the first
+    node NONE of them were among the flattest (they sat at |lat| ~17) while on the other two the
+    rollable ones were the flattest (|lat| 0.2-0.4). So a flatness keep silently empties the stage on
+    some entry states and works on others -- which is exactly how the cycle-2 stage kept reporting
+    hundreds of valid-looking endpoints and zero surviving rolls. Probe; do not rank by proxy."""
     best = None
     for (_want, aim) in T.roll_facing_fan(endpoint['run'], hl.bearing_bam(), half_window, step):
         rr = endpoint['run'].clone()
