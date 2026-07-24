@@ -419,16 +419,17 @@ cdef bint _NECK_SSC[6]
 _NECK_SSC[0]=False; _NECK_SSC[1]=False; _NECK_SSC[2]=False
 _NECK_SSC[3]=True;  _NECK_SSC[4]=True;  _NECK_SSC[5]=True
 
-def co_center(double px, double py, double pz, long long facing, long long lean,
-              long long body_x, old_q, old_t, old_s):
-    """Link's body-Co cylinder centre (cx, cz) -- setCollision's root/neck world midpoint -- rebuilt
-    from the STORED old pose in one native call. Bit-exact drop-in for
+cdef void _co_center_impl(double px, double py, double pz, long long facing, long long lean,
+                          long long body_x, double* q6, double* t6, double* s6,
+                          double* out) noexcept nogil:
+    """Link's body-Co cylinder centre (out[0]=cx, out[1]=cz) -- setCollision's root/neck world
+    midpoint -- rebuilt from the STORED old pose. Shared nogil core of the module-level `co_center`
+    (marshals Python lists) AND `PoseEngine._body_co_center` (reads the C stores). Bit-exact port of
     foot_fk.FootFK.body_co_center's Python loop.
 
-    ``px/py/pz`` world pos, ``facing``/``lean`` s16 (lean = the base ZrotM, shape_angle.z), ``body_x``
-    the sign-extended -mBodyAngle.z (the BODY_CHN twist on joint 2). ``old_q``/``old_t``/``old_s`` are
-    length-6 sequences (chain order [0,1,2,3,4,14]): old_q[i]=(w,x,y,z), old_t[i]=(x,y,z),
-    old_s[i]=(x,y,z). Returns (cx, cz)."""
+    ``q6``/``t6``/``s6`` are FLAT arrays in chain order [0,1,2,3,4,14]: q6[i*4+k] (w,x,y,z),
+    t6[i*3+k] (x,y,z), s6[i*3+k] (x,y,z). ``body_x`` = sign-extended -mBodyAngle.z (BODY_CHN twist
+    on chain idx 2 = joint 2)."""
     # --- build the leaned worldBase (fk.world_base): transS(p) . YrotM(facing) [. ZrotM(lean)] ---
     cdef long long fc = facing & 0xFFFF, lc = lean & 0xFFFF
     cdef double c = jma_cos(fc), s = jma_sin(fc), ns = f32(-s)
@@ -450,7 +451,6 @@ def co_center(double px, double py, double pz, long long facing, long long lean,
     # --- accumulate the neck chain, capturing root (slot 0) and neck (slot 5) world translates ----
     cdef double bufA[12]
     cdef double bufB[12]
-    cdef double loc[12]
     cdef double q[4]
     cdef double tw[4]
     cdef double q2[4]
@@ -459,26 +459,26 @@ def co_center(double px, double py, double pz, long long facing, long long lean,
     cdef double* nxt = bufB
     cdef double* swp
     cdef double s0, s1, s2, inv, ps0, ps1, ps2
-    cdef int i, r
+    cdef int i
     cdef double root_x = 0.0, root_z = 0.0
     memcpy(cur, base, 12 * sizeof(double))
     for i in range(6):
         # rebuild the local 3x4 from the stored old pose
-        q[0] = old_q[i][0]; q[1] = old_q[i][1]; q[2] = old_q[i][2]; q[3] = old_q[i][3]
+        q[0] = q6[i*4+0]; q[1] = q6[i*4+1]; q[2] = q6[i*4+2]; q[3] = q6[i*4+3]
         if i == 2 and body_x != 0:
             _euler_to_quat_c(body_x, 0, 0, tw)
             _quat_concat_c(q, tw, q2)
             _psmtx_quat_c(q2, m)
         else:
             _psmtx_quat_c(q, m)
-        s0 = old_s[i][0]; s1 = old_s[i][1]; s2 = old_s[i][2]
+        s0 = s6[i*3+0]; s1 = s6[i*3+1]; s2 = s6[i*3+2]
         # M = R . diag(anim scale): column j scaled by scale[j]
         m[0] = fmuls(m[0], s0); m[1] = fmuls(m[1], s1); m[2] = fmuls(m[2], s2)
         m[4] = fmuls(m[4], s0); m[5] = fmuls(m[5], s1); m[6] = fmuls(m[6], s2)
         m[8] = fmuls(m[8], s0); m[9] = fmuls(m[9], s1); m[10] = fmuls(m[10], s2)
         # SSC: row r of the local 3x3 scaled by 1/parentS[r] (parent = slot i-1)
         if _NECK_SSC[i]:
-            ps0 = old_s[i - 1][0]; ps1 = old_s[i - 1][1]; ps2 = old_s[i - 1][2]
+            ps0 = s6[(i-1)*3+0]; ps1 = s6[(i-1)*3+1]; ps2 = s6[(i-1)*3+2]
             if ps0 != 1.0 or ps1 != 1.0 or ps2 != 1.0:
                 inv = fdivs(1.0, ps0)
                 m[0] = fmuls(m[0], inv); m[1] = fmuls(m[1], inv); m[2] = fmuls(m[2], inv)
@@ -486,14 +486,37 @@ def co_center(double px, double py, double pz, long long facing, long long lean,
                 m[4] = fmuls(m[4], inv); m[5] = fmuls(m[5], inv); m[6] = fmuls(m[6], inv)
                 inv = fdivs(1.0, ps2)
                 m[8] = fmuls(m[8], inv); m[9] = fmuls(m[9], inv); m[10] = fmuls(m[10], inv)
-        m[3] = f32(old_t[i][0]); m[7] = f32(old_t[i][1]); m[11] = f32(old_t[i][2])
+        m[3] = f32(t6[i*3+0]); m[7] = f32(t6[i*3+1]); m[11] = f32(t6[i*3+2])
         _concat_c(cur, m, nxt)
         swp = cur; cur = nxt; nxt = swp
         if i == 0:
             root_x = cur[3]; root_z = cur[11]
-    cdef double cx = fmuls(0.5, fadds(root_x, cur[3]))
-    cdef double cz = fmuls(0.5, fadds(root_z, cur[11]))
-    return (cx, cz)
+    out[0] = fmuls(0.5, fadds(root_x, cur[3]))
+    out[1] = fmuls(0.5, fadds(root_z, cur[11]))
+
+
+def co_center(double px, double py, double pz, long long facing, long long lean,
+              long long body_x, old_q, old_t, old_s):
+    """Link's body-Co cylinder centre (cx, cz) -- setCollision's root/neck world midpoint -- rebuilt
+    from the STORED old pose in one native call. Bit-exact drop-in for
+    foot_fk.FootFK.body_co_center's Python loop.
+
+    ``px/py/pz`` world pos, ``facing``/``lean`` s16 (lean = the base ZrotM, shape_angle.z), ``body_x``
+    the sign-extended -mBodyAngle.z (the BODY_CHN twist on joint 2). ``old_q``/``old_t``/``old_s`` are
+    length-6 sequences (chain order [0,1,2,3,4,14]): old_q[i]=(w,x,y,z), old_t[i]=(x,y,z),
+    old_s[i]=(x,y,z). Returns (cx, cz)."""
+    cdef double q6[24]
+    cdef double t6[18]
+    cdef double s6[18]
+    cdef int i
+    for i in range(6):
+        q6[i*4+0] = old_q[i][0]; q6[i*4+1] = old_q[i][1]
+        q6[i*4+2] = old_q[i][2]; q6[i*4+3] = old_q[i][3]
+        t6[i*3+0] = old_t[i][0]; t6[i*3+1] = old_t[i][1]; t6[i*3+2] = old_t[i][2]
+        s6[i*3+0] = old_s[i][0]; s6[i*3+1] = old_s[i][1]; s6[i*3+2] = old_s[i][2]
+    cdef double out[2]
+    _co_center_impl(px, py, pz, facing, lean, body_x, q6, t6, s6, out)
+    return (out[0], out[1])
 
 
 # ---- dCcS::SetPosCorrect Co push (cc_push.co_move_pair) ----------------------------------------
@@ -901,6 +924,14 @@ cdef class PoseEngine:
     cdef double _oldt[12][3]
     cdef double _olds[12][3]
     cdef bint _has_old[12]
+    # body_co store: the neck/head extras (BODY_CO_EXTRA slots 12-16 = joints 2,3,4,14,15), posed
+    # each frame with the SAME blend state as the feet (Stage 2 courtyard exec-centre). Index i =
+    # slot 12+i. The foot path leaves these untouched; only set when `_body_co` is on.
+    cdef double _oldq_bc[5][4]
+    cdef double _oldt_bc[5][3]
+    cdef double _olds_bc[5][3]
+    cdef bint _has_old_bc[5]
+    cdef bint _body_co              # pose the body_co extras each frame (courtyard; off in walk)
     cdef double _m_counter, _m_f8, _m_rate, _m_f10, _m_f14
     cdef double _base[12]           # worldBase (set by set_pos)
     cdef double _inv[12]            # m37B4 = PSMTXInverse(worldBase)
@@ -929,6 +960,9 @@ cdef class PoseEngine:
         self.data = data
         for i in range(12):
             self._has_old[i] = False
+        for i in range(5):
+            self._has_old_bc[i] = False
+        self._body_co = False
         self._m_counter = self._m_f8 = self._m_rate = self._m_f10 = self._m_f14 = 0.0
         self._fused_ready = False
         self._has_pending = False
@@ -937,6 +971,8 @@ cdef class PoseEngine:
         cdef int i
         for i in range(12):
             self._has_old[i] = False
+        for i in range(5):
+            self._has_old_bc[i] = False
 
     def clone_state(self):
         """Full memberwise state-copy sharing the immutable AnimData -- makes a MID-WALK clone
@@ -957,6 +993,14 @@ cdef class PoseEngine:
             c._inv[i] = self._inv[i]
             c._t1[i] = self._t1[i]
             c._t2[i] = self._t2[i]
+        c._body_co = self._body_co
+        for i in range(5):
+            c._has_old_bc[i] = self._has_old_bc[i]
+            for j in range(4):
+                c._oldq_bc[i][j] = self._oldq_bc[i][j]
+            for j in range(3):
+                c._oldt_bc[i][j] = self._oldt_bc[i][j]
+                c._olds_bc[i][j] = self._olds_bc[i][j]
         c._m_counter = self._m_counter; c._m_f8 = self._m_f8; c._m_rate = self._m_rate
         c._m_f10 = self._m_f10; c._m_f14 = self._m_f14
         for i in range(15):
@@ -1097,7 +1141,7 @@ cdef class PoseEngine:
         cdef long long r1[3]
         cdef double tr[3]
         cdef double scl[3]
-        cdef int slot, k, base_off
+        cdef int slot, k, base_off, bci
         cdef bint apply_morf
         cdef double r30, f31
         cdef bint morf_on = rate > 0.0
@@ -1134,6 +1178,35 @@ cdef class PoseEngine:
                 self._olds[slot][k] = scl[k]
             self._has_old[slot] = True
 
+        # body_co extras (slots 12-16 = joints 2,3,4,14,15): same blend state as the feet this
+        # frame (same m0,m1,f0,f1,ratio,rate), stored LOCAL (no FK) for the exec-centre co_center.
+        # Mirrors foot_fk._pose_frame's neck-chain pass (which poses all 17 joints in one call).
+        if self._body_co:
+            for slot in range(12, 17):
+                bci = slot - 12
+                self._calc_transform_c(m0, slot, f0, s0, r0, t0)
+                self._calc_transform_c(m1, slot, f1, s1, r1, t1)
+                _euler_to_quat_c(r0[0], r0[1], r0[2], q0)
+                _euler_to_quat_c(r1[0], r1[1], r1[2], q1)
+                _quat_lerp_c(q0, q1, ratio, q3)
+                r30 = fsubs(1.0, ratio)
+                for k in range(3):
+                    tr[k] = fadds(fmuls(t0[k], r30), fmuls(t1[k], ratio))
+                    scl[k] = fadds(fmuls(s0[k], r30), fmuls(s1[k], ratio))
+                apply_morf = morf_on and self._has_old_bc[bci]   # all body_co joints < MORF_END
+                if apply_morf:
+                    f31 = fsubs(1.0, rate)
+                    _quat_lerp_c(self._oldq_bc[bci], q3, f31, q3)
+                    for k in range(3):
+                        tr[k] = fadds(fmuls(tr[k], f31), fmuls(self._oldt_bc[bci][k], rate))
+                        scl[k] = fadds(fmuls(scl[k], f31), fmuls(self._olds_bc[bci][k], rate))
+                for k in range(4):
+                    self._oldq_bc[bci][k] = q3[k]
+                for k in range(3):
+                    self._oldt_bc[bci][k] = tr[k]
+                    self._olds_bc[bci][k] = scl[k]
+                self._has_old_bc[bci] = True
+
         self._morf_dec()
 
         cdef double cur39[12]
@@ -1154,6 +1227,32 @@ cdef class PoseEngine:
         self._pose_toe_core(m0, m1, f0, f1, ratio, i_morf, toes)
         return (toes[0], toes[1], toes[2], toes[3], toes[4], toes[5],
                 toes[6], toes[7], toes[8], toes[9], toes[10], toes[11])
+
+    cdef void _body_co_center(self, double px, double py, double pz, long long facing,
+                              long long lean, long long body_x, double* out) noexcept nogil:
+        """Link's exec-pass body-Co centre (out[0]=cx, out[1]=cz) from THIS engine's posed neck
+        chain: chain [0,1,2,3,4,14] = foot slots 0,1 (_oldq[0..1]) + body_co slots 12,13,14,15
+        (_oldq_bc[0..3]). Bit-exact twin of foot_fk.body_co_center / the module `co_center`, reading
+        the C stores directly (no Python round-trip) -- requires `_body_co` (the extras were posed)."""
+        cdef double q6[24]
+        cdef double t6[18]
+        cdef double s6[18]
+        cdef int k
+        for k in range(4):
+            q6[0*4+k] = self._oldq[0][k]
+            q6[1*4+k] = self._oldq[1][k]
+            q6[2*4+k] = self._oldq_bc[0][k]
+            q6[3*4+k] = self._oldq_bc[1][k]
+            q6[4*4+k] = self._oldq_bc[2][k]
+            q6[5*4+k] = self._oldq_bc[3][k]
+        for k in range(3):
+            t6[0*3+k] = self._oldt[0][k];    s6[0*3+k] = self._olds[0][k]
+            t6[1*3+k] = self._oldt[1][k];    s6[1*3+k] = self._olds[1][k]
+            t6[2*3+k] = self._oldt_bc[0][k]; s6[2*3+k] = self._olds_bc[0][k]
+            t6[3*3+k] = self._oldt_bc[1][k]; s6[3*3+k] = self._olds_bc[1][k]
+            t6[4*3+k] = self._oldt_bc[2][k]; s6[4*3+k] = self._olds_bc[2][k]
+            t6[5*3+k] = self._oldt_bc[3][k]; s6[5*3+k] = self._olds_bc[3][k]
+        _co_center_impl(px, py, pz, facing, lean, body_x, q6, t6, s6, out)
 
     def pose_chain(self, int m0, int m1, double f0, double f1, double ratio, double rate,
                    object slots, object oldq, object oldt, object olds,
@@ -1531,7 +1630,7 @@ cdef class PoseEngine:
         in the C engine's own storage (12 foot-chain slots). Call on a fresh `clone_state()` engine
         (shares the immutable AnimData). `code2idx` = foot.ff._anim_idx in ANIM_ORDER."""
         from .anim_state import ANIM_CODE
-        from .foot_fk import CHAIN_JOINTS
+        from .foot_fk import CHAIN_JOINTS, BODY_CO_EXTRA
         cdef int i, jnt
         if not self._fused_ready:
             self.init_anim(code2idx)
@@ -1562,6 +1661,22 @@ cdef class PoseEngine:
                 self._has_old[i] = True
             else:
                 self._has_old[i] = False
+        # body_co extras (courtyard exec centre): copy joints 2,3,4,14,15 -> body_co slots 0..4 from
+        # the Python FootFK old-pose dicts, and arm `_body_co` so `_pose_toe_core` poses them each
+        # frame. `ff.body_co` is False on the plain walk path -> the store stays inert.
+        self._body_co = bool(getattr(ff, 'body_co', False))
+        if self._body_co:
+            for i in range(5):
+                jnt = BODY_CO_EXTRA[i]
+                if jnt in ff.old_quat:
+                    q = ff.old_quat[jnt]; t = ff.old_trans[jnt]; s = ff.old_scale[jnt]
+                    self._oldq_bc[i][0] = q[0]; self._oldq_bc[i][1] = q[1]
+                    self._oldq_bc[i][2] = q[2]; self._oldq_bc[i][3] = q[3]
+                    self._oldt_bc[i][0] = t[0]; self._oldt_bc[i][1] = t[1]; self._oldt_bc[i][2] = t[2]
+                    self._olds_bc[i][0] = s[0]; self._olds_bc[i][1] = s[1]; self._olds_bc[i][2] = s[2]
+                    self._has_old_bc[i] = True
+                else:
+                    self._has_old_bc[i] = False
         for i in range(12):
             self._t1[i] = float(foot.t1[i]); self._t2[i] = float(foot.t2[i])
         self._prev_f312 = float(foot.prev_f312); self._m35B4 = float(foot.m35B4)
@@ -1926,7 +2041,8 @@ cdef class LandCore:
     cdef public double _tetra_x, _tetra_z   # tracked Tetra feet XZ (f32 point)
     cdef double _atn_eye_x, _atn_eye_z      # proc-9 re-aim target (Tetra eyePos XZ; injected)
     cdef bint _has_eye
-    cdef double _pend_link_x, _pend_link_z  # incoming CC recoil for THIS frame (posMove consume)
+    cdef public double _pend_link_x, _pend_link_z  # Link CC recoil for THIS frame (posMove consume)
+    cdef public double _pend_tetra_x, _pend_tetra_z # Tetra CC push for THIS frame (matched pair)
     cdef int _cbuf[6]                       # delay-1 pending controller input
     cdef bint _has_cbuf
     cdef bint _court_locked                 # mpAttnActorLockOn != NULL (courtyard; False in walk step)
@@ -1991,6 +2107,7 @@ cdef class LandCore:
         self._atn_eye_x = 0.0; self._atn_eye_z = 0.0
         self._has_eye = False
         self._pend_link_x = 0.0; self._pend_link_z = 0.0
+        self._pend_tetra_x = 0.0; self._pend_tetra_z = 0.0
         self._has_cbuf = False
         self._court_locked = False
         for i in range(6):
@@ -2029,6 +2146,7 @@ cdef class LandCore:
         c._tetra_x = self._tetra_x; c._tetra_z = self._tetra_z
         c._atn_eye_x = self._atn_eye_x; c._atn_eye_z = self._atn_eye_z; c._has_eye = self._has_eye
         c._pend_link_x = self._pend_link_x; c._pend_link_z = self._pend_link_z
+        c._pend_tetra_x = self._pend_tetra_x; c._pend_tetra_z = self._pend_tetra_z
         c._court_locked = self._court_locked; c._has_cbuf = self._has_cbuf
         for j in range(6):
             c._cbuf[j] = self._cbuf[j]
@@ -2528,10 +2646,15 @@ cdef class LandCore:
         return _s16c(<long long>self.m351C) >> 1
 
     def seed_courtyard(self, PoseEngine pe, double pos_y, long long m351c, int atn_state,
-                       double tetra_x, double tetra_z):
+                       double tetra_x, double tetra_z,
+                       double pend_link_x=0.0, double pend_link_z=0.0,
+                       double pend_tetra_x=0.0, double pend_tetra_z=0.0):
         """Attach the courtyard-seeded fused PoseEngine (`pe.seed_from_foot(...)` on a fresh
         clone_state) + the coupled-state seeds (pos_y for the FK base rounding, the m351C lean, the
-        AttentionLock state, Tetra's f0 feet). setup() must have run first (physics scalar seeds)."""
+        AttentionLock state, Tetra's f0 feet). `pend_link_*`/`pend_tetra_*` = the f0->f1 CC push pair
+        (FreeRun's `seed_push`; the matched Link recoil + Tetra push consumed on the FIRST native
+        step) -- required only for the fully-native push mode (`step_courtyard(..., native_push=1)`).
+        setup() must have run first (physics scalar seeds)."""
         self._pe = pe
         self.pos_y = pos_y
         self.m351C = <double>(m351c & 0xFFFF)
@@ -2539,6 +2662,8 @@ cdef class LandCore:
         self._atn_state = atn_state
         self._tetra_x = tetra_x
         self._tetra_z = tetra_z
+        self._pend_link_x = pend_link_x; self._pend_link_z = pend_link_z
+        self._pend_tetra_x = pend_tetra_x; self._pend_tetra_z = pend_tetra_z
 
     def pre_seed_courtyard(self, int sx, int sy, int buttons, int triggerL):
         """Seed the delay-1 controller buffer (the input the FIRST step_courtyard acts on) --
@@ -2644,22 +2769,39 @@ cdef class LandCore:
                        long long csangle, double tetra_x, double tetra_z,
                        double eye_x, double eye_z, int has_eye,
                        double pend_link_x, double pend_link_z,
-                       double speedf_inject, int has_speedf_inject):
+                       double speedf_inject, int has_speedf_inject,
+                       int native_push=0):
         """One coupled Courtyard frame (physics port of FreeRun.step + LandState.step). Injected
-        per-frame: `csangle` (camera value the physics reads), the Tetra feet `tetra_x/z` (cone gate +
-        proc-9 feet fallback + tracked point), the proc-9 re-aim `eye_x/z` (has_eye), the incoming CC
-        recoil `pend_link_x/z` (posMove consume). `speedf_inject`/`has_speedf_inject` overrides the
-        native pose-engine speedF (for the physics-first validation milestone). Returns the NATIVE
-        pose-engine speedF (== self.speedF when not injecting); the caller reads pos_x/pos_z/facing/
-        travel/state/nspeed/court_shape_z + self.speedF for the 0-ULP gate."""
+        per-frame: `csangle` (camera value the physics reads) and the proc-9 re-aim `eye_x/z`
+        (has_eye). `speedf_inject`/`has_speedf_inject` overrides the native pose-engine speedF (for
+        the physics-first validation milestone). Returns the NATIVE pose-engine speedF (== self.speedF
+        when not injecting); the caller reads pos_x/pos_z/facing/travel/state/nspeed/court_shape_z +
+        self.speedF for the 0-ULP gate.
+
+        `native_push` == 0 (Stage 1 injected mode): the coupled push is INJECTED -- the Tetra feet
+        `tetra_x/z` (cone gate + proc-9 feet fallback + tracked point) and the incoming Link recoil
+        `pend_link_x/z` (posMove consume). `native_push` != 0 (Stage 2): the push is SELF-CONTAINED --
+        `tetra_x/z`/`pend_link_x/z` are ignored; the tracked Tetra XZ (`self._tetra_x/_tetra_z`) and
+        the recoil pair (`self._pend_link/_pend_tetra`) persist frame-to-frame. Each frame consumes
+        THIS frame's recoil in posMove, moves the tracked Tetra by THIS frame's push (rounded to f32
+        per axis), then rebuilds the exec-pass body-Co centre (`_pe._body_co_center` off the posed
+        neck chain) and computes NEXT frame's push pair (`_co_move_pair_c`). Only the eye + csangle
+        stay injected. Requires a `seed_courtyard(..., pend_link_*, pend_tetra_*)` seed."""
         # --- delay-1 controller buffer: act on the PREVIOUS call's input (input_delay=1) ---
         cdef int asx = self._cbuf[0], asy = self._cbuf[1], abtn = self._cbuf[2], atrig = self._cbuf[3]
         self._cbuf[0] = sx; self._cbuf[1] = sy; self._cbuf[2] = buttons; self._cbuf[3] = triggerL
-        self._tetra_x = tetra_x; self._tetra_z = tetra_z
+        if native_push == 0:
+            # injected mode: overwrite the tracked Tetra + the incoming recoil from the caller.
+            self._tetra_x = tetra_x; self._tetra_z = tetra_z
+            self._pend_link_x = pend_link_x; self._pend_link_z = pend_link_z
         self._atn_eye_x = eye_x; self._atn_eye_z = eye_z; self._has_eye = has_eye != 0
-        self._pend_link_x = pend_link_x; self._pend_link_z = pend_link_z
         self.csangle = csangle & 0xFFFF
         self._set_stick_data(asx, asy)
+        # Frame-START proc (this frame's mCurProc before any dispatch/_roll_init mutation): the
+        # from_f0 `init_frame` = "did a proc *_init run" = post-step state != THIS value (the
+        # previous frame's post-step state). Must be captured BEFORE the A-roll trigger, which
+        # sets state=FRONT_ROLL and would otherwise mask the roll-entry init_frame.
+        cdef int entry_state = self.state
         cdef bint l_held = ((abtn & 0x40) != 0) or (atrig >= 200)
         cdef bint a_pressed = (abtn & 0x100) != 0
         cdef bint moving = self.msd > 0.05
@@ -2765,14 +2907,40 @@ cdef class LandCore:
         cdef double d = self.speedF
         self.pos_x = f32(self.pos_x + f32(d * jma_sin(self.travel)))
         self.pos_z = f32(self.pos_z + f32(d * jma_cos(self.travel)))
-        self.pos_x = f32(self.pos_x + pend_link_x)
-        self.pos_z = f32(self.pos_z + pend_link_z)
+        # posMove CC recoil (2558): consume THIS frame's Link recoil. self._pend_link is the injected
+        # value (native_push==0) or the pair computed at the end of the previous native frame.
+        self.pos_x = f32(self.pos_x + self._pend_link_x)
+        self.pos_z = f32(self.pos_z + self._pend_link_z)
+        # Native coupling: move the tracked Tetra by THIS frame's push (matched to the recoil just
+        # consumed), rounding each axis to f32 (the plow amplifies any f64 residue -- README s29).
+        if native_push != 0:
+            self._tetra_x = f32(self._tetra_x + self._pend_tetra_x)
+            self._tetra_z = f32(self._tetra_z + self._pend_tetra_z)
         # end-of-frame: the draw lean (pre-update m351C), the setMoveSlantAngle update, m34de/m34ea.
         self._draw_lean_c = <double>(_s16c(<long long>self.m351C) >> 1)
         self._set_move_slant_angle_c()
         self.m34de = self.facing
         self.m34ea = self.m34dc
         self._l_prev = l_held
+        # Native coupling: rebuild the exec-pass body-Co centre from the neck chain posed this frame,
+        # then compute NEXT frame's push pair (Link recoil obj1, Tetra push obj2). Runs AFTER
+        # setMoveSlantAngle so the BODY_CHN twist uses the post-update lean and the base uses the
+        # draw lean (0 on a proc-init frame) -- the from_f0._computed_center timing law.
+        cdef bint init_frame
+        cdef long long base_lean_v, body_lean_v
+        cdef double cxz[2]
+        cdef double push[4]
+        if native_push != 0:
+            init_frame = self.state != entry_state
+            body_lean_v = _s16c(<long long>self.m351C) >> 1
+            base_lean_v = 0 if init_frame else (<long long>self._draw_lean_c)
+            self._pe._body_co_center(self.pos_x, self.pos_y, self.pos_z, self.facing,
+                                     base_lean_v & 0xFFFF, -body_lean_v, cxz)
+            _co_move_pair_c(cxz[0], cxz[1], 30.0, 140.0,
+                            self._tetra_x, self._tetra_z, 50.0, 140.0,
+                            120, 0x8C, push)
+            self._pend_link_x = push[0]; self._pend_link_z = push[1]
+            self._pend_tetra_x = push[2]; self._pend_tetra_z = push[3]
         return sf_native
 
 

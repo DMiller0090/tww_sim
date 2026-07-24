@@ -9,11 +9,17 @@ the seeding bridge). Per the `[[zero-ulp-tests-only]]` hard rule every field is 
 `_bits == _bits` against the already-live-0-ULP Python oracle (`harness/tetrapush/from_f0.FreeRun`,
 gated by `tests/test_from_f0.py`).
 
-SCOPE (Stage 1): the coupled push is INJECTED per frame (the Python model's exec-centre CC push),
-along with csangle, the Tetra feet, and the proc-9 eye -- exactly as the closed-loop oracle consumes
-them. The native step reproduces proc / facing / travel / nspeed / speedF / pos_x / pos_z / lean AND
-the native pose-engine speedF bit-for-bit. Closing the loop natively (the exec centre + cc_push +
-Tetra track in C) is Stage 2; until then the injected push keeps the physics gate honest.
+SCOPE (Stage 1, `test_step_courtyard_native_bit_exact`): the coupled push is INJECTED per frame (the
+Python model's exec-centre CC push), along with csangle, the Tetra feet, and the proc-9 eye -- exactly
+as the closed-loop oracle consumes them. The native step reproduces proc / facing / travel / nspeed /
+speedF / pos_x / pos_z / lean AND the native pose-engine speedF bit-for-bit.
+
+SCOPE (Stage 2, `test_step_courtyard_native_push_bit_exact`): the loop is CLOSED natively -- the
+body-Co neck chain is posed in C, the exec-pass centre rebuilt via `PoseEngine._body_co_center` (the
+native `co_center`), the CC push pair computed via `_co_move_pair_c`, and the tracked Tetra XZ moved +
+f32-rounded each frame IN C (`step_courtyard(..., native_push=1)`, NO injected push/centre/Tetra).
+Only the proc-9 eye + csangle stay injected. The gate asserts Link pos + facing + speedF + proc AND
+the native-tracked Tetra XZ AND the native push pair (`_pend_link`/`_pend_tetra`) 0-ULP vs the oracle.
 """
 import json
 import os
@@ -60,7 +66,9 @@ def _build_native(run):
     core = N.LandCore()
     core.setup(pe, link.pos_x, link.pos_z, link.facing, link.travel, link.csangle,
                link.state, link.nspeed, link.speedF, float(link._cam.scale))
-    core.seed_courtyard(pe, link.pos_y, link.m351C, int(link._atn.state), run.tx, run.tz)
+    # Seed the f0->f1 CC push pair too (only the native-push mode consumes it; inert for injected).
+    core.seed_courtyard(pe, link.pos_y, link.m351C, int(link._atn.state), run.tx, run.tz,
+                        run.pend_link[0], run.pend_link[1], run.pend_tetra[0], run.pend_tetra[1])
     return core
 
 
@@ -131,4 +139,56 @@ def test_step_courtyard_native_bit_exact(env):
             if a != b:
                 diverged.append("f%d %s native=%r py=%r" % (k, name, a, b))
     assert not diverged, "native step_courtyard != Python FreeRun (0 ULP required): " \
+        + "; ".join(diverged[:20])
+
+
+def test_step_courtyard_native_push_bit_exact(env):
+    """Stage 2 -- the fully-native coupled loop. `step_courtyard(..., native_push=1)` computes the CC
+    push IN C: the body-Co neck chain is posed natively, the exec-pass centre rebuilt (`co_center`),
+    the push pair computed (`_co_move_pair_c`), and the tracked Tetra XZ moved + f32-rounded each
+    frame -- with NO injected push, centre, or Tetra (only the proc-9 eye + csangle stay injected).
+    Asserts f1..f43 BIT-FOR-BIT vs the Python `FreeRun` oracle on Link proc/facing/pos + speedF, the
+    native-tracked Tetra XZ (`self._tetra_x/_tetra_z`), and the native push pair
+    (`_pend_link`/`_pend_tetra`)."""
+    from harness.tetrapush.from_f0 import FreeRun
+    cyl, dtm, seed, perop, eyes = (env['cyl'], env['dtm'], env['seed'],
+                                   env['perop'], env['eyes'])
+    run = FreeRun(cyl[0], seed_nspeed=seed['link']['nspeed'], computed_pose=True,
+                  seed_old_pose=seed.get('old_pose'), seed_push=_seed_push(perop))
+    run.pre_seed_input(dtm[0]['inp'])
+    core = _build_native(run)
+    core.pre_seed_courtyard(*_sa(dtm[0]['inp']))
+
+    link = run.link
+    diverged = []
+    for k in range(1, 44):
+        eye = eyes[k - 1] if k - 1 < len(eyes) else None
+        csang = cyl[k - 1]['csangle']
+        inp = dtm[k]['inp']
+        # Python oracle (closed-loop computed-pose; its own push/Tetra track, 0-ULP live-gated)
+        row = run.step(inp, csangle=csang, eye=eye)
+        # native fully-native step: push/centre/Tetra are ALL native (0.0 injected push/feet)
+        isx, isy, ibtn, itr = _sa(inp)
+        ex, ez = (eye[0], eye[-1]) if eye is not None else (0.0, 0.0)
+        sfn = core.step_courtyard(isx, isy, ibtn, itr, int(csang) & 0xFFFF,
+                                  0.0, 0.0, float(ex), float(ez),
+                                  1 if eye is not None else 0,
+                                  0.0, 0.0, 0.0, 0, 1)     # native_push=1
+        checks = (
+            ('proc', int(core.state), int(row['sim_proc'])),
+            ('facing', int(core.facing), int(row['sim_facing'])),
+            ('speedF', _bits(sfn), _bits(row['speedF'])),
+            ('pos_x', _bits(core.pos_x), _bits(row['sim_link'][0])),
+            ('pos_z', _bits(core.pos_z), _bits(row['sim_link'][1])),
+            ('tetra_x', _bits(core._tetra_x), _bits(run.tx)),
+            ('tetra_z', _bits(core._tetra_z), _bits(run.tz)),
+            ('pend_link_x', _bits(core._pend_link_x), _bits(run.pend_link[0])),
+            ('pend_link_z', _bits(core._pend_link_z), _bits(run.pend_link[1])),
+            ('pend_tetra_x', _bits(core._pend_tetra_x), _bits(run.pend_tetra[0])),
+            ('pend_tetra_z', _bits(core._pend_tetra_z), _bits(run.pend_tetra[1])),
+        )
+        for name, a, b in checks:
+            if a != b:
+                diverged.append("f%d %s native=%r py=%r" % (k, name, a, b))
+    assert not diverged, "native-push step_courtyard != Python FreeRun (0 ULP required): " \
         + "; ".join(diverged[:20])
