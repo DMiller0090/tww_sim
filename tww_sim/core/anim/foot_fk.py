@@ -367,7 +367,7 @@ class FootFK:
         m[0][3] = fp.f32(t[0]); m[1][3] = fp.f32(t[1]); m[2][3] = fp.f32(t[2])
         return m
 
-    def body_co_center(self, px, py, pz, facing, lean=0, body_lean=None):
+    def body_co_center(self, px, py, pz, facing, lean=0, body_lean=None, _force_py=False):
         """Link's body **Co** cylinder centre (x, z) for the pose LAST posed (drawn) by this driver --
         ``daPy_lk_c::setCollision``'s root/neck world midpoint (d_a_player_main.cpp:9748-9754), the
         centre ``cM3d_Cross_CylCyl`` pushes other actors from. The generalization of
@@ -392,10 +392,18 @@ class FootFK:
         ``lean`` (the old behavior) for callers without a post-update value."""
         if not (self.body_co and self.world):
             raise RuntimeError("body_co_center needs body_co=True on the Python world FK path")
-        base, _ = fk.world_base(fp.f32(px), fp.f32(py), fp.f32(pz), int(facing) & 0xFFFF,
-                                int(lean) & 0xFFFF)
         lv = int(lean if body_lean is None else body_lean) & 0xFFFF
         body_x = -(lv - 0x10000 if lv >= 0x8000 else lv)   # -mBodyAngle.z; .z==shape_angle.z (:9526)
+        if _N is not None and self.world and not _force_py:
+            # Native one-call fold of the Python loop below (gated bit-exact by test_from_f0.py +
+            # tests/test_body_co_native.py); marshal the stored old pose in chain order.
+            oq = self.old_quat; ot = self.old_trans; os_ = self.old_scale
+            return _N.co_center(fp.f32(px), fp.f32(py), fp.f32(pz), int(facing) & 0xFFFF,
+                                int(lean) & 0xFFFF, body_x,
+                                [oq[j] for j in NECK_CHAIN], [ot[j] for j in NECK_CHAIN],
+                                [os_[j] for j in NECK_CHAIN])
+        base, _ = fk.world_base(fp.f32(px), fp.f32(py), fp.f32(pz), int(facing) & 0xFFFF,
+                                int(lean) & 0xFFFF)
         cur = base
         root_t = None
         for jnt in NECK_CHAIN:

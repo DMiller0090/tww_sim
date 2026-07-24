@@ -1159,6 +1159,41 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
                  hard-prune only speed/overtake/regime, NEVER rank-drop), with the MAINTAINED-ACTOR-LOCK
                  lever (freeze facing out-of-cone). Bit-confirm on the full 0-ULP FreeRun. THEN exact
                  placement + entry walk-in + tier-2 DTM.
+            - **SESSION 35 -- the CYTHONIZE started: native `co_center` + a search fast-path (2.6x,
+              0-ULP-gated); the physics-proc + anim-sampler port is the remaining chunk to 300k-1M/s.**
+              Measured (stripped geometry proxy, zl1/neck OFF): baseline **6.8k/s** -> **8.4k/s** (native
+              `co_center`) -> **17.5k/s** (`record=False`). Two safe, gated deliverables:
+              1. **`_anmc.co_center` (native, 0-ULP).** Folded the whole `FootFK.body_co_center` neck-chain
+                 accumulation (the setCollision root/neck midpoint -- 6x `_local_from_old` + concat + the
+                 BODY_CHN twist + neck SSC) into ONE C call, reusing the existing native f32/quat/concat
+                 primitives (+ a new `_quat_concat_c`). `body_co_center` calls it when `_anmc` is built
+                 (Python loop kept as the `_force_py` reference). This removed the #1 Python hotspot
+                 (`_local_from_old`). Gate: `tests/test_body_co_native.py` (native vs `_force_py` bit-exact
+                 over a pos/facing/lean/body-lean sweep on a real dash old-pose) + `test_from_f0` stays
+                 16/16 0-ULP.
+              2. **`FreeRun.step(record=False)` -- the search fast path.** Skips the `sim_cyl` settled-centre
+                 DIAGNOSTIC (`_cc_settled_center`) and the per-frame row dict; the brute force reads
+                 `run.link`/`run.tx` directly. PROVEN geometry 0-ULP vs `record=True` over 40 f (pos,
+                 speedF, facing, Tetra x/z all `_bits`-equal). The push (`cc_push_pair` on the computed
+                 exec centre) is unchanged.
+              **The remaining port (NEXT, still Dereck's 300k-1M/s directive):** the profile of the
+              `record=False` step is now dominated by (a) the LAND PHYSICS procs -- `state.step` own +
+              `move._set_speed_and_angle_normal` + `atn`/`atn_actor` + `main_stick_decode` +
+              `_clamped_angle_s16`/`s16_signed`/`_dist_angle_s` (~33%), and (b) the ANIM KEYFRAME SAMPLER
+              `j3d_eval.calc_transform`/`_keyframe_interp` (~20%; hermite is already native, the per-track
+              dispatch is not). There is NO single remaining big lever -- 300k-1M/s needs the WHOLE step in
+              one nogil C translation unit (physics procs + anim sampler + the FK glue), operating on C
+              scalars with no per-frame Python object churn, then optionally an OpenMP `prange` fan-out over
+              the BFS frontier (the `_shovec.pyx` pattern) to multiply by cores. Architecture: extend the
+              C-resident `PoseEngine` to also pose the neck chain + expose `co_center`/`head_top` natively
+              (so `from_f0` can drop `foot_native=False` and the whole pose FK is one C call), and port the
+              courtyard procs (MOVE / ATN_MOVE / ATN_ACTOR / FRONT_ROLL + the attention machine) to a
+              native `LandCore`-style struct. Keep the pure-Python step as the 0-ULP differential ORACLE
+              at every stage (the `test_body_co_native` pattern: native vs `_force_py`, `_bits`-equal).
+              **DERECK STEER (s35): MORE ROLLS ARE OPTIMAL** -- the brute force must NOT cap or penalise
+              roll count. The roll is the productive frame (~26 u/f deep-overlap herd); the dead cost is the
+              inter-roll REPOSITION. Frame-minimal = pack MORE rolls with minimal reposition between them,
+              not fewer-rolls-with-long-glides and not a single big roll (`[[tetrapush-frame-minimal]]`).
 
 ## Hard rules (inherited from the seam-clip work)
 

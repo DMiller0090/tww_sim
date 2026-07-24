@@ -398,13 +398,19 @@ class FreeRun:
         self.link._inbuf = [_step_args(inp)]
         self._prev_raw = inp
 
-    def step(self, inp, csangle=None, eye=None, center=None, tattn=None):
+    def step(self, inp, csangle=None, eye=None, center=None, tattn=None, record=True):
         """Advance one game frame on raw input ``inp``. ``csangle``/``eye``/``tattn`` as in the
         class doc; ``center`` = an injected SETTLED Co centre for this frame's outgoing push (the
         live-capture mode) -- None uses the computed settled centre (requires ``computed_pose``).
         Returns the sim row dict (``sim_proc``, ``sim_facing``, ``sim_shape_z``, ``sim_link``,
         ``sim_tetra``, ``speedF``, ``sim_cyl`` when computed, and ``sim_csangle`` -- the camera
-        value the NEXT frame's physics will read -- when a camera is wired)."""
+        value the NEXT frame's physics will read -- when a camera is wired).
+
+        ``record=False`` -- the SEARCH fast path: advance the coupled state (physics + computed
+        exec-centre push, both actors' positions 0-ULP identical to ``record=True``) but skip the
+        ``sim_cyl`` settled-centre DIAGNOSTIC and the per-frame row dict (the brute force reads
+        ``run.link`` / ``run.tx`` directly). Requires ``computed_pose`` and no wired camera/zl1/neck
+        (search runs stripped -- geometry-exact per the s34 handoff). Returns None."""
         link = self.link
         if csangle is not None:
             if self.camera is not None:
@@ -457,13 +463,14 @@ class FreeRun:
             sim_proc=link.state, sim_facing=link.facing,
             sim_shape_z=_s16(link.m351C) >> 1,
             sim_link=(link.pos_x, link.pos_z), sim_tetra=(self.tx, self.tz),
-            speedF=link.speedF)
+            speedF=link.speedF) if record else None
         # The push consumed producing the NEXT state (decomp draw-phase Ccsp()->Move() order): the
         # CONSOLE push `cc_push_pair` on this frame's EXEC centre (bug-#1 fix; see its docstring).
         if self.computed_pose:
             cx = _computed_center(link, init_frame=init_frame)
-            row['sim_cyl'] = _cc_settled_center(cx, (self.tx, self.tz))
-            row['sim_cyl_exec'] = cx           # the pose-driven exec centre (drives the push)
+            if record:
+                row['sim_cyl'] = _cc_settled_center(cx, (self.tx, self.tz))  # DIAGNOSTIC only
+                row['sim_cyl_exec'] = cx        # the pose-driven exec centre (drives the push)
         if center is not None:
             # injected SETTLED centre (the live-capture 'injected' mode): approximate full-depth push
             self.pend_link, self.pend_tetra = full_depth_push(center, (self.tx, self.tz))
@@ -472,6 +479,8 @@ class FreeRun:
             self.pend_link, self.pend_tetra = cc_push_pair(cx, (self.tx, self.tz))
         else:
             raise ValueError("step() needs either an injected center= or computed_pose")
+        if not record:
+            return None
 
         # setNeckAngle m3564: measure the CACHED previous head matrix, chase toward the look
         # target, twist THIS frame's head pose (knowledge/mechanics/link-head-look.md).

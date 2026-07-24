@@ -176,6 +176,20 @@ def quat_lerp(a, b, t):
     return (out[0], out[1], out[2], out[3])
 
 
+# ---- quaternion concat (mDoMtx_QuatConcat: plain f64 products, single f32 round) ---------------
+cdef void _quat_concat_c(double* a, double* b, double* out) nogil:
+    """out = a (x) b (Hamilton product). a/b/out are (w,x,y,z). Bit-exact core of
+    foot_fk.FootFK._quat_concat -- each component is a plain f64 expression rounded ONCE to f32
+    (the products of f32 inputs are exact in f64, so the single round matches the game). out may
+    NOT alias a or b."""
+    cdef double aw = a[0], ax = a[1], ay = a[2], az = a[3]
+    cdef double bw = b[0], bx = b[1], by = b[2], bz = b[3]
+    out[0] = f32(aw * bw - ax * bx - ay * by - az * bz)
+    out[1] = f32(aw * bx + ax * bw + ay * bz - az * by)
+    out[2] = f32(aw * by - ax * bz + ay * bw + az * bx)
+    out[3] = f32(aw * bz + ax * by - ay * bx + az * bw)
+
+
 # ---- PSMTXQuat (retail paired-single asm), fres scale mode ------------------------------------
 cdef void _psmtx_quat_c(double* q, double* m) nogil:
     """m[0..11] = 3x4 rotation matrix (row-major, trans cols = m[3],m[7],m[11] set to 0) from
@@ -343,6 +357,90 @@ def mtx_mult_vec(m, v):
         pb = fadds(fmuls(mi[1], sy), mi[3])
         out[i] = fadds(pa, pb)
     return (out[0], out[1], out[2])
+
+
+# ---- body-Co centre (setCollision root/neck midpoint) in one C call ---------------------------
+# Neck chain foot_fk.NECK_CHAIN=[0,1,2,3,4,14] in calc order; SSC slots 3,4,5 scale by 1/parentS
+# (parent = slot i-1). See co_center's docstring + foot_fk.FootFK.body_co_center for the full law.
+cdef bint _NECK_SSC[6]
+_NECK_SSC[0]=False; _NECK_SSC[1]=False; _NECK_SSC[2]=False
+_NECK_SSC[3]=True;  _NECK_SSC[4]=True;  _NECK_SSC[5]=True
+
+def co_center(double px, double py, double pz, long long facing, long long lean,
+              long long body_x, old_q, old_t, old_s):
+    """Link's body-Co cylinder centre (cx, cz) -- setCollision's root/neck world midpoint -- rebuilt
+    from the STORED old pose in one native call. Bit-exact drop-in for
+    foot_fk.FootFK.body_co_center's Python loop.
+
+    ``px/py/pz`` world pos, ``facing``/``lean`` s16 (lean = the base ZrotM, shape_angle.z), ``body_x``
+    the sign-extended -mBodyAngle.z (the BODY_CHN twist on joint 2). ``old_q``/``old_t``/``old_s`` are
+    length-6 sequences (chain order [0,1,2,3,4,14]): old_q[i]=(w,x,y,z), old_t[i]=(x,y,z),
+    old_s[i]=(x,y,z). Returns (cx, cz)."""
+    # --- build the leaned worldBase (fk.world_base): transS(p) . YrotM(facing) [. ZrotM(lean)] ---
+    cdef long long fc = facing & 0xFFFF, lc = lean & 0xFFFF
+    cdef double c = jma_cos(fc), s = jma_sin(fc), ns = f32(-s)
+    cdef double base[12]
+    base[0] = c;   base[1] = 0.0; base[2] = s;   base[3] = f32(px)
+    base[4] = 0.0; base[5] = 1.0; base[6] = 0.0; base[7] = f32(py)
+    base[8] = ns;  base[9] = 0.0; base[10] = c;  base[11] = f32(pz)
+    cdef double rz[12]
+    cdef double leaned[12]
+    cdef double cz_, sz_
+    if lc != 0:
+        cz_ = jma_cos(lc); sz_ = jma_sin(lc)
+        rz[0] = cz_; rz[1] = f32(-sz_); rz[2] = 0.0; rz[3] = 0.0
+        rz[4] = sz_; rz[5] = cz_;       rz[6] = 0.0; rz[7] = 0.0
+        rz[8] = 0.0; rz[9] = 0.0;       rz[10] = 1.0; rz[11] = 0.0
+        _concat_c(base, rz, leaned)
+        memcpy(base, leaned, 12 * sizeof(double))
+
+    # --- accumulate the neck chain, capturing root (slot 0) and neck (slot 5) world translates ----
+    cdef double bufA[12]
+    cdef double bufB[12]
+    cdef double loc[12]
+    cdef double q[4]
+    cdef double tw[4]
+    cdef double q2[4]
+    cdef double m[12]
+    cdef double* cur = bufA
+    cdef double* nxt = bufB
+    cdef double* swp
+    cdef double s0, s1, s2, inv, ps0, ps1, ps2
+    cdef int i, r
+    cdef double root_x = 0.0, root_z = 0.0
+    memcpy(cur, base, 12 * sizeof(double))
+    for i in range(6):
+        # rebuild the local 3x4 from the stored old pose
+        q[0] = old_q[i][0]; q[1] = old_q[i][1]; q[2] = old_q[i][2]; q[3] = old_q[i][3]
+        if i == 2 and body_x != 0:
+            _euler_to_quat_c(body_x, 0, 0, tw)
+            _quat_concat_c(q, tw, q2)
+            _psmtx_quat_c(q2, m)
+        else:
+            _psmtx_quat_c(q, m)
+        s0 = old_s[i][0]; s1 = old_s[i][1]; s2 = old_s[i][2]
+        # M = R . diag(anim scale): column j scaled by scale[j]
+        m[0] = fmuls(m[0], s0); m[1] = fmuls(m[1], s1); m[2] = fmuls(m[2], s2)
+        m[4] = fmuls(m[4], s0); m[5] = fmuls(m[5], s1); m[6] = fmuls(m[6], s2)
+        m[8] = fmuls(m[8], s0); m[9] = fmuls(m[9], s1); m[10] = fmuls(m[10], s2)
+        # SSC: row r of the local 3x3 scaled by 1/parentS[r] (parent = slot i-1)
+        if _NECK_SSC[i]:
+            ps0 = old_s[i - 1][0]; ps1 = old_s[i - 1][1]; ps2 = old_s[i - 1][2]
+            if ps0 != 1.0 or ps1 != 1.0 or ps2 != 1.0:
+                inv = fdivs(1.0, ps0)
+                m[0] = fmuls(m[0], inv); m[1] = fmuls(m[1], inv); m[2] = fmuls(m[2], inv)
+                inv = fdivs(1.0, ps1)
+                m[4] = fmuls(m[4], inv); m[5] = fmuls(m[5], inv); m[6] = fmuls(m[6], inv)
+                inv = fdivs(1.0, ps2)
+                m[8] = fmuls(m[8], inv); m[9] = fmuls(m[9], inv); m[10] = fmuls(m[10], inv)
+        m[3] = f32(old_t[i][0]); m[7] = f32(old_t[i][1]); m[11] = f32(old_t[i][2])
+        _concat_c(cur, m, nxt)
+        swp = cur; cur = nxt; nxt = swp
+        if i == 0:
+            root_x = cur[3]; root_z = cur[11]
+    cdef double cx = fmuls(0.5, fadds(root_x, cur[3]))
+    cdef double cz = fmuls(0.5, fadds(root_z, cur[11]))
+    return (cx, cz)
 
 
 # ---- Hermite interpolation (s16 asm path + f32 path) ------------------------------------------
