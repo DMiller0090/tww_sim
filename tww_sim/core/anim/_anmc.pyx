@@ -53,6 +53,59 @@ def tables_ready():
     return _TABLES_READY
 
 
+# ---- cM_atan2s: the TABLE atan2 -> u16 angle (c_math.cpp:118) ----------------------------------
+# Distinct from the stick-decode atan2f: U_GetAtanTable is a 1025-entry table indexed by the f32
+# (int)(a/b * 1024). Bit-exact twin of mathlib.cM_atan2s -- the cone gate + setShapeAngleToAtnActor
+# re-aim need it. Populated by init_atan_table from mathlib._ATN_TABLE.
+cdef unsigned short _ATAN_TABLE[1025]
+cdef bint _ATAN_READY = False
+DEF _CM3D_ABS_MIN = 3.814697265625e-06        # 2^-18 (mathlib G_CM3D_F_ABS_MIN)
+
+
+def init_atan_table(table):
+    """Copy mathlib._ATN_TABLE (1025 u16 entries) into C. Idempotent."""
+    global _ATAN_READY
+    cdef int i
+    for i in range(1025):
+        _ATAN_TABLE[i] = <unsigned short>(<int>table[i])
+    _ATAN_READY = True
+
+
+cdef inline long long _atab(double a, double b) nogil:
+    """U_GetAtanTable(a, b): _ATN_TABLE[(int)f32(f32(a/b) * 1024)]."""
+    cdef int idx = <int>f32(fmuls(fdivs(a, b), 1024.0))
+    return <long long>_ATAN_TABLE[idx]
+
+
+cdef long long _cm_atan2s_c(double f0, double f1) nogil:
+    """cM_atan2s (c_math.cpp:118). Bit-exact port of mathlib.cM_atan2s."""
+    f0 = f32(f0); f1 = f32(f1)
+    cdef double a0 = f0 if f0 >= 0.0 else -f0
+    cdef double a1 = f1 if f1 >= 0.0 else -f1
+    if a0 < _CM3D_ABS_MIN:
+        return 0 if f1 >= 0.0 else 0x8000
+    if a1 < _CM3D_ABS_MIN:
+        return 0x4000 if f0 >= 0.0 else 0xC000
+    cdef long long r
+    if f0 >= 0.0:
+        if f1 >= 0.0:
+            r = _atab(f0, f1) if f1 >= f0 else 0x4000 - _atab(f1, f0)
+        else:
+            r = (_atab(-f1, f0) + 0x4000) if -f1 < f0 else 0x8000 - _atab(f0, -f1)
+    elif f1 < 0.0:
+        r = (_atab(-f0, -f1) + 0x8000) if f1 <= f0 else 0xC000 - _atab(-f1, -f0)
+    else:
+        r = (_atab(f1, -f0) + 0xC000) if f1 < -f0 else -_atab(-f0, f1)
+    return r & 0xFFFF
+
+
+def cm_atan2s(f0, f1):
+    """Public wrapper over the native cM_atan2s (for gating vs mathlib.cM_atan2s)."""
+    if not _ATAN_READY:
+        raise RuntimeError("init_atan_table() must be called first")
+    return _cm_atan2s_c(f0, f1)
+
+
 cdef inline double jma_cos(long long a) nogil:
     return COS_TABLE[(a & 0xFFFF) >> 4]
 
@@ -441,6 +494,97 @@ def co_center(double px, double py, double pz, long long facing, long long lean,
     cdef double cx = fmuls(0.5, fadds(root_x, cur[3]))
     cdef double cz = fmuls(0.5, fadds(root_z, cur[11]))
     return (cx, cz)
+
+
+# ---- dCcS::SetPosCorrect Co push (cc_push.co_move_pair) ----------------------------------------
+# The Courtyard CC push: obj1 (Link) and obj2 (Tetra) each ejected half the overlap depth, exact
+# opposites for a same-rank pair. Bit-exact twin of tww_sim.core.cc_push.co_move_pair (XZ only,
+# dy=0). Rank table (d_cc_s.cpp:138) + GetRank (:153) inlined; is_zero threshold = collision 1e-5.
+DEF _CC_ISZERO = 1.0e-5               # collision.G_CM3D_F_ABS_MIN (NOT the mathlib 2^-18)
+cdef int _RANK_TBL[11][11]
+cdef bint _RANK_READY = False
+
+
+def init_rank_table(tbl):
+    """Copy cc_push.RANK_TBL (11x11) into C. Idempotent."""
+    global _RANK_READY
+    cdef int i, j
+    for i in range(11):
+        for j in range(11):
+            _RANK_TBL[i][j] = <int>tbl[i][j]
+    _RANK_READY = True
+
+
+cdef inline int _get_rank_c(int w) nogil:
+    """dCcS::GetRank (d_cc_s.cpp:153): raw weight u8 -> rank 0..10."""
+    w = w & 0xFF
+    if w == 0xFF: return 10
+    if w == 0xFE: return 9
+    if w >= 0xD9: return 8
+    if w >= 0xB5: return 7
+    if w >= 0x91: return 6
+    if w >= 0x6D: return 5
+    if w >= 0x49: return 4
+    if w >= 0x25: return 3
+    if w >= 0x02: return 2
+    if w == 0x01: return 1
+    return 0
+
+
+cdef inline double _cc_fsqrt(double a) nogil:
+    return f32(_c_sqrt(f32(a)))
+
+
+cdef int _co_move_pair_c(double c1x, double c1z, double r1, double h1,
+                         double c2x, double c2z, double r2, double h2,
+                         int w1, int w2, double* out) noexcept nogil:
+    """co_move_pair XZ core: fills out[0..3] = (v1x, v1z, v2x, v2z) -- obj1 (c1) and obj2 (c2)
+    accumulated moves. Returns 1 if a push was applied, 0 (out zeroed) on no-overlap / deadzone /
+    both-immovable. Cylinders share the whole Y span here (courtyard flat floor), so the Y-overlap
+    gate always passes; callers that need it must add it. Bit-exact port of cc_push.co_move_pair."""
+    out[0] = 0.0; out[1] = 0.0; out[2] = 0.0; out[3] = 0.0
+    cdef double dx = fsubs(c1x, c2x)
+    cdef double dz = fsubs(c1z, c2z)
+    cdef double dist_sq = fmadds(dz, dz, fmuls(dx, dx))
+    cdef double rsum = fadds(r1, r2)
+    if dist_sq > fmuls(rsum, rsum):
+        return 0
+    cdef double cross_len = fsubs(rsum, _cc_fsqrt(dist_sq))
+    cdef double acl = cross_len if cross_len >= 0.0 else -cross_len
+    if acl < _CC_ISZERO:
+        return 0
+    cdef int a = w1 & 0xFF, b = w2 & 0xFF
+    if (a == 0 and b == 0) or (a == 0xFF and b == 0xFF):
+        return 0
+    cdef int rank = _RANK_TBL[_get_rank_c(a)][_get_rank_c(b)]   # obj1's push %
+    cdef double obj1_w = fmuls(<double>rank, 0.01)
+    cdef double obj2_w = fmuls(<double>(100 - rank), 0.01)
+    # objsDist = ppos2 - ppos1 = (c2 - c1); scale to cross_len; vec1 = -objsDist*obj2_w, vec2 = +*obj1_w.
+    cdef double ox = fsubs(c2x, c1x)
+    cdef double oz = fsubs(c2z, c1z)
+    cdef double dist = _cc_fsqrt(fmadds(oz, oz, fmuls(ox, ox)))
+    cdef double f, sx, sz, mag
+    if not (dist < _CC_ISZERO):
+        f = fdivs(cross_len, dist)
+        sx = fmuls(ox, f); sz = fmuls(oz, f)
+        out[0] = fmuls(sx, fsubs(0.0, obj2_w)); out[1] = fmuls(sz, fsubs(0.0, obj2_w))
+        out[2] = fmuls(sx, obj1_w);             out[3] = fmuls(sz, obj1_w)
+    else:
+        mag = cross_len if acl >= _CC_ISZERO else 1.0
+        out[0] = fmuls(fsubs(0.0, mag), obj2_w); out[1] = 0.0
+        out[2] = fmuls(mag, obj1_w);             out[3] = 0.0
+    return 1
+
+
+def co_move_pair_xz(double c1x, double c1z, double r1, double h1,
+                    double c2x, double c2z, double r2, double h2, int w1, int w2):
+    """Public wrapper over the native co_move_pair (XZ, dy=0), for gating vs cc_push.co_move_pair.
+    Pass the cylinder centres UNPACKED (c1x, c1z, ...); returns ((v1x, 0.0, v1z), (v2x, 0.0, v2z))."""
+    if not _RANK_READY:
+        raise RuntimeError("init_rank_table() must be called first")
+    cdef double out[4]
+    _co_move_pair_c(c1x, c1z, r1, h1, c2x, c2z, r2, h2, w1, w2, out)
+    return ((out[0], 0.0, out[1]), (out[2], 0.0, out[3]))
 
 
 # ---- Hermite interpolation (s16 asm path + f32 path) ------------------------------------------

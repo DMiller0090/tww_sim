@@ -27,6 +27,11 @@ from . import fk
 try:
     from . import _anmc as _N
     _N.init_tables(S._COS_TABLE, S._SIN_TABLE)
+    # The Courtyard native step needs the table atan2 (cone gate / re-aim) + the CC-push rank table.
+    if hasattr(_N, 'init_atan_table'):
+        from ..cc_push import RANK_TBL as _RANK_TBL
+        _N.init_atan_table(S._ATN_TABLE)
+        _N.init_rank_table(_RANK_TBL)
 except ImportError:
     _N = None
 
