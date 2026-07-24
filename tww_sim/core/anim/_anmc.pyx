@@ -1522,6 +1522,58 @@ cdef class PoseEngine:
     def w_get_idle_frame(self):
         return self._idle_frame
 
+    def seed_from_foot(self, foot, code2idx):
+        """Courtyard seeding bridge: copy a PYTHON `foot_speedf.FootSpeedF` (`foot_native=False`,
+        the from-f0 FreeRun path) state INTO this fused C engine so `w_step`/`w_step_atn`/
+        `w_step_single` reproduce it bit-for-bit. The Python courtyard foot stream lives in the
+        UnderAnimState (`foot.st`) + FootFK old-pose dicts (`foot.ff.old_*`, joint-keyed) + the
+        posMoveFromFootPos toe stream (`foot.t1/t2/prev_f312/m35B4`); this method lands all of it
+        in the C engine's own storage (12 foot-chain slots). Call on a fresh `clone_state()` engine
+        (shares the immutable AnimData). `code2idx` = foot.ff._anim_idx in ANIM_ORDER."""
+        from .anim_state import ANIM_CODE
+        from .foot_fk import CHAIN_JOINTS
+        cdef int i, jnt
+        if not self._fused_ready:
+            self.init_anim(code2idx)
+        st = foot.st
+        ff = foot.ff
+        self._move0 = ANIM_CODE[st.move0]
+        self._move1 = ANIM_CODE[st.move1] if st.move1 is not None else -1
+        self._m34C3 = int(st.m34C3)
+        self._a_ratio = float(st.ratio)
+        self._m3598 = float(st.m3598)
+        self._fc0_attr = int(st.fc0.attribute); self._fc0_start = float(st.fc0.start)
+        self._fc0_end = float(st.fc0.end); self._fc0_loop = float(st.fc0.loop)
+        self._fc0_rate = float(st.fc0.rate); self._fc0_frame = float(st.fc0.frame)
+        self._fc1_attr = int(st.fc1.attribute); self._fc1_start = float(st.fc1.start)
+        self._fc1_end = float(st.fc1.end); self._fc1_loop = float(st.fc1.loop)
+        self._fc1_rate = float(st.fc1.rate); self._fc1_frame = float(st.fc1.frame)
+        m = ff.morf
+        self._m_counter = float(m.counter); self._m_f8 = float(m.f8); self._m_rate = float(m.rate)
+        self._m_f10 = float(m.f10); self._m_f14 = float(m.f14)
+        for i in range(12):
+            jnt = CHAIN_JOINTS[i]
+            if jnt in ff.old_quat:
+                q = ff.old_quat[jnt]; t = ff.old_trans[jnt]; s = ff.old_scale[jnt]
+                self._oldq[i][0] = q[0]; self._oldq[i][1] = q[1]
+                self._oldq[i][2] = q[2]; self._oldq[i][3] = q[3]
+                self._oldt[i][0] = t[0]; self._oldt[i][1] = t[1]; self._oldt[i][2] = t[2]
+                self._olds[i][0] = s[0]; self._olds[i][1] = s[1]; self._olds[i][2] = s[2]
+                self._has_old[i] = True
+            else:
+                self._has_old[i] = False
+        for i in range(12):
+            self._t1[i] = float(foot.t1[i]); self._t2[i] = float(foot.t2[i])
+        self._prev_f312 = float(foot.prev_f312); self._m35B4 = float(foot.m35B4)
+        self._started = bool(foot.started); self._stopped = bool(foot.stopped)
+        self._single_entered = bool(foot._single_entered)
+        self._idle_frame = float(foot.idle_frame); self._idle_code = ANIM_CODE[foot.idle_anim]
+        pm = foot._pending_morf
+        if pm is None:
+            self._has_pending = False
+        else:
+            self._pending_morf = float(pm); self._has_pending = True
+
 
 # ---- posMoveFromFootPos composition (plant select + absXZ + smoothing + speedF) ---------------
 cdef double _sqrtf_c(double x) nogil:
@@ -1672,6 +1724,8 @@ DEF LS_WAIT=4
 DEF LS_FREE_WAIT=5
 DEF LS_MOVE=6
 DEF LS_ATN_MOVE=7
+DEF LS_ATN_ACTOR_WAIT=8
+DEF LS_ATN_ACTOR_MOVE=9
 DEF LS_WAIT_TURN=23
 DEF LS_MOVE_TURN=24
 DEF LS_SLIP=25
@@ -1686,6 +1740,15 @@ DEF LD_NONE=4
 DEF _DEG_PER_RAD = 57.29577951308232
 
 # C-up-cancel (subjectivity freeze) input gates -- mirror land.py CUP_POSY / CUP_MAIN_MAX / C-DOWN.
+# AttentionLock / atn_actor (Courtyard Tetra push): NONE/LOCK/RELEASE + the front-of-player cone
+# (attention.py FRONT_CONE_HALF) + setShapeAngleToAtnActor's cLib_addCalcAngleS knobs (2629).
+DEF _ATN_NONE=0
+DEF _ATN_LOCK=1
+DEF _ATN_RELEASE=2
+DEF _ATN_FRONT_CONE_HALF=0x4000
+DEF _ATN_SHAPE_SCALE=2
+DEF _ATN_SHAPE_MAX=0x2000
+DEF _ATN_SHAPE_MIN=0x800
 DEF _CUP_POSY = 0.5
 DEF _CUP_MAIN_MAX = 0.5
 DEF _CDOWN_POSY = -0.74
@@ -1852,6 +1915,21 @@ cdef class LandCore:
     cdef int _inbuf[2][6]
     cdef long long _cam_yaw, _cam_target
     cdef double _cam_scale, _cam_pending_posx
+    # --- Courtyard Tetra-push coupled state (step_courtyard only; inert for the walk step) ---
+    cdef public double pos_y                # Link world Y (constant in the push window; base rounding)
+    cdef public double m351C                # setMoveSlantAngle lean state (s16 stored as double)
+    cdef public double _draw_lean_c         # shape_angle.z at draw (s16(m351C)>>1)
+    cdef public int _atn_state              # AttentionLock.state: 0 NONE / 1 LOCK / 2 RELEASE
+    cdef int _atn_fade, _atn_fade_frames    # RELEASE reticle-fade timer
+    cdef bint _atn_l_prev                    # AttentionLock's own prev-frame L (rising edge)
+    cdef public bint _atn_list_present      # GetLockonList(0) != NULL
+    cdef public double _tetra_x, _tetra_z   # tracked Tetra feet XZ (f32 point)
+    cdef double _atn_eye_x, _atn_eye_z      # proc-9 re-aim target (Tetra eyePos XZ; injected)
+    cdef bint _has_eye
+    cdef double _pend_link_x, _pend_link_z  # incoming CC recoil for THIS frame (posMove consume)
+    cdef int _cbuf[6]                       # delay-1 pending controller input
+    cdef bint _has_cbuf
+    cdef bint _court_locked                 # mpAttnActorLockOn != NULL (courtyard; False in walk step)
 
     @property
     def pe_phase(self):
@@ -1900,6 +1978,23 @@ cdef class LandCore:
         self._cam_target = (self._cam_yaw - 1) & 0xFFFF
         self._cam_scale = cam_scale
         self._cam_pending_posx = 0.0
+        # Courtyard coupled state (inert unless step_courtyard drives it):
+        self.pos_y = 0.0
+        self.m351C = 0.0
+        self._draw_lean_c = 0.0
+        self._atn_state = _ATN_NONE
+        self._atn_fade = 0
+        self._atn_fade_frames = 10
+        self._atn_l_prev = False
+        self._atn_list_present = False
+        self._tetra_x = 0.0; self._tetra_z = 0.0
+        self._atn_eye_x = 0.0; self._atn_eye_z = 0.0
+        self._has_eye = False
+        self._pend_link_x = 0.0; self._pend_link_z = 0.0
+        self._has_cbuf = False
+        self._court_locked = False
+        for i in range(6):
+            self._cbuf[i] = 128 if i == 0 or i == 1 or i == 4 or i == 5 else 0
 
     def clone(self, PoseEngine new_pe):
         """Clone over a caller-supplied PoseEngine (a state-copy of the source engine, via
@@ -1926,6 +2021,17 @@ cdef class LandCore:
                 c._inbuf[i][j] = self._inbuf[i][j]
         c._cam_yaw = self._cam_yaw; c._cam_target = self._cam_target
         c._cam_scale = self._cam_scale; c._cam_pending_posx = self._cam_pending_posx
+        # courtyard coupled state
+        c.pos_y = self.pos_y; c.m351C = self.m351C; c._draw_lean_c = self._draw_lean_c
+        c._atn_state = self._atn_state; c._atn_fade = self._atn_fade
+        c._atn_fade_frames = self._atn_fade_frames; c._atn_l_prev = self._atn_l_prev
+        c._atn_list_present = self._atn_list_present
+        c._tetra_x = self._tetra_x; c._tetra_z = self._tetra_z
+        c._atn_eye_x = self._atn_eye_x; c._atn_eye_z = self._atn_eye_z; c._has_eye = self._has_eye
+        c._pend_link_x = self._pend_link_x; c._pend_link_z = self._pend_link_z
+        c._court_locked = self._court_locked; c._has_cbuf = self._has_cbuf
+        for j in range(6):
+            c._cbuf[j] = self._cbuf[j]
         return c
 
     # --- SUBJECTIVITY freeze (chained-freeze tech); mirrors LandState.enter_freeze/hold_freeze/resume_walk.
@@ -2107,8 +2213,10 @@ cdef class LandCore:
         cdef double f2 = jma_sin(iVar6)
         cdef double fVar4 = jma_cos(iVar6)
         cdef int uVar1 = self.direction
+        # The FWD/BACK branch is gated on mpAttnActorLockOn == NULL (a live actor-lock keeps mDirection
+        # on a SIDE -- the proc-9 strafe pose). `_court_locked` is False in the walk step (inert there).
         if self.msd > 0.05:
-            if fVar4 <= _L_ATNB_COS_BACK or fVar4 >= _L_ATNB_COS_FWD:
+            if (not self._court_locked) and (fVar4 <= _L_ATNB_COS_BACK or fVar4 >= _L_ATNB_COS_FWD):
                 self.direction = LD_BACKWARD if fVar4 <= _L_ATNB_COS_BACK else LD_FORWARD
             else:
                 if uVar1 == LD_BACKWARD or uVar1 == LD_FORWARD:
@@ -2128,9 +2236,14 @@ cdef class LandCore:
     cdef void _check_next_mode(self, bint l_held):
         cdef int cur = self.state
         cdef long long dist
-        if l_held:
+        # `_court_locked` (mpAttnActorLockOn != NULL) is set only by step_courtyard; it stays False in
+        # the walk step, so this branch is byte-identical to the pre-courtyard behaviour there.
+        if l_held or self._court_locked:
             self.max_nspeed = _L_ATN_MAX
-            self.state = LS_WAIT if _c_fabs(self.nspeed) <= 0.001 else LS_ATN_MOVE
+            if self._court_locked:
+                self.state = LS_ATN_ACTOR_WAIT if _c_fabs(self.nspeed) <= 0.001 else LS_ATN_ACTOR_MOVE
+            else:
+                self.state = LS_WAIT if _c_fabs(self.nspeed) <= 0.001 else LS_ATN_MOVE
             return
         self.max_nspeed = _L_MAX_NSPEED
         self.direction = LD_NONE
@@ -2401,6 +2514,266 @@ cdef class LandCore:
         self._cam_step(acsx, acsy)
         self._l_prev = l_held
         return d
+
+
+    # ================= Courtyard Tetra-push coupled step (step_courtyard) =====================
+    # The from-f0 FreeRun window: MOVE(6) <-> ATN_MOVE(7) <-> ATN_ACTOR_WAIT/MOVE(8/9) <-> FRONT_ROLL.
+    # Adds the dAttention_c hold-mode lock machine + the actor-lock targeting procs 8/9 (re-aim +
+    # DIR_BACKWARD negation) + the locked-actor checkNextMode/setBlendAtnMoveAnime gates + the posMove
+    # CC-push consume, all resident in C. Physics port of harness/tetrapush/from_f0.FreeRun.step +
+    # land.state.LandState.step (the courtyard subset). speedF via the seeded fused PoseEngine.
+    @property
+    def court_shape_z(self):
+        """sim_shape_z: shape_angle.z = s16(m351C) >> 1 (the lean the from_f0 gate asserts)."""
+        return _s16c(<long long>self.m351C) >> 1
+
+    def seed_courtyard(self, PoseEngine pe, double pos_y, long long m351c, int atn_state,
+                       double tetra_x, double tetra_z):
+        """Attach the courtyard-seeded fused PoseEngine (`pe.seed_from_foot(...)` on a fresh
+        clone_state) + the coupled-state seeds (pos_y for the FK base rounding, the m351C lean, the
+        AttentionLock state, Tetra's f0 feet). setup() must have run first (physics scalar seeds)."""
+        self._pe = pe
+        self.pos_y = pos_y
+        self.m351C = <double>(m351c & 0xFFFF)
+        self._draw_lean_c = <double>(_s16c(m351c & 0xFFFF) >> 1)
+        self._atn_state = atn_state
+        self._tetra_x = tetra_x
+        self._tetra_z = tetra_z
+
+    def pre_seed_courtyard(self, int sx, int sy, int buttons, int triggerL):
+        """Seed the delay-1 controller buffer (the input the FIRST step_courtyard acts on) --
+        FreeRun.pre_seed_input at input_delay=1."""
+        self._cbuf[0] = sx; self._cbuf[1] = sy; self._cbuf[2] = buttons
+        self._cbuf[3] = triggerL; self._cbuf[4] = 128; self._cbuf[5] = 128
+        self._has_cbuf = True
+
+    cdef inline bint _atn_locked(self):
+        return self._atn_state == _ATN_LOCK or self._atn_state == _ATN_RELEASE
+
+    cdef bint _atn_target_present(self):
+        """chaseAttention front-of-player cone gate (attention.py _atn_target_present)."""
+        cdef long long bearing = _cm_atan2s_c(f32(self._tetra_x - self.pos_x),
+                                              f32(self._tetra_z - self.pos_z))
+        cdef long long d = _s16c((bearing - self.facing) & 0xFFFF)
+        if d < 0:
+            d = -d
+        return d <= _ATN_FRONT_CONE_HALF
+
+    cdef void _atn_update(self, bint l_held, bint target_present):
+        """dAttention_c hold-mode Run (attention.py AttentionLock.update)."""
+        cdef bint rising = l_held and not self._atn_l_prev
+        cdef int prev_state = self._atn_state
+        if self._atn_state == _ATN_NONE:
+            if rising and target_present:
+                self._atn_state = _ATN_LOCK
+        elif self._atn_state == _ATN_LOCK:
+            if not target_present:
+                self._atn_state = _ATN_NONE
+            elif not l_held:
+                self._atn_state = _ATN_RELEASE
+                self._atn_fade = self._atn_fade_frames
+        elif self._atn_state == _ATN_RELEASE:
+            if rising:
+                self._atn_state = _ATN_LOCK if target_present else _ATN_NONE
+            else:
+                if self._atn_fade > 0:
+                    self._atn_fade -= 1
+                if (not target_present) or self._atn_fade <= 0:
+                    self._atn_state = _ATN_NONE
+        self._atn_l_prev = l_held
+        if self._atn_state == _ATN_LOCK or self._atn_state == _ATN_RELEASE:
+            self._atn_list_present = True
+        elif prev_state != _ATN_NONE:
+            self._atn_list_present = False
+        else:
+            self._atn_list_present = target_present
+
+    cdef void _set_shape_angle_to_atn_actor(self):
+        """setShapeAngleToAtnActor (2625): re-aim shape_angle.y at the locked actor's eyePos
+        (injected _atn_eye; feet fallback). No-op while unlocked (the body2 frame past the drop)."""
+        if not self._atn_locked():
+            return
+        cdef double ax, az
+        if self._has_eye:
+            ax = self._atn_eye_x; az = self._atn_eye_z
+        else:
+            ax = self._tetra_x; az = self._tetra_z
+        cdef long long ta = _cm_atan2s_c(f32(ax - self.pos_x), f32(az - self.pos_z))
+        self.facing = _clib_addcalc_angles(self.facing, ta & 0xFFFF,
+                                           _ATN_SHAPE_SCALE, _ATN_SHAPE_MAX, _ATN_SHAPE_MIN)
+
+    cdef void _set_speed_and_angle_atn_actor(self):
+        """setSpeedAndAngleAtnActor (2909): the actor-lock chase (procs 8/9). Same mAtnMove family as
+        the ATN path with the DIR_BACKWARD negation flip, but re-aims facing at the actor (no mDirection
+        forward/backward split -- procs 8/9 always run this)."""
+        cdef double f1
+        cdef long long old
+        if self.msd > 0.05:
+            if self._get_dir(self.target - self.travel) == LD_BACKWARD:
+                self.travel = (self.travel + 0x8000) & 0xFFFF
+                self.nspeed = f32(self.nspeed * -1.0)
+            old = self.travel
+            self.travel = _clib_addcalc_angles(self.travel, self.target, _L_ATN_TURN_SCALE,
+                                               _L_ATN_TURN_MAX, _L_ATN_TURN_MIN)
+            f1 = f32(f32(_L_ATN_SPD * self.msd) * jma_cos(_s16c(self.travel - old)))
+        else:
+            f1 = 0.0
+        self._set_shape_angle_to_atn_actor()
+        self._set_normal_speed_f(f1, _L_ATN_SCL, _L_ATN_ACC, _L_ATN_DEC)
+
+    cdef void _set_move_slant_angle_c(self):
+        """daPy_lk_c::setMoveSlantAngle (state.py _set_move_slant_angle): the MOVE turn-lean m351C.
+        Uses the frame-START m34de, the current facing, and self.speedF (the actual integrated speed)."""
+        cdef double thresh = f32(0.95)
+        cdef double fvar1 = f32(_c_fabs(f32(self.speedF / self.max_nspeed)))
+        cdef double ratio
+        cdef long long tgt, sv, m
+        if self.state == LS_MOVE and fvar1 > thresh:
+            ratio = f32(f32(fvar1 - thresh) / f32(1.0 - thresh))
+            tgt = <long long>(f32(f32(f32(1.6) * <double>_s16c(self.m34de - self.facing)) * ratio))
+            m = <long long>self.m351C
+            self.m351C = <double>(_clib_addcalc_angles(m, tgt & 0xFFFF, 4, 200, 100))
+        else:
+            sv = <long long>(f32(<double>_s16c(<long long>self.m351C) * f32(0.35)))
+            if sv == 0:
+                self.m351C = 0.0
+            else:
+                self.m351C = <double>(((<long long>self.m351C) - sv) & 0xFFFF)
+
+    def step_courtyard(self, int sx, int sy, int buttons, int triggerL,
+                       long long csangle, double tetra_x, double tetra_z,
+                       double eye_x, double eye_z, int has_eye,
+                       double pend_link_x, double pend_link_z,
+                       double speedf_inject, int has_speedf_inject):
+        """One coupled Courtyard frame (physics port of FreeRun.step + LandState.step). Injected
+        per-frame: `csangle` (camera value the physics reads), the Tetra feet `tetra_x/z` (cone gate +
+        proc-9 feet fallback + tracked point), the proc-9 re-aim `eye_x/z` (has_eye), the incoming CC
+        recoil `pend_link_x/z` (posMove consume). `speedf_inject`/`has_speedf_inject` overrides the
+        native pose-engine speedF (for the physics-first validation milestone). Returns the NATIVE
+        pose-engine speedF (== self.speedF when not injecting); the caller reads pos_x/pos_z/facing/
+        travel/state/nspeed/court_shape_z + self.speedF for the 0-ULP gate."""
+        # --- delay-1 controller buffer: act on the PREVIOUS call's input (input_delay=1) ---
+        cdef int asx = self._cbuf[0], asy = self._cbuf[1], abtn = self._cbuf[2], atrig = self._cbuf[3]
+        self._cbuf[0] = sx; self._cbuf[1] = sy; self._cbuf[2] = buttons; self._cbuf[3] = triggerL
+        self._tetra_x = tetra_x; self._tetra_z = tetra_z
+        self._atn_eye_x = eye_x; self._atn_eye_z = eye_z; self._has_eye = has_eye != 0
+        self._pend_link_x = pend_link_x; self._pend_link_z = pend_link_z
+        self.csangle = csangle & 0xFFFF
+        self._set_stick_data(asx, asy)
+        cdef bint l_held = ((abtn & 0x40) != 0) or (atrig >= 200)
+        cdef bint a_pressed = (abtn & 0x100) != 0
+        cdef bint moving = self.msd > 0.05
+        # attention machine (delay-1: l_atn == l_held); cone gate on the pre-dispatch pos/facing.
+        self._atn_update(l_held, self._atn_target_present())
+        if l_held and not self._l_prev:
+            self.m34E6 = self.facing
+        # A dispatch: L-off attack roll only (the L-held jump does not occur in this window).
+        cdef bint grounded = (self.state == LS_WAIT or self.state == LS_FREE_WAIT
+                              or self.state == LS_MOVE or self.state == LS_ATN_MOVE)
+        if (a_pressed and grounded and not l_held and moving
+                and (self.state == LS_MOVE or self.state == LS_ATN_MOVE)):
+            self.facing = self.target
+            self._roll_init()
+        cdef bint locked_actor = self._atn_locked()
+        self._court_locked = locked_actor       # steers the shared _check_next_mode / _update_atn_direction
+        cdef int proc = self.state
+        if proc == LS_WAIT or proc == LS_FREE_WAIT:
+            if locked_actor:
+                self.state = LS_ATN_ACTOR_WAIT
+                self._set_speed_and_angle_atn_actor()
+            elif l_held:
+                self.state = LS_ATN_MOVE
+                self._set_speed_and_angle_atn()
+            else:
+                self._set_speed_and_angle_normal(_L_F0, False)
+            self._check_next_mode(l_held)
+        elif proc == LS_MOVE:
+            self._set_speed_and_angle_normal(_L_F0, l_held)
+            self._check_next_mode(l_held)
+        elif proc == LS_ATN_MOVE:
+            self._set_speed_and_angle_atn()
+            self._check_next_mode(l_held)
+        elif proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT:
+            self._set_speed_and_angle_atn_actor()
+            self._check_next_mode(l_held)
+        elif proc == LS_WAIT_TURN:
+            self._proc_wait_turn(l_held)
+        elif proc == LS_MOVE_TURN:
+            self._proc_move_turn(l_held)
+        elif proc == LS_SLIP:
+            self._proc_slip(l_held)
+        elif proc == LS_FRONT_ROLL:
+            self._proc_roll(l_held)
+
+        cdef int prev_dir = self.direction
+        if (self.state == LS_ATN_MOVE or self.state == LS_ATN_ACTOR_MOVE
+                or self.state == LS_ATN_ACTOR_WAIT):
+            self._update_atn_direction()        # _court_locked already set above (locked gate)
+        if ((proc == LS_ATN_MOVE or proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT)
+                and self.state == LS_MOVE):
+            self._pe.w_set_pending(_L_MOVE_REENTRY_MORF)
+
+        # --- pose + speedF (posMoveFromFootPos via the seeded fused engine) ---
+        self._pe.set_pos(self.pos_x, self.pos_y, self.pos_z, self.facing)
+        cdef double sf_native, f31, na, ratio
+        cdef long long r3, r3a
+        cdef int r27
+        cdef bint entered, morf_on
+        cdef int st_now = self.state
+        if st_now == LS_FRONT_ROLL or st_now == LS_SLIP:
+            self._pe.w_step_single(self.nspeed, self.msd)
+            na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
+            sf_native = 0.0 if na < 0.05 else self.nspeed
+        elif (proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT
+              or st_now == LS_ATN_ACTOR_MOVE or st_now == LS_ATN_ACTOR_WAIT):
+            f31 = f32(_c_fabs(self.nspeed) / self.max_nspeed)
+            if st_now == LS_MOVE:
+                self._pe.w_step(self.nspeed, self.msd, 0.0, False)
+            else:
+                entered = not (proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT)
+                morf_on = entered or (self.direction != prev_dir)
+                self._pe.w_step_atn(self.nspeed, self.msd, self.direction, f31,
+                                    _L_MOVE_REENTRY_MORF if morf_on else 0.0, morf_on)
+            na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
+            sf_native = 0.0 if na < 0.05 else self.nspeed
+        elif st_now == LS_ATN_MOVE:
+            f31 = f32(_c_fabs(self.nspeed) / self.max_nspeed)
+            morf_on = (proc != LS_ATN_MOVE) or (self.direction != prev_dir)
+            sf_native = self._pe.w_step_atn(self.nspeed, self.msd, self.direction, f31,
+                                            _L_MOVE_REENTRY_MORF if morf_on else 0.0, morf_on)
+        elif st_now == LS_WAIT_TURN:
+            self._pe.w_step_single(self.nspeed, self.msd)
+            sf_native = 0.0
+        elif proc == LS_WAIT_TURN and st_now == LS_WAIT:
+            r3 = _s16c(self.facing - self.m34de)
+            r3a = r3 if r3 >= 0 else -r3
+            r27 = C_ATNWLS if r3 > 0 else C_ATNWRS
+            ratio = f32(f32(0.5) + f32(0.001 * <double>r3a))
+            if ratio > 1.0:
+                ratio = 1.0
+            self._pe.w_enter_wait_idle(ratio, r27, _L_MOVE_REENTRY_MORF, self.msd)
+            sf_native = 0.0
+        else:
+            sf_native = self._pe.w_step(self.nspeed, self.msd,
+                                        self._anim_nspeed if self._has_anim_nspeed else 0.0,
+                                        self._has_anim_nspeed)
+            self._has_anim_nspeed = False
+
+        self.speedF = f32(speedf_inject) if has_speedf_inject != 0 else sf_native
+
+        # --- world motion (speedF along travel) then the posMove CC recoil consume ---
+        cdef double d = self.speedF
+        self.pos_x = f32(self.pos_x + f32(d * jma_sin(self.travel)))
+        self.pos_z = f32(self.pos_z + f32(d * jma_cos(self.travel)))
+        self.pos_x = f32(self.pos_x + pend_link_x)
+        self.pos_z = f32(self.pos_z + pend_link_z)
+        # end-of-frame: the draw lean (pre-update m351C), the setMoveSlantAngle update, m34de/m34ea.
+        self._draw_lean_c = <double>(_s16c(<long long>self.m351C) >> 1)
+        self._set_move_slant_angle_c()
+        self.m34de = self.facing
+        self.m34ea = self.m34dc
+        self._l_prev = l_held
+        return sf_native
 
 
 cdef inline long long _lldist(long long a, long long b) nogil:
