@@ -162,20 +162,55 @@ def test_beam_search_reaches_first_cycle(env):
     assert herd > 300.0, "beam cycle-1 best herd only %.1f u" % herd
 
 
-def test_turnaround_reroll_fires_from_grounded(env, recs):
-    """CAPABILITY (session 31): the A-turnaround-roll re-rolls THROUGH Tetra from the grounded
-    post-untarget MOVE -- no attention lock, no cone gate. `cyc1_to_untarget` stops at the first MOVE
-    after the proc-9 untarget; `turnaround_reroll` (A held 2 frames + full stick toward Tetra, which
-    `_roll_init` snaps facing to) then enters FRONT_ROLL. This is the frame-minimal chaining primitive
-    (Dereck, `[[tetrapush-frame-minimal]]`); its overlap DEPTH (the herd-per-frame) is the open search
-    knob -- an immediate re-roll only grazes (min_ovl ~66), NOT gated as an invariant here."""
+def test_turnaround_reroll_is_talk_unsafe_and_weak(env, recs):
+    """CORRECTION REGRESSION (session 32): the session-31 pure turnaround-roll is a DEAD END, and
+    this pins WHY so it can't silently come back. Fired from the grounded post-untarget MOVE it does
+    enter a FRONT_ROLL in the sim, but with TWO defects the forward sim doesn't model:
+      * TALK -- the A-press fires with Tetra in her talk/lock cone (`talk_unsafe` True), so on
+        console it talks/locks, it does not roll (invalid); and
+      * WEAK ROLL -- `roll_speedF` floors at ~+5 (the -25 backslide clamps `_roll_init`), so Link
+        crawls and only GRAZES (min_ovl > 60). A fast (+26) roll needs positive pre-roll speedF.
+    A genuine talk-safe primitive must fire the A with Tetra OUT of the cone and positive pre-speedF."""
     macro, aim1 = S.canonical_cycle(env, recs)
     run, _ = S.cyc1_to_untarget(env, aim=aim1, recs=recs, macro=macro)
     assert run.link.state in (6, 7), "cyc1_to_untarget did not land on a grounded MOVE proc"
     res = S.turnaround_reroll(run, reposition=0)
-    assert res['rolled'] and res['roll_frames'] > 0, "the A-turnaround-roll did not fire a FRONT_ROLL"
-    assert res['min_ovl'] is not None and res['min_ovl'] < 120.0, \
-        "the re-roll never contacted Tetra (min_ovl %s)" % res['min_ovl']
+    assert res['rolled'], "the A-roll did not enter FRONT_ROLL in the sim"
+    assert res['talk_unsafe'], "expected the turnaround-roll A-press to be talk-UNSAFE (in cone)"
+    assert res['roll_speedF'] is not None and res['roll_speedF'] < 10.0, \
+        "expected a WEAK roll (speedF ~+5), got %s" % res['roll_speedF']
+    assert res['min_ovl'] is not None and res['min_ovl'] > 60.0, \
+        "expected a GRAZE (min_ovl > 60), got %s" % res['min_ovl']
+
+
+def test_recorded_window_is_talk_safe(env, recs):
+    """INVARIANT (session 32): the human's recorded window is TALK-SAFE -- no roll-trigger A-press
+    fires while Tetra is in her talk/lock cone (`a_press_is_talk`). This both validates the
+    conservative gate (it must not false-positive on a real, valid run) and confirms the human's
+    rolls all trigger with Tetra OUT of the +-90 deg front cone."""
+    dtm = seeds.dtm_input_at(env)
+    run = seeds.make_freerun(env)
+    run.pre_seed_input(dtm(0))
+    violations = []
+    for k in range(1, 45):
+        d = dtm(k)
+        if S.a_press_is_talk(run, d):
+            violations.append(k)
+        run.step(d)
+    assert not violations, "recorded window has roll-A-in-cone (talk) at frames %s" % violations
+
+
+def test_beam_and_recorded_rollout_are_talk_safe(env, recs):
+    """INVARIANT (session 32): the talk gate is wired into the rollout path -- the recorded-input
+    replay carries `talk_unsafe` False, and every candidate the beam keeps is talk-safe (the gate
+    prunes any cycle whose roll-A fires in the cone). A talk-unsafe plan would talk on console."""
+    rec = S.rollout_recorded(env, upto=44, recs=recs)
+    assert rec['talk_unsafe'] is False, "recorded-input rollout flagged talk_unsafe (gate wrong)"
+    _, nodes = S.beam_search(env, n_cycles=1, beam=6, cone_half=1500, step=80)
+    for node in nodes:
+        # re-run the kept node's aims and confirm the rollout is talk-safe (gate held at selection).
+        r = S.rollout(env, node['aims'], stop_on_follow=False)
+        assert not r['talk_unsafe'], "beam kept a talk-unsafe cycle (aims %s)" % node['aims']
 
 
 def test_lockless_macro_strips_L(env, recs):

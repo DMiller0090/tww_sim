@@ -1020,6 +1020,52 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             EVERY frame Link's Co-cyl overlaps Tetra (dist < 80), roll AND backslide alike; a proc-9
             slide keeps plowing but DECAYS as Link drifts to dist > 80, so rolls -- forward-drive at
             +26, tight overlap -- are ~3-4x more herd-efficient per frame.)
+            - **SESSION 32 -- the session-31 pure turnaround-roll is a DEAD END; the primitive is the
+              HUMAN'S re-aimed cycle. TALK-SAFE GATE built + wired + gated.** Two defects the forward
+              sim hid (it models neither the talk trigger nor a facing gate on A) sink the turnaround-
+              roll, both surfaced offline via `[[turnaround-roll-tech]]`/`knowledge/mechanics/tetra-follow.md`:
+              1. **It TALKS.** A roll-trigger A-press (PAD 0x100) from a GROUNDED proc while Tetra is a
+                 valid attention target (`zl1_attention_active`: XZ<300, |dy|<300, Link facing within
+                 +-90 deg of the bearing to her) TALKS/LOCKS on console instead of rolling -- INVALID.
+                 The turnaround-roll fires facing ~straight AT Tetra (face-err ~3 deg), so it talks.
+                 **GATE (session 32):** `search.a_press_is_talk`/`talk_active` (wraps
+                 `zl1_attention_active`) is now checked at every roll-A press and reported as
+                 `talk_unsafe` by `rollout`/`rollout_recorded`/`turnaround_reroll`, and PRUNED in
+                 `beam_search`. Gated `tests/test_search.py` (10): the human's recorded window is
+                 talk-safe (every roll-A fires with Tetra OUT of the cone -- the gate does not
+                 false-positive), the turnaround-roll is talk-UNSAFE + weak, the beam keeps only
+                 talk-safe cycles. A genuine turnaround-roll needs Link facing AWAY (cone False) at
+                 the A-press; the roll then snaps facing THROUGH her AFTER the talk check.
+              2. **It is a WEAK +5 roll, not +26.** `roll._roll_init` sets the roll COAST speed ONCE =
+                 `clamp(pre_roll_speedF*1.5 + 0.5, 5.0, 26.0)` (constant momentum, no build-up). Fired
+                 from the -25 EBS backslide it FLOORS at +5 -> Link crawls while the Co-cyl still punts
+                 Tetra out of the 80 u range: the "graze" (min_ovl ~66; session 31 mis-attributed this
+                 to "positioning"). A FAST (+26) roll needs positive pre-roll speedF (~>=17), which the
+                 human gets from the proc-7 ATN re-target DIR_BACKWARD flip (+18, `atn.py` `nspeed *=
+                 -1`) -- and that flip needs L held with Tetra OUT of the cone (else L hard-locks ->
+                 proc-9 slide, no roll).
+              - **The EFFICIENT primitive = the human's re-aimed cycle** (turn to clear the cone ->
+                L-held proc-7 re-target +18 flip -> A-roll +26 with Tetra out of cone at the trigger
+                -> ride the +26 roll), ~12 u/frame. The proc-9 locked slide (hold L + stick->Tetra, no
+                A, talk-safe) is a ~6.6 u/frame monotonic fallback (NOT validated beyond the 2-cycle
+                window, so not a 0-ULP deliverable yet).
+              - **MONOTONIC HERD requires Link ON the herd line, BEHIND Tetra, rolling ALONG it.** A
+                roll travels in a STRAIGHT line (facing locked at `_roll_init`). On-line behind her +
+                aim along-line -> a SELF-STABILISING pursuit (dist oscillates 40..85, Link never
+                overtakes; the recorded human f3..44 stays up-herd every frame, herd monotonic
+                +8..+18/f). Laterally offset or aiming at her instantaneous position -> the straight
+                roll crosses her path and OVERSHOOTS (dist balloons, herd freezes -- the oscillating
+                hand-designed chains). So the roll aim is the herd-line bearing; the reposition must
+                place Link on-line behind her.
+              - **NEXT (the frame-minimal frontier): the REPOSITION OPTIMIZER.** A search over the
+                inter-roll reposition inputs -- reverse Link, back up-herd, get ON the herd line, clear
+                the cone momentarily for the L-flip+A-roll trigger, in the fewest frames (the human
+                spends ~10; the untarget EBS backslide does reverse-and-back-up for free) -- chaining
+                the +26 on-line pursuit roll monotonically. Score by net cycle herd, prune by
+                talk-safety (`a_press_is_talk`) + regime + on-line. Camera (csangle, a per-frame input)
+                is a knob for the cone-clear turn. Build on `FreeRun.clone` + the talk gate. THEN the
+                exact placement (walk-push nudge) + entry walk-in + tier-2 DTM. NO further live
+                capture is needed for the forward model.
 
 ## Hard rules (inherited from the seam-clip work)
 
