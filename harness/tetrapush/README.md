@@ -238,6 +238,7 @@ deliberately unported.
 | `search.py` | **The exact aim-per-cycle SEARCH foundation** (session 30): `rollout(env, aims)` stitches re-aimed push-cycle macros (`canonical_cycle` = the 26-frame roll-to-roll unit) through the 0-ULP `FreeRun` (C-stick pinned DOWN; main stick re-aimed per frame from the LIVE csangle; the aim is NOMINAL, the achieved landing is read back). `FreeRun.clone` (~0.025 ms, shares anim tables) is the beam branch; `reach_one_cycle` maps the per-cycle reach (the RESONANCE at the recorded aim, ~324 u); `beam_search` is the clone-branched beam ranked by nearest-genuine-coord dist, regime-pruned, each candidate a real FreeRun rollout. CLI `python -m harness.tetrapush.search {selfcheck\|reach\|sweep\|chain\|herd\|turnaround}` -- `selfcheck` proves the 0-ULP round-trip, `herd` shows the CONTINUOUS overlap-push, `chain` reproduces the old re-aimed-macro cycle-chaining blocker, and **`turnaround`** (session 31) reproduces the FRAME-MINIMAL turnaround-roll finding (`cyc1_to_untarget` + `turnaround_reroll`: the A-roll re-rolls THROUGH Tetra from the grounded post-untarget MOVE with no lock/cone gate; an immediate re-roll GRAZES min_ovl ~66 vs the human oracle's DEEP ~40, so the search knob is the minimal camera-assisted reposition, `[[tetrapush-frame-minimal]]`). Gated `tests/test_search.py` (0-ULP: recorded replay, macro re-aim, clone; structural: clean cycle, resonance, beam cycle-1, turnaround-roll fires). |
 | `reposition.py` | **The FRAME-MINIMAL reposition primitives** (session 33; Dereck's live steers): `HerdLine` (herd axis + `lead`/`on_line_ok` = the STEER-#1 past-Tetra prune, Link must stay behind her), `l_release_early` (STEER-#2/#3: release the mid-roll lock-L 1 frame early -> a 1-frame untarget tier -> the backslide retains **-25.727** vs the human's -25.454), `turnaround` (the 1-frame INSTANT 180 facing-snap out of the EBS via a precise csangle, `move.py:115`, speed preserved), and `frame_min_reroll` (turnaround -> proc-7 flip -> talk-safe +26 roll, a ~3-frame reposition vs the human's ~10). CLI `python -m harness.tetrapush.reposition {verify\|retain\|chain}` -- `verify` shows the human stays 40-85 u behind Tetra, `retain` shows the -25.727 retention, `chain` runs the frame-minimal cycles (currently OVERSHOOTS -- the roll leaves Link ~15 u off-line: the on-line reposition SEARCH is the open blocker). Gated `tests/test_reposition.py` (5). |
 | `native_search.py` | **The native-fleet reposition BFS** (session 38): a beam BFS whose frontier is native `FreeRun` nodes (each wrapping a `LandCore`); a generation is expanded by fanning every (node, candidate-input) child through `CourtyardFleet.run_par` ONE frame in parallel (`batch_step`), syncing the public C fields, pruning off-line/past-Tetra (`reposition.HerdLine`), talk-unsafe (`search.a_press_is_talk`), and out-of-regime (follow) nodes, deduping by a quantized state tag, and keeping the top-`beam` by down-herd progress. `Node`/`reconstruct` record the input chain; `bit_confirm` re-runs the winning plan on a FRESH Python-stepped `FreeRun` 0-ULP. `seed_root` = the state-2 f0 seed (the BFS finds the WHOLE push -- the recorded human's inputs are NOT a valid pursuit template in the stripped sim, see below). CLI `python -m harness.tetrapush.native_search {selfcheck\|search}`. Gated `tests/test_native_search.py` (3: fleet-frontier readout 0-ULP vs a native FreeRun rollout, batch-step == individual, tiny-search prunes on-line + bit-confirms). **KEY FINDING (s38): the stripped sim's +26 roll cannot be an on-line pursuit -- it OVERSHOOTS.** The search finds the continuous glide-push herds Tetra on-line ~12 u/f for ~10 frames then STALLS at along ~148 (Link drifts laterally to +65), and EVERY roll is pruned (overshoots past Tetra). Root cause PINNED (inject the full sim's own csangle to remove it as a variable): the ONLY stripped-vs-full difference is the **roll-entry facing, -102 BAM** (full 35316 vs stripped 35214), the proc-7 re-aim to Tetra's animated **eyePos** (leads her feet 16-26 u) that the stripped config replaces with feet-aim; -102 BAM at entry compounds over the 16-frame locked roll into Tetra diverging 69 u by f18 -> overshoot (stripped) vs pursuit (full). So the on-line-roll chain needs the **zl1 eye-aim ported into the native step** (proc-7/9 re-aim to eyePos), OR the search run in the full Python sim. |
+| `steered_reposition.py` | **The REALIZABLE camera-steered reposition primitives** (session 39; Dereck's live design): the validated pieces the frame-minimal branching search is built from -- `camera_authority` (neutral substickX FREEZES csangle; full stick ~+-460..530 BAM/frame -> csangle is a STEERED, not free, channel), `_steered_cyc1` (replay the first roll steering substickX toward a `target_cs` during the locked-roll frames, camera+zl1 ON = realizable + eye-aim), `armed_geometry` (lead/lat/dist/bearing-to-Tetra/talk of an armed EBS -- shows the camera sets FACING not POSITION), `roll`/`recorded_online_metrics` (the on-line self-stabilization evidence: the recorded 2-roll window stays behind Tetra). CLI `python -m harness.tetrapush.steered_reposition {authority\|armed\|selfstab}`. Gated `tests/test_steered_reposition.py` (3, structural). The full architecture (roll = zero-branch camera-steer segment; junctions branch facing/position/release; three coupled controls; on-line self-stabilization) is in the module docstring + the `## Plan / status` s39 box. |
 | `feasibility.py` | **The COARSE-FEASIBILITY report** (session 28): from the bit-exact 2-cycle window, answers "can a few push cycles herd Tetra the full ~960 u to the genuine-coord cluster, in-regime?" -- directional (herd bearing vs target bearing), per-cycle reach, and the plow-regime bound. VERDICT: CONFIRMED (0.2 deg direction match, ~3 cycles, dist 40-85 u < engage 230). All numbers recomputed live. CLI `python -m harness.tetrapush.feasibility`. |
 | `_notes/tetrapush-camoracle_probe.py` | (gitignored) Session-18 land-camera ORACLE probe: run A re-captured with the FULL dCamera_c block (0x520 B, incl. mEventFlags/mCurStyle/mCurType), player status words, attention lockstate, both actors' `attention_info.position`, and the pad main-stick angle. Baked to `fixtures/courtyard_cam_oracle.json` (the `test_land_cam.py` gate). |
 | `_notes/tetrapush-eyeindep_probe.py` | (gitignored) Session-17 A/B probe: two 120-frame runs from slot 2 diverging only in post-f48 inputs; logs both actors + csangle + the RAW `dCamera_c` block (0x450 B/frame). DISPROVED the eyePos input-independence shortcut (offsets diverge f51, both runs stt 3); run A doubles as the extended csangle + camera-spring ground truth (f0..f120) for the camera port, and run B pins the stt-3->4 follow flip (crossed 230 at f63, stt 4 at f75). `.json` beside it. |
@@ -691,11 +692,47 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             proc-7 re-aim to Tetra's animated **eyePos** (leads her feet 16-26 u) which the stripped
             config replaces with her feet; over the 16-frame locked roll it compounds into Tetra
             diverging 69 u by f18 -> overshoot instead of the full sim's pursuit (lead recovers -85 ->
-            -40). **NEXT: port the zl1 eye-aim into the native `step_courtyard`** (proc-7/9 re-aim to
-            eyePos, not feet) so the native/stripped roll pursues like the console-faithful full sim,
-            THEN the on-line-roll chain is searchable on the fleet; alternatively run the search in the
-            full Python sim (slow, no fleet). Supersedes the vague s34 "facing differs stripped" note
-            with the exact BAM + mechanism.
+            -40). Supersedes the vague s34 "facing differs stripped" note with the exact BAM +
+            mechanism. **The s38 NEXT ("port the zl1 eye-aim into native, then re-run the SAME beam")
+            was SUPERSEDED by session 39** -- running the reposition beam in the full Python sim
+            (eye-aim correct) found the beam STILL finds zero rolls (it is lured into the same
+            glide-drift local optimum), so the eye-aim port alone would not have found the chain.
+            The missing piece is a REALIZABLE, roll-seeking search structure, not (only) eye-aim.
+            See the s39 box below.
+      - [~] **The REALIZABLE camera-steered reposition -- DESIGN VALIDATED (session 39; Dereck's live
+            steer). The search structure, not eye-aim/fleet-speed, is the real blocker; the design that
+            fixes it is validated primitive-by-primitive, the branching search is the build.**
+            Running the reposition beam in the FULL Python `FreeRun` (0-ULP `land_cam` + `zl1` wired,
+            so the proc-7/9 re-aim uses eyePos -- correct pursuit facing) reframed everything: (a) the
+            greedy along-score beam finds ZERO rolls (glide-drift local optimum, the same stall the
+            s38 native beam hit) -- so porting eye-aim into native and re-running that beam would NOT
+            have found the chain; (b) csangle is NOT a free per-frame lever -- the camera yaw moves at
+            a BOUNDED rate via the C-stick (neutral substickX FREEZES it; full stick ~+-460..530
+            BAM/frame; ~+-8000 BAM reachable in a 16-frame roll), so an injected-csangle plan is not
+            realizable. Dereck's design makes the search BOTH correct and tractable:
+            **roll = a zero-branch camera-steering segment** (facing is locked, so spend the free
+            substick pre-rotating the camera to the csangle the NEXT turnaround needs; the steered
+            untarget then lands Link facing AWAY = talk-safe, arming the +18 flip -> a talk-safe +26
+            roll), **branch aggressively at the junctions** (roll FACING is a free variable -- any
+            halfword, since facing = decode(stick, csangle) and csangle is C-stick-controllable -- so
+            PREDICT the plow-into-Tetra facing and fan around it; branch the main-stick position + the
+            release timing). THREE coupled per-cycle controls pinned: **camera -> facing/talk-safety,
+            main-stick -> on-line POSITION (the camera CANNOT move position -- armed-state lat/lead are
+            invariant across the reachable target_cs), release-timing -> the -25.727-vs-on-line
+            tradeoff.** SELF-STABILIZATION (Dereck; confirmed by the ground-truth recording): an
+            on-line plow-roll KEEPS Link on-line (the recorded 2-roll window: worst_lead -40.3,
+            on_line=True), so the off-line landing is a ONE-TIME bootstrap artifact, not an intrinsic
+            property of the cycle -- the search optimizes per-cycle knobs WITHIN the on-line
+            self-stabilizing regime (off-line nodes prune as non-self-sustaining), which bounds the
+            branching. Primitives BUILT + GATED: `harness/tetrapush/steered_reposition.py` (camera
+            authority; steer-during-roll; armed-state geometry; the self-stab evidence), gated
+            `tests/test_steered_reposition.py` (3: neutral freezes / full stick steers bounded; camera
+            sets facing not position; on-line roll self-stabilises). **NEXT: build the per-cycle
+            branching search** -- bootstrap on-line once (first-roll angle/release, or a one-time
+            main-stick slide), then chain the self-consistent camera-steer -> turnaround -> plow-roll
+            cycle, branching (target_cs = next roll facing) x (main-stick position) x (release), pruning
+            off-line/talk-unsafe/follow, ranked frame-minimal. Bit-confirm any winner on the full
+            Python `FreeRun` (realizable = C-stick-driven csangle, no injection).
       - [x] **The f1 seed-frame boundary MATTERS -- CHARACTERIZED (session 28), then CLOSED OFFLINE
             (session 29; see the search-proper box).** Session 28 measured that the f1 seed-push error
             (~3.3e-5 u, from `full_depth_push` on the settled seed centre) grows GEOMETRICALLY at
