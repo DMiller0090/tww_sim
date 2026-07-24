@@ -1057,15 +1057,21 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
                 roll crosses her path and OVERSHOOTS (dist balloons, herd freezes -- the oscillating
                 hand-designed chains). So the roll aim is the herd-line bearing; the reposition must
                 place Link on-line behind her.
-              - **NEXT (the frame-minimal frontier): the REPOSITION OPTIMIZER.** A search over the
-                inter-roll reposition inputs -- reverse Link, back up-herd, get ON the herd line, clear
-                the cone momentarily for the L-flip+A-roll trigger, in the fewest frames (the human
-                spends ~10; the untarget EBS backslide does reverse-and-back-up for free) -- chaining
-                the +26 on-line pursuit roll monotonically. Score by net cycle herd, prune by
-                talk-safety (`a_press_is_talk`) + regime + on-line. Camera (csangle, a per-frame input)
-                is a knob for the cone-clear turn. Build on `FreeRun.clone` + the talk gate. THEN the
-                exact placement (walk-push nudge) + entry walk-in + tier-2 DTM. NO further live
-                capture is needed for the forward model.
+              - **NEXT -- the OPTIMAL, BETTER-THAN-HUMAN solution** (Dereck, session 32: NOT the
+                ~6.6 u/f proc-9 slide, NOT merely matching the human's ~12 u/f -- the recorded human is
+                a LOWER BOUND to BEAT). Objective: fewest TOTAL frames from state 2 to Tetra on a
+                genuine coord (+ the matching final roll entry). The human averages ~12.4 u/f only
+                because ~10 inter-roll frames herd ~8-13 while a deep +26 roll peaks ~16-18; the win is
+                COMPRESSING that inter-roll overhead toward the ceiling. Build a cycle from PRIMITIVES
+                (not the fixed 26-frame macro) so the roll-to-roll PERIOD is a search variable: reverse
+                (the untarget -25.7 backslide backs Link up-herd on-line for FREE) -> minimal cone-clear
+                turn (camera/csangle = the fast-reorient knob) -> proc-7 +18 flip -> +26 roll aimed
+                ALONG the herd line, ridden while Link stays on-line. Search (reverse frames, cone-clear,
+                roll ride) per cycle to MAXIMISE herd/frame; chain via `FreeRun.clone`, prune by
+                talk-safety (`a_press_is_talk`) + regime + on-line. FIRST verify the reverse-from-
+                primitives (L held late in a corner-aimed roll -> untarget -> on-line backslide). THEN
+                exact placement (walk-push nudge) + entry walk-in + tier-2 DTM. NO further live capture
+                is needed for the forward model.
 
 ## Hard rules (inherited from the seam-clip work)
 
