@@ -1211,6 +1211,23 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               whole land sim (incl. the fused `LandCore`) onto Python. Bumped the cap to **20**; a default
               `LandState` has `_core` active again (497 offline pass + goldens byte-identical at the last
               check). KEEP that; `pose_chain` is optional scaffolding.
+            - **SESSION 37 -- THE COURTYARD STEP IS NATIVE; 1M steps/s ACHIEVED (goal met).** The whole
+              coupled Courtyard frame now runs in C and is fanned across OpenMP threads:
+              `LandCore.step_courtyard` (physics + attention machine + procs 8/9 ATN_ACTOR + the
+              checkNextMode lock routing + native body-Co exec centre + `dCcS` CC push + f32 Tetra
+              track) is 0-ULP vs the Python `from_f0.FreeRun` over f1..f43, `FreeRun(native_step=True)`
+              drives it (~190k steps/s single-thread), and `CourtyardFleet.run_par` (prange, all leaf
+              helpers `noexcept nogil`) fans it BIT-IDENTICALLY to sequential across threads:
+              **measured 1.06M steps/s at 10 threads (1.16M at 12)** on this 12-core box -- Dereck's 1M
+              directive MET. Built in 5 gated stages (commits f2227ff cM_atan2s + dCcS Co push;
+              d7db997 native physics + seed bridge; 9f8d765 native exec centre + push; 1671729 FreeRun
+              wiring; d1ec838 the prange fleet). Gates: `tests/test_{cc_push,step_courtyard,freerun,
+              courtyard_fleet}_native.py` + `test_body_co_native.py` (510 offline pass, goldens
+              byte-identical). Detail log: `_notes/native-courtyard-step-PROGRESS.md`. The proc-9 eye +
+              csangle are still injected (zl1 look-at not ported -- the stripped search uses feet-aim,
+              geometry-exact per s34). **NEXT: hard-brute-force the on-line reposition on the native
+              fleet** (the pre-perf blocker, `[[courtyard-tetra-push]]`); a complete state-space BFS is
+              now affordable (>1M steps/s), MORE ROLLS optimal (don't cap roll count, Dereck s35).
 
 ## Hard rules (inherited from the seam-clip work)
 
