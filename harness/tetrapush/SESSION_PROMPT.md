@@ -23,6 +23,9 @@ search is fine. Two milestones, in order:
   1. the sim reproduces the ~45 hand-performed push frames after state 2 **bit-exact** (Link + Tetra);
   2. the planner: state-2 config to the input sequence that lands Tetra on a genuine coord AND sets up
      the matching final roll entry (the two are coupled; there is runway from state 2 to steer both).
+     The objective is **FRAME-MINIMAL -- the OPTIMAL, better-than-human solution** (`[[tetrapush-frame-minimal]]`):
+     fewest total frames, the recorded human TAS a lower bound to BEAT, not the proc-9 slide and not
+     a mere replica of the human cadence.
 
 HARD RULES:
 - **0-ULP is the bar**, validated against a locked live capture, never offline plausibility.
