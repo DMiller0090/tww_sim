@@ -184,6 +184,38 @@ def test_terminal_targeting_reduces_placement_distance_and_bit_confirms(env, hl,
     assert c['talk_safe'] and not best['run']._follow_warned
 
 
+def test_separation_scan_reports_the_coupled_entry_barrier(env, hl, box):
+    """The coupled-entry barrier metric (milestone 2b): from a placement state, `separation_scan`
+    reports the deep-contact gap, the best one-step Tetra-still-on-coord placement, and whether a
+    CLEAN separation step (Tetra on-coord AND gap>80 AND toward the entry) exists. Gates the metric's
+    SHAPE off a cheap synthetic placed node, not a search result -- the named fields are present and
+    typed, and the clean-separation verdict is a bool."""
+    nodes = F.cycle1_nodes(env, hl, box, beam=2)
+    placed = F.terminal_targeting(nodes, hl, max_frames=3, beam=6)['best']
+    sc = F.separation_scan(placed, hl, n_dirs=16)
+    assert sc['n_steps'] > 0
+    assert sc['best_step_placement'] >= 0.0
+    assert sc['start_dist'] >= 0.0 and sc['start_entry'] >= 0.0
+    assert isinstance(sc['clean_separation'], bool)
+
+
+def test_entry_targeting_stays_in_regime_and_bit_confirms(env, hl, box):
+    """The coupled-entry reposition machinery: `entry_targeting` steers Link toward the final-clip
+    entry within the plow regime + genuine band, and any survivor replays BIT-IDENTICALLY on a fresh
+    `FreeRun` (the whole state-2 -> placement -> reposition log). Structural gate off a cheap synthetic
+    placed node -- the reposition never leaves the regime and always confirms 0-ULP; it does not
+    assert an entry distance (that awaits the grazing-arrival chain, route a)."""
+    nodes = F.cycle1_nodes(env, hl, box, beam=2)
+    placed = F.terminal_targeting(nodes, hl, max_frames=3, beam=6)['best']
+    et = F.entry_targeting(placed, hl, max_frames=4, beam=16, band_tol=6.0)
+    b = et['best']
+    assert et['dist'] >= 0.0 and et['placement'] >= 0.0
+    assert -0x8000 <= et['entry_dfacing'] < 0x8000
+    c = F.confirm_plan(env, hl, b)
+    assert c['bit_exact'], "the reposition plan did not replay 0-ULP"
+    assert c['talk_safe'] and not b['run']._follow_warned
+
+
 @pytest.mark.slow
 def test_cycle_unit_chains_from_the_recorded_entry_and_bit_confirms(env, hl, box):
     """What IS established (s43): the generic cycle unit -- junction beam then roll -- chains a

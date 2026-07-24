@@ -55,7 +55,11 @@ TWO THINGS THIS SESSION HAD TO FIX BEFORE ANY OF IT SEARCHED CORRECTLY
     what made the cycle-2 stage report hundreds of valid endpoints and zero surviving rolls, four
     times over.
 
-Pure stdlib, no Dolphin. CLI: ``python -m harness.tetrapush.full_herd {sep | box | plan}``.
+Pure stdlib, no Dolphin. CLI: ``python -m harness.tetrapush.full_herd {sep | box | plan | endgame}``.
+The ``endgame`` command now also runs the coupled-entry stage (milestone 2b): `separation_scan`
+measures the deep-contact BARRIER (placement lands at dist ~47 u, off which any step ejects Tetra
+off the thin genuine thread) and `entry_targeting` is the reposition beam that will steer Link back
+to the final-clip entry once fed a GRAZING placement (route a).
 """
 import math
 
@@ -619,6 +623,114 @@ def endgame_report(node, hl, placements=None):
                 link=(lx, lz, node['run'].link.facing))
 
 
+def _entry_cost(run):
+    """Link's endpoint distance to the final-clip roll entry (`seeds.ENTRY_ROLL_POS`), the position
+    the reposition drives to zero. Facing (`ENTRY_ROLL_FACING`) is scored separately -- the clip's
+    own turnaround sets it -- so position is the reposition rank."""
+    erp = seeds.ENTRY_ROLL_POS
+    return math.hypot(run.link.pos_x - erp[0], run.link.pos_z - erp[1])
+
+
+def separation_scan(placed, hl, placements=None, *, n_dirs=48):
+    """**The measured coupled-entry BARRIER** (milestone 2b): from a state where Tetra sits ON a
+    genuine coord, scan every one-frame move and report the best Tetra-still-on-coord step and
+    whether ANY step both keeps her on-coord AND grows the Link<->Tetra gap toward the entry.
+
+    Why this exists: `terminal_targeting` lands Tetra on a coord only at DEEP contact (measured
+    dist(Link,Tetra) ~= 47.5 u, depth ~= 32 u), because the genuine coords form a THIN thread
+    (session 26: ~46 u long, ~5e-4 u perpendicular) that the plow can only reach by pushing INTO it.
+    From deep contact every separation step ejects Tetra ~16 u -- OFF the thread (best reachable
+    placement ~= 4.2 u, out of band) -- and the placed state is already the glide's entry-distance
+    MINIMUM (the entry is up-herd, opposite the down-herd glide), so no forward step reduces the
+    159.8 u gap either. This quantifies both facts so the fix (a GRAZING arrival -- the chain ranked
+    to reach the band on-line with Link near dist 80 and decelerating up-herd, `[[tetrapush-frame-minimal]]`
+    route a) is aimed, not guessed. Returns the scan summary; pure prediction, no state kept."""
+    if placements is None:
+        placements, _ = seeds.load_placements()
+
+    def pdist(run):
+        return min(math.hypot(p['x'] - run.tx, p['z'] - run.tz) for p in placements)
+
+    r0 = placed['run']
+    dist0 = math.hypot(r0.link.pos_x - r0.tx, r0.link.pos_z - r0.tz)
+    rows = []
+    for (sx, sy) in _terminal_alphabet(r0, hl, n_dirs=n_dirs):
+        for l in (0, 1):
+            r = r0.clone()
+            r.step(dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
+                        triggerL=255 if l else 0, substickX=T.CSTICK_NEUTRAL, substickY=0))
+            if r._follow_warned:
+                continue
+            rows.append((pdist(r), math.hypot(r.link.pos_x - r.tx, r.link.pos_z - r.tz),
+                         _entry_cost(r)))
+    rows.sort()
+    best_pd = rows[0][0] if rows else None
+    clean = [x for x in rows if x[0] <= 2.0 and x[1] > 80.0 and x[2] < _entry_cost(r0)]
+    return dict(start_dist=dist0, start_entry=_entry_cost(r0), start_placement=pdist(r0),
+                best_step_placement=best_pd, clean_separation=bool(clean),
+                n_steps=len(rows))
+
+
+def entry_targeting(placed, hl, placements=None, *, max_frames=40, beam=48, n_dirs=24,
+                    band_tol=6.0, verbose=False):
+    """**The coupled-entry reposition beam** (milestone 2b machinery): from a placement state, steer
+    LINK back to the final-clip entry (`seeds.ENTRY_ROLL_POS`, ~174 u up-herd + 73 u lateral of the
+    coord band) while Tetra stays ON a coord. Per-frame beam (atom = one `_terminal_alphabet`
+    (stick, L)), pruned by the plow regime (`_follow_warned`: dist < 230 so Tetra will not FOLLOW)
+    and the genuine band (`placement_dist <= band_tol`, which also holds her still -- once Link
+    separates past dist 80, `cc_push_pair` ejects zero), ranked by `_entry_cost`, tracking the
+    global closest-to-entry in-band state. Any survivor carries its FULL log, so `confirm_plan`
+    replays the WHOLE state-2 -> placement -> reposition sequence 0-ULP.
+
+    NOTE (`separation_scan`): from a DEEP-contact placement (the current terminal's output) this beam
+    is BLOCKED at frame 0 -- separating ejects Tetra off the thin genuine thread -- so it is inert
+    until fed a GRAZING placement (route a). It is the validated reposition primitive the grazing
+    terminal will hand off to, not a standalone solve yet."""
+    if placements is None:
+        placements, _ = seeds.load_placements()
+
+    def pdist(run):
+        return min(math.hypot(p['x'] - run.tx, p['z'] - run.tz) for p in placements)
+
+    best = dict(run=placed['run'], log=placed['log'], frames=placed['frames'],
+                cost=_entry_cost(placed['run']), pd=pdist(placed['run']),
+                plan=placed.get('plan', []))
+    live = [dict(run=placed['run'], log=placed['log'], frames=placed['frames'])]
+    for _f in range(int(max_frames)):
+        nxt, seen = [], set()
+        for nd in live:
+            for (sx, sy) in _terminal_alphabet(nd['run'], hl, n_dirs=n_dirs):
+                for l in (0, 1):
+                    r = nd['run'].clone()
+                    d = dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
+                             triggerL=255 if l else 0, substickX=T.CSTICK_NEUTRAL, substickY=0)
+                    r.step(d)
+                    if r._follow_warned:                       # dist > 230: Tetra would FOLLOW
+                        continue
+                    pd = pdist(r)
+                    if pd > band_tol:                          # Tetra left the genuine band
+                        continue
+                    tag = (round(r.link.pos_x, 1), round(r.link.pos_z, 1),
+                           r.link.facing >> 5, round(r.link.speedF, 2))
+                    if tag in seen:
+                        continue
+                    seen.add(tag)
+                    cost = _entry_cost(r)
+                    cand = dict(run=r, log=nd['log'] + [d], frames=nd['frames'] + 1, cost=cost, pd=pd)
+                    nxt.append(cand)
+                    if cost < best['cost']:
+                        best = dict(cand, plan=placed.get('plan', []))
+        nxt.sort(key=lambda c: c['cost'])
+        live = nxt[:int(beam)]
+        if verbose:
+            print("    f%2d: %3d live, best entry %.1f u (Tetra %.2f u from coord)"
+                  % (_f, len(live), best['cost'], best['pd']))
+        if not live:
+            break
+    return dict(best=best, dist=best['cost'], placement=best['pd'],
+                entry_dfacing=_s16(best['run'].link.facing - seeds.ENTRY_ROLL_FACING))
+
+
 def _placement_dist(run, placements):
     """Tetra's distance to the nearest genuine coord, from a live run."""
     tx, tz = run.tx, run.tz
@@ -817,6 +929,18 @@ def _cmd_endgame(env, hl, kw):
              eg['placement']['nearest']['x'], eg['placement']['nearest']['z']))
     print("  Link at (%.3f, %.3f) facing %d; final-clip ENTRY gap: %.1f u, %d BAM off facing"
           % (eg['link'][0], eg['link'][1], eg['link'][2], eg['entry_dist'], eg['entry_dfacing']))
+
+    # milestone 2b: the coupled reposition (Link -> entry, Tetra holds) + the measured barrier
+    sc = separation_scan(best, hl, placements)
+    print("\n  SEPARATION BARRIER (why Link cannot yet leave for the entry):")
+    print("    placement lands at dist(Link,Tetra) %.1f u (deep contact); best one-step keeps Tetra "
+          "%.2f u from a coord" % (sc['start_dist'], sc['best_step_placement']))
+    print("    a clean separation step (Tetra on-coord AND gap>80 AND toward entry) exists: %s"
+          % sc['clean_separation'])
+    et = entry_targeting(best, hl, placements, max_frames=int(kw.get('rframes', 30)),
+                         beam=int(kw.get('rbeam', 48)))
+    print("  reposition beam: Link -> entry %.1f u (Tetra %.2f u from coord), %d frames"
+          % (et['dist'], et['placement'], et['best']['frames']))
 
 
 def main(argv):
