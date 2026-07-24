@@ -114,6 +114,34 @@ def make_freerun(env, tetra_at=None):
                    camera=cam, zl1=zl1, neck=neck, seed_push=seed_push)
 
 
+def make_freerun_native(env, tetra_at=None):
+    """The STRIPPED native-step `FreeRun` -- the search fast path: the whole coupled courtyard frame
+    runs in C (`LandCore.step_courtyard`, native_push=1) instead of the Python `LandState.step`, at
+    ~8x the Python step (Stage 3). NO wired camera/zl1/neck (the stripped geometry-exact config): the
+    caller injects csangle per `step` (or holds it) and the proc-9 eye falls back to Tetra's feet --
+    identical positions to a stripped Python `FreeRun` (gated `tests/test_freerun_native.py`, 0-ULP on
+    Link pos/facing/travel/speedF/proc + Tetra XZ over the DTM window, incl. a cloned run). Same f0
+    seed + seed-push as `make_freerun`; `tetra_at` re-seats Tetra's plow point as there.
+
+    NOTE the perf limiter (Stage 3 bench, this hardware): the native step is ~108k steps/s (vs the
+    Python ~10.5k), pose-FK-bound (the bare native walk step is ~137k/s here) -- an 8x search win, not
+    the ~1M/s the state-space brute force wants; that needs a per-frame pose-FK rework (phase caching /
+    sampling only the needed joints / a nogil OpenMP `prange` fan-out over the BFS frontier), which is
+    beyond wiring FreeRun. See `_notes/native-courtyard-step-PROGRESS.md` `## Stage 3 result`."""
+    from harness.tetrapush.from_f0 import FreeRun
+
+    seed_row = env['cyl'][0]
+    if tetra_at is not None:
+        seed_row = json.loads(json.dumps(seed_row))          # deep copy, fixture stays locked
+        seed_row['tetra']['pos'][0] = float(tetra_at[0])
+        seed_row['tetra']['pos'][2] = float(tetra_at[-1])
+    seed = env['seed']
+    seed_push = None if tetra_at is not None else seed_push_f0(env)
+    return FreeRun(seed_row, seed_nspeed=seed['link']['nspeed'],
+                   seed_old_pose=seed.get('old_pose'), computed_pose=True,
+                   seed_push=seed_push, native_step=True)
+
+
 def load_placements(path=None):
     """The 288 genuine Tetra clip coords (`_generated/tetra_placements.tsv`, Dereck 2026-07-21)
     as a list of dicts: ``idx``, ``x``, ``z``, ``dist_wallB``, ``dist_wallA``. The header carries

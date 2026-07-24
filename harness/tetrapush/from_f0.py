@@ -66,6 +66,11 @@ from harness.tetrapush.link_plow import recoil
 from harness.tetrapush.tetra_plow import LINK_CO_R, TETRA_CO_R, _CO_H
 
 
+# One-shot guard (list-boxed so `_build_core` flips it): native consts must be armed before the
+# first `step_courtyard` or the s16 `diff/scale` SIGFPEs (PROGRESS.md Stage-1 trap 2).
+_NATIVE_CONSTS_ARMED = [False]
+
+
 def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
@@ -324,7 +329,7 @@ class FreeRun:
     point -- unmodeled, same status as eyePos; keep-last semantics like ``eye``)."""
 
     def __init__(self, seed_row, *, seed_nspeed=None, seed_old_pose=None, computed_pose=True,
-                 camera=None, zl1=None, neck=None, seed_push=None):
+                 camera=None, zl1=None, neck=None, seed_push=None, native_step=False):
         e = seed_row
         self.link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
         self.computed_pose = bool(computed_pose)
@@ -366,6 +371,45 @@ class FreeRun:
             self.pend_link, self.pend_tetra = full_depth_push(c0, (self.tx, self.tz))
         self.prev_disp = self.link.state               # dispatch proc of the seed frame
 
+        # native-step mode (Stage 3): drive the frame in C (LandCore.step_courtyard, native_push=1);
+        # `self.link` stays a field-holder synced from the core. See PROGRESS.md Stage 3.
+        self.native_step = bool(native_step)
+        self._core = None
+        if self.native_step:
+            if not self.computed_pose:
+                raise ValueError("native_step needs computed_pose (the fused native pose FK)")
+            if camera is not None or zl1 is not None or neck is not None:
+                raise ValueError("native_step is the STRIPPED search config -- no camera/zl1/neck "
+                                 "(csangle is injected, eye is feet-fallback)")
+            self._core = self._build_core()
+
+    def _build_core(self):
+        """Build + seed the native `LandCore` for this seeded (f0) FreeRun -- the Stage-1 seeding
+        bridge folded in: clone the fused C `PoseEngine`, `seed_from_foot` the Python FootSpeedF into
+        it, `setup` the physics scalars, and `seed_courtyard` the coupled seeds (pos_y, lean, the
+        AttentionLock state, Tetra's f0 feet, and the f0->f1 CC push pair). Idempotently arms the
+        module consts (`land_init_consts`/`init_anim_consts`) -- required or the s16 divide SIGFPEs
+        (PROGRESS.md trap 2)."""
+        from tww_sim.core.anim import _anmc as N
+        from tww_sim.core.anim.anim_state import (ANIM_ORDER, NATIVE_META_MAX,
+                                                  NATIVE_META_ATTR, NATIVE_HIO)
+        from tww_sim.land.state import _LAND_CONSTS
+        if not _NATIVE_CONSTS_ARMED[0]:
+            N.land_init_consts(_LAND_CONSTS)
+            N.init_anim_consts(NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO)
+            _NATIVE_CONSTS_ARMED[0] = True
+        link = self.link
+        code2idx = [link._foot.ff._anim_idx[name] for name in ANIM_ORDER]
+        pe = link._foot.ff._pose_engine.clone_state()   # fresh engine sharing the immutable AnimData
+        pe.seed_from_foot(link._foot, code2idx)
+        core = N.LandCore()
+        core.setup(pe, link.pos_x, link.pos_z, link.facing, link.travel, link.csangle,
+                   link.state, link.nspeed, link.speedF, float(link._cam.scale))
+        core.seed_courtyard(pe, link.pos_y, link.m351C, int(link._atn.state), self.tx, self.tz,
+                            self.pend_link[0], self.pend_link[1],
+                            self.pend_tetra[0], self.pend_tetra[1])
+        return core
+
     def clone(self):
         """A deep copy for the planner beam search: branch the coupled state without re-running the
         rollout from state 2. `LandState.clone` shares the immutable `AnimData`; the camera / zl1 /
@@ -391,12 +435,19 @@ class FreeRun:
         c.pend_link = self.pend_link
         c.pend_tetra = self.pend_tetra
         c.prev_disp = self.prev_disp
+        c.native_step = self.native_step
+        # Native core: clone over a state-copy of its fused PoseEngine (shares the immutable AnimData);
+        # a cloned run stays bit-identical (gated). Non-native runs carry _core = None.
+        c._core = self._core.clone(self._core.pe.clone_state()) if self._core is not None else None
         return c
 
     def pre_seed_input(self, inp):
         """Seed the delay-1 controller buffer (the input the FIRST `step` acts on)."""
         self.link._inbuf = [_step_args(inp)]
         self._prev_raw = inp
+        if self._core is not None:
+            a = _step_args(inp)
+            self._core.pre_seed_courtyard(a[0], a[1], a[2], a[3])
 
     def step(self, inp, csangle=None, eye=None, center=None, tattn=None, record=True):
         """Advance one game frame on raw input ``inp``. ``csangle``/``eye``/``tattn`` as in the
@@ -410,7 +461,12 @@ class FreeRun:
         exec-centre push, both actors' positions 0-ULP identical to ``record=True``) but skip the
         ``sim_cyl`` settled-centre DIAGNOSTIC and the per-frame row dict (the brute force reads
         ``run.link`` / ``run.tx`` directly). Requires ``computed_pose`` and no wired camera/zl1/neck
-        (search runs stripped -- geometry-exact per the s34 handoff). Returns None."""
+        (search runs stripped -- geometry-exact per the s34 handoff). Returns None.
+
+        Native-step mode (`native_step=True`) drives the whole coupled frame in C
+        (`LandCore.step_courtyard`, native_push=1) -- see `_step_native`."""
+        if self._core is not None:
+            return self._step_native(inp, csangle=csangle, eye=eye, record=record)
         link = self.link
         if csangle is not None:
             if self.camera is not None:
@@ -529,6 +585,62 @@ class FreeRun:
             row['sim_csangle'] = self.csangle
             row['sim_attn_y'] = attn_y
         return row
+
+    def _step_native(self, inp, csangle=None, eye=None, record=True):
+        """The NATIVE search fast path: one `LandCore.step_courtyard(native_push=1)` call, then a few
+        field reads. Everything the coupled Python `step` (computed-pose config) does -- delay-1 input
+        buffer, stick decode, attention machine, procs, the A-roll trigger, the fused pose FK + speedF,
+        the posMove recoil consume, the body-Co exec centre, the CC push pair, and the f32 Tetra
+        track -- runs inside the C engine. csangle is injected per frame (held if None); eye is the
+        proc-9 re-aim target (feet-fallback when None -- the stripped no-zl1 search config). The
+        Python `self.link` public fields (pos/facing/travel/speedF/state) and `self.tx/self.tz` are
+        synced back so the search reads them exactly as in Python mode.
+
+        Returns None when ``record=False`` (the brute force reads ``run.link``/``run.tx`` directly),
+        else the same row dict the Python step returns for the fields the search consumes."""
+        if csangle is not None:
+            self.csangle = csangle
+        if isinstance(inp, dict):
+            sx = int(inp['stickX']); sy = int(inp['stickY'])
+            btn = int(inp.get('buttons', 0)); trg = int(inp.get('triggerL', 0))
+        else:
+            t = inp
+            sx = int(t[0]); sy = int(t[1])
+            btn = int(t[2]) if len(t) > 2 else 0
+            trg = int(t[3]) if len(t) > 3 else 0
+        if eye is not None:
+            ex, ez, he = float(eye[0]), float(eye[-1]), 1
+        else:
+            ex = ez = 0.0; he = 0
+        core = self._core
+        sf = core.step_courtyard(sx, sy, btn, trg, int(self.csangle) & 0xFFFF,
+                                 0.0, 0.0, ex, ez, he, 0.0, 0.0, 0.0, 0, 1)   # native_push=1
+        link = self.link
+        link.pos_x = core.pos_x; link.pos_z = core.pos_z
+        link.facing = core.facing; link.travel = core.travel
+        link.speedF = sf; link.nspeed = core.nspeed
+        link.state = core.state
+        self.tx = core._tetra_x; self.tz = core._tetra_z
+        self.pend_link = (core._pend_link_x, core._pend_link_z)
+        self.pend_tetra = (core._pend_tetra_x, core._pend_tetra_z)
+        # FOLLOW guard (search reads run._follow_warned): identical test to the Python step; skipped
+        # once tripped (the model is unfaithful past FOLLOW_ENGAGE_DIST -- see the class doc).
+        if not self._follow_warned:
+            dist = math.sqrt((link.pos_x - self.tx) ** 2 + (link.pos_y - self.ty) ** 2
+                             + (link.pos_z - self.tz) ** 2)
+            if dist > FOLLOW_ENGAGE_DIST:
+                self._follow_warned = True
+                warnings.warn(
+                    "FreeRun: Link-Tetra distance %.1f u exceeds FOLLOW_ENGAGE_DIST (%.0f u) -- "
+                    "live Tetra would enter the stt-4 FOLLOW state, which this stt-3 plow model "
+                    "does NOT cover; the sim is no longer faithful from this frame on"
+                    % (dist, FOLLOW_ENGAGE_DIST))
+        if not record:
+            return None
+        return dict(sim_proc=core.state, sim_facing=core.facing,
+                    sim_shape_z=core.court_shape_z,
+                    sim_link=(core.pos_x, core.pos_z), sim_tetra=(self.tx, self.tz),
+                    speedF=sf)
 
 
 def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None,

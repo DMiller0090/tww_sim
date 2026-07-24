@@ -2052,6 +2052,12 @@ cdef class LandCore:
         """The shared PoseEngine's anim-phase fingerprint (diagnostic; see PoseEngine.phase)."""
         return self._pe.phase
 
+    @property
+    def pe(self):
+        """The bound PoseEngine (read-only). Lets a Python owner clone the fused engine for a
+        bit-exact `LandCore.clone(pe.clone_state())` (the FreeRun native-step beam-search clone)."""
+        return self._pe
+
     def setup(self, PoseEngine pe, double pos_x, double pos_z, long long facing,
               long long travel, long long csangle, int state, double nspeed,
               double speedF, double cam_scale):
