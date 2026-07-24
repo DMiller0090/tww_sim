@@ -1115,6 +1115,50 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
                 talk + regime; chain via `FreeRun.clone`; score herd/frame. The primitives + prunes are
                 built and gated -- this is the remaining search. THEN exact placement + entry walk-in +
                 tier-2 DTM. NO further live capture is needed for the forward model.
+            - **SESSION 34 -- RE-DIAGNOSED the reposition (the session-33 turnaround is a DEAD END for
+              on-line) + started the SEARCH + hit the throughput wall; ended on Dereck's PERFORMANCE
+              pivot (CYTHONIZE for a hard brute force).** Full writeup:
+              `_notes/tetrapush-session34-rediagnosis.md`; framework `harness/tetrapush/repo_search.py`.
+              1. **The turnaround-roll (`reposition.frame_min_reroll`) cannot be on-line.** Validity
+                 sweep over (nflip in 2..4, roll aim +-3000 BAM, csangle): **worst_lead >= +235 for
+                 EVERY combo**. The turnaround snaps facing in 1 frame but Link's +lateral drift
+                 compounds (entry lat +10 -> +21 at roll start), so the +26 roll shoves Tetra sideways
+                 (overlaps her at dist 56-76 but lat +21->+76) and overshoots (lead -63 -> +261). The
+                 corrected flip is `nflip=3` (the +18 completes; nflip=2 floored the roll at +5), but
+                 even talk-safe + nflip=3 overshoots.
+              2. **release-early (steer #2/#3, -25.7 retention) is INCOMPATIBLE with on-line.** From the
+                 full 2-frame tier (-25.455, facing 37552, lat +5.1) an ESS-down hold nulls lat to -2 in
+                 ONE frame with lead staying -33..-69 (never overtakes); from the release-early untarget
+                 (-25.727, facing 35324, lat +10.2) the SAME hold makes lat GROW +14..+58 and Link
+                 overtakes. Use the full tier for the reposition; the 0.27 u/f is not worth on-line-ness.
+              3. **The on-line lever is the human's ESS-curved backslide** (facing/travel decouple),
+                 NOT the turnaround; csangle is ~frozen in the recording but its VALUE is razor-critical
+                 (the human's working curve sits ~650 BAM off a coarse grid).
+              4. **THE WALL -- the coff-vs-lat coupling.** A talk-safe +26 roll needs facing OUT of
+                 Tetra's +-90 cone at the L/A press (else L actor-locks -> +12 slide, and the A talks),
+                 which requires rotating facing ~110 deg off the bearing. But rotating facing out-of-cone
+                 via the backslide (preserving speed) forces lat to drift to ~-19 u by the frame coff
+                 exits the cone -- NEVER both out-of-cone AND lat~0. The human evades this with the
+                 **MAINTAINED actor-lock** (soft-lock, L held, `AttnFlag_20000000`; persists from cyc1's
+                 roll through RELEASE + mid-roll L re-pulses) which FREEZES facing out-of-cone so he
+                 never rotates it via the backslide. Neither the from-scratch primitives NOR a replay of
+                 the recorded reposition CHAIN a valid on-line cycle (recorded replay -> proc-9 slide,
+                 talk, overshoot +268).
+              5. **`repo_search.py` (BUILT, not yet finding a cycle):** `curve_beam` = a per-frame beam
+                 over speed-preserving backslide inputs (HARD-PRUNE speed drops below |24| -- Dereck
+                 steer: a braked backslide is physically dead; fine aim + csangle vernier + soft-lock
+                 L-held candidates), `flip_roll`, CLIs `curve`/`cycle`. Finds no on-line roll from the
+                 reachable setups (the coupling + coarse vernier + no maintained-lock).
+              6. **PERF (the pivot):** `FreeRun.step` = ~2500/s full, ~7600/s stripped (zl1=None,
+                 neck=None -- PROVEN geometry-exact, 0.000 u diff, a safe no-miss search proxy; only the
+                 head-look facing-echo differs). The pose-FK exec-centre (`foot_fk._pose_frame`/
+                 `_local_from_old`/`body_co_center`, needed for the push) is the floor and runs in
+                 PYTHON; native `_anmc.pyx` exists but does not cover it. **NEXT (Dereck's directive):
+                 CYTHONIZE the step to 300k-1M/s, then HARD BRUTE-FORCE the reposition** -- a COMPLETE
+                 state-space BFS (full per-frame branching on a FINE grid, dedup by discretized state,
+                 hard-prune only speed/overtake/regime, NEVER rank-drop), with the MAINTAINED-ACTOR-LOCK
+                 lever (freeze facing out-of-cone). Bit-confirm on the full 0-ULP FreeRun. THEN exact
+                 placement + entry walk-in + tier-2 DTM.
 
 ## Hard rules (inherited from the seam-clip work)
 
