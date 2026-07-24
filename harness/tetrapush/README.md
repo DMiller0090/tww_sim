@@ -240,7 +240,7 @@ deliberately unported.
 | `native_search.py` | **The native-fleet reposition BFS** (session 38): a beam BFS whose frontier is native `FreeRun` nodes (each wrapping a `LandCore`); a generation is expanded by fanning every (node, candidate-input) child through `CourtyardFleet.run_par` ONE frame in parallel (`batch_step`), syncing the public C fields, pruning off-line/past-Tetra (`reposition.HerdLine`), talk-unsafe (`search.a_press_is_talk`), and out-of-regime (follow) nodes, deduping by a quantized state tag, and keeping the top-`beam` by down-herd progress. `Node`/`reconstruct` record the input chain; `bit_confirm` re-runs the winning plan on a FRESH Python-stepped `FreeRun` 0-ULP. `seed_root` = the state-2 f0 seed (the BFS finds the WHOLE push -- the recorded human's inputs are NOT a valid pursuit template in the stripped sim, see below). CLI `python -m harness.tetrapush.native_search {selfcheck\|search}`. Gated `tests/test_native_search.py` (3: fleet-frontier readout 0-ULP vs a native FreeRun rollout, batch-step == individual, tiny-search prunes on-line + bit-confirms). **KEY FINDING (s38): the stripped sim's +26 roll cannot be an on-line pursuit -- it OVERSHOOTS.** The search finds the continuous glide-push herds Tetra on-line ~12 u/f for ~10 frames then STALLS at along ~148 (Link drifts laterally to +65), and EVERY roll is pruned (overshoots past Tetra). Root cause PINNED (inject the full sim's own csangle to remove it as a variable): the ONLY stripped-vs-full difference is the **roll-entry facing, -102 BAM** (full 35316 vs stripped 35214), the proc-7 re-aim to Tetra's animated **eyePos** (leads her feet 16-26 u) that the stripped config replaces with feet-aim; -102 BAM at entry compounds over the 16-frame locked roll into Tetra diverging 69 u by f18 -> overshoot (stripped) vs pursuit (full). So the on-line-roll chain needs the **zl1 eye-aim ported into the native step** (proc-7/9 re-aim to eyePos), OR the search run in the full Python sim. |
 | `steered_reposition.py` | **The REALIZABLE camera-steered reposition primitives** (session 39; Dereck's live design): the validated pieces the frame-minimal branching search is built from -- `camera_authority` (neutral substickX FREEZES csangle; full stick ~+-460..530 BAM/frame -> csangle is a STEERED, not free, channel), `_steered_cyc1` (replay the first roll steering substickX toward a `target_cs` during the locked-roll frames, camera+zl1 ON = realizable + eye-aim), `armed_geometry` (lead/lat/dist/bearing-to-Tetra/talk of an armed EBS -- shows the camera sets FACING not POSITION), `roll`/`recorded_online_metrics` (the on-line self-stabilization evidence: the recorded 2-roll window stays behind Tetra). CLI `python -m harness.tetrapush.steered_reposition {authority\|armed\|selfstab}`. Gated `tests/test_steered_reposition.py` (3, structural). The full architecture (roll = zero-branch camera-steer segment; junctions branch facing/position/release; three coupled controls; on-line self-stabilization) is in the module docstring + the `## Plan / status` s39 box. |
 | `steered_search.py` | **The per-cycle branching search + THE HERD-RATE CEILING** (session 40). The s39 design made concrete: a cycle is glide (the EBS reposition, small msd so the -25.7 is retained) -> L-held proc-7 flip -> talk-safe A-roll -> roll, branching at the junctions only, pruned by talk/on-line/regime, ranked frame-minimal. **`push_ceiling`** (CLI `ceiling`) is the session's durable result: the push is a SPLIT of Link's step, so herd <= `\|speedF\|/2` = 13.0 u/f and the human already runs at 12.76 = 98.2% (contact 95%, alignment 0.996) -- a roll is NOT privileged and no reposition can pay for itself. CLI `python -m harness.tetrapush.steered_search {ceiling\|probe\|cycle\|search\|confirm}`. |
-| `two_roll.py` | **The 2-roll proof harness** (session 40; Dereck's bar: chain TWO rolls above the human's **12.758 u/frame** from state 2). `human_baseline` = the bar; **`roll_facing_fan`** enumerates the REACHABLE roll facings by inverting target halfwords at 1-BAM step and deduping by ACHIEVED stick bytes (**312 within +-8192 BAM**) -- the achievable set, not a nominal grid; `roll_segment` (A-press + ride, `l_window` = the mid-roll L PULSE, C-stick = the computed csangle slew), `turnaround_and_flip`, `cycle1_candidates` (+ the aggressive `alive` prune). Runs in the full Python sim deliberately (the native fleet passes `has_eye=0` -> feet-aim, the s38 -102 BAM error). **Bar NOT yet met**; the blocker is the in-roll STICK STREAM (see `## Plan / status`). CLI `python -m harness.tetrapush.two_roll {human\|fan}`. |
+| `two_roll.py` | **The 2-roll proof harness + THE SEARCH-SPACE CONTAINMENT GATE** (session 40, re-founded session 41; Dereck's bar: chain TWO rolls above the human's **12.758 u/frame** from state 2). `human_baseline` = the bar. **`reachable_stick_fan`** = the controller's true aim alphabet: the full 256x256 byte grid deduped by DECODED ANGLE (**7032** aims; csangle-independent), replacing s40's inversion through `stick_for_bearing`, whose image is only the maximal-radius octagon-boundary bytes (**544 of 2280** at full msd) -- that narrowing WAS the s40 blocker. `roll_facing_fan` places alphabet members at a csangle via `world_facing`; `roll_stream` = the delivered main-stick/button stream as a pure function of the knobs (`hold`, `a_hold`, `l_window` = the mid-roll L PULSE, `post_l`, `post` -- three stick phases, split at the aim release and the L-pulse end); `roll_segment` rides it with the C-stick as the computed csangle slew (the camera / instant-turnaround setup). **`contains_human`** = the gate that the human's recorded inputs are a SUBSET of what the parameterization can emit (`_fit_roll_knobs` reads his knobs back off the DTM); **`reproduces_recorded_roll`** = the 0-ULP fidelity gate (generated bytes, not his, reproduce both recorded rolls exactly); **`roll_is_stick_inert`** = the measured fact that the main stick does NOTHING inside a FRONT_ROLL. Runs in the full Python sim deliberately (the native fleet passes `has_eye=0` -> feet-aim, the s38 -102 BAM error). Cycle 1 now clears the bar (**13.15 u/f**); **the 2-roll chain is still open**. Gated `tests/test_two_roll.py` (7). CLI `python -m harness.tetrapush.two_roll {human\|contain\|fan}`. |
 | `feasibility.py` | **The COARSE-FEASIBILITY report** (session 28): from the bit-exact 2-cycle window, answers "can a few push cycles herd Tetra the full ~960 u to the genuine-coord cluster, in-regime?" -- directional (herd bearing vs target bearing), per-cycle reach, and the plow-regime bound. VERDICT: CONFIRMED (0.2 deg direction match, ~3 cycles, dist 40-85 u < engage 230). All numbers recomputed live. CLI `python -m harness.tetrapush.feasibility`. |
 | `_notes/tetrapush-camoracle_probe.py` | (gitignored) Session-18 land-camera ORACLE probe: run A re-captured with the FULL dCamera_c block (0x520 B, incl. mEventFlags/mCurStyle/mCurType), player status words, attention lockstate, both actors' `attention_info.position`, and the pad main-stick angle. Baked to `fixtures/courtyard_cam_oracle.json` (the `test_land_cam.py` gate). |
 | `_notes/tetrapush-eyeindep_probe.py` | (gitignored) Session-17 A/B probe: two 120-frame runs from slot 2 diverging only in post-f48 inputs; logs both actors + csangle + the RAW `dCamera_c` block (0x450 B/frame). DISPROVED the eyePos input-independence shortcut (offsets diverge f51, both runs stt 3); run A doubles as the extended csangle + camera-spring ground truth (f0..f120) for the camera port, and run B pins the stt-3->4 follow flip (crossed 230 at f63, stt 4 at f75). `.json` beside it. |
@@ -735,8 +735,51 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             cycle, branching (target_cs = next roll facing) x (main-stick position) x (release), pruning
             off-line/talk-unsafe/follow, ranked frame-minimal. Bit-confirm any winner on the full
             Python `FreeRun` (realizable = C-stick-driven csangle, no injection).
+      - [~] **THE S40 BLOCKER IS CLOSED -- the roll segment now reproduces the human 0-ULP, and the
+            search space PROVABLY CONTAINS him (session 41; Dereck's containment steer).**
+            The cause was never the in-roll stick stream (the s40 reading below is **overturned**);
+            it was **aim GENERATION**, in two compounding ways, both found by per-frame diff:
+            - **`stick_for_bearing` cannot express most aims.** Its image is only the MAXIMAL-RADIUS
+              (octagon-boundary) byte pairs. The human's own A-press pair `(181,236)` is an INTERIOR
+              pair -- identical decoded angle **28732** and a saturated `mStickDistance` 1.0, so
+              physically equivalent, but simply not in that image. `roll_facing_fan` deduping by
+              those emitted BYTES therefore reached **544 of the 2280** distinct aims the byte grid
+              actually realizes: the fan did not contain the human.
+            - **The aim was built at the LIVE csangle**, but a delivered stick is acted the NEXT
+              frame against the csangle committed then -- so every commanded facing landed one frame
+              of camera slew off (**76 BAM** at the state-2 entry: world target 35392 -> achieved
+              35316). s40 read that offset as a physics divergence.
+            **The structural fix: the fan's atom is the stick BYTE PAIR, not a world bearing.**
+            `reachable_stick_fan` enumerates the full 256x256 grid deduped by DECODED ANGLE (which is
+            csangle-INDEPENDENT); the world facing a member achieves is
+            `decoded + 0x8000 + csangle_at_act`, read back off the run. Containment is then true by
+            construction. **`contains_human` gates it** (CLI `two_roll contain`): every recorded aim
+            is a fan member (**0 missing of 7032**), and both recorded roll segments are emittable by
+            `roll_stream` -- which needed one genuine widening the check itself found, a **third
+            stick phase**: the human moves his stick again when the L pulse ENDS (cycle 2
+            `(128,110) -> (111,111)`; cycle 1 does not), so the knobs are
+            `hold` x `a_hold` x `l_window` x `post_l` x `post`.
+            **FIDELITY, 0-ULP:** `reproduces_recorded_roll` replays to the human's own entry, then
+            drives the GENERATED stream (fan aim bytes `(154,170)`/`(151,172)` -- **not** his
+            `(181,236)`/`(172,243)`, same decoded angle) and reproduces **both** recorded rolls
+            bit-exactly, both actors' positions + facing, every frame to the exit.
+            **The main stick is INERT inside a FRONT_ROLL -- MEASURED**
+            (`roll_is_stick_inert`): pegging the mid-roll stick to `(255,128)`, `(0,128)`,
+            `(128,255)`, `(128,0)`, `(255,255)`, `(1,1)` or the aim itself all reproduce the recorded
+            roll **0-ULP**. So **the s39 "a roll is a zero-branch segment" premise is RESTORED** and
+            s40's overturn of it was an artifact of the aim bug. The roll's live channels are only
+            the mid-roll **L pulse** (the untarget tier) and the **C-stick slew** (the camera /
+            instant-turnaround setup, which Dereck wants kept as a supported control).
+            With the fan fixed, `cycle1_candidates` now yields on-line cycle-1 survivors at
+            **13.15 u/frame** vs the human's 12.758 (`two_roll fan window=2000`). **NEXT: chain
+            cycle 2** -- cycle 1 alone is a transient, and the sustained bar is the 2-roll rate
+            against 12.758 under the `|speedF|/2 = 13.0` ceiling below.
+            Gated `tests/test_two_roll.py` (7: fan-vs-`stick_for_bearing` strict-subset, fan members
+            decode to their own angle, containment, the fitted knobs are the human's real pattern,
+            0-ULP roll reproduction x2, stick inertness). 523 offline pass.
       - [~] **THE HERD-RATE CEILING -- MEASURED (session 40); the objective is re-framed. Plus the
-            2-roll proof harness, and the in-roll stick stream named as the live blocker.**
+            2-roll proof harness, and the in-roll stick stream named as the live blocker
+            (that blocker diagnosis is OVERTURNED by session 41 -- see the box above).**
             **The push rate is a pure SPLIT of Link's speed.** Both actors eject the full Co overlap
             depth, so on a contact frame Link advances `|speedF| - e` down-herd and Tetra advances
             `e`; a sustained push is the steady state `e == |speedF|/2`. Measured on the recorded
@@ -762,14 +805,12 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             measurement on the way: the **delay-1 A-press** (`nflip=2` delivers A a frame late, so
             the flip has decayed and the roll fires **+22.235** instead of +26 -- `nflip=1` is the
             correct pairing, verified +26.0 exactly), and the fan being nominal rather than reachable.
-            **THE LIVE BLOCKER, pinned by per-frame diff:** from the human's own f1 entry at his own
-            roll facing 35316, our roll segment matches him **bit-for-bit through 6 roll frames**,
-            then diverges to **+88 u lateral** by the exit. The cause is the **in-roll STICK
-            STREAM** -- a held stick STEERS the roll. Neither holding the aim (+88.6), going neutral
-            (+97.5, worse), nor any mid-roll L-pulse window recovers it. **This overturns the s39
-            "a roll is a zero-branch segment" design premise**: the roll's stick stream is a real
-            control surface, not free camera time. NEXT = diff that stream frame-by-frame until
-            `roll_segment` reproduces the human's roll, THEN sweep facings and chain cycle 2.
+            **The s40 blocker reading -- "the in-roll STICK STREAM steers the roll" -- is WRONG and
+            was closed in session 41 (box above).** The +88 u lateral divergence it measured came
+            from generating the aim through `stick_for_bearing` at the live csangle, not from
+            in-roll steering; the main stick is provably inert inside a roll. The s40 fan figure
+            ("312 reachable facings, deduped by ACHIEVED stick bytes") is likewise superseded --
+            that dedup key was the narrowing.
             (Note `[[tetra-clip-solved-live]]` already recorded "NEUTRAL roll stick (not UP)" as a
             delivery truth; s40 re-derived it the hard way -- read that memory before authoring
             roll inputs.)
