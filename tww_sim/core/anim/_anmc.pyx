@@ -543,6 +543,13 @@ def hermite_f32(frame, time0, value0, tan0, time1, value1, tan1):
 cdef int _CJ[12]
 _CJ[0]=0; _CJ[1]=1; _CJ[2]=29; _CJ[3]=30; _CJ[4]=31; _CJ[5]=32
 _CJ[6]=33; _CJ[7]=34; _CJ[8]=36; _CJ[9]=37; _CJ[10]=38; _CJ[11]=39
+# body_co pose set = CHAIN_JOINTS (slots 0-11, == _CJ) + BODY_CO_EXTRA (slots 12-16, the neck/head
+# extras); AnimData registers all 17 so pose_chain samples them from C. See foot_fk body_co_center.
+cdef int _NALL = 17
+cdef int _CJALL[17]
+_CJALL[0]=0; _CJALL[1]=1; _CJALL[2]=29; _CJALL[3]=30; _CJALL[4]=31; _CJALL[5]=32
+_CJALL[6]=33; _CJALL[7]=34; _CJALL[8]=36; _CJALL[9]=37; _CJALL[10]=38; _CJALL[11]=39
+_CJALL[12]=2; _CJALL[13]=3; _CJALL[14]=4; _CJALL[15]=14; _CJALL[16]=15
 
 # l_toe / l_heel in Lfoot-joint local space (fk.L_TOE / L_HEEL, d_a_player_main_data.inc:18-19).
 cdef double _TOE_X = 6.0, _TOE_Y = 3.25, _HEEL_X = -6.0, _HEEL_Y = 3.25
@@ -678,11 +685,12 @@ cdef class AnimData:
     """IMMUTABLE registered keyframe data + foot chains, shared across all PoseEngine instances (and
     thus every A* clone). Built once per parsed anim set and cached -- avoids re-copying ~90k keyframe
     values into C on every LandState.clone(). Read-only after set-up."""
-    cdef int _meta[16][12][3][3][3]     # [anim][slot][track s0/r1/t2][axis][cnt, off, ttype]
-    cdef double* _sdata[16]
-    cdef double* _rdata[16]
-    cdef double* _tdata[16]
-    cdef int _dec[16]
+    cdef int _meta[20][17][3][3][3]     # [anim<=20][slot; 0-11 feet, 12-16 body_co extras][s/r/t][axis][cnt,off,tt]
+    #                                     anim cap 20: the land set is 17 (was 16 -> native engine off).
+    cdef double* _sdata[20]
+    cdef double* _rdata[20]
+    cdef double* _tdata[20]
+    cdef int _dec[20]
     cdef int _chain34[12]
     cdef int _n34
     cdef int _chain39[12]
@@ -690,12 +698,12 @@ cdef class AnimData:
 
     def __cinit__(self):
         cdef int i
-        for i in range(16):
+        for i in range(20):
             self._sdata[i] = NULL; self._rdata[i] = NULL; self._tdata[i] = NULL
 
     def __dealloc__(self):
         cdef int i
-        for i in range(16):
+        for i in range(20):
             if self._sdata[i] != NULL: free(self._sdata[i])
             if self._rdata[i] != NULL: free(self._rdata[i])
             if self._tdata[i] != NULL: free(self._tdata[i])
@@ -714,8 +722,8 @@ cdef class AnimData:
         self._dec[idx] = anm['dec_shift']
         cdef list joints = anm['joints']
         cdef list keys = ['s', 'r', 't']
-        for slot in range(12):
-            jnt = _CJ[slot]
+        for slot in range(_NALL):
+            jnt = _CJALL[slot]
             j = joints[jnt]
             for track in range(3):
                 trk = j[keys[track]]
@@ -1002,6 +1010,85 @@ cdef class PoseEngine:
         self._pose_toe_core(m0, m1, f0, f1, ratio, i_morf, toes)
         return (toes[0], toes[1], toes[2], toes[3], toes[4], toes[5],
                 toes[6], toes[7], toes[8], toes[9], toes[10], toes[11])
+
+    def pose_chain(self, int m0, int m1, double f0, double f1, double ratio, double rate,
+                   object slots, object oldq, object oldt, object olds,
+                   double f030_0, double f030_1):
+        """Batched native fold of foot_fk._pose_frame for the body_co joint set (the ONE call the
+        Python pose loop becomes): sample both anims from the shared AnimData, blend + oldframe-morf,
+        build the local 3x4, per joint -- in C, no per-joint calc_transform dicts / Python call.
+
+        `slots` = a list of (slot, jnt) in pose order (foot chain slots 0-11 then the neck/head extras
+        12-16; == enumerate(CHAIN_JOINTS + BODY_CO_EXTRA)). `oldq/oldt/olds` = the caller's old-pose
+        dicts (jnt -> tuple); read for the morf and UPDATED IN PLACE with this frame's posed pose (the
+        store body_co_center / the next frame's morf read). `rate` = the morf rate (>0 => morf on;
+        the caller owns the morf counter, exactly like _pose_frame). `f030_0`/`f030_1` = the CLOTCH
+        leg-lift (mFootData[0]->jnt36, [1]->jnt31); 0.0 skips. Returns {jnt: 3x4 local matrix}.
+
+        Bit-exact with foot_fk._pose_frame's native (blend_joint) branch: _calc_transform_c is the
+        0-ULP twin of j3d_eval.calc_transform (the fused foot path is gated on it) and the inner
+        blend math is copied verbatim from blend_joint. Gated by tests/test_pose_chain_native.py
+        (differential vs _force_slow) + test_from_f0.py (the live 0-ULP end-to-end oracle)."""
+        cdef double s0[3]
+        cdef double t0[3]
+        cdef double s1[3]
+        cdef double t1[3]
+        cdef long long r0[3]
+        cdef long long r1[3]
+        cdef double q0[4]
+        cdef double q1[4]
+        cdef double q3[4]
+        cdef double oq[4]
+        cdef double m[12]
+        cdef double r30, f31, tr0, tr1, tr2, sc0, sc1, sc2
+        cdef int slot, jnt
+        cdef bint morf_on = rate > 0.0
+        cdef bint apply_morf
+        cdef object prev, ot, os_
+        local = {}
+        for slot, jnt in slots:
+            self._calc_transform_c(m0, slot, f0, s0, r0, t0)
+            self._calc_transform_c(m1, slot, f1, s1, r1, t1)
+            _euler_to_quat_c(r0[0], r0[1], r0[2], q0)
+            _euler_to_quat_c(r1[0], r1[1], r1[2], q1)
+            _quat_lerp_c(q0, q1, ratio, q3)
+            r30 = fsubs(1.0, ratio)
+            # translate/scale blend is NON-fused (m_Do_ext.cpp:1183): each product separately rounded.
+            tr0 = fadds(fmuls(t0[0], r30), fmuls(t1[0], ratio))
+            tr1 = fadds(fmuls(t0[1], r30), fmuls(t1[1], ratio))
+            tr2 = fadds(fmuls(t0[2], r30), fmuls(t1[2], ratio))
+            sc0 = fadds(fmuls(s0[0], r30), fmuls(s1[0], ratio))
+            sc1 = fadds(fmuls(s0[1], r30), fmuls(s1[1], ratio))
+            sc2 = fadds(fmuls(s0[2], r30), fmuls(s1[2], ratio))
+            # every body_co joint is < MORF_END (0x2A), so the range gate reduces to "has old pose".
+            apply_morf = morf_on and (jnt in oldq)
+            if apply_morf:
+                f31 = fsubs(1.0, rate)
+                prev = oldq[jnt]
+                oq[0] = prev[0]; oq[1] = prev[1]; oq[2] = prev[2]; oq[3] = prev[3]
+                _quat_lerp_c(oq, q3, f31, q3)
+                ot = oldt[jnt]; os_ = olds[jnt]
+                tr0 = fadds(fmuls(tr0, f31), fmuls(<double>ot[0], rate))
+                tr1 = fadds(fmuls(tr1, f31), fmuls(<double>ot[1], rate))
+                tr2 = fadds(fmuls(tr2, f31), fmuls(<double>ot[2], rate))
+                sc0 = fadds(fmuls(sc0, f31), fmuls(<double>os_[0], rate))
+                sc1 = fadds(fmuls(sc1, f31), fmuls(<double>os_[1], rate))
+                sc2 = fadds(fmuls(sc2, f31), fmuls(<double>os_[2], rate))
+            _psmtx_quat_c(q3, m)
+            # M = R * diag(scale): scale column j by scale[j]; trans column = f32(trans).
+            m[0] = fmuls(m[0], sc0); m[1] = fmuls(m[1], sc1); m[2] = fmuls(m[2], sc2); m[3] = f32(tr0)
+            m[4] = fmuls(m[4], sc0); m[5] = fmuls(m[5], sc1); m[6] = fmuls(m[6], sc2); m[7] = f32(tr1)
+            m[8] = fmuls(m[8], sc0); m[9] = fmuls(m[9], sc1); m[10] = fmuls(m[10], sc2); m[11] = f32(tr2)
+            local[jnt] = [[m[0], m[1], m[2], m[3]], [m[4], m[5], m[6], m[7]], [m[8], m[9], m[10], m[11]]]
+            oldq[jnt] = (q3[0], q3[1], q3[2], q3[3])
+            oldt[jnt] = (tr0, tr1, tr2)
+            olds[jnt] = (sc0, sc1, sc2)
+        # _apply_foot030: jointBeforeCB per-leg CLOTCH lift (local translate.x -= mFootData[i].0x030).
+        if f030_0 != 0.0 and 36 in local:
+            local[36][0][3] = fsubs(local[36][0][3], f030_0)
+        if f030_1 != 0.0 and 31 in local:
+            local[31][0][3] = fsubs(local[31][0][3], f030_1)
+        return local
 
     # ==== fused anim-state machine + posMoveFromFootPos (FootSpeedF + UnderAnimState port) =======
     # Every per-frame land walk/atn/turn/roll step becomes ONE native call: the anim FrameCtrl

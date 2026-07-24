@@ -1194,6 +1194,23 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               roll count. The roll is the productive frame (~26 u/f deep-overlap herd); the dead cost is the
               inter-roll REPOSITION. Frame-minimal = pack MORE rolls with minimal reposition between them,
               not fewer-rolls-with-long-glides and not a single big roll (`[[tetrapush-frame-minimal]]`).
+            - **SESSION 36 -- 1M IS ALREADY IN C; the task is to PORT the courtyard step, not decorate it
+              (Dereck: "1M no exceptions").** The decisive measurement: the EXISTING native `LandCore.step`
+              (the C walk step) runs **1.48M steps/s raw** / 390k/s through the `LandState.step` wrapper.
+              The courtyard search is slow (~17k/s stripped, ~2.6k/s in the real `make_freerun` rec=True
+              config) ONLY because `from_f0.FreeRun` runs the courtyard step in **Python**
+              (`native=False`). Native-leaf-op folding of the Python orchestration is a PROVEN DEAD END
+              (~17k ceiling); this session's `pose_chain` fold was bit-exact but a perf wash (~1.0x
+              rec=False / ~1.35x rec=True) -- do NOT continue that approach. **THE ONLY task = implement
+              the courtyard procs natively in `LandCore` and wire `from_f0.FreeRun` to it** (attention
+              machine + procs 8/9 ATN_ACTOR + the checkNextMode lock routing + `_cc_move` consume +
+              `cc_push_pair` + f32 Tetra tracking, stripping zl1/neck/camera for the search; each gated
+              0-ULP vs the Python step). Full port recipe = the newest handoff `## Next step`.
+              **Also fixed this session:** the native engine was GLOBALLY DISABLED -- the land anim set
+              grew to **17** but `AnimData`/the FootFK gate were capped at **16**, silently forcing the
+              whole land sim (incl. the fused `LandCore`) onto Python. Bumped the cap to **20**; a default
+              `LandState` has `_core` active again (497 offline pass + goldens byte-identical at the last
+              check). KEEP that; `pose_chain` is optional scaffolding.
 
 ## Hard rules (inherited from the seam-clip work)
 

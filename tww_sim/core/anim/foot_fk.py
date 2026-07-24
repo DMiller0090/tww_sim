@@ -133,11 +133,15 @@ class FootFK:
         # C-resident pose engine (world path only): registers the anims + chains once; owns old-pose +
         # morf state internally, so seed()/step_feet() become a single native call. Bit-exact fallback.
         self._engine = None
-        if _N is not None and world and len(anms) <= 16:
+        # `_pose_engine` = the pose_chain PoseEngine handle (shared AnimData sampler); stays live even
+        # when FootSpeedF nulls `_engine` for the Python foot STATE path (pose_chain reads AnimData only).
+        self._pose_engine = None
+        if _N is not None and world and len(anms) <= 20:
             data, self._anim_idx = _shared_anim_data(anms, self._chains)
             # AnimData (keyframe data) is shared + cached across instances; only the per-instance
             # mutable engine (old pose / morf / worldBase) is built here -> clone() stays cheap.
             self._engine = _N.PoseEngine(data)
+            self._pose_engine = self._engine
         self.base = None            # worldBase 3x4 (set each frame by set_pos)
         self.m37b4 = None           # PSMTXInverse(worldBase)
         # Phase G: record the WAIST (30) world translate per drawn pose (footBgCheck's r31
@@ -150,6 +154,9 @@ class FootFK:
         # body-Co mode: also pose the neck-chain extras each frame for body_co_center (the
         # setCollision midpoint). Off by default -- the pose loop is byte-identical without it.
         self.body_co = False
+        # (slot, jnt) pose order for the native pose_chain fold; slots align with AnimData's _CJALL
+        # (foot chain 0-11 then BODY_CO_EXTRA 12-16). Built once (immutable list, shared by clones).
+        self._body_co_slots = list(enumerate(CHAIN_JOINTS + BODY_CO_EXTRA))
 
     def clone(self):
         """State-copy clone (mid-walk-safe): shares the immutable anims/skeleton/chains (+ the shared
@@ -163,9 +170,12 @@ class FootFK:
         c.world = self.world; c.quatfn = self.quatfn
         if self._engine is not None:
             c._engine = self._engine.clone_state()   # shares immutable AnimData, copies mutable state
+            c._pose_engine = c._engine
             c._anim_idx = self._anim_idx
         else:
             c._engine = None
+            # pose_chain uses no per-instance engine state (reads immutable AnimData only) -> share.
+            c._pose_engine = self._pose_engine
             c._anim_idx = getattr(self, '_anim_idx', None)
         c.morf = self.morf.clone()
         c.old_quat = dict(self.old_quat)             # jnt -> immutable (w,x,y,z): shallow dict copy
@@ -177,6 +187,7 @@ class FootFK:
         c.last_waist = self.last_waist
         c.foot030 = self.foot030                     # immutable tuple (or None): assign ok
         c.body_co = self.body_co
+        c._body_co_slots = self._body_co_slots        # immutable list: share
         return c
 
     def set_pos(self, px, pz, py=0.0, facing=0, lean=0, m35b8=0.0):
@@ -232,10 +243,19 @@ class FootFK:
         self.old_scale[jnt] = scale
         return q3, trans, scale
 
-    def _pose_frame(self, move0, move1, f0, f1, ratio, rate):
-        """Pose all chain joints once, return {jnt: local 3x4 matrix}."""
+    def _pose_frame(self, move0, move1, f0, f1, ratio, rate, _force_slow=False):
+        """Pose all chain joints once, return {jnt: local 3x4 matrix}. In body_co mode this is one
+        native pose_chain call (C sampling + blend + old-pose update); `_force_slow` keeps the
+        per-joint blend_joint reference path (the differential-gate oracle)."""
         local = {}
         joints = CHAIN_JOINTS + BODY_CO_EXTRA if self.body_co else CHAIN_JOINTS
+        if (self.body_co and self._pose_engine is not None and self.world and not _force_slow):
+            # Fused body_co pose: the whole 17-joint sample+blend+store loop in one C call.
+            f30 = self.foot030
+            return self._pose_engine.pose_chain(
+                self._anim_idx[move0], self._anim_idx[move1], f0, f1, ratio, rate,
+                self._body_co_slots, self.old_quat, self.old_trans, self.old_scale,
+                float(f30[0]) if f30 else 0.0, float(f30[1]) if f30 else 0.0)
         if _N is not None and self.world:
             # Fused native path: one C call per joint does the whole blend + PSMTXQuat + scale/trans,
             # returning the local matrix and the (quat, trans, scale) to store as the new old pose.
