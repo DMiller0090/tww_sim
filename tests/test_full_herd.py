@@ -369,6 +369,30 @@ def test_terminal_grazing_objective_seeks_freeze_ok_without_breaking_placement_m
     assert c['talk_safe'] and not bg['run']._follow_warned
 
 
+def test_place_on_thread_freezes_tetra_on_the_thread_from_an_online_rest_arrival(env, hl):
+    """**The clean grazing-arrival recipe, gated (session 49).** Session 49 ran route (a) piece 1 (the
+    grazing terminal off the regenerated chain) and found it reaches `freeze_ok` + receding but lands
+    Tetra 10.85 u off a coord -- the deep->freeze_ok separation of the hot -23 EBS glide drags her
+    ~10 u LATERALLY off the thin thread. The fix is geometric: from a near-REST arrival behind the
+    coord a single gentle down-line push ejects Tetra ALONG the line, so she freezes ON-thread.
+
+    Gated on a SYNTHETIC frozen arrival (not chain-reachable, so no bit-confirm -- this gates the
+    FREEZE/PLACEMENT physics + the recipe, like the walk gate): from rest, `place_on_thread` reaches
+    `arrival_ok` with pd < 1 and ~0 lateral drift, at `centre_feet >= 80`. This makes the session-49
+    target concrete: the chain must deliver Link on-line-behind + near-rest, not the hot EBS glide."""
+    for cf in (74.0, 76.0, 78.0):
+        arr = F.synthetic_frozen_arrival(env, hl, 241, target_cf=cf, lat_off=0.0, momentum='rest')
+        # the arrival itself is below the bar (a placement push is still needed to freeze her)
+        assert F._centre_feet(arr['run']) < F.CO_RADII_BAR
+        p = F.place_on_thread(arr, hl)
+        assert p['freeze_ok'] and p['centre_feet'] >= F.CO_RADII_BAR   # the push reaches the bar
+        assert p['pd'] < 1.0                                           # ON the thread, not 10.85 off
+        assert abs(p['lat_drift']) < 1.0                              # ejected ALONG the line
+        assert p['approach'] <= 3.0 and p['arrival_ok']              # near-rest -> arrival_ok
+        # the log carries the arrival + the push (bit-confirmable only for a chain-reachable arrival)
+        assert p['frames'] == len(p['log'])
+
+
 @pytest.mark.slow
 def test_cycle_unit_chains_from_the_recorded_entry_and_bit_confirms(env, hl, box):
     """What IS established (s43): the generic cycle unit -- junction beam then roll -- chains a

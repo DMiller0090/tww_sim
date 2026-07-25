@@ -715,6 +715,66 @@ def arrival_quality(placed, hl, placements=None, *, band_tol=2.0, approach_tol=3
                 arrival_ok=freeze_ok and pd <= band_tol and ar <= approach_tol)
 
 
+def place_on_thread(arrival, hl, placements=None, *, mags=(0.08, 0.15, 0.25), max_frames=18):
+    """**The CLEAN grazing-arrival recipe** (milestone 2b, session 49): freeze Tetra ON the genuine
+    thread by placing from an ON-LINE, near-REST arrival.
+
+    Session 49 traced why the current terminal grazing lands 10.85 u off (not on) a coord even though
+    it reaches `freeze_ok` + receding: the hot EBS glide (speedF ~ -23) overshoots DOWN-herd THROUGH
+    Tetra, so the deep->freeze_ok separation ejects her ~10 u LATERALLY off the ~5e-4 u-thin thread
+    (measured: from the on-coord frame NO separation direction -- neutral / up-push / ess -- keeps her
+    within pd 9; all reach lat -9..-15 as centre_feet climbs past 80). The lateral drag IS the
+    separation of a hot, off-center approach.
+
+    The fix is geometric: if Link sits ON the herd line BEHIND Tetra (lateral-matched to the coord) at
+    NEAR-REST, a single gentle down-line crawl-push ejects her ALONG the line -- so she freezes
+    on-thread with ~0 lateral drift. Validated here: from a `synthetic_frozen_arrival(momentum='rest',
+    lat_off=0)` seeded just below the bar, one msd~0.08-0.25 push down `hl.bearing_bam()` freezes Tetra
+    at pd < 1 (lateral drift ~ 0.02 u), `arrival_ok` True. So route (a)'s chain/terminal must deliver
+    Link on-line-behind + near-rest before the placing push (a decelerating, lateral-centered approach),
+    NOT the sustained EBS glide -- that is the concrete next target.
+
+    Sweeps the gentle push magnitude, keeps the min-pd freeze at `centre_feet >= CO_RADII_BAR`. Returns
+    ``dict(run, log, frames, pd, centre_feet, lat_drift, approach, freeze_ok, arrival_ok, msd)``; `log`
+    carries the arrival's log + the push (bit-confirmable only when the arrival is chain-reachable --
+    a synthetic arrival does not replay, like `walk_to_entry`)."""
+    if placements is None:
+        placements, _ = seeds.load_placements()
+    r0 = arrival['run']
+    lat0 = hl.lateral(r0.tx, r0.tz)
+    down = hl.bearing_bam()
+    best = None
+    for msd in mags:
+        r = r0.clone()
+        inputs = []
+        for _f in range(int(max_frames)):
+            sx, sy = stick_for_bearing(down, int(r.csangle), msd=msd)
+            d = dict(stickX=sx, stickY=sy, buttons=0, triggerL=0,
+                     substickX=T.CSTICK_NEUTRAL, substickY=0)
+            r.step(d)
+            inputs.append(d)
+            if r._follow_warned:
+                break
+            if _centre_feet(r) < CO_RADII_BAR:
+                continue
+            pd = _placement_dist(r, placements)
+            cand = dict(run=r.clone(), inputs=list(inputs), pd=pd, msd=msd,
+                        centre_feet=_centre_feet(r), lat_drift=hl.lateral(r.tx, r.tz) - lat0,
+                        approach=_approach_rate(r))
+            if best is None or pd < best['pd']:
+                best = cand
+            break                                          # first freeze on this glide is the graze
+    if best is None:                                       # never froze (stayed deep or followed)
+        best = dict(run=r0, inputs=[], pd=_placement_dist(r0, placements), msd=None,
+                    centre_feet=_centre_feet(r0), lat_drift=0.0, approach=_approach_rate(r0))
+    freeze_ok = best['centre_feet'] >= CO_RADII_BAR
+    return dict(run=best['run'], log=list(arrival.get('log', [])) + best['inputs'],
+                frames=arrival.get('frames', 0) + len(best['inputs']),
+                pd=best['pd'], centre_feet=best['centre_feet'], lat_drift=best['lat_drift'],
+                approach=best['approach'], msd=best['msd'], freeze_ok=freeze_ok,
+                arrival_ok=freeze_ok and best['pd'] <= 2.0 and best['approach'] <= 3.0)
+
+
 def separation_scan(placed, hl, placements=None, *, n_dirs=48):
     """**The coupled-entry BARRIER, quantified against the decomp bar** (milestone 2b): from a state
     where Tetra sits ON a genuine coord, report whether Link can leave for the entry without ejecting
@@ -1297,6 +1357,30 @@ def _cmd_arrivals(env, hl, kw):
           "     grazing-chain rank can gate on it before the walk / the chain re-run.")
 
 
+def _cmd_place(env, hl, kw):
+    """**The clean grazing-arrival recipe demo** (milestone 2b, session 49): from a near-REST arrival
+    behind a coord, `place_on_thread`'s single gentle down-line push freezes Tetra ON the thread (pd
+    < 1, ~0 lateral drift) -- the arrival the hot EBS terminal glide CANNOT reach (session 49 measured
+    it drag her from pd 1.98 to 10.85 LATERALLY as it separates to freeze_ok). Sweeps the arrival
+    depth (centre_feet just below the bar) to show the freeze is robust; the lever is the ARRIVAL
+    MOMENTUM (near-rest), not the lateral position -- even an off-center rest arrival places clean,
+    because a gentle push barely drags, while the -23 glide overshoots and drags ~10 u."""
+    idx = int(kw.get('coord', 241))
+    placements, _ = seeds.load_placements()
+    print("PLACE ON THREAD (milestone 2b, the clean grazing arrival): coord idx %d\n" % idx)
+    print("  arrival_cf  freeze pd   lat_drift  centre_feet  freeze_ok  arrival_ok")
+    for cf in (74.0, 76.0, 78.0):
+        arr = synthetic_frozen_arrival(env, hl, idx, target_cf=cf, lat_off=0.0, momentum='rest')
+        p = place_on_thread(arr, hl, placements)
+        print("    %5.1f      %6.2f      %+6.3f     %6.1f       %-5s      %s"
+              % (cf, p['pd'], p['lat_drift'], p['centre_feet'], p['freeze_ok'], p['arrival_ok']))
+    print("\n  => from a near-REST arrival the placing push ejects Tetra ALONG the line, so she freezes\n"
+          "     ON-thread (pd < 1, ~0 lateral drift), arrival_ok. Contrast the current terminal's hot\n"
+          "     -23 EBS glide, which overshoots and drags her 10.85 u off-thread (session 49). So route\n"
+          "     (a)'s chain must decelerate Link to near-rest behind Tetra before the placing push, NOT\n"
+          "     sustain the EBS glide -- the concrete next target.")
+
+
 def main(argv):
     import warnings
     warnings.simplefilter('ignore')
@@ -1316,9 +1400,11 @@ def main(argv):
         _cmd_walk(env, hl, kw)
     elif cmd == 'arrivals':
         _cmd_arrivals(env, hl, kw)
+    elif cmd == 'place':
+        _cmd_place(env, hl, kw)
     else:
         print("usage: python -m harness.tetrapush.full_herd "
-              "{sep | box | plan | endgame | walk | arrivals}")
+              "{sep | box | plan | endgame | walk | arrivals | place}")
 
 
 if __name__ == '__main__':
