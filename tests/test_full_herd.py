@@ -313,6 +313,62 @@ def test_walk_to_entry_is_clean_from_rest_and_flags_a_hot_arrival(env, hl):
         "freeze_ok position with a HOT arrival must be flagged (momentum is the other half)"
 
 
+def test_arrival_quality_gates_position_and_momentum(env, hl):
+    """**Route a, piece 1 -- the CHEAP arrival gate (session 48).** `arrival_quality` is the monotone
+    predictor a grazing-chain candidate is rejected by BEFORE paying `walk_to_entry` / the 800 s
+    chain. It must reproduce the session-47 finding as a scalar off the placed state alone: at the
+    SAME `freeze_ok` position, a REST arrival is `arrival_ok` and a hot down-herd EBS is not -- the
+    momentum half, `approach_rate` (Link's velocity component toward Tetra), is what separates them.
+
+    Gated on the two synthetic frozen arrivals (not chain-reachable, so no bit-confirm -- this gates
+    the PREDICTOR's shape + agreement with the expensive walk, not a search result). The fields are
+    self-consistent and the verdict agrees with `walk_to_entry`'s measured plow."""
+    rest = F.synthetic_frozen_arrival(env, hl, 241, target_cf=88.0, momentum='rest')
+    ebs = F.synthetic_frozen_arrival(env, hl, 241, target_cf=88.0, momentum='ebs')
+    qr = F.arrival_quality(rest, hl)
+    qe = F.arrival_quality(ebs, hl)
+
+    # both are the SAME freeze_ok position; the fields are self-consistent
+    for q in (qr, qe):
+        assert q['freeze_ok'] and q['centre_feet'] >= F.CO_RADII_BAR
+        assert q['co_radii_bar'] == F.CO_RADII_BAR == 80.0
+        assert q['deficit'] == pytest.approx(max(0.0, q['co_radii_bar'] - q['centre_feet']))
+        assert q['receding'] == (q['approach_rate'] <= 0.0)
+
+    # POSITION is identical; MOMENTUM is what differs and what the verdict keys on
+    assert qr['approach_rate'] < 1.0 and qr['receding']          # near-rest / receding
+    assert qe['approach_rate'] > 10.0 and not qe['receding']     # closing on Tetra at EBS speed
+    assert qr['arrival_ok'] and not qe['arrival_ok']
+
+    # the cheap verdict AGREES with the expensive walk (the predictor it stands in for)
+    assert F.walk_to_entry(rest, hl)['clean'] == qr['arrival_ok']
+    assert F.walk_to_entry(ebs, hl)['clean'] == qe['arrival_ok']
+
+
+def test_terminal_grazing_objective_seeks_freeze_ok_without_breaking_placement_mode(env, hl, box):
+    """**The re-ranked terminal (session 48), gated structurally.** `terminal_targeting`'s default
+    `objective='placement'` (the s44 nearest-coord rank) must be byte-for-byte unchanged, and the new
+    `objective='grazing'` must seek an endpoint that is ALSO `freeze_ok` and receding -- the arrival
+    `walk_to_entry` needs -- trading a little placement distance for it. Off cheap cycle-1 nodes (far
+    from the cluster, but the rank behaviour is what is gated); the grazing winner bit-confirms."""
+    nodes = F.cycle1_nodes(env, hl, box, beam=3)
+    tt_p = F.terminal_targeting(nodes, hl, max_frames=4, beam=8, objective='placement')
+    tt_g = F.terminal_targeting(nodes, hl, max_frames=4, beam=8, objective='grazing')
+    bp, bg = tt_p['best'], tt_g['best']
+
+    # placement mode: the rank key IS the placement distance (existing behaviour preserved)
+    assert bp['score'] == bp['dist'] == tt_p['dist']
+    # grazing mode: an endpoint closer to the bar AND less closing than the deep-contact lander
+    qp, qg = F.arrival_quality(bp, hl), F.arrival_quality(bg, hl)
+    assert qg['deficit'] <= qp['deficit']
+    assert qg['approach_rate'] <= qp['approach_rate']
+    assert bg['score'] <= bg['dist']                 # grazing score credits the freeze/momentum terms
+
+    c = F.confirm_plan(env, hl, bg)
+    assert c['bit_exact'], "the grazing terminal plan did not replay 0-ULP"
+    assert c['talk_safe'] and not bg['run']._follow_warned
+
+
 @pytest.mark.slow
 def test_cycle_unit_chains_from_the_recorded_entry_and_bit_confirms(env, hl, box):
     """What IS established (s43): the generic cycle unit -- junction beam then roll -- chains a

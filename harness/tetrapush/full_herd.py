@@ -664,6 +664,57 @@ def _centre_feet(run):
     return math.hypot(cx[0] - run.tx, cx[-1] - run.tz)
 
 
+def _link_velocity(run):
+    """Link's ground velocity (x, z) in u/frame. speedF integrates the position along the TRAVEL
+    angle (`current.angle.y`), not the shape facing -- in the EBS backslide the two differ by
+    0x8000, so it is `travel` that gives the direction Link actually moves."""
+    th = run.link.travel * (2.0 * math.pi / 65536.0)
+    return (run.link.speedF * math.sin(th), run.link.speedF * math.cos(th))
+
+
+def _approach_rate(run):
+    """Link's ground-velocity component TOWARD Tetra's feet (u/frame): +ve = closing (the plow
+    re-fires as centre_feet drops below the bar), <= 0 = receding. This is the MOMENTUM half of the
+    coupled-entry barrier (session 47): at the SAME `freeze_ok` position a near-rest/receding arrival
+    (approach ~ 0) walks clean, but a hot down-herd EBS (approach ~ +25.6) re-plows Tetra tens of u
+    before the walk can reverse it. `arrival_quality` gates on it."""
+    vx, vz = _link_velocity(run)
+    dx, dz = run.tx - run.link.pos_x, run.tz - run.link.pos_z
+    d = math.hypot(dx, dz)
+    if d < 1e-9:
+        return 0.0
+    return (vx * dx + vz * dz) / d
+
+
+def arrival_quality(placed, hl, placements=None, *, band_tol=2.0, approach_tol=3.0):
+    """**The CHEAP coupled-arrival gate** (milestone 2b, route a piece 1): does a placement satisfy
+    BOTH arrival constraints the grazing chain must hit, so a chain candidate can be REJECTED before
+    paying `walk_to_entry` (or the 800 s chain re-run)?
+
+    The two halves (both decomp/live-grounded, sessions 46 + 47):
+      * POSITION -- Tetra ON a genuine coord (`placement_dist <= band_tol`) at `freeze_ok`
+        (`centre_feet >= CO_RADII_BAR`, so a separating step ejects zero); and
+      * MOMENTUM -- Link near-rest / receding up-herd (`approach_rate <= approach_tol`), else the
+        hot EBS re-plows her even from a freeze_ok position (the session-47 finding).
+
+    Pure prediction off the placed state (no walk, no rollout), so it is a monotone PREDICTOR the
+    exact `walk_to_entry`/`confirm_plan` bit-confirm sits behind (the method reference: cheap
+    predictor + exact confirm, no calibration). Returns the measured fields + the `arrival_ok`
+    verdict; `approach_tol` is a "few u/f", not a tuned magic constant -- the clean/hostile split is
+    0 vs +25.6 u/f, a wide margin either side of it."""
+    if placements is None:
+        placements, _ = seeds.load_placements()
+    run = placed['run']
+    pd = _placement_dist(run, placements)
+    cf = _centre_feet(run)
+    ar = _approach_rate(run)
+    freeze_ok = cf >= CO_RADII_BAR
+    return dict(placement_dist=pd, centre_feet=cf, co_radii_bar=CO_RADII_BAR,
+                deficit=max(0.0, CO_RADII_BAR - cf), freeze_ok=freeze_ok,
+                speedF=run.link.speedF, approach_rate=ar, receding=ar <= 0.0,
+                arrival_ok=freeze_ok and pd <= band_tol and ar <= approach_tol)
+
+
 def separation_scan(placed, hl, placements=None, *, n_dirs=48):
     """**The coupled-entry BARRIER, quantified against the decomp bar** (milestone 2b): from a state
     where Tetra sits ON a genuine coord, report whether Link can leave for the entry without ejecting
@@ -972,10 +1023,32 @@ def _terminal_alphabet(run, hl, *, n_dirs=24, mags=(0.08, 0.2, 0.35, 0.5, 0.7, 1
     return list(out)
 
 
+def _terminal_score(run, hl, placements, objective, w_deficit, w_approach):
+    """The terminal beam's rank key. ``'placement'`` (the s44 default) = pure Tetra->coord distance,
+    the deepest-contact lander. ``'grazing'`` (route a, session 48) additionally penalises the
+    coupled-entry `deficit` (`CO_RADII_BAR - centre_feet`, below the bar) and a closing
+    `approach_rate`, so the endpoint the beam seeks is on-thread AND freeze_ok AND near-rest --
+    the arrival `walk_to_entry` needs, not merely the closest coord. Returns ``(score, placement)``;
+    in placement mode ``score == placement`` so the existing rank is byte-for-byte unchanged."""
+    pd = _placement_dist(run, placements)
+    if objective == 'placement':
+        return pd, pd
+    deficit = max(0.0, CO_RADII_BAR - _centre_feet(run))
+    return pd + w_deficit * deficit + w_approach * max(0.0, _approach_rate(run)), pd
+
+
 def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
-                       n_dirs=24, verbose=False):
+                       n_dirs=24, objective='placement', w_deficit=1.0, w_approach=2.0,
+                       verbose=False):
     """**The TERMINAL cycle, ranked by PLACEMENT distance instead of u/frame** -- the endgame stage
     the chain hands off to once one more full roll would OVERSHOOT the cluster.
+
+    ``objective`` selects the rank (`_terminal_score`): the s44 ``'placement'`` (nearest coord, the
+    deep-contact lander) or ``'grazing'`` (route a, session 48) -- the same beam, but ranked to seek
+    an on-thread endpoint that is ALSO `freeze_ok` and near-rest, the coupled-entry arrival
+    `walk_to_entry` needs. Grazing is the rank the re-ranked chain will inherit; run here it MEASURES
+    how close the terminal alone can graze from a given endpoint (s46: from the deep 3-cycle endpoint
+    it cannot -- the grazing term belongs on the chain).
 
     The geometry forces this (`endgame_geom`): each full cycle herds ~280 u but only ~99 u along
     (and a ~28 u lateral correction) separate the 3-cycle endpoint from the nearest coord, so a full
@@ -1002,10 +1075,10 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
     best = None
     per_node = []
     for node in nodes:
-        d0 = _placement_dist(node['run'], placements)
+        s0, d0 = _terminal_score(node['run'], hl, placements, objective, w_deficit, w_approach)
         node_best = dict(run=node['run'], log=node['log'], frames=node['frames'], dist=d0,
-                         plan=node.get('plan', []))
-        if best is None or d0 < best['dist']:
+                         score=s0, plan=node.get('plan', []))
+        if best is None or s0 < best['score']:
             best = node_best
         live = [dict(run=node['run'], log=node['log'], frames=node['frames'])]
         for _f in range(int(max_frames)):
@@ -1025,14 +1098,16 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                         if tag in seen:
                             continue
                         seen.add(tag)
-                        dist = _placement_dist(r, placements)
-                        cand = dict(run=r, log=nd['log'] + [d], frames=nd['frames'] + 1, dist=dist)
+                        score, dist = _terminal_score(r, hl, placements,
+                                                      objective, w_deficit, w_approach)
+                        cand = dict(run=r, log=nd['log'] + [d], frames=nd['frames'] + 1,
+                                    dist=dist, score=score)
                         nxt.append(cand)
-                        if dist < best['dist']:
+                        if score < best['score']:
                             best = dict(cand, plan=node.get('plan', []))
-                        if dist < node_best['dist']:
+                        if score < node_best['score']:
                             node_best = dict(cand, plan=node.get('plan', []))
-            nxt.sort(key=lambda c: c['dist'])
+            nxt.sort(key=lambda c: c['score'])
             live = nxt[:int(beam)]
             if not live:
                 break
@@ -1149,6 +1224,12 @@ def _cmd_endgame(env, hl, kw):
 
     # milestone 2b: the coupled reposition (Link -> entry, Tetra holds) + the measured barrier
     sc = separation_scan(best, hl, placements)
+    aq = arrival_quality(best, hl, placements)
+    print("\n  ARRIVAL GATE (route a, both coupled halves -- the cheap pre-chain check):")
+    print("    POSITION: Tetra %.2f u from a coord, centre_feet %.1f (freeze_ok=%s)"
+          % (aq['placement_dist'], aq['centre_feet'], aq['freeze_ok']))
+    print("    MOMENTUM: approach_rate %+.2f u/f toward Tetra (receding=%s) -> arrival_ok=%s"
+          % (aq['approach_rate'], aq['receding'], aq['arrival_ok']))
     print("\n  SEPARATION BARRIER (why Link cannot yet leave for the entry):")
     print("    placement centre_feet %.1f u vs the %.0f u Co-radii bar -> %.1f u TOO DEEP "
           "(freeze_ok=%s)" % (sc['centre_feet'], sc['co_radii_bar'], sc['deficit'], sc['freeze_ok']))
@@ -1193,6 +1274,29 @@ def _cmd_walk(env, hl, kw):
           "     grazing chain (route a) to arrive NEAR-REST / receding up-herd, not a hot EBS at Tetra.")
 
 
+def _cmd_arrivals(env, hl, kw):
+    """**The CHEAP arrival gate demo** (route a, piece 1): `arrival_quality` scores the SAME
+    freeze_ok position two ways -- from rest (clean) and from a hot EBS (re-plows) -- and the
+    `arrival_ok` verdict separates them WITHOUT running the walk. This is the monotone predictor a
+    grazing-chain candidate is gated by before paying `walk_to_entry`/the 800 s chain."""
+    idx = int(kw.get('coord', 241))
+    cf = float(kw.get('cf', 88.0))
+    placements, _ = seeds.load_placements()
+    print("ARRIVAL GATE (cheap, both coupled halves): coord idx %d, target centre_feet %.0f\n"
+          % (idx, cf))
+    print("  arrival  freeze_ok  approach(u/f)  receding  arrival_ok   walk max_disp  clean")
+    for mom in ('rest', 'ebs'):
+        placed = synthetic_frozen_arrival(env, hl, idx, target_cf=cf, momentum=mom)
+        aq = arrival_quality(placed, hl, placements)
+        w = walk_to_entry(placed, hl, placements)
+        print("  %-4s        %-5s     %+7.2f       %-5s     %-5s        %8.3f     %s"
+              % (mom, aq['freeze_ok'], aq['approach_rate'], aq['receding'],
+                 aq['arrival_ok'], w['max_tetra_disp'], w['clean']))
+    print("\n  => the cheap `arrival_ok` (freeze_ok AND approach_rate <= a few u/f) agrees with the\n"
+          "     expensive walk: it PASSES the clean rest arrival and REJECTS the hot EBS one, so a\n"
+          "     grazing-chain rank can gate on it before the walk / the chain re-run.")
+
+
 def main(argv):
     import warnings
     warnings.simplefilter('ignore')
@@ -1210,8 +1314,11 @@ def main(argv):
         _cmd_endgame(env, hl, kw)
     elif cmd == 'walk':
         _cmd_walk(env, hl, kw)
+    elif cmd == 'arrivals':
+        _cmd_arrivals(env, hl, kw)
     else:
-        print("usage: python -m harness.tetrapush.full_herd {sep | box | plan | endgame | walk}")
+        print("usage: python -m harness.tetrapush.full_herd "
+              "{sep | box | plan | endgame | walk | arrivals}")
 
 
 if __name__ == '__main__':
