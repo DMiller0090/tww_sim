@@ -56,10 +56,15 @@ TWO THINGS THIS SESSION HAD TO FIX BEFORE ANY OF IT SEARCHED CORRECTLY
     times over.
 
 Pure stdlib, no Dolphin. CLI: ``python -m harness.tetrapush.full_herd {sep | box | plan | endgame}``.
-The ``endgame`` command now also runs the coupled-entry stage (milestone 2b): `separation_scan`
-measures the deep-contact BARRIER (placement lands at dist ~47 u, off which any step ejects Tetra
-off the thin genuine thread) and `entry_targeting` is the reposition beam that will steer Link back
-to the final-clip entry once fed a GRAZING placement (route a).
+The ``endgame`` command also runs the coupled-entry stage (milestone 2b). Session 46 quantified the
+BARRIER against the decomp bar: the plow ejects Tetra by `CO_RADII_BAR - centre_feet`, so she is
+FROZEN on her coord exactly when Link's exec Co-centre sits >= 80 u (`LINK_CO_R + TETRA_CO_R`) from
+her. `separation_scan` reports `centre_feet`/`deficit`/`freeze_ok`; the s44 placement lands 15.4 u
+below the bar (deep contact) so any step ejects her. The FIX is a GRAZING arrival (chain ranked to
+place her at `centre_feet >= 80`, route a). ABOVE the bar 2b reduces to a Link-ONLY navigation to the
+entry (Tetra untouched) -- `entry_targeting`'s down-herd push fan STALLS there (the EBS backslide
+carries Link off the up-herd entry), so it stays as the in-band GUARD and the reposition wants a
+WALK/EBS planner.
 """
 import math
 
@@ -68,8 +73,14 @@ from harness.tetrapush import search as S
 from harness.tetrapush import two_roll as T
 from harness.tetrapush.reposition import HerdLine, ESS_DOWN
 from harness.tetrapush.steered_reposition import _bearing, _s16
+from harness.tetrapush.from_f0 import _computed_center, cc_push_pair
+from harness.tetrapush.tetra_plow import LINK_CO_R, TETRA_CO_R
 from tww_sim.land.land import FRONT_ROLL
 from tww_sim.land.plan_land._primitives import stick_for_bearing
+
+# The clean-separation bar (s46): the plow depth is `CO_RADII_BAR - dist(exec_centre, Tetra_feet)`,
+# so it ejects ZERO -- Tetra FROZEN -- once the exec centre sits >= 80 u away. See `_centre_feet`.
+CO_RADII_BAR = LINK_CO_R + TETRA_CO_R
 
 # The camera's slew authority over a roll's frames (~460-530 BAM/frame, `steered_reposition
 # .camera_authority`) bounds the reachable band; 128 BAM resolves the ~+-300 BAM viable window.
@@ -631,20 +642,35 @@ def _entry_cost(run):
     return math.hypot(run.link.pos_x - erp[0], run.link.pos_z - erp[1])
 
 
-def separation_scan(placed, hl, placements=None, *, n_dirs=48):
-    """**The measured coupled-entry BARRIER** (milestone 2b): from a state where Tetra sits ON a
-    genuine coord, scan every one-frame move and report the best Tetra-still-on-coord step and
-    whether ANY step both keeps her on-coord AND grows the Link<->Tetra gap toward the entry.
+def _centre_feet(run):
+    """Horizontal distance from Link's ANIMATED exec Co-centre (`_computed_center`, the value the
+    console push `cc_push_pair` consumes) to Tetra's feet -- the quantity the plow depth is
+    `CO_RADII_BAR - this`. It, NOT the feet-to-feet distance, decides whether a step ejects Tetra:
+    once it is >= `CO_RADII_BAR` (80 u) the push is zero and she is frozen on her coord. The centre
+    leads the feet by a pose-dependent ~17 u, so the feet can be well inside 80 while the centre is
+    at the bar."""
+    cx = _computed_center(run.link, init_frame=False)
+    return math.hypot(cx[0] - run.tx, cx[-1] - run.tz)
 
-    Why this exists: `terminal_targeting` lands Tetra on a coord only at DEEP contact (measured
-    dist(Link,Tetra) ~= 47.5 u, depth ~= 32 u), because the genuine coords form a THIN thread
-    (session 26: ~46 u long, ~5e-4 u perpendicular) that the plow can only reach by pushing INTO it.
-    From deep contact every separation step ejects Tetra ~16 u -- OFF the thread (best reachable
-    placement ~= 4.2 u, out of band) -- and the placed state is already the glide's entry-distance
-    MINIMUM (the entry is up-herd, opposite the down-herd glide), so no forward step reduces the
-    159.8 u gap either. This quantifies both facts so the fix (a GRAZING arrival -- the chain ranked
-    to reach the band on-line with Link near dist 80 and decelerating up-herd, `[[tetrapush-frame-minimal]]`
-    route a) is aimed, not guessed. Returns the scan summary; pure prediction, no state kept."""
+
+def separation_scan(placed, hl, placements=None, *, n_dirs=48):
+    """**The coupled-entry BARRIER, quantified against the decomp bar** (milestone 2b): from a state
+    where Tetra sits ON a genuine coord, report whether Link can leave for the entry without ejecting
+    her, and -- when he cannot -- BY HOW MUCH the placement is too deep.
+
+    The pivot (session 46): the plow depth is `CO_RADII_BAR - centre_feet` (`_centre_feet` = the exec
+    Co-centre to Tetra), so a separating step ejects ZERO -- Tetra is FROZEN -- exactly when the
+    placement's centre_feet >= `CO_RADII_BAR` (80 u, decomp-exact). `terminal_targeting` lands Tetra
+    on a coord only at DEEP contact (centre_feet ~= 64.6 u, ~15 u below the bar), because the genuine
+    coords form a THIN thread (session 26: ~46 u long, ~5e-4 u perpendicular) the plow can only reach
+    by pushing INTO it; there every separation step ejects her off the thread. So the fix is a
+    GRAZING arrival -- the chain/terminal ranked to reach the band with the placing push the LAST
+    light touch, `centre_feet` up at the bar. Above the bar the coupling is BROKEN and 2b reduces to
+    a Link-ONLY navigation to the entry (Tetra frozen); see `entry_targeting`.
+
+    Returns the scan summary + the measured bar fields (`centre_feet`, `co_radii_bar`, `deficit`,
+    `freeze_ok`); pure prediction, no state kept. `clean_separation` is retained (the strict
+    one-step form); `freeze_ok` (`centre_feet >= bar`) is the actionable grazing target."""
     if placements is None:
         placements, _ = seeds.load_placements()
 
@@ -653,6 +679,7 @@ def separation_scan(placed, hl, placements=None, *, n_dirs=48):
 
     r0 = placed['run']
     dist0 = math.hypot(r0.link.pos_x - r0.tx, r0.link.pos_z - r0.tz)
+    cf0 = _centre_feet(r0)
     rows = []
     for (sx, sy) in _terminal_alphabet(r0, hl, n_dirs=n_dirs):
         for l in (0, 1):
@@ -668,6 +695,8 @@ def separation_scan(placed, hl, placements=None, *, n_dirs=48):
     clean = [x for x in rows if x[0] <= 2.0 and x[1] > 80.0 and x[2] < _entry_cost(r0)]
     return dict(start_dist=dist0, start_entry=_entry_cost(r0), start_placement=pdist(r0),
                 best_step_placement=best_pd, clean_separation=bool(clean),
+                centre_feet=cf0, co_radii_bar=CO_RADII_BAR,
+                deficit=max(0.0, CO_RADII_BAR - cf0), freeze_ok=cf0 >= CO_RADII_BAR,
                 n_steps=len(rows))
 
 
@@ -682,10 +711,16 @@ def entry_targeting(placed, hl, placements=None, *, max_frames=40, beam=48, n_di
     global closest-to-entry in-band state. Any survivor carries its FULL log, so `confirm_plan`
     replays the WHOLE state-2 -> placement -> reposition sequence 0-ULP.
 
-    NOTE (`separation_scan`): from a DEEP-contact placement (the current terminal's output) this beam
-    is BLOCKED at frame 0 -- separating ejects Tetra off the thin genuine thread -- so it is inert
-    until fed a GRAZING placement (route a). It is the validated reposition primitive the grazing
-    terminal will hand off to, not a standalone solve yet."""
+    NOTE (`separation_scan`, session 46): from a DEEP-contact placement (`centre_feet` < the 80 u
+    bar, the current terminal's output) this beam is BLOCKED at frame 0-1 -- separating ejects Tetra
+    off the thin genuine thread. Above the bar (`freeze_ok`) Tetra is FROZEN and the coupling is
+    broken, but this beam still STALLS there: its `_terminal_alphabet` is a down-herd PUSH fan, and
+    Link leaves the placement in a hot EBS backslide (speedF ~-23) whose momentum carries him AWAY
+    from the up-herd entry faster than a push-bearing stick can turn him (measured: greedy nav grows
+    the entry gap). Above the bar 2b is a Link-ONLY navigation problem -- kill the backslide, walk to
+    the entry, Tetra untouched -- so the correct tool is a WALK/EBS planner (`plan_land`), not this
+    push fan. This beam remains the in-band GUARD (it proves Tetra holds); the navigation is the open
+    milestone-2b piece once the chain arrives grazing (route a)."""
     if placements is None:
         placements, _ = seeds.load_placements()
 
@@ -933,10 +968,11 @@ def _cmd_endgame(env, hl, kw):
     # milestone 2b: the coupled reposition (Link -> entry, Tetra holds) + the measured barrier
     sc = separation_scan(best, hl, placements)
     print("\n  SEPARATION BARRIER (why Link cannot yet leave for the entry):")
-    print("    placement lands at dist(Link,Tetra) %.1f u (deep contact); best one-step keeps Tetra "
-          "%.2f u from a coord" % (sc['start_dist'], sc['best_step_placement']))
-    print("    a clean separation step (Tetra on-coord AND gap>80 AND toward entry) exists: %s"
-          % sc['clean_separation'])
+    print("    placement centre_feet %.1f u vs the %.0f u Co-radii bar -> %.1f u TOO DEEP "
+          "(freeze_ok=%s)" % (sc['centre_feet'], sc['co_radii_bar'], sc['deficit'], sc['freeze_ok']))
+    print("    (feet dist %.1f u; best one-step keeps Tetra %.2f u from a coord; strict one-step "
+          "clean_separation=%s)"
+          % (sc['start_dist'], sc['best_step_placement'], sc['clean_separation']))
     et = entry_targeting(best, hl, placements, max_frames=int(kw.get('rframes', 30)),
                          beam=int(kw.get('rbeam', 48)))
     print("  reposition beam: Link -> entry %.1f u (Tetra %.2f u from coord), %d frames"

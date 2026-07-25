@@ -186,10 +186,11 @@ def test_terminal_targeting_reduces_placement_distance_and_bit_confirms(env, hl,
 
 def test_separation_scan_reports_the_coupled_entry_barrier(env, hl, box):
     """The coupled-entry barrier metric (milestone 2b): from a placement state, `separation_scan`
-    reports the deep-contact gap, the best one-step Tetra-still-on-coord placement, and whether a
-    CLEAN separation step (Tetra on-coord AND gap>80 AND toward the entry) exists. Gates the metric's
-    SHAPE off a cheap synthetic placed node, not a search result -- the named fields are present and
-    typed, and the clean-separation verdict is a bool."""
+    reports the deep-contact gap, the best one-step Tetra-still-on-coord placement, whether a CLEAN
+    separation step exists, AND the decomp bar (session 46): `centre_feet` (exec Co-centre to Tetra),
+    the `co_radii_bar` (80), the `deficit` below it, and `freeze_ok`. Gates the metric's SHAPE off a
+    cheap synthetic placed node, not a search result -- the named fields are present, typed, and
+    self-consistent (deficit == max(0, bar - centre_feet); freeze_ok == centre_feet >= bar)."""
     nodes = F.cycle1_nodes(env, hl, box, beam=2)
     placed = F.terminal_targeting(nodes, hl, max_frames=3, beam=6)['best']
     sc = F.separation_scan(placed, hl, n_dirs=16)
@@ -197,6 +198,66 @@ def test_separation_scan_reports_the_coupled_entry_barrier(env, hl, box):
     assert sc['best_step_placement'] >= 0.0
     assert sc['start_dist'] >= 0.0 and sc['start_entry'] >= 0.0
     assert isinstance(sc['clean_separation'], bool)
+    # the session-46 bar fields
+    assert sc['co_radii_bar'] == F.CO_RADII_BAR == 80.0
+    assert sc['centre_feet'] > 0.0
+    assert sc['deficit'] == pytest.approx(max(0.0, sc['co_radii_bar'] - sc['centre_feet']))
+    assert sc['freeze_ok'] == (sc['centre_feet'] >= sc['co_radii_bar'])
+
+
+def test_freeze_bar_is_the_co_radii_sum(env, hl, box):
+    """**The session-46 pivot, gated decomp-exact**: the plow ejects Tetra by `CO_RADII_BAR -
+    centre_feet` (halved by the 50/50 `cc_push_pair` split), so she is FROZEN on her coord exactly
+    when Link's exec Co-centre sits >= the 80 u Co-radii sum from her. This is the whole reason the
+    coupled entry is a GRAZING problem: place her with `centre_feet >= 80` and separation ejects zero.
+
+    Self-contained: take any placed node, translate Link along the Tetra->Link line to a centre_feet
+    below the bar and one above it (recomputing the pending push from the moved pose, as `step` does),
+    take one neutral step, and assert the measured ejection tracks `(80 - centre_feet)/2` below the
+    bar and is ZERO at/above it. No tuned constant -- the bar IS `LINK_CO_R + TETRA_CO_R`."""
+    import math
+    from harness.tetrapush import from_f0
+
+    nodes = F.cycle1_nodes(env, hl, box, beam=2)
+    placed = F.terminal_targeting(nodes, hl, max_frames=3, beam=6)['best']
+
+    def place_link(feet):
+        """Move a fresh clone's Link to `feet` u from Tetra along the current line, recompute the
+        pending push from the moved pose (as `step` does). Returns the clone + its centre_feet."""
+        r = placed['run'].clone()
+        tx, tz = r.tx, r.tz
+        d0 = math.hypot(r.link.pos_x - tx, r.link.pos_z - tz)
+        ux, uz = (r.link.pos_x - tx) / d0, (r.link.pos_z - tz) / d0
+        r.link.pos_x, r.link.pos_z = tx + ux * feet, tz + uz * feet
+        cx = from_f0._computed_center(r.link, init_frame=False)
+        r.pend_link, r.pend_tetra = from_f0.cc_push_pair(cx, (r.tx, r.tz))
+        return r, F._centre_feet(r)
+
+    def at_cf(target):
+        """Binary-search feet (centre_feet is monotone in feet) so centre_feet == target, then step
+        once neutral. Returns (centre_feet, ejection)."""
+        lo, hi = 20.0, 160.0
+        for _ in range(40):
+            mid = (lo + hi) / 2
+            _r, cf = place_link(mid)
+            if cf < target:
+                lo = mid
+            else:
+                hi = mid
+        r, cf = place_link((lo + hi) / 2)
+        bx, bz = r.tx, r.tz
+        r.step(dict(stickX=111, stickY=111, buttons=0, triggerL=0,
+                    substickX=T.CSTICK_NEUTRAL, substickY=0))
+        return cf, math.hypot(r.tx - bx, r.tz - bz)
+
+    # sample centre_feet on both sides of the 80 u bar and assert the LAW: the neutral-step ejection
+    # is exactly max(0, bar - centre_feet) / 2 (the depth, halved by the 50/50 split), zero at/above.
+    samples = [at_cf(t) for t in (60.0, 70.0, 78.0, 80.0, 85.0, 95.0)]
+    for cf, ej in samples:
+        assert ej == pytest.approx(max(0.0, F.CO_RADII_BAR - cf) / 2.0, abs=1e-2)
+    assert any(cf < F.CO_RADII_BAR for cf, _ in samples)                       # ejecting regime
+    assert any(cf >= F.CO_RADII_BAR and ej == pytest.approx(0.0, abs=1e-3)     # frozen regime
+               for cf, ej in samples)
 
 
 def test_entry_targeting_stays_in_regime_and_bit_confirms(env, hl, box):
