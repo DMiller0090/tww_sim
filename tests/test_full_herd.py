@@ -277,6 +277,42 @@ def test_entry_targeting_stays_in_regime_and_bit_confirms(env, hl, box):
     assert c['talk_safe'] and not b['run']._follow_warned
 
 
+def test_walk_to_entry_is_clean_from_rest_and_flags_a_hot_arrival(env, hl):
+    """**Milestone-2b piece 2, gated (session 47): the Link-only WALK to the final-clip entry is
+    CLEAN above the bar from a near-rest arrival, and freeze_ok alone is NOT enough.**
+
+    On a SYNTHETIC frozen arrival (`synthetic_frozen_arrival`, not chain-reachable so no bit-confirm)
+    at a fixed `centre_feet >= 80`, the same POSITION walks two ways depending on ARRIVAL MOMENTUM:
+
+      * from REST (`momentum='rest'`, the clean route-(a) arrival) the walk drives Link toward the
+        entry with Tetra bit-frozen (max displacement 0 u) and never leaves the follow regime;
+      * from a hot down-herd EBS (`momentum='ebs'`) the SAME freeze_ok position re-plows Tetra tens
+        of u -- the walk is flagged unclean.
+
+    This is the session-47 finding as a gate: the s46 `freeze_ok` (centre_feet >= 80) is positional
+    and necessary but not sufficient; the grazing chain must also control the arrival momentum."""
+    rest = F.synthetic_frozen_arrival(env, hl, 241, target_cf=88.0, momentum='rest')
+    ebs = F.synthetic_frozen_arrival(env, hl, 241, target_cf=88.0, momentum='ebs')
+
+    # both are the SAME freeze_ok position (centre_feet ~ target, above the 80 u bar)
+    for placed in (rest, ebs):
+        sc = F.separation_scan(placed, hl)
+        assert sc['freeze_ok'] and sc['centre_feet'] >= F.CO_RADII_BAR
+
+    import math
+    erp = seeds.ENTRY_ROLL_POS
+    entry0 = math.hypot(rest['run'].link.pos_x - erp[0], rest['run'].link.pos_z - erp[1])
+    wr = F.walk_to_entry(rest, hl)
+    assert wr['max_tetra_disp'] < 1e-6 and wr['clean'], "the from-rest walk plowed Tetra"
+    assert not wr['followed']                              # stayed inside the follow shell
+    assert wr['dist'] < entry0                             # it made real progress toward the entry
+    assert wr['dist'] < 12.0                               # to within a few u (facing set by the clip)
+
+    we = F.walk_to_entry(ebs, hl)
+    assert we['max_tetra_disp'] > 10.0 and not we['clean'], \
+        "freeze_ok position with a HOT arrival must be flagged (momentum is the other half)"
+
+
 @pytest.mark.slow
 def test_cycle_unit_chains_from_the_recorded_entry_and_bit_confirms(env, hl, box):
     """What IS established (s43): the generic cycle unit -- junction beam then roll -- chains a

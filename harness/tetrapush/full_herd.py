@@ -62,9 +62,19 @@ FROZEN on her coord exactly when Link's exec Co-centre sits >= 80 u (`LINK_CO_R 
 her. `separation_scan` reports `centre_feet`/`deficit`/`freeze_ok`; the s44 placement lands 15.4 u
 below the bar (deep contact) so any step ejects her. The FIX is a GRAZING arrival (chain ranked to
 place her at `centre_feet >= 80`, route a). ABOVE the bar 2b reduces to a Link-ONLY navigation to the
-entry (Tetra untouched) -- `entry_targeting`'s down-herd push fan STALLS there (the EBS backslide
-carries Link off the up-herd entry), so it stays as the in-band GUARD and the reposition wants a
-WALK/EBS planner.
+entry (Tetra untouched); `entry_targeting`'s down-herd push fan STALLS there (the EBS backslide
+carries Link off the up-herd entry), so it stays as the in-band GUARD and `walk_to_entry` (session 47)
+is the real navigation -- a `reach_precise` glide to `seeds.ENTRY_ROLL_POS` on the coupled run.
+
+THE SECOND HALF OF THE BARRIER: ARRIVAL MOMENTUM, NOT JUST POSITION (session 47)
+--------------------------------------------------------------------------------
+The s46 `freeze_ok` (centre_feet >= 80) is POSITIONAL and necessary but NOT sufficient. `walk_to_entry`
+run on a synthetic frozen arrival (`synthetic_frozen_arrival`, the `walk` CLI) shows the SAME freeze_ok
+position walks CLEAN (Tetra bit-frozen) from a near-rest arrival but re-plows her ~59 u from a hot
+down-herd EBS -- the ~5 frames it takes to bleed a -25.7 momentum off drift Link back below the bar,
+and a turnaround does not rescue it (the snap preserves the -25.7). So route a's grazing chain must
+deliver Link NEAR-REST / receding up-herd, not merely at centre_feet >= 80. The walk maneuver itself is
+solved (Link reaches the entry to ~7 u clean); the open piece is the chain that arrives that way.
 """
 import math
 
@@ -76,7 +86,8 @@ from harness.tetrapush.steered_reposition import _bearing, _s16
 from harness.tetrapush.from_f0 import _computed_center, cc_push_pair
 from harness.tetrapush.tetra_plow import LINK_CO_R, TETRA_CO_R
 from tww_sim.land.land import FRONT_ROLL
-from tww_sim.land.plan_land._primitives import stick_for_bearing
+from tww_sim.land.constants import WAIT, FREE_WAIT
+from tww_sim.land.plan_land._primitives import stick_for_bearing, world_angle_s16
 
 # The clean-separation bar (s46): the plow depth is `CO_RADII_BAR - dist(exec_centre, Tetra_feet)`,
 # so it ejects ZERO -- Tetra FROZEN -- once the exec centre sits >= 80 u away. See `_centre_feet`.
@@ -766,6 +777,177 @@ def entry_targeting(placed, hl, placements=None, *, max_frames=40, beam=48, n_di
                 entry_dfacing=_s16(best['run'].link.facing - seeds.ENTRY_ROLL_FACING))
 
 
+def _neutral_input():
+    return dict(stickX=128, stickY=128, buttons=0, triggerL=0,
+                substickX=T.CSTICK_NEUTRAL, substickY=0)
+
+
+def _at_rest(run):
+    return run.link.state in (WAIT, FREE_WAIT) and abs(run.link.speedF) < 1e-6
+
+
+_WALK_MAX_NSPEED = 17.0                                   # LandState.MAX_NSPEED (the walk speed cap)
+
+
+def _glide_to_entry(run0, ex, ez, t0, k, min_crawl, max_walk, coast_max):
+    """One proportional-speed glide toward the entry at controller gain ``k`` (the `reach_precise`
+    inner loop, on the coupled run). Returns ``(best, max_td)`` where `best` is the min-resting-gap
+    release (``dict(gap, n_walk, coast, run, inputs)``) or None, and `max_td` is Tetra's worst
+    displacement seen (walk + every coast probe)."""
+    def tdisp(run):
+        return math.hypot(run.tx - t0[0], run.tz - t0[1])
+
+    def entry_gap(run):
+        return math.hypot(run.link.pos_x - ex, run.link.pos_z - ez)
+
+    walk = run0.clone()
+    walk_inputs = []
+    max_td = tdisp(walk)
+    best = None
+    for n in range(1, int(max_walk) + 1):
+        rem = entry_gap(walk)
+        target_speed = min(max(k * rem, min_crawl), _WALK_MAX_NSPEED)
+        # floor 0.051 sustains a sub-unit crawl (reach_precise): the first frame's remaining is large
+        # so msd == 1.0 and the walk STARTS from rest fine; once moving, a low msd is sustainable.
+        msd = min(max(math.sqrt(target_speed / _WALK_MAX_NSPEED), 0.051), 1.0)
+        th = world_angle_s16(ex - walk.link.pos_x, ez - walk.link.pos_z)
+        sx, sy = stick_for_bearing(th, walk.csangle, msd)
+        d = dict(stickX=sx, stickY=sy, buttons=0, triggerL=0,
+                 substickX=T.CSTICK_NEUTRAL, substickY=0)
+        walk.step(d)
+        walk_inputs.append(d)
+        max_td = max(max_td, tdisp(walk))
+        if walk._follow_warned:                         # the walk itself left the plow regime
+            break
+        coast = walk.clone()
+        cn, broke = 0, False
+        for _ in range(int(coast_max)):
+            coast.step(_neutral_input())
+            cn += 1
+            max_td = max(max_td, tdisp(coast))
+            if coast._follow_warned:                    # coasting overshot the follow shell
+                broke = True
+                break
+            if _at_rest(coast):
+                break
+        g = entry_gap(coast)
+        if not broke and (best is None or g < best['gap']):
+            best = dict(gap=g, n_walk=n, coast=cn, run=coast, inputs=list(walk_inputs))
+        # stop once the crawl has clearly passed closest approach (the controller then orbits it)
+        elif best is not None and n > best['n_walk'] + 12 and entry_gap(walk) > best['gap'] + 3.0:
+            break
+    return best, max_td
+
+
+_WALK_GAINS = (0.5, 0.3, 0.2)                             # the proportional-glide gain sweep
+
+
+def walk_to_entry(placed, hl, placements=None, *, max_walk=200, coast_max=40, gains=_WALK_GAINS,
+                  min_crawl=0.043):
+    """**Milestone-2b piece 2: the Link-ONLY WALK to the final-clip entry** (`seeds.ENTRY_ROLL_POS`),
+    ABOVE the clean-separation bar where Tetra is frozen (session 47). This is the tool the s46
+    reframe called for: above the bar the coupling is broken, so reaching the entry is standard land
+    navigation, NOT the push fan that `entry_targeting` stalls on.
+
+    Structure -- `reach_precise` on the coupled run: aim the live world-bearing to the entry each
+    frame, scaling the walk deflection so the target speed tracks ``k * remaining`` (Link glides into
+    a ~`min_crawl` u/frame crawl instead of overshooting the ~17 u full-deflection granularity), and
+    per-frame clone + neutral-coast to the min RESTING entry gap (bit-exact mid-walk clone makes the
+    O(n) release sweep identical to per-release re-simulation). The 2-frame input latency makes the
+    approach overshoot at a gain-dependent speed, so the controller gain is SWEPT over `gains` and the
+    best clean release kept (a search over the gain, not a per-case tuned constant). It runs on the
+    `FreeRun` so the push coupling stays HONEST -- Tetra's displacement is MEASURED, not assumed zero
+    -- and the plan bit-confirms via `confirm_plan`; every candidate is pruned by the FOLLOW regime
+    (dist < 230, `_follow_warned`), so the walk never carries Link past the follow shell.
+
+    THE MOMENTUM CAVEAT (the session-47 finding, why `freeze_ok` alone is not enough): the s46 bar is
+    POSITIONAL and necessary but NOT sufficient. A hot down-herd EBS arrival (speedF ~ -25.7 pointing
+    at Tetra) re-plows her 44-67 u before the walk can reverse it -- the ~5 frames it takes to bleed
+    the momentum off drift Link back below the bar. Turning around first does not rescue it (the snap
+    preserves the -25.7, still ~44 u of plow). So a CLEAN walk needs the grazing chain (route a,
+    piece 1) to deliver Link NEAR-REST or already receding up-herd, not just at `centre_feet >= 80`.
+    This planner REPORTS `max_tetra_disp` (Tetra's worst displacement over the whole walk+coast) and
+    `clean` (< 1 u) so a hot arrival is flagged, never silently plowed.
+
+    Returns ``dict(best, dist, run, log, frames, max_tetra_disp, clean, followed, entry_dfacing)`` --
+    `log`/`frames` carry the FULL state-2 -> placement -> walk sequence for `confirm_plan` (only when
+    the placement itself is chain-reachable; a synthetic placement does not replay). `entry_dfacing`
+    is scored but not optimised -- the clip's own turnaround sets the entry facing (`_entry_cost`)."""
+    ex, ez = seeds.ENTRY_ROLL_POS
+    if placements is None:
+        placements, _ = seeds.load_placements()
+    run0 = placed['run']
+    t0 = (run0.tx, run0.tz)
+    best, max_td = None, math.hypot(run0.tx - t0[0], run0.tz - t0[1])
+    for k in gains:
+        b, td = _glide_to_entry(run0, ex, ez, t0, k, min_crawl, max_walk, coast_max)
+        max_td = max(max_td, td)                          # every gain's plow counts toward the flag
+        if b is not None and (best is None or b['gap'] < best['gap']):
+            best = b
+    if best is None:
+        best = dict(gap=math.hypot(run0.link.pos_x - ex, run0.link.pos_z - ez),
+                    n_walk=0, coast=0, run=run0, inputs=[])
+    plan_log = (list(placed.get('log', [])) + best['inputs'][:best['n_walk']]
+                + [_neutral_input()] * best['coast'])
+    return dict(best=best, dist=best['gap'], run=best['run'], log=plan_log,
+                frames=placed.get('frames', 0) + best['n_walk'] + best['coast'],
+                max_tetra_disp=max_td, clean=max_td < 1.0,
+                followed=best['run']._follow_warned,
+                entry_dfacing=_s16(best['run'].link.facing - seeds.ENTRY_ROLL_FACING))
+
+
+def synthetic_frozen_arrival(env, hl, coord_idx=241, *, target_cf=88.0, lat_off=0.0,
+                             momentum='rest'):
+    """**A SYNTHETIC above-the-bar frozen placement, for developing/gating the 2b walk BEFORE the
+    grazing chain (route a, piece 1) can mint a real one** (session 47). Seeds a real Courtyard Link
+    state (`reposition.seed_to_untarget`); for ``momentum='rest'`` it parks Tetra out of range and
+    coasts Link to a genuine WAIT rest (the clean route-(a) arrival), for ``momentum='ebs'`` it keeps
+    the hot post-untarget EBS backslide (the hostile arrival); then it relocates Tetra onto genuine
+    coord `coord_idx` and Link `target_cf`-worth of centre_feet UP-HERD (behind) her (``lat_off`` u
+    lateral), recomputing the pending push from the moved pose exactly as `step` does. Position does
+    not feed anim/momentum, so the state stays self-consistent, and `centre_feet >= CO_RADII_BAR`
+    freezes Tetra.
+
+    NOT reachable from state 2 by an input log (fabricated by relocation), so its plan does NOT
+    bit-confirm -- it exercises the walk's REGIME/FREEZE properties, not the state-2 replay. The
+    `momentum` knob is the session-47 finding's lever: 'rest' -> the walk keeps Tetra frozen; 'ebs'
+    -> the walk re-plows her (freeze_ok is positional, momentum is the other half). Returns a
+    ``placed`` node (``dict(run, log=[], frames=0, plan=[])``)."""
+    from harness.tetrapush.reposition import seed_to_untarget
+    import tww_sim.core.fp as fp
+    placements, _ = seeds.load_placements()
+    p = placements[coord_idx]
+    tx, tz = float(p['x']), float(p['z'])
+    run, _aim = seed_to_untarget(env)
+    if momentum == 'rest':
+        run.tx, run.tz = fp.f32(9000.0), fp.f32(9000.0)     # park out of range -> no plow
+        for _ in range(48):
+            run.step(_neutral_input())
+            if _at_rest(run):
+                break
+    elif momentum != 'ebs':
+        raise ValueError("momentum must be 'rest' or 'ebs'")
+
+    def place(feet):
+        run.link.pos_x = fp.f32(tx - feet * hl.dx + lat_off * hl.px)
+        run.link.pos_z = fp.f32(tz - feet * hl.dz + lat_off * hl.pz)
+        run.tx, run.tz = fp.f32(tx), fp.f32(tz)
+
+    lo, hi = 60.0, 150.0                                 # centre_feet is monotone in feet
+    for _ in range(44):
+        mid = 0.5 * (lo + hi)
+        place(mid)
+        if _centre_feet(run) < target_cf:
+            lo = mid
+        else:
+            hi = mid
+    place(0.5 * (lo + hi))
+    cx = _computed_center(run.link, init_frame=False)
+    run.pend_link, run.pend_tetra = cc_push_pair(cx, (run.tx, run.tz))
+    run._follow_warned = False
+    return dict(run=run, log=[], frames=0, plan=[])
+
+
 def _placement_dist(run, placements):
     """Tetra's distance to the nearest genuine coord, from a live run."""
     tx, tz = run.tx, run.tz
@@ -973,10 +1155,42 @@ def _cmd_endgame(env, hl, kw):
     print("    (feet dist %.1f u; best one-step keeps Tetra %.2f u from a coord; strict one-step "
           "clean_separation=%s)"
           % (sc['start_dist'], sc['best_step_placement'], sc['clean_separation']))
-    et = entry_targeting(best, hl, placements, max_frames=int(kw.get('rframes', 30)),
-                         beam=int(kw.get('rbeam', 48)))
-    print("  reposition beam: Link -> entry %.1f u (Tetra %.2f u from coord), %d frames"
-          % (et['dist'], et['placement'], et['best']['frames']))
+    if sc['freeze_ok']:
+        w = walk_to_entry(best, hl, placements)
+        print("  ABOVE THE BAR -> Link-only WALK: entry %.1f u (Tetra moved %.3f u, clean=%s), %d frames"
+              % (w['dist'], w['max_tetra_disp'], w['clean'], w['frames']))
+    else:
+        print("  (deep contact: the WALK planner is inert until the chain arrives grazing -- "
+              "route a, piece 1. See `full_herd walk` for the above-the-bar maneuver on a "
+              "synthetic frozen arrival.)")
+        et = entry_targeting(best, hl, placements, max_frames=int(kw.get('rframes', 30)),
+                             beam=int(kw.get('rbeam', 48)))
+        print("  in-band GUARD (push fan, stalls above the bar): Link -> entry %.1f u "
+              "(Tetra %.2f u from coord), %d frames"
+              % (et['dist'], et['placement'], et['best']['frames']))
+
+
+def _cmd_walk(env, hl, kw):
+    """**Milestone-2b piece 2 demo**: the Link-only WALK to the final-clip entry, above the
+    clean-separation bar. Runs on a SYNTHETIC frozen arrival (`synthetic_frozen_arrival`) because the
+    current chain lands DEEP (route a, the grazing chain, is piece 1). Shows the session-47 momentum
+    finding: at the SAME freeze_ok position a REST arrival walks clean (Tetra frozen) while a hot EBS
+    arrival re-plows her -- freeze_ok is positional, the arrival momentum is the other half."""
+    idx = int(kw.get('coord', 241))
+    cf = float(kw.get('cf', 88.0))
+    placements, _ = seeds.load_placements()
+    print("WALK TO ENTRY (milestone 2b, above the bar): coord idx %d, target centre_feet %.0f\n" % (idx, cf))
+    for mom in ('rest', 'ebs'):
+        placed = synthetic_frozen_arrival(env, hl, idx, target_cf=cf, momentum=mom)
+        sc = separation_scan(placed, hl, placements)
+        w = walk_to_entry(placed, hl, placements)
+        r0 = placed['run']
+        print("  %-4s arrival: proc %d speedF %+6.2f  centre_feet %.1f (freeze_ok %s)"
+              % (mom, r0.link.state, r0.link.speedF, sc['centre_feet'], sc['freeze_ok']))
+        print("       walk -> entry %.2f u in %d frames  (Tetra moved %.3f u, clean=%s, %d BAM off facing)\n"
+              % (w['dist'], w['frames'], w['max_tetra_disp'], w['clean'], w['entry_dfacing']))
+    print("  => freeze_ok is POSITIONAL and necessary but not sufficient; a clean walk also needs the\n"
+          "     grazing chain (route a) to arrive NEAR-REST / receding up-herd, not a hot EBS at Tetra.")
 
 
 def main(argv):
@@ -994,8 +1208,10 @@ def main(argv):
         _cmd_plan(env, hl, kw)
     elif cmd == 'endgame':
         _cmd_endgame(env, hl, kw)
+    elif cmd == 'walk':
+        _cmd_walk(env, hl, kw)
     else:
-        print("usage: python -m harness.tetrapush.full_herd {sep | box | plan | endgame}")
+        print("usage: python -m harness.tetrapush.full_herd {sep | box | plan | endgame | walk}")
 
 
 if __name__ == '__main__':
