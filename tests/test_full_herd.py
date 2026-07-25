@@ -393,6 +393,39 @@ def test_place_on_thread_freezes_tetra_on_the_thread_from_an_online_rest_arrival
         assert p['frames'] == len(p['log'])
 
 
+def test_decel_place_beats_the_hot_glide_with_an_on_line_near_rest_arrival(env, hl):
+    """**Route (a), piece 1 -- the DECELERATING on-line placement approach, gated (session 50).**
+    Session 49 proved the hot -23 EBS glide places Tetra on a coord only at deep contact then drags
+    her ~10 u LATERALLY off the thin thread as it separates to freeze_ok (the miss is lateral).
+    `decel_place` inverts that: kill the EBS (reverse-brake -> Link near-rest up-herd, plow on-line so
+    Tetra freezes with ~0 lateral drift), then an on-line proportional forward glide herds her DOWN
+    the thread onto the coord, so the residual is a clean sub-unit ALONG-line miss.
+
+    Gated on a SYNTHETIC hot arrival (`synthetic_hot_arrival`, the deep-contact hot state the chain
+    terminal produces -- not chain-reachable, so no bit-confirm: this gates the RECIPE's physics, like
+    the walk/place gates). Across d_short (chain-endpoint variability) the decel approach must reach
+    `arrival_ok` with ~0 lateral drift, and it must land Tetra strictly closer than the raw hot glide
+    fed the same arrival. A coarser `backs`/`gains` sweep than the CLI default keeps the gate fast."""
+    backs = tuple(float(x) for x in range(44, 78, 4))
+    for d_short in (35.0, 55.0):
+        hot = F.synthetic_hot_arrival(env, hl, 241, d_short=d_short, feet=64.0)
+        # the seed IS the s49 hostile arrival: below the bar (deep contact), hot, closing on Tetra
+        assert F._centre_feet(hot['run']) < F.CO_RADII_BAR
+        assert F._approach_rate(hot['run']) > 10.0
+
+        raw = F.place_on_thread(dict(run=hot['run'].clone(), log=[], frames=0), hl)
+        r = F.decel_place(hot, hl, coord_idx=241, backs=backs, gains=(0.3, 0.2))
+
+        assert r['arrival_ok'], "decel_place did not reach an arrival_ok placement"
+        assert r['pd'] < 1.0                                   # ON the coord (along-line residual)
+        assert abs(r['lat_drift']) < 0.5                      # ~0 lateral drift (the s49 fix)
+        assert r['centre_feet'] >= F.CO_RADII_BAR             # freeze_ok
+        assert r['approach'] <= 3.0                            # near-rest
+        assert r['pd'] < raw['pd']                             # strictly beats the raw hot glide
+        # the log carries the full brake -> glide -> place sequence (bit-confirmable when chain-real)
+        assert r['frames'] == len(r['log']) and r['brake_frames'] > 0
+
+
 @pytest.mark.slow
 def test_cycle_unit_chains_from_the_recorded_entry_and_bit_confirms(env, hl, box):
     """What IS established (s43): the generic cycle unit -- junction beam then roll -- chains a
