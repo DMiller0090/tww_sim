@@ -53,6 +53,36 @@ def test_attention_lock_target_loss():
     assert a.state == NONE and not a.locked
 
 
+def test_release_survives_leaving_the_front_cone_but_lock_does_not():
+    """The two gates are DIFFERENT, and conflating them cost the tier-2 gate frames 68-70 (session 57).
+
+    `chaseAttention` -- and with it `check_flontofplayer`'s front cone -- is consulted by NONE
+    (acquire, d_attention.cpp:810) and by LOCK (`judgementLostCheck`, 816). RELEASE (835-841) does
+    NOT: it tests `LockonTarget(0) == NULL || !AttnFlag_40000000`, i.e. the FROZEN list entry plus the
+    reticle-fade flag. So a target that swings out of the cone mid-fade keeps driving the ATN_ACTOR
+    procs until the fade runs out -- which is exactly what the console's second untarget brakeslide
+    does -- while the same target leaving the cone while still LOCKed drops it that frame."""
+    a = AttentionLock(fade_frames=4)
+    a.update(True, True)                                # LOCK
+    a.update(False, True)                               # -> RELEASE, fade armed
+    for _ in range(3):                                  # cone lost, but the entry still exists
+        a.update(False, target_present=False, target_exists=True)
+        assert a.state == RELEASE and a.locked, "the front cone must not end RELEASE"
+    a.update(False, target_present=False, target_exists=True)
+    assert a.state == NONE and not a.locked, "the fade running out is what ends RELEASE"
+
+    b = AttentionLock(fade_frames=4)                    # ... and the LOCK gate DOES watch the cone
+    b.update(True, True)
+    b.update(True, target_present=False, target_exists=True)
+    assert b.state == NONE, "judgementLostCheck must still drop a LOCK on the cone"
+
+    c = AttentionLock(fade_frames=4)                    # a DELETED target still ends RELEASE at once
+    c.update(True, True)
+    c.update(False, True)
+    c.update(False, target_present=True, target_exists=False)
+    assert c.state == NONE and not c.locked
+
+
 def test_attention_lock_inert_without_target():
     """No lock-on target ever presented -> the machine can never leave NONE (so `locked` stays False
     and every single-actor land path is byte-identical). This is the additive-safety guarantee."""

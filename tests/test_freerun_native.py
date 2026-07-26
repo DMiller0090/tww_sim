@@ -126,3 +126,35 @@ def test_freerun_native_clone_bit_identical(env):
                 diverged.append("f%d %s clone=%r parent=%r" % (k, name, a, b))
     assert not diverged, "cloned native FreeRun != parent (0 ULP required): " \
         + "; ".join(diverged[:20])
+
+
+def test_native_and_python_agree_across_the_second_lock_cycle(env):
+    """The DTM window above ends at f43, one frame INTO the first untarget brakeslide -- so it never
+    exercised the second lock-on cycle, where session 57's RELEASE-gate fix lives. Replay node 1's
+    locked 241-frame plan (the tier-2 gate's log) in both engines instead: it covers the second
+    acquire/release around plan frames 55-70 and everything after it.
+
+    Stripped config (no injected csangle/eye), so this is native-stripped == python-stripped, the
+    property the beam search depends on. It would go red if only one of `attention.py` /
+    `_anmc.pyx` ever got a lock-machine change again."""
+    log = json.load(open(os.path.join(_FIX, 'courtyard_node1_console.json')))['log']
+    py = _mk_run(env, native=False)
+    nt = _mk_run(env, native=True)
+    diverged = []
+    for k, inp in enumerate(log):
+        rp = py.step(inp)
+        rn = nt.step(inp)
+        checks = (
+            ('proc', rn['sim_proc'], rp['sim_proc']),
+            ('facing', rn['sim_facing'], rp['sim_facing']),
+            ('speedF', _bits(rn['speedF']), _bits(rp['speedF'])),
+            ('pos_x', _bits(rn['sim_link'][0]), _bits(rp['sim_link'][0])),
+            ('pos_z', _bits(rn['sim_link'][1]), _bits(rp['sim_link'][1])),
+            ('tetra_x', _bits(nt.tx), _bits(py.tx)),
+            ('tetra_z', _bits(nt.tz), _bits(py.tz)),
+        )
+        for name, a, b in checks:
+            if a != b:
+                diverged.append("plan f%d %s native=%r py=%r" % (k + 1, name, a, b))
+    assert not diverged, "native != Python over the node-1 plan (0 ULP required): " \
+        + "; ".join(diverged[:20])

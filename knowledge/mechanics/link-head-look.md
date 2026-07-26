@@ -52,7 +52,8 @@ The law (all s16 arithmetic):
    list is restocked every NONE-state attention Run (`stockAttention`) and kept through
    LOCK/RELEASE, but the Run that transitions to NONE has just `freeAttention()`d it and does
    NOT restock -- a **one-frame empty hole on the lock-drop frame** (courtyard f21 chases 0
-   between two chase frames). Modeled by `AttentionLock.list_present`.
+   between two chase frames). Modeled by `AttentionLock.list_present`. Which frame that drop lands
+   on is [attention-lock-lifetime.md](attention-lock-lifetime.md).
 3. **Measure** (off the previous head matrix M): `spC4 = M*(11.25, 0, 0)` (head centre),
    `spAC = M*(11.25, 18.75, 0) - spC4` (eye direction); the anim's own pitch/yaw with the current
    twist subtracted: `r24_4 = atan2s(-spAC.y, absXZ(spAC)) - m3564.x`, `r25_3 = atan2s(spAC.x,

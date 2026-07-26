@@ -2746,8 +2746,11 @@ cdef class LandCore:
             d = -d
         return d <= _ATN_FRONT_CONE_HALF
 
-    cdef void _atn_update(self, bint l_held, bint target_present) noexcept nogil:
-        """dAttention_c hold-mode Run (attention.py AttentionLock.update)."""
+    cdef void _atn_update(self, bint l_held, bint target_present, bint target_exists) noexcept nogil:
+        """dAttention_c hold-mode Run (attention.py AttentionLock.update).
+
+        `target_present` = chaseAttention() (cone-gated, used by NONE/LOCK only); `target_exists` =
+        LockonTarget(0) != NULL, which is what RELEASE keys on -- see the Python docstring."""
         cdef bint rising = l_held and not self._atn_l_prev
         cdef int prev_state = self._atn_state
         if self._atn_state == _ATN_NONE:
@@ -2765,7 +2768,7 @@ cdef class LandCore:
             else:
                 if self._atn_fade > 0:
                     self._atn_fade -= 1
-                if (not target_present) or self._atn_fade <= 0:
+                if (not target_exists) or self._atn_fade <= 0:
                     self._atn_state = _ATN_NONE
         self._atn_l_prev = l_held
         if self._atn_state == _ATN_LOCK or self._atn_state == _ATN_RELEASE:
@@ -2884,7 +2887,8 @@ cdef class LandCore:
         cdef bint a_pressed = (abtn & 0x100) != 0
         cdef bint moving = self.msd > 0.05
         # attention machine (delay-1: l_atn == l_held); cone gate on the pre-dispatch pos/facing.
-        self._atn_update(l_held, self._atn_target_present())
+        # target_exists=1: the courtyard step always has a driven Tetra, and she never despawns.
+        self._atn_update(l_held, self._atn_target_present(), True)
         if l_held and not self._l_prev:
             self.m34E6 = self.facing
         # A dispatch: L-off attack roll only (the L-held jump does not occur in this window).

@@ -1,0 +1,152 @@
+{
+ "source": "session 57 -- truncate-and-read on node 1's locked 241-frame log (fixtures/courtyard_node1_console.json), delivered by harness/tetrapush/deliver.py: playmovie the spliced boot movie + savestate load 1, PauseMovie halts at plan frame N-1. Fills the 71..79 band, which no earlier capture sampled and which the n=80 Link-only divergence is born in (s57 closed 68-70 with the attention RELEASE fix).",
+ "immutable": "LOCKED live capture. For a fixed input log the console is ground truth -- never edit a value to make the sim pass; fix the model (tests/dolphin/README.md#locked-tests-are-immutable-hard-rule).",
+ "method": "deterministic PauseMovie halt, not a single-step: one full run per N, nothing issued but playmovie + savestate load 1.",
+ "plan": "fixtures/courtyard_node1_console.json (log, 241 frames)",
+ "samples": [
+  {
+   "n": 71,
+   "link": {
+    "x": -1612.6905517578125,
+    "z": -911.9508056640625,
+    "facing": 29300,
+    "travel": 36817,
+    "proc": 24,
+    "speedF": -11.609049797058105
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 72,
+   "link": {
+    "x": -1609.9849853515625,
+    "z": -905.3329467773438,
+    "facing": 35300,
+    "travel": 36817,
+    "proc": 24,
+    "speedF": -7.149580955505371
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 73,
+   "link": {
+    "x": -1608.18994140625,
+    "z": -900.9421997070312,
+    "facing": 36817,
+    "travel": 36817,
+    "proc": 6,
+    "speedF": -4.7435479164123535
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 74,
+   "link": {
+    "x": -1607.9044189453125,
+    "z": -900.2438354492188,
+    "facing": 36817,
+    "travel": 36817,
+    "proc": 6,
+    "speedF": -0.7544552683830261
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 75,
+   "link": {
+    "x": -1607.3707275390625,
+    "z": -898.9382934570312,
+    "facing": 36817,
+    "travel": 36817,
+    "proc": 6,
+    "speedF": -1.4104430675506592
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 76,
+   "link": {
+    "x": -1607.3707275390625,
+    "z": -898.9382934570312,
+    "facing": 36817,
+    "travel": 36817,
+    "proc": 4,
+    "speedF": 0.0
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 77,
+   "link": {
+    "x": -1607.3707275390625,
+    "z": -898.9382934570312,
+    "facing": 36817,
+    "travel": 36817,
+    "proc": 4,
+    "speedF": 0.0
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 78,
+   "link": {
+    "x": -1607.461181640625,
+    "z": -899.3067016601562,
+    "facing": 35295,
+    "travel": 35295,
+    "proc": 6,
+    "speedF": 0.3793545961380005
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 79,
+   "link": {
+    "x": -1607.9105224609375,
+    "z": -902.9041748046875,
+    "facing": 34077,
+    "travel": 34077,
+    "proc": 6,
+    "speedF": 3.6254255771636963
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  }
+ ]
+}

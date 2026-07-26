@@ -56,10 +56,20 @@ class AttentionLock:
         gate ``checkNextMode`` uses to pick the ATN_ACTOR procs (LOCK, or RELEASE while fading)."""
         return self.state in (LOCK, RELEASE)
 
-    def update(self, l_held, target_present):
+    def update(self, l_held, target_present, target_exists=True):
         """Advance one frame (judgementButton + judgementStatusHd). ``l_held`` is the delayed L
-        input already used for the ATN gate; ``target_present`` is whether a chaseable lock-on actor
-        exists (the harness supplies Tetra's presence). Returns ``self`` for chaining."""
+        input already used for the ATN gate; ``target_present`` is ``chaseAttention()`` -- whether a
+        CHASEABLE lock-on actor exists (front cone + distance; the harness supplies Tetra's).
+        ``target_exists`` is the different, weaker ``LockonTarget(0) != NULL`` -- does the locked
+        list entry still exist at all -- which is what RELEASE keys on. Returns ``self``.
+
+        The two are NOT interchangeable, and conflating them is the session-6 bug one cycle later
+        (session 57): `chaseAttention` is consulted only by NONE (acquire, 810) and LOCK
+        (`judgementLostCheck`, 816). RELEASE (835-841) tests `LockonTarget(0) == NULL ||
+        !AttnFlag_40000000` -- the frozen list entry plus the reticle-fade flag -- so a target that
+        leaves the front cone mid-fade does NOT end the lock: only the fade running out does. The
+        list cannot be re-stocked meanwhile (`stockAttention` runs only in NONE), so for an actor
+        that does not despawn ``target_exists`` is simply True."""
         rising = bool(l_held) and not self._l_prev        # field_0x01a == 1 (first held frame)
         prev_state = self.state
         if self.state == NONE:
@@ -74,14 +84,14 @@ class AttentionLock:
                 self.state = RELEASE
                 self._fade = self.FADE_FRAMES
         elif self.state == RELEASE:
-            # RELEASE: L re-pressed -> re-lock (825-829); else end when the target is gone OR the
-            # reticle fade-out anim completes -- AttnFlag_40000000 cleared (837-840).
+            # RELEASE: L re-pressed -> nextAttention re-locks (825-829; it re-makes the list, so the
+            # chaseable gate stands in for it); else the LOCKED ENTRY or the fade ends it (837).
             if rising:
                 self.state = LOCK if target_present else NONE
             else:
                 if self._fade > 0:
                     self._fade -= 1
-                if not target_present or self._fade <= 0:
+                if not target_exists or self._fade <= 0:
                     self.state = NONE
         self._l_prev = bool(l_held)
         # The lock-on list, as of THIS Run: kept while locked; freed (not restocked) on the

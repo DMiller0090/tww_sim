@@ -42,6 +42,16 @@ class _AtnActorMixin:
         bearing = S.cM_atan2s(f32(ap[0] - self.pos_x), f32(ap[1] - self.pos_z))
         return abs(s16_signed((bearing - self.facing) & 0xFFFF)) <= FRONT_CONE_HALF
 
+    def _atn_target_exists(self):
+        """``LockonTarget(0) != NULL`` -- the LOCKED list entry, which the front cone has no say over
+        (d_attention.cpp:836; `stockAttention` cannot re-make the list outside NONE). This is the
+        RELEASE-branch gate, deliberately weaker than `_atn_target_present`: a driven actor that
+        leaves the cone mid-fade keeps the lock until the reticle anim ends. False with no driven
+        actor at all, so the goldens' NONE-forever behaviour is untouched."""
+        if getattr(self, "_atn_force_present", None) is not None:
+            return bool(self._atn_force_present)
+        return getattr(self, "_atn_actor_pos", None) is not None
+
     def _set_shape_angle_to_atn_actor(self):
         """setShapeAngleToAtnActor (2625): chase shape_angle.y toward the bearing to the locked
         actor's EYE position (cLib_targetAngleY(current.pos, mpAttnActorLockOn->eyePos)). No-op while

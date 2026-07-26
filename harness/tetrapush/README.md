@@ -813,7 +813,48 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               operands in Python, 40k push pairs native-vs-Python). The native push therefore uses
               `_sqrtf_msl_c`, but `_frsqrte` is UNDIAGNOSED and still sits under the acch/WallCorrect
               call sites (`_shovec` ~297/467/549/668/856). Worth root-causing before trusting it.
-      - [~] **THE FP FRONTIER IS CLOSED, AND WHAT IS LEFT IS NOT FP (session 56). Bit-exact through
+      - [~] **THE SECOND UNTARGET CYCLE NOW DISPATCHES ON THE CONSOLE'S FRAME, AND THE FRONTIER IS
+            THE FOOT POSE (session 57). Bit-exact through plan frame 71; the next seed at 72 is the
+            first ANIM-DRIVEN speedF frame since the roll.**
+            - **THE BUG: `chaseAttention`'s front cone is an ACQUIRE/LOCK gate, never a RELEASE one.**
+              `judgementStatusHd` consults `chaseAttention()` in NONE (acquire, `d_attention.cpp`:810)
+              and in LOCK (`judgementLostCheck`, 816), but RELEASE (837) tests
+              `LockonTarget(0) == NULL || !AttnFlag_40000000` -- the FROZEN list entry plus the
+              reticle-fade flag. `stockAttention` runs only in the NONE branch, so nothing can re-make
+              the list mid-fade either: for an actor that does not despawn, RELEASE is a pure
+              countdown. The sim fed the same cone-gated `target_present` to all three branches, so
+              when Tetra swung out of the +-0x4000 cone at plan frame 64 the lock died with 5 fade
+              frames still owed, and the roll exited into MOVE_TURN (24) where the console takes its
+              proc-9 brakeslide frame (68). Truth page:
+              `knowledge/mechanics/attention-lock-lifetime.md`. Fixed in both engines
+              (`attention.py` `update(..., target_exists)`, `_anmc.pyx` `_atn_update`); the RELEASE
+              branch now keys on `_atn_target_exists` (`procs/atn_actor.py`). Frames 68, 69 and 70 all
+              went 0-ULP on both actors at once.
+            - **THEN THE BAND BEHIND IT WAS SAMPLED LIVE** (`_notes/tetrapush-s57_bracket.py`, 9
+              truncate-and-read runs): n=71 exact, n=72 the first miss.
+              `fixtures/courtyard_node1_console_s57.json` (NEW, LOCKED; consecutive n=71..79).
+            - **FRAME 72 IS A FOOT-POSE DIVERGENCE, NOT A TURN ONE.** It is the first MOVE_TURN body
+              frame, i.e. the first frame since the roll whose speedF comes from the walk anim
+              (`m3598 != 0`) instead of momentum. The console's step is PARALLEL to the sim's to the
+              last ULP and 0.05% longer -- pure magnitude. Reading the live foot internals at the halt
+              (`_notes/tetrapush-s57_footscan.py`, the `foot_probe` offsets) splits the layers: the
+              composition math is right (live `m3598`/`msd`/`m35B4` match the sim 0-ULP, and
+              `0.3*raw + 0.7*prev` on the live plant-toe delta reproduces the live `m359C` exactly),
+              while its INPUT stream is not. The model-local toe positions track live to ~1 ULP at
+              sim frames 4, 9, 19, 45, 59, 61, 63, 65, 67 and 68, then jump to ~0.02 u at **sim frame
+              69** -- the roll/ATN -> MOVE re-entry pose (`MOVE_REENTRY_MORF`). The stream is warmed
+              but unused while speedF is momentum, which is exactly why the error surfaces 3 frames
+              later. (Alignment is not assumed: live `mFootData` at frame N == the sim's pose at N-1,
+              verified on the known-exact early frames before any claim was made.)
+            - **GATE.** `OPEN` = {72..80, 100, 120, 160, 200}; the localization test is REPLACED by
+              `test_the_first_open_sample_is_the_first_anim_driven_speedf_frame`, which asserts the
+              parallel-and-longer signature off the fixture + rollout. New offline gates:
+              `test_atn_actor.py::test_release_survives_leaving_the_front_cone_but_lock_does_not`
+              (all three branches, incl. a deleted target) and
+              `test_freerun_native.py::test_native_and_python_agree_across_the_second_lock_cycle`
+              (the DTM window ends at f43 and never reached the second cycle, so the native engine's
+              copy of the machine was ungated). 625 offline pass.
+      - [x] **THE FP FRONTIER IS CLOSED, AND WHAT IS LEFT IS NOT FP (session 56). Bit-exact through
             plan frame 67; the next seed at 68 is a PROC divergence, and from frame 100 the console
             leaves the modeled regime entirely.**
             - **THE BUG: `JMAEulerToQuat`'s half-angle must be taken on the SIGNED s16.** `quat.

@@ -345,7 +345,8 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
             l_atn = l_held
         # chaseAttention target-present gate (front-of-player cone; see _atn_target_present): a lock-on
         # actor is chaseable only inside the cone, so the Courtyard lock acquires mid-roll, not at state 2.
-        self._atn.update(l_atn, self._atn_target_present())
+        # RELEASE keys on the weaker _atn_target_exists (LockonTarget(0), no cone) instead -- s57.
+        self._atn.update(l_atn, self._atn_target_present(), self._atn_target_exists())
 
         # --- mid-walk sword pull-out (opt-in): B rising edge -> DRAW_DELAY frames later the anim set
         # flips base->sword BEFORE the proc dispatch (this frame's foot pose). See FootSpeedF.draw_sword.
