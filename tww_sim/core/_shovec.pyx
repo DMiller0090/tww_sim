@@ -117,6 +117,30 @@ cdef double _frsqrte(double val) noexcept nogil:
     integral = integral | (<unsigned long long>entry << 26)
     return (<double*>&integral)[0]
 
+
+cdef inline double _sqrtf_msl_c(double x) noexcept nogil:
+    """MSL ``std::sqrtf`` (frsqrte seed + 3 double Newton steps, then f32(x*g)) with a MATH-ACCURATE
+    seed -- bit-identical to the frsqrte-seeded form, which is the point of the 3 refines: Python's
+    table-seeded `collision.sqrtf_msl` and this agree on 400k random operands, and the native push is
+    gated against Python bit-for-bit in `tests/test_cc_push_native.py` (40k pairs).
+
+    Why not the table-seeded `sqrtf_c` right below: calling THAT from the Co-push block faults the
+    process (Windows access violation in `tests/test_pushaside_clip.py`, clean rebuild, reproducible).
+    The values are provably identical, so this is not a fidelity compromise -- but `_frsqrte` corrupting
+    memory from one call site is a REAL latent bug that also sits under the acch/WallCorrect sites
+    (0x8024C4.. `sqrtf_c` at lines ~297/467/549/668/856), and it is UNDIAGNOSED. See the README
+    `## Plan / status` session-55 box; do not assume it is benign because those tests pass today.
+    """
+    x = f32(x)
+    cdef double g
+    if x > 0.0:
+        g = 1.0 / _c_sqrt(x)
+        g = 0.5 * g * (3.0 - g * g * x)
+        g = 0.5 * g * (3.0 - g * g * x)
+        g = 0.5 * g * (3.0 - g * g * x)
+        return f32(x * g)
+    return x
+
 cdef inline double sqrtf_c(double x) noexcept nogil:
     """MSL std::sqrtf: frsqrte double estimate + 3 Newton iterations in DOUBLE, then f32(x*g)."""
     x = f32(x)
@@ -1071,17 +1095,20 @@ cdef class ShoveCtx:
             # cyl_cyl overlap (link Co cyl vs tetra cyl; y ranges always overlap on the flat floor)
             odx = fsubs(cx, tx)
             odz = fsubs(cz, tz)
-            dist_sq = fmadds(odz, odz, fmuls(odx, odx))
+            # UNFUSED (dx*dx)+(dz*dz) and the MSL sqrtf -- cM3d_Cross_CylCyl / dCcS::SetPosCorrect
+            # as the JP binary compiles them (fmuls/fmuls/fadds at 0x8024C44C, 0x800AB430; frsqrte+
+            # 3 Newton at 0x800AB444). Mirrors core/cc_push.py; see its FP note (session 55).
+            dist_sq = fadds(fmuls(odx, odx), fmuls(odz, odz))
             lpend_x = 0.0; lpend_z = 0.0
             tpend_x = 0.0; tpend_z = 0.0
             lpend_has = True                     # co_move_pair returns zeros when no overlap
             if dist_sq <= fmuls(self.co_r_sum, self.co_r_sum):
                 if not (fadds(ly, self.link_co_h) < ty or ly > fadds(ty, self.tet_co_h)):
-                    cross_len = fsubs(self.co_r_sum, fsqrt_l(dist_sq))
+                    cross_len = fsubs(self.co_r_sum, _sqrtf_msl_c(dist_sq))
                     if not is_zero_c(cross_len):
                         odx = fsubs(tx, cx)      # objsDist = obj2 - obj1
                         odz = fsubs(tz, cz)
-                        temp = fsqrt_l(fmadds(odz, odz, fmuls(odx, odx)))
+                        temp = _sqrtf_msl_c(fadds(fmuls(odx, odx), fmuls(odz, odz)))
                         if not is_zero_c(temp):
                             ff = fdivs(cross_len, temp)
                             sx_ = fmuls(odx, ff)

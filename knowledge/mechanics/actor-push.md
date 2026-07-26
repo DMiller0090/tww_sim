@@ -16,7 +16,8 @@ and the roll-stab was live-reproduced at the corner - aim/wall-hold/bonk confirm
 **Source:** decomp `dCcS::SetPosCorrect` / `dCcS::GetRank` / `rank_tbl` (`d_cc_s.cpp:138/153/180`),
 `cM3d_Cross_CylCyl` (`c_m3d.cpp:1553`), `cCcD_Stts::PlusCcMove` (`c_cc_d.cpp`), `daPy_lk_c::posMove`
 + `daPy_lk_c::setCollision` (`d_a_player_main.cpp:9748`) + player/Tetra weights (`:11233`,
-`d_a_npc_zl1.cpp`). Constants: [reference/constants-npc.md](../reference/constants-npc.md#collision-actor-co-push).
+`d_a_npc_zl1.cpp`); the push's FP shape is read off the shipped JP binary (session 55, see
+[The FP shape](#the-fp-shape-load-bearing---read-this-before-touching-the-push)). Constants: [reference/constants-npc.md](../reference/constants-npc.md#collision-actor-co-push).
 
 ---
 
@@ -53,6 +54,25 @@ his share on the **next** frame, before his own movement and before the wall che
  consumed at the same point; `harness/rollstab/cc_stepper.py`). The push from frame *N*'s Draw-phase
  overlap (computed from *N*'s settled + drawn positions) lands on frame *N+1*, **before** the wall
  is tested.
+
+## The FP shape (load-bearing - read this before touching the push)
+
+Both distance computations in the chain are **UNFUSED**, and the square root is the game's
+`std::sqrtf`, not a correctly-rounded one. Read off the shipped JP binary (2026-07-26):
+
+| Site | JP address | Instructions |
+|------|-----------|--------------|
+| `cM3d_Cross_CylCyl` `dist_sq` | `0x8024C44C` | `fmuls f1,f2,f2` · `fmuls f0,f0,f0` · `fadds f4,f1,f0` |
+| `dCcS::SetPosCorrect` `objDistLen` | `0x800AB430` (correctY: `0x800AB394`) | the same three ops |
+| `std::sqrtf` (both) | inlined, e.g. `0x800AB444` | `frsqrte` + **3** double Newton steps, then one f32 round of `x*guess` (MSL `math.h`) |
+
+There is **no `fmadds` in either routine**. Do not assume the fused form because `PSVECMag` fuses -
+`PSVECMag` is a separate paired-single routine and its shape does not carry over. This is not a
+rounding pedantry: fusing puts `cross_len` ~2 ULP high, which biases the push ~3e-6 u per frame, and
+the Link↔Tetra plow amplifies ~1.4x per contact frame - over a 241-frame herd that grew into a
+**113 u** miss on console (session 54's falsification; fixed session 55, gated by
+[`tests/test_node1_console.py`](../../tests/test_node1_console.py), which pins the sim to the
+console frame-by-frame through plan frame 38).
 
 ## Link & Tetra parameters (GZLJ01, live-confirmed)
 

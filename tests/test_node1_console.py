@@ -8,13 +8,21 @@ CONSOLE-MEASURED state at each truncate-and-read sample (session 54, delivered b
 expectation never moves and **the SIM is what must converge to it**. Never edit the fixture to make this
 pass (`tests/dolphin/README.md#locked-tests-are-immutable-hard-rule`); fixing the push model is the work.
 
-Where it stands (session 54): the sim is bit-exact through plan frame 20 and then diverges --
-2-3 ULP by n=30, ~150 by n=40, ~2e5 by n=60 -- until the 4th roll passes to Tetra's LEFT and misses her,
-leaving her 113 u from the target coord instead of 0.011. Diagnosis encoded by the assertions below:
-`proc` and `facing` match at EVERY sample (so the procs/attention/foot direction are faithful) and the
-Link and Tetra position errors are EQUAL, which is the CC push split's signature -- the fault is push
-MAGNITUDE, not Link's foot term. The open samples are `xfail(strict=True)`, so the moment a model fix
-makes one exact, pytest reports XPASS and the marker must be removed -- the frontier ratchets forward.
+Where it stands (session 55): **bit-exact through plan frame 38**, then the next seed at frame 39.
+Session 54 opened this gate exact only through n=20; the divergence was root-caused to the CC push's
+FP shape -- `dist_sq` must be UNFUSED, and the sqrt is the game's `std::sqrtf` (see the FP note in
+`tww_sim/core/cc_push.py` and `knowledge/mechanics/actor-push.md`) -- which closed everything to 38.
+
+Two fixtures feed it: the original 10-frame-stride samples plus session 55's CONSECUTIVE sweep
+(n=21..40), so a regression anywhere in 21..38 names its own frame instead of a 10-frame bracket. The
+two captures overlap at n=30/40 and agree bit-for-bit (`test_the_two_captures_agree_where_they_overlap`),
+which is what licenses treating either as ground truth.
+
+Diagnosis encoded by the assertions below: `proc` and `facing` match at EVERY sample (so the
+procs/attention/foot direction are faithful) and the Link and Tetra position errors are EQUAL, the CC
+push split's signature -- the fault is push MAGNITUDE, not Link's foot term. The open samples are
+`xfail(strict=True)`, so the moment a model fix makes one exact, pytest reports XPASS and the marker
+must be removed -- the frontier ratchets forward.
 
 Offline: replays the locked log on the 0-ULP `FreeRun` (no Dolphin). The live delivery that produced the
 fixture lives in `harness/tetrapush/deliver.py` (`divergence_curve` extends the curve, ~8 s per sample).
@@ -27,14 +35,17 @@ import pytest
 
 from harness.tetrapush import seeds
 
-_FIX_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                         'fixtures', 'courtyard_node1_console.json')
-FIX = json.load(open(_FIX_PATH))
-SAMPLES = {s['n']: s for s in FIX['samples']}
+def _fx(name):
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fixtures', name)
 
-# The 0-ULP frontier as of session 54. n=20 PASSES (a real gate protecting the exact region); the rest
-# are the known-open push divergence. Shrink this set as the model is fixed -- never grow it.
-OPEN = {30, 40, 45, 50, 55, 60}
+
+FIX = json.load(open(_fx('courtyard_node1_console.json')))
+DENSE = json.load(open(_fx('courtyard_node1_console_dense.json')))   # consecutive n=21..40
+SAMPLES = {s['n']: s for s in DENSE['samples']}
+SAMPLES.update({s['n']: s for s in FIX['samples']})
+
+# The 0-ULP frontier (see the module docstring). Shrink it as the model is fixed -- never grow it.
+OPEN = {39, 40, 45, 50, 55, 60}
 
 
 def _bits(x):
@@ -43,6 +54,12 @@ def _bits(x):
 
 def _ulp(a, b):
     return abs(_bits(a) - _bits(b))
+
+
+def _ulp_size(x):
+    """The width of one f32 ULP at ``x`` -- the granularity a stored position can carry."""
+    b = _bits(x)
+    return abs(struct.unpack('<f', struct.pack('<I', b + 1))[0] - float(x))
 
 
 @pytest.fixture(scope="module")
@@ -68,9 +85,10 @@ def rollout():
 
 
 _XFAIL = pytest.mark.xfail(strict=True, reason=(
-    "known-open CC-push divergence (session 54): the push magnitude is slightly too strong, seeding by "
-    "plan frame ~30 and amplifying ~1.4x/contact-frame. STRICT -- when a model fix makes this exact it "
-    "XPASSes and FAILS the suite; remove the n from OPEN then."))
+    "known-open CC-push divergence: after session 55's un-fusing fix the sim is bit-exact through plan "
+    "frame 38 and the next seed is frame 39 (1 ULP on Link's z, equal-and-opposite on Tetra -- still the "
+    "push split's signature), amplifying ~1.4x/contact-frame from there. STRICT -- when a model fix "
+    "makes this exact it XPASSes and FAILS the suite; remove the n from OPEN then."))
 
 
 def _case(n):
@@ -101,26 +119,36 @@ def test_proc_facing_and_regime_match_the_console_everywhere(n, rollout):
     assert s['tetra']['stt'] == 3, "fixture row left the stt-3 plow regime the model covers"
 
 
-_SYMMETRY_FLOOR = 0.05      # below this the f32 position storage perturbs the equality (n=30: 2.6e-4)
+_SYMMETRY_FLOOR = 0.05      # below this the f32 position storage perturbs the equality
 
 
 @pytest.mark.parametrize("n", sorted(n for n in SAMPLES if n in OPEN))
 def test_the_open_error_is_equal_on_both_actors_the_push_split_signature(n, rollout):
     """The CC push is a 50/50 split, so a push-magnitude error displaces Link and Tetra by EQUAL amounts
     in opposite directions. Measured in world units that equality is EXACT once the error clears the f32
-    storage noise (n=45/50/55/60: identical to the last bit; n=30/40 agree to 6%/0.5% at 2.6e-4/1.1e-2 u).
-    Compared as distances, NOT in ULP -- ULP spacing depends on magnitude, and Link's z and Tetra's z sit
-    at different exponents, so equal displacement gives unequal ULP counts.
+    storage noise (n=50/55/60: identical to the last bit). Compared as distances, NOT in ULP -- ULP
+    spacing depends on magnitude, and Link's z and Tetra's z sit at different exponents, so equal
+    displacement gives unequal ULP counts.
 
-    This is what exonerates Link's foot term (his speedF matches too) and points the fix at the push
-    depth / animated exec Co-centre. Pinned so a 'fix' that breaks the symmetry -- i.e. one that moves the
-    foot term instead of the push -- is caught rather than mistaken for progress."""
+    This is what exonerates Link's foot term (his speedF matches too) and keeps the remaining open
+    samples pointed at the push. Pinned so a 'fix' that breaks the symmetry -- i.e. one that moves the
+    foot term instead of the push -- is caught rather than mistaken for progress.
+
+    Near the floor the comparison is bounded by STORAGE, not by the model: each actor's x/z is an f32
+    field, so a residual of a few ULP can differ between the two purely from where each coordinate
+    falls in its own bin. There the test asserts only that the two agree to that storage quantum,
+    derived from the sample's own magnitudes rather than a tuned tolerance."""
     s, sim = SAMPLES[n], rollout[n]
     import math
     dl = math.hypot(sim['x'] - s['link']['x'], sim['z'] - s['link']['z'])
     dt = math.hypot(sim['tx'] - s['tetra']['x'], sim['tz'] - s['tetra']['z'])
     if max(dl, dt) < _SYMMETRY_FLOOR:
-        assert abs(dl - dt) <= 0.10 * max(dl, dt), "push symmetry lost near the f32 noise floor"
+        # one f32 ULP at each actor's own coordinate magnitude, added in quadrature per actor
+        def _quantum(x, z):
+            return math.hypot(_ulp_size(x), _ulp_size(z))
+        q = _quantum(s['link']['x'], s['link']['z']) + _quantum(s['tetra']['x'], s['tetra']['z'])
+        assert abs(dl - dt) <= q, ("push symmetry lost beyond the f32 storage quantum: Link %.9f, "
+                                   "Tetra %.9f, quantum %.9f" % (dl, dt, q))
     else:
         assert dl == dt, "push split is not symmetric: Link moved %.12f, Tetra %.12f" % (dl, dt)
 
@@ -133,6 +161,21 @@ def test_the_frontier_is_contiguous_and_the_exact_region_is_not_silently_shrinki
     exact = [n for n in ns if n not in OPEN]
     assert exact, "no sample is bit-exact any more -- the push model regressed"
     assert exact == ns[:len(exact)], "OPEN must be a suffix; the exact region is a prefix of the samples"
+
+
+def test_the_two_captures_agree_where_they_overlap():
+    """n=30 and n=40 were measured independently in session 54 and session 55 (separate Dolphin
+    launches, separately authored movies). They must agree BIT-FOR-BIT: that is what licenses
+    treating either capture as ground truth, and it is the check that would catch a delivery whose
+    alignment silently shifted between sessions."""
+    dense = {s['n']: s for s in DENSE['samples']}
+    for s in FIX['samples']:
+        if s['n'] in dense:
+            d = dense[s['n']]
+            for who in ('link', 'tetra'):
+                for ax in ('x', 'z'):
+                    assert _bits(s[who][ax]) == _bits(d[who][ax]), \
+                        "session 54 and 55 disagree at n=%d on %s.%s" % (s['n'], who, ax)
 
 
 def test_the_plan_and_its_console_endpoint_are_locked():

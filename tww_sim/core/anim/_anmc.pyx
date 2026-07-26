@@ -555,10 +555,6 @@ cdef inline int _get_rank_c(int w) noexcept nogil:
     return 0
 
 
-cdef inline double _cc_fsqrt(double a) noexcept nogil:
-    return f32(_c_sqrt(f32(a)))
-
-
 cdef int _co_move_pair_c(double c1x, double c1z, double r1, double h1,
                          double c2x, double c2z, double r2, double h2,
                          int w1, int w2, double* out) noexcept nogil:
@@ -569,11 +565,14 @@ cdef int _co_move_pair_c(double c1x, double c1z, double r1, double h1,
     out[0] = 0.0; out[1] = 0.0; out[2] = 0.0; out[3] = 0.0
     cdef double dx = fsubs(c1x, c2x)
     cdef double dz = fsubs(c1z, c2z)
-    cdef double dist_sq = fmadds(dz, dz, fmuls(dx, dx))
+    # UNFUSED (dx*dx)+(dz*dz) + the MSL sqrtf -- cM3d_Cross_CylCyl / dCcS::SetPosCorrect as the JP
+    # binary compiles them (fmuls/fmuls/fadds at 0x8024C44C and 0x800AB430; frsqrte + 3 double Newton
+    # at 0x800AB444). Mirrors core/cc_push.py; see its FP note (session 55).
+    cdef double dist_sq = fadds(fmuls(dx, dx), fmuls(dz, dz))
     cdef double rsum = fadds(r1, r2)
     if dist_sq > fmuls(rsum, rsum):
         return 0
-    cdef double cross_len = fsubs(rsum, _cc_fsqrt(dist_sq))
+    cdef double cross_len = fsubs(rsum, _sqrtf_c(dist_sq))
     cdef double acl = cross_len if cross_len >= 0.0 else -cross_len
     if acl < _CC_ISZERO:
         return 0
@@ -586,7 +585,7 @@ cdef int _co_move_pair_c(double c1x, double c1z, double r1, double h1,
     # objsDist = ppos2 - ppos1 = (c2 - c1); scale to cross_len; vec1 = -objsDist*obj2_w, vec2 = +*obj1_w.
     cdef double ox = fsubs(c2x, c1x)
     cdef double oz = fsubs(c2z, c1z)
-    cdef double dist = _cc_fsqrt(fmadds(oz, oz, fmuls(ox, ox)))
+    cdef double dist = _sqrtf_c(fadds(fmuls(ox, ox), fmuls(oz, oz)))
     cdef double f, sx, sz, mag
     if not (dist < _CC_ISZERO):
         f = fdivs(cross_len, dist)
