@@ -698,17 +698,54 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               companion `<out>.sav.dtm` (the deep-anchor `m_current_frame!=1` trick), playmovies straight
               into the courtyard: Link reads the state-2 seed EXACTLY (`(-1329.424, 39.899) sF -24.574
               proc 6`) -- decoupled from the recorded movie. So the plan CAN be delivered this way.
-            - **NEXT (the concrete recipe, all pieces identified):** (1) author node 1's 241 frames as a
-              `bFromSaveState=1` movie -- an L-capable encoder inverting `dtm_inputs.frame_input`
-              (A=0x02/B=0x04/L=0x400; `dtm_make.pad_to_cs` lacks L), slot-2 `.sav` anchor + companion
-              `.sav.dtm`; (2) CALIBRATE the leading `REST_NOOPS` (0/1/2, anchor-dependent -- `rollstab/
-              rest.py`) by first authoring the KNOWN recorded 45-frame push as a `bFromSaveState` movie and
-              finding the noop offset that reproduces the recorded trajectory (one live run, compare
-              post-hoc); (3) `bFromSaveState` movies FREE-RUN to exhaustion + PauseMovie (run_dtm's model,
-              NOT per-frame `advance` -- the probe's manual advance on `state:other` did nothing), so read
-              Tetra + Link at the movie-end pause; (4) compare to coord 287 + `ENTRY_ROLL_POS`. Scratch
-              (gitignored `_notes/`): `node1_full_log.json`, `tetrapush-{node1_extract,delivered_resim,
-              author_dtm,live_diag,live_full,stratB_probe}.py`, `stratB_probe.log`. `[[courtyard-tetra-push]]`.
+      - [~] **THE TIER-2 CONFIRM RAN (session 54): the DELIVERY PATH IS BUILT + VALIDATED, and it
+            FALSIFIED node 1's plan on console -- a REAL, localized CC-PUSH divergence.** The plan is not
+            console-faithful: Tetra ends **113.3 u** from coord 287 (Link 165.9 u from the entry, vs the
+            model's 10.4), reproducibly. This is the first live test of the model BEYOND the 43-frame
+            recorded window, and it found a genuine modeling gap -- exactly what tier 2 is for.
+            - **Session 53's "Strategy B confirmed" is OVERTURNED: it only ever verified the seed
+              APPEARS, never that inputs PLAY.** The slot-2 savestate is welded to the recorded 90k-frame
+              movie (`currentFrame` 89952), so a fresh anchored movie is instantly past its end -> Link
+              frozen at the seed + the **input-mismatch dialog**. A clean anchor cannot be minted at the
+              seed either (`recordstart` is a no-op while a movie plays; no pipe verb ends playback while
+              keeping the game running). Both savestate-anchor routes are dead.
+            - **THE WORKING DELIVERY (Dereck's steer): splice the tail onto the recorded BOOT movie.**
+              Keep game-frames 0..F0 BYTE-IDENTICAL, replace F0+1.. with the plan (`log[i]` -> game-frame
+              F0+1+i), leave `bFromSaveState=0`, and `playmovie` it. Validated end-to-end: re-appending the
+              recorded tail delivers **latched inputs (poll index 2) 0/45 mismatch** vs the recording (raw
+              diffs in the other 3 polls are irrelevant -- the game latches poll 2 only). Byte-aligned by
+              construction, so **`REST_NOOPS` is moot** (no savestate alignment padding).
+            - **`tickCount` must be EXTENDED, not maxed.** `Movie::CheckInputEnd` ends playback when
+              `GetTicks() > tickCount`, so keeping the recorded value truncated ~197 of the 241 tail frames
+              (playback stopped at the RECORDING's frameCount); but maxing to `0xFFFFFFFFFFFFFFFF` reads as
+              signed -1 -- **the real cause of s53's "maxed tickCount crashes State::Load"**. Scale the
+              recorded ticks to the longer movie + 10% (`author_boot.build_boot_movie(tick_mode='extend')`).
+            - **The ~9.5-min boot replay is SKIPPABLE (Dereck's rule): `loadstate 1`.** Start the boot movie,
+              then load a state whose inputs are a SUBSET of that movie's -- slot 1 is frame 89682, INSIDE
+              the identical prefix -- and it is equivalent to having replayed to that frame, so read the
+              result as the full playback's. A full delivery run is then **~8 s**. Slot 2 is NOT usable (it
+              sits AT the splice, reading plan frame i=0, and trips the mismatch). Issue ONLY `playmovie` +
+              `savestate load 1`: any `pause`/`resume`/per-frame `advance` of ours makes Dolphin re-pause
+              (PauseMovie=True, restored frame/tick bookkeeping) and needs manual unpausing.
+            - **THE DIVERGENCE, localized by TRUNCATE-AND-READ** (author the first N plan frames; PauseMovie
+              halts at plan frame N-1, so a plain 8-s run reads that exact frame -- no stepping):
+              N=20 **0.0000**, N=30 0.0002, N=40 0.0106, N=45 0.0958, N=50 0.5243, N=55 4.4162, N=60 31.63.
+              **dLink == dTetra at EVERY N** -- equal-and-opposite displacement, the signature of the
+              **CC push split**, so the error is in the PUSH MAGNITUDE, not Link's foot term (his proc and
+              speedF stay bit-identical: at the first divergence both read p7 / sF -25.387, position alone
+              differs). The model pushes very slightly TOO HARD (separation at N=50: live 46.49 vs model
+              46.60 u). A tiny residue seeds between plan frames 20-30 and amplifies ~1.4x/frame -- the
+              known ~1.35x/contact-frame plow amplifier -- until the 4th roll passes to Tetra's LEFT and
+              misses her entirely (observed live), leaving her 113 u short.
+            - **NEXT:** root-cause the push residue that appears by plan frame ~30, decomp-first. Link's
+              foot term is exonerated, so suspect the **animated exec Co-centre** (`body_co_center` at poses
+              the recorded window never visited) or the f32 Tetra-track rounding. The existing 0-ULP gates
+              only cover the RECORDED inputs' f1..f43, which never excited it -- so build the gate from a
+              truncate-and-read live curve on node 1's OWN inputs. Iterate cheaply: each N is one ~8-s run.
+            - Scratch (gitignored `_notes/`): `node1_full_log.json`, `node1_perframe.json` (the offline
+              expectation), `node1_bisect.json` (the divergence curve), `tetrapush-{author_boot,node1_plain,
+              node1_bisect,node1_stepped,node1_perframe,boot_run,boot_fast,author_stratB,stratB_run}.py`.
+              `[[courtyard-tetra-push]]`, `[[tetrapush-dtm-delivery]]`.
       - [x] **ROUTE (a) PIECE 2 CLOSED -- THE COUPLED Link->ENTRY WALK BIT-CONFIRMS END-TO-END
             (session 52).** From the s51 confirmed homing placement, `walk_to_entry` (s47, Link-only
             reach_precise to `seeds.ENTRY_ROLL_POS`, Tetra frozen above the bar) closes the entry with
