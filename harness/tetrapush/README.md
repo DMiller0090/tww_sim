@@ -677,6 +677,35 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       bit-confirm, no calibration). The camera/look/neck sub-models ARE 0-ULP-gated and reusable.
       Session-28 progress (below): the sound primitive layer is RESTORED + gated, coarse feasibility
       is CONFIRMED, and the f1 seed-frame cost was characterized (session 28) then CLOSED (session 29).
+      - [x] **ROUTE (a) PIECE 2 CLOSED -- THE COUPLED Link->ENTRY WALK BIT-CONFIRMS END-TO-END
+            (session 52).** From the s51 confirmed homing placement, `walk_to_entry` (s47, Link-only
+            reach_precise to `seeds.ENTRY_ROLL_POS`, Tetra frozen above the bar) closes the entry with
+            ZERO new code -- the s47 walk + s51 homing compose directly. Off the real 3-cycle chain
+            dump (`_notes/tetrapush-walk_chain.py` regenerates it, ~800 s; the RUN half
+            `tetrapush-walk_run.py` rebuilds each placement from its cached log and iterates the walk):
+            - **node 1 (the best homing node, Tetra pd 0.011 on a genuine coord, Link at rest lead
+              -62.9 BEHIND Tetra / lat +51.6 off-line): the walk reaches the entry to `dist 10.42 u`,
+              `max_tetra_disp 0.000` (Tetra bit-FROZEN -- untouched), `clean=True`, follow-free, Tetra
+              pd after the walk still 0.011.** `confirm_plan` replays the WHOLE state-2 -> chain ->
+              brake -> homing -> walk log (**241 frames**) **0-ULP: bit_exact=True, talk_safe=True,
+              follow-free**. So from state 2 a single fully-computed input sequence lands Tetra ON a
+              genuine seam-clip coord AND stands Link at the final-clip entry, bit-confirmed.
+            - **The node SIDE is the discriminator (why node 1 alone):** nodes 0/2/3 also arrive+confirm
+              their placement but re-plow Tetra during the walk (node 0 lead +55 = OVERTOOK her; nodes
+              2/3 lat -80 = far off-line the wrong side) -- the walk to the UP-HERD entry crosses Tetra.
+              Node 1 ends behind-and-beside her, so the walk never crosses her (Tetra 0.000).
+            - **The 10.42 u entry residual is a genuine floor** (stable across a dense gain grid +
+              min_crawl {0.043,0.03,0.02}): the 2-frame input latency + coast-to-rest granularity, the
+              s47 walk floor (~7 u synthetic). FINE because the entry is a reposition target the final
+              clip re-solves per (entry,facing) (`ENTRY_ROLL_FACING` is unoptimised -- the clip's own
+              turnaround sets it); a sub-unit entry tail is follow-up, not a blocker.
+            - **No new gate** (matches the s49-s51 discipline): the real bit-confirm is the scratch run
+              (documented), not a unit test (the 800 s chain); the synthetic recipe-physics of
+              `walk_to_entry` (rest clean / ebs re-plow) + `homing_place` are already gated. A synthetic
+              off-line `lat_off` walk was probed and is clean but only duplicates the s47 rest-clean
+              property (it can't reproduce the node-side crossing on the fixed coord). 543 offline pass.
+            - **2b is CLOSED end-to-end OFFLINE**; only the out-of-band DTM tier-2 confirm + an optional
+              sub-unit entry-precision tail remain. `[[courtyard-tetra-push]]`.
       - [~] **ROUTE (a) PIECE 1: THE OFF-THREAD ARRIVAL CLOSED -- `homing_place` BUILT + GATED
             (session 51).** The s50 handoff's concrete next target -- get Tetra ONTO the thread
             laterally so the placement closes -- is delivered as a gated terminal, `full_herd.
