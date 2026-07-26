@@ -677,6 +677,38 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
       bit-confirm, no calibration). The camera/look/neck sub-models ARE 0-ULP-gated and reusable.
       Session-28 progress (below): the sound primitive layer is RESTORED + gated, coarse feasibility
       is CONFIRMED, and the f1 seed-frame cost was characterized (session 28) then CLOSED (session 29).
+      - [~] **THE OUT-OF-BAND DTM TIER-2 LIVE CONFIRM -- STRATEGY A KILLED, STRATEGY B ANCHOR CONFIRMED
+            (session 53). This is the last open tier; the offline model + 2b are CLOSED.** Node 1's full
+            **241-frame** input log was extracted (`_notes/node1_full_log.json`; the offline model lands
+            Tetra pd **0.011** on genuine coord 287 `(-1627.42, -892.34)`, Link 10.42 u from the entry)
+            and it is **delivery-robust**: re-simulating on the console's cal-clamped delivered bytes
+            (0->1, 255->254) is BIT-IDENTICAL (the octagon dead-zone absorbs the extremes), so
+            `[[octagon-clamp-decode-bug]]` does not bite -- authoring cal'd bytes is exact.
+            - **Strategy A (extend the recorded boot movie + `loadstate 2`) is DEAD.** Authored the
+              continuation movie `GZLJ01.s02.node1.dtm` (recorded prefix byte-identical through F0=44974,
+              my 241 frames after, round-trips 0/241 vs `dtm_inputs`), but **`loadstate 2` REJECTS any
+              modified movie**: with `tickCount` maxed Dolphin CRASHES at State::Load; with a minimal
+              header edit it HANGS on a blocking modal (baseline recorded-movie loadstate returns <1s).
+              The movie-anchored slot-2 savestate is bound to the EXACT recorded movie -- you cannot
+              deliver computed inputs by extending it. Baseline re-verified healthy (recorded movie
+              loadstate 2 reads the seed exactly: `(-1329.424, 39.899) sF -24.574 proc 6`).
+            - **Strategy B (a fresh `bFromSaveState=1` movie anchored to the slot-2 savestate, `run_dtm`'s
+              flow) WORKS -- CONFIRMED LIVE.** A trivial 20-frame `bFromSaveState=1` movie authored from
+              the `run_dtm` template, with the slot-2 savestate `GZLJ01.s02` copied to `<out>.sav` + the
+              companion `<out>.sav.dtm` (the deep-anchor `m_current_frame!=1` trick), playmovies straight
+              into the courtyard: Link reads the state-2 seed EXACTLY (`(-1329.424, 39.899) sF -24.574
+              proc 6`) -- decoupled from the recorded movie. So the plan CAN be delivered this way.
+            - **NEXT (the concrete recipe, all pieces identified):** (1) author node 1's 241 frames as a
+              `bFromSaveState=1` movie -- an L-capable encoder inverting `dtm_inputs.frame_input`
+              (A=0x02/B=0x04/L=0x400; `dtm_make.pad_to_cs` lacks L), slot-2 `.sav` anchor + companion
+              `.sav.dtm`; (2) CALIBRATE the leading `REST_NOOPS` (0/1/2, anchor-dependent -- `rollstab/
+              rest.py`) by first authoring the KNOWN recorded 45-frame push as a `bFromSaveState` movie and
+              finding the noop offset that reproduces the recorded trajectory (one live run, compare
+              post-hoc); (3) `bFromSaveState` movies FREE-RUN to exhaustion + PauseMovie (run_dtm's model,
+              NOT per-frame `advance` -- the probe's manual advance on `state:other` did nothing), so read
+              Tetra + Link at the movie-end pause; (4) compare to coord 287 + `ENTRY_ROLL_POS`. Scratch
+              (gitignored `_notes/`): `node1_full_log.json`, `tetrapush-{node1_extract,delivered_resim,
+              author_dtm,live_diag,live_full,stratB_probe}.py`, `stratB_probe.log`. `[[courtyard-tetra-push]]`.
       - [x] **ROUTE (a) PIECE 2 CLOSED -- THE COUPLED Link->ENTRY WALK BIT-CONFIRMS END-TO-END
             (session 52).** From the s51 confirmed homing placement, `walk_to_entry` (s47, Link-only
             reach_precise to `seeds.ENTRY_ROLL_POS`, Tetra frozen above the bar) closes the entry with
