@@ -65,6 +65,37 @@ def zl1_execute_addr(D):
     return text + ZL1_EXECUTE_OFF
 
 
+def tetra_scan(D, xz_lo=(-2300.0, -1400.0), xz_hi=(-1000.0, 500.0), floor_y=0.16327, y_tol=0.05,
+               lo=0x80A00000, hi=0x80F00000, verbose=True):
+    """Locate Tetra WITHOUT a breakpoint, by scanning the actor heap. Returns the `this` pointer or None.
+
+    `find_tetra_instance` needs its `_execute` breakpoint to TRAP, which cannot happen on a HALTED movie
+    (a movie paused at its last frame, or one being single-stepped -- the advance halts on the pause
+    boundary instead, reported as "breakpoint at 0x... did not trap"). That silently yields no reads at
+    all, so any endpoint read off a finished DTM playback must come through here (session 54).
+
+    The struct is identifiable from RAM alone: fopAc pos (+0x1F8 x, +0x1FC y, +0x200 z) on the courtyard
+    floor (Y = 0.16327) plus the Zl1 following-variant tag `field_0x84F == 5`. Reads MEM1 in ONE block
+    and filters in Python, so it is fast and perturbs nothing."""
+    h, mem1 = D.attach()
+    blob = D.read_bytes(h, mem1, lo, hi - lo)
+    hits = []
+    for off in range(0, len(blob) - 0x900, 4):
+        y = struct.unpack_from('>f', blob, off + 0x1FC)[0]
+        if not (abs(y - floor_y) <= y_tol):
+            continue
+        if blob[off + ZL1_TYPE_OFF] != 5:
+            continue
+        x = struct.unpack_from('>f', blob, off + 0x1F8)[0]
+        z = struct.unpack_from('>f', blob, off + 0x200)[0]
+        if xz_lo[0] <= x <= xz_hi[0] and xz_lo[1] <= z <= xz_hi[1]:
+            hits.append((lo + off, x, y, z))
+    if verbose:
+        for a, x, y, z in hits:
+            print("  tetra_scan hit 0x%08x pos(%.4f, %.4f, %.4f)" % (a, x, y, z))
+    return hits[0][0] if hits else None
+
+
 def find_tetra_instance(D, reload_slot=None, verbose=True):
     """Return Tetra's runtime `this` pointer by trapping _execute.
 
