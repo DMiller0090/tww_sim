@@ -70,7 +70,9 @@ foot-chain joint matrix is built as:
 
 1. euler s16 (half-angle s16/2) → quaternion - `JMAEulerToQuat` (**non-fused**, see
    [fp-faithfulness](fp-faithfulness.md#fma-fusion-vs-non-fusion-the-load-bearing-distinction)),
-   `quat.euler_to_quat`.
+   `quat.euler_to_quat`. The half-angle is taken on the **signed** s16 - halving a raw u16 picks the
+   negated (bit-different) table entry, see
+   [euler-quat-signed-half](euler-quat-signed-half.md).
 2. optional **two-anim blend** - `JMAQuatLerp` (`quat.quat_lerp`: dot in f32, lerp in f64→f32,
    **no renormalize**), plus the non-fused translate/scale blend.
 3. quaternion → matrix - `mDoMtx_quat = PSMTXQuat` (fused-then-scaled off-diagonals; `fres`+Newton

@@ -89,6 +89,7 @@ you can triage in one glance.
 ### Model - engine (core)
 - **Why f32/ctypes / op-order / `_F32_PI` / `cM_rad2s` truncation / the baked cos+sin tables / which matrix-quat ops are FMA-fused?** → [model/fp-faithfulness.md](model/fp-faithfulness.md)
 - **How does the J3D anim runtime work / the 42-joint skeleton / Hermite keyframes / world-space foot FK / `PSMTXQuat` / how does the toe become `speedF`?** → [model/anim-engine.md](model/anim-engine.md)
+- **Why must the euler→quat half-angle be sign-extended / why isn't a negated quaternion bit-equivalent?** → [model/euler-quat-signed-half.md](model/euler-quat-signed-half.md)
 
 ### Model - swim
 - **Why f32 / the console cosine table / CHARGE_DISP_FACTOR / cold-start mRate?** → [model/swim-sim.md](model/swim-sim.md)

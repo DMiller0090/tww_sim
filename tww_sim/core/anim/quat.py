@@ -39,9 +39,20 @@ def euler_to_quat(rx, ry, rz):
     zero. JMAEulerToQuat is compiled WITHOUT FMA contraction: each component is `(a*b) +/- (c*d)` with
     BOTH products separately f32-rounded, THEN added/subtracted -- NOT fused (fmadds/fnmsubs). Confirmed
     bit-exact vs the live oldQuat array for every foot-chain joint (a fused x/y left jnt34 1 ULP off,
-    which leaked into the ATN/waitturn foot-toe tails). See knowledge/model/sim.md."""
+    which leaked into the ATN/waitturn foot-toe tails). See knowledge/model/sim.md.
+
+    The parameters are **s16**, so each is SIGN-EXTENDED before the halving (session 56): a rotation
+    that arrives as a raw u16 >= 0x8000 is a NEGATIVE angle, and halving it unsigned lands 2048 table
+    entries (180 deg) away. That yields the mathematically EQUIVALENT negated quaternion -- which is
+    why it stayed invisible for so long, negation being bit-neutral through `mtx_quat`'s pairwise
+    products -- but `jmaSinTable`'s two entries are rounded independently, so the magnitudes differ by
+    tens of ULP. Live-pinned on the Courtyard roll (`rollf` joint 0 at frame 11: u16 33160 = s16
+    -32376, half -16188 not +16580), where it moved the neck world z 1 ULP and, through the Co-centre,
+    the CC push. `foot_fk._local_from_old` already sign-extended its own callback angles for the same
+    reason (session 16); doing it HERE covers every caller, including the animated rotations."""
     def half(a):
-        a = int(a)
+        a = int(a) & 0xFFFF                                  # the parameter is s16 -- sign-extend
+        a = a - 0x10000 if a >= 0x8000 else a
         return a // 2 if a >= 0 else -((-a) // 2)
     c0, c1, c2 = _cos(half(rx)), _cos(half(ry)), _cos(half(rz))
     s0, s1, s2 = _sin(half(rx)), _sin(half(ry)), _sin(half(rz))

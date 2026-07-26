@@ -185,7 +185,13 @@ cdef inline double _recip2(double denom) noexcept nogil:
 
 # ---- euler s16 -> quaternion (JMAEulerToQuat, non-fused) --------------------------------------
 cdef inline long long _half(long long a) noexcept nogil:
-    # C `s16/2` truncates toward zero (Python's // truncates toward -inf, so replicate that here).
+    # The parameter is s16: SIGN-EXTEND before halving (session 56 -- an unsigned half lands 2048
+    # table entries away, giving the equivalent NEGATED quat whose table magnitudes differ by tens
+    # of ULP; see quat.euler_to_quat). C `s16/2` then truncates toward zero (Python's // truncates
+    # toward -inf, so replicate that here).
+    a = a & 0xFFFF
+    if a >= 0x8000:
+        a -= 0x10000
     return a // 2 if a >= 0 else -((-a) // 2)
 
 cdef void _euler_to_quat_c(long long rx, long long ry, long long rz, double* out) noexcept nogil:

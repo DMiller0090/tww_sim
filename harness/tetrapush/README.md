@@ -812,7 +812,55 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               same MSL sqrt with a math-accurate seed is fine and is provably bit-identical (400k
               operands in Python, 40k push pairs native-vs-Python). The native push therefore uses
               `_sqrtf_msl_c`, but `_frsqrte` is UNDIAGNOSED and still sits under the acch/WallCorrect
-              call sites (`_shovec` ~297/467/549/668/856). Worth root-causing before trusting it. -- THE COUPLED Link->ENTRY WALK BIT-CONFIRMS END-TO-END
+              call sites (`_shovec` ~297/467/549/668/856). Worth root-causing before trusting it.
+      - [~] **THE FP FRONTIER IS CLOSED, AND WHAT IS LEFT IS NOT FP (session 56). Bit-exact through
+            plan frame 67; the next seed at 68 is a PROC divergence, and from frame 100 the console
+            leaves the modeled regime entirely.**
+            - **THE BUG: `JMAEulerToQuat`'s half-angle must be taken on the SIGNED s16.** `quat.
+              euler_to_quat` halved the raw u16, so an animated rotation `>= 0x8000` (a negative angle)
+              landed **2048 sin-table entries away**. That yields the mathematically EQUIVALENT NEGATED
+              quaternion, which is why it hid for months: negation is bit-neutral through `mtx_quat`
+              (every element uses components in pairs). But `jmaSinTable`'s two entries are rounded
+              independently, so the magnitudes differ by tens of ULP on the cancellation-prone
+              components. Truth page: `knowledge/model/euler-quat-signed-half.md`.
+            - **WHAT IT COST.** Live at `rollf` joint 0 frame 11 (rotation.x = u16 33160 = s16 -32376)
+              the sim's `w` was 47 ULP short, which through `2(yz - wx)` with |x| ~ 1 moved the NECK
+              world z 1 ULP, hence the root/neck midpoint `setCollision` uses as the push Co-centre,
+              hence the CC push. Fixed in both engines (`quat.py`, `_anmc.pyx` `_half`); native rebuilt.
+            - **IT ALSO CLOSED A SEPARATE 16-DAY-OLD GAP**: `test_rest_roll_pose_bitexact` (late
+              FRONT_ROLL drawn poses, 1-122 ULP, open since 2026-07-10) XPASSed and its marker is gone.
+              The suspects on that marker (thigh lean, m35C4, foot lift) were all wrong. Late roll
+              frames are exactly where a joint rotation crosses into negative s16.
+            - **METHOD (reusable, and it beat guessing three times running).** Invert the f32 bin
+              boundary at the seed frame to BOUND the required change (frame 39 wanted the push z
+              +3..+35 ULP); enumerate FP-shape variants against that interval -- **every one moved it 0
+              ULP**, which exonerated the push arithmetic and pointed at its INPUTS; then eliminate live,
+              term by term (`_notes/tetrapush-node1_chainscan.py`, NEW: the full 3x4 world matrix of
+              every NECK_CHAIN joint plus the `m_old_fdata` quat/trans/scale store, diffed joint by
+              joint -- "the divergence frame names the bug", applied down the chain instead of down
+              time). Joints 1-14's quats were bit-exact and joint 0's was the sign-flipped
+              representative; a two-variable ULP brute force over `cos_0`/`sin_0` returned a UNIQUE
+              solution (c0 47 ULP away, s0 unchanged) = the fingerprint of a table-INDEX error.
+            - **RESULT.** Every previously-open sample (39, 40, 45, 50, 55, 60) went 0-ULP at once, and
+              the live sweep past 60 kept it: 61, 62, 65, 66, 67 all bit-exact on BOTH actors. Full
+              offline suite green (615).
+            - **THE NEXT SEED IS FRAME 68, AND IT IS NOT FP.** The console exits the roll into **proc 9
+              (`ATN_ACTOR_MOVE`, the untarget brakeslide)**; the sim goes to **proc 24
+              (`MOVE_TURN`)** -- the attention actor-lock is dropping early again, exactly the session-6
+              failure one cycle later. Tetra is still 0-ULP at n=80, so the push is not implicated.
+              Start at `checkNextMode`'s roll-exit routing + `AttentionLock` lifetime, decomp-first.
+            - **AND A SCOPE GAP BEHIND IT, which is the likely real cause of the 113 u miss.** From plan
+              frame 100 the console's Tetra reads **stt 4 (FOLLOW)** -- and `FreeRun`'s own
+              FOLLOW_ENGAGE_DIST guard fires at that very frame. The stt-3 plow model does not cover
+              follow, so the plan's second half is outside the model by construction. Closing it is a
+              SCOPE task (model stt-4 follow, or re-solve the plan under an in-regime constraint), NOT
+              another rounding hunt. `test_the_out_of_regime_rows_are_flagged_not_silently_expected`
+              pins that distinction so a future session cannot mistake it for one.
+            - **GATE.** `fixtures/courtyard_node1_console_s56.json` (NEW, LOCKED; n=61..70, 80, 100,
+              120, 160, 200) joins the s54/s55 fixtures. `OPEN` = {68,69,70,80,100,120,160,200}; the
+              push-symmetry test is REPLACED (that signature is gone) by
+              `test_the_first_open_sample_is_a_proc_divergence_not_a_push_one`.
+      - [x] **ROUTE (a) PIECE 2 CLOSED -- THE COUPLED Link->ENTRY WALK BIT-CONFIRMS END-TO-END
             (session 52).** From the s51 confirmed homing placement, `walk_to_entry` (s47, Link-only
             reach_precise to `seeds.ENTRY_ROLL_POS`, Tetra frozen above the bar) closes the entry with
             ZERO new code -- the s47 walk + s51 homing compose directly. Off the real 3-cycle chain

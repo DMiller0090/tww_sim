@@ -1,0 +1,217 @@
+{
+ "source": "session 56 -- truncate-and-read on node 1s locked 241-frame log (fixtures/courtyard_node1_console.json), delivered by harness/tetrapush/deliver.py: playmovie the spliced boot movie + savestate load 1, PauseMovie halts at plan frame N-1. Extends session 55s n=21..40 sweep past n=60 after the signed-half euler_to_quat fix closed every sample out to 60.",
+ "immutable": "LOCKED live capture. For a fixed input log the console is ground truth -- never edit a value to make the sim pass; fix the model (tests/dolphin/README.md#locked-tests-are-immutable-hard-rule).",
+ "method": "deterministic PauseMovie halt, not a single-step: one full run per N, nothing issued but playmovie + savestate load 1.",
+ "regime_note": "Tetra reads stt 4 (the FOLLOW state) at n=100 and n=120 -- OUTSIDE the stt-3 plow regime the sim models. FreeRuns own guard fires at plan frame 100 (Link-Tetra distance crosses FOLLOW_ENGAGE_DIST = 230 u), so these rows are recorded as ground truth but are NOT a fair 0-ULP target until stt-4 follow is modeled or the plan is re-solved to stay in regime.",
+ "plan": "fixtures/courtyard_node1_console.json (log, 241 frames)",
+ "samples": [
+  {
+   "n": 61,
+   "link": {
+    "x": -1609.3077392578125,
+    "z": -691.1090698242188,
+    "facing": 32424,
+    "travel": 32424,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1540.8675537109375,
+    "z": -715.9415283203125,
+    "stt": 3
+   }
+  },
+  {
+   "n": 62,
+   "link": {
+    "x": -1612.6630859375,
+    "z": -716.0205688476562,
+    "facing": 32424,
+    "travel": 32424,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1536.6348876953125,
+    "z": -717.0151977539062,
+    "stt": 3
+   }
+  },
+  {
+   "n": 65,
+   "link": {
+    "x": -1611.5821533203125,
+    "z": -793.9425659179688,
+    "facing": 32424,
+    "travel": 32424,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 66,
+   "link": {
+    "x": -1610.704833984375,
+    "z": -819.927734375,
+    "facing": 32424,
+    "travel": 32424,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 67,
+   "link": {
+    "x": -1609.8275146484375,
+    "z": -845.9129028320312,
+    "facing": 32424,
+    "travel": 32424,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 68,
+   "link": {
+    "x": -1608.9501953125,
+    "z": -871.8980712890625,
+    "facing": 32424,
+    "travel": 32424,
+    "proc": 9,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 69,
+   "link": {
+    "x": -1612.9981689453125,
+    "z": -897.304931640625,
+    "facing": 32424,
+    "travel": 1656,
+    "proc": 6,
+    "speedF": -25.727313995361328
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 70,
+   "link": {
+    "x": -1617.083740234375,
+    "z": -922.6964721679688,
+    "facing": 27421,
+    "travel": 1666,
+    "proc": 6,
+    "speedF": -25.71809959411621
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 80,
+   "link": {
+    "x": -1608.0679931640625,
+    "z": -908.6046142578125,
+    "facing": 33070,
+    "travel": 33070,
+    "proc": 6,
+    "speedF": 5.702632904052734
+   },
+   "tetra": {
+    "x": -1535.0838623046875,
+    "z": -717.0487060546875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 100,
+   "link": {
+    "x": -1590.5172119140625,
+    "z": -955.2555541992188,
+    "facing": 38643,
+    "travel": 38643,
+    "proc": 6,
+    "speedF": 0.10414473712444305
+   },
+   "tetra": {
+    "x": -1543.2734375,
+    "z": -736.296875,
+    "stt": 4
+   }
+  },
+  {
+   "n": 120,
+   "link": {
+    "x": -1608.720947265625,
+    "z": -953.8230590820312,
+    "facing": 51089,
+    "travel": 51089,
+    "proc": 6,
+    "speedF": 0.4411928057670593
+   },
+   "tetra": {
+    "x": -1566.125732421875,
+    "z": -822.804931640625,
+    "stt": 4
+   }
+  },
+  {
+   "n": 160,
+   "link": {
+    "x": -1633.1005859375,
+    "z": -955.2555541992188,
+    "facing": 43717,
+    "travel": 43717,
+    "proc": 6,
+    "speedF": 0.529705286026001
+   },
+   "tetra": {
+    "x": -1568.3983154296875,
+    "z": -829.5521240234375,
+    "stt": 3
+   }
+  },
+  {
+   "n": 200,
+   "link": {
+    "x": -1593.729248046875,
+    "z": -883.013427734375,
+    "facing": 30611,
+    "travel": 30611,
+    "proc": 6,
+    "speedF": 2.3738021850585938
+   },
+   "tetra": {
+    "x": -1547.8870849609375,
+    "z": -811.6023559570312,
+    "stt": 3
+   }
+  }
+ ]
+}
