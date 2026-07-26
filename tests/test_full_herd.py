@@ -426,6 +426,40 @@ def test_decel_place_beats_the_hot_glide_with_an_on_line_near_rest_arrival(env, 
         assert r['frames'] == len(r['log']) and r['brake_frames'] > 0
 
 
+def test_homing_place_corrects_an_off_thread_lateral_offset(env, hl):
+    """**Route (a), piece 1 -- the HOMING placement terminal, gated (session 51).** `decel_place`
+    (s50) herds Tetra straight DOWN the line (lat_drift ~0), so it needs her already on the thread; run
+    on the REAL 3-cycle chain endpoint it stalled at pd ~41 because the chain leaves Tetra ~28 u OFF
+    the thread laterally (s44's offset), which the on-line herd cannot pull her onto from behind.
+    `homing_place` fixes exactly that: it aims Link each frame at a moving standoff BEHIND Tetra
+    RELATIVE TO THE COORD, so the plow (which ejects Tetra away from Link's exec centre) pushes her
+    TOWARD the coord in along AND lateral.
+
+    Gated on the off-thread `synthetic_hot_arrival(lat_off=+-28)` (the s44 offset; synthetic, so no
+    bit-confirm -- gates the recipe physics like decel/walk/place). For BOTH offset signs the homing
+    terminal must land Tetra `arrival_ok` ON a coord, freeze_ok, with the lateral offset NULLED (the
+    net Tetra lateral move `lat_drift` cancels the seeded ~28 u), where `decel_place`'s on-line herd
+    provably cannot (the s50 chain result). A coarse standoff/gain sweep keeps the gate fast."""
+    standoffs = tuple(float(x) for x in range(42, 70, 8))
+    for lat_off in (28.0, -28.0):
+        hot = F.synthetic_hot_arrival(env, hl, 241, d_short=40.0, feet=64.0, lat_off=lat_off)
+        # the seed is off-thread: Tetra sits ~|lat_off| u laterally off the genuine thread
+        assert abs(hl.lateral(hot['run'].tx, hot['run'].tz)
+                   - hl.lateral(env['cyl'][0]['tetra']['pos'][0],
+                                env['cyl'][0]['tetra']['pos'][2])) > 20.0
+
+        r = F.homing_place(hot, hl, coord_idx=241, standoffs=standoffs, gains=(0.5, 0.25))
+
+        assert r['arrival_ok'], "homing_place did not reach an arrival_ok placement"
+        assert r['pd'] <= 2.0                                  # ON a genuine coord
+        assert r['centre_feet'] >= F.CO_RADII_BAR             # freeze_ok
+        assert r['approach'] <= 3.0                            # near-rest
+        # the lateral offset is corrected: Tetra's net lateral move cancels the seeded offset
+        assert abs(r['lat_drift'] + lat_off) < 6.0
+        # the log carries the full brake -> homing sequence (bit-confirmable when chain-real)
+        assert r['frames'] == len(r['log']) and r['brake_frames'] > 0
+
+
 @pytest.mark.slow
 def test_cycle_unit_chains_from_the_recorded_entry_and_bit_confirms(env, hl, box):
     """What IS established (s43): the generic cycle unit -- junction beam then roll -- chains a

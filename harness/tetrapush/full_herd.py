@@ -1060,8 +1060,10 @@ def decel_place(placed, hl, placements=None, coord_idx=None, *, brake_msd=0.06,
          gain are SWEPT (not tuned) and the best `arrival_ok`/min-pd release kept. `place_on_thread`
          finishes (a no-op when the glide already froze her on-coord).
 
-    The result is exactly the arrival `arrival_quality` gates for and `walk_to_entry` needs: Tetra ON
-    a coord, `freeze_ok`, Link near-rest on-line-behind. Returns
+    This herds Tetra straight down the line and so needs her ALREADY on the thread laterally; when the
+    chain leaves her off-thread (the s44 lateral OFFSET), use `homing_place` (session 51), which aims
+    Link at a moving standoff behind Tetra RELATIVE to the coord so the plow corrects along + lateral
+    together. Returns
     ``dict(run, log, frames, pd, centre_feet, lat_drift, approach, arrival_ok, back, gain,
     brake_frames, coord_idx)``; `log`/`frames` carry the FULL placed -> brake -> glide -> place
     sequence, so `confirm_plan` replays it 0-ULP once the placement is chain-reachable (a synthetic
@@ -1111,21 +1113,150 @@ def decel_place(placed, hl, placements=None, coord_idx=None, *, brake_msd=0.06,
                 gain=best['gain'], brake_frames=len(br_inputs), coord_idx=coord_idx)
 
 
-def synthetic_hot_arrival(env, hl, coord_idx=241, *, d_short=40.0, feet=64.0):
+_HOMING_STANDOFFS = tuple(float(x) for x in range(38, 74, 4))   # Link's standoff behind Tetra (rel. coord)
+_HOMING_GAINS = (0.5, 0.35, 0.25, 0.15)                         # the proportional-crawl gain sweep
+
+
+def _homing_glide(run0, cp, hl, placements, standoff, k, *, min_crawl, max_walk, coast_max):
+    """One proportional-speed HOMING glide toward a moving standoff point ``standoff`` u behind Tetra
+    on the far side from the target coord ``cp`` -- so the plow ejects Tetra TOWARD the coord (along +
+    lateral together). Each frame re-aims at ``Tetra + standoff * unit(Tetra - coord)`` and, like
+    `_glide_to_entry`, clones + neutral-coasts to REST to read the clean frozen placement at that
+    release (bit-exact mid-walk clone makes the O(n) release sweep equal to per-release re-simulation).
+    Returns the best ``dict(pd, centre_feet, run, inputs, n_walk, coast)`` (prefer frozen, then min-pd)
+    or None. The coast is what freezes Tetra (`centre_feet >= CO_RADII_BAR` once Link separates)."""
+    def pdist(run):
+        return min(math.hypot(p['x'] - run.tx, p['z'] - run.tz) for p in placements)
+
+    walk = run0.clone()
+    walk_inputs = []
+    best = None
+    for n in range(1, int(max_walk) + 1):
+        vx, vz = walk.tx - cp['x'], walk.tz - cp['z']       # coord -> Tetra
+        vn = math.hypot(vx, vz)
+        ux, uz = (hl.dx, hl.dz) if vn < 1e-6 else (vx / vn, vz / vn)
+        ax, az = walk.tx + standoff * ux, walk.tz + standoff * uz
+        rem = math.hypot(ax - walk.link.pos_x, az - walk.link.pos_z)
+        target_speed = min(max(k * rem, min_crawl), _WALK_MAX_NSPEED)
+        msd = min(max(math.sqrt(target_speed / _WALK_MAX_NSPEED), 0.051), 1.0)
+        th = world_angle_s16(ax - walk.link.pos_x, az - walk.link.pos_z)
+        sx, sy = stick_for_bearing(th, walk.csangle, msd)
+        d = dict(stickX=sx, stickY=sy, buttons=0, triggerL=0,
+                 substickX=T.CSTICK_NEUTRAL, substickY=0)
+        walk.step(d)
+        walk_inputs.append(d)
+        if walk._follow_warned:                             # left the plow regime
+            break
+        coast = walk.clone()
+        cn, broke = 0, False
+        for _ in range(int(coast_max)):
+            coast.step(_neutral_input())
+            cn += 1
+            if coast._follow_warned:
+                broke = True
+                break
+            if _at_rest(coast):
+                break
+        if broke:
+            continue
+        cf = _centre_feet(coast)
+        cand = (0 if cf >= CO_RADII_BAR else 1, pdist(coast))
+        if best is None or cand < best['key']:
+            best = dict(key=cand, pd=cand[1], centre_feet=cf, run=coast,
+                        inputs=list(walk_inputs), n_walk=n, coast=cn)
+    return best
+
+
+def homing_place(placed, hl, placements=None, coord_idx=None, *, brake_msd=0.06,
+                 gains=_HOMING_GAINS, standoffs=_HOMING_STANDOFFS, min_crawl=0.043,
+                 max_walk=240, coast_max=40, brake_frames=16):
+    """**Route (a), piece 1: the HOMING placement terminal** (session 51) -- the terminal that closes
+    2b for an OFF-THREAD arrival, correcting the s44 lateral OFFSET the decelerating on-line
+    `decel_place` (s50) cannot.
+
+    `decel_place` proved the DECELERATE-then-glide recipe lands Tetra on a coord with ZERO lateral
+    DRAG (inverting the s49 hot-glide drag), but it herds her straight DOWN the line, so it needs her
+    already on the thread laterally. Run on the real 3-cycle chain endpoint (s50) it stalled at pd ~41
+    because the chain leaves Tetra ~28 u OFF the thread laterally and the on-line herd cannot pull her
+    onto it from behind. This terminal fixes exactly that: after the same reverse-brake, its glide
+    AIMS Link each frame at a moving standoff point BEHIND Tetra RELATIVE TO THE TARGET COORD
+    (`Tetra + standoff * unit(Tetra - coord)`), so the plow -- which ejects Tetra away from Link's
+    exec centre -- pushes her TOWARD the coord in BOTH along and lateral, converging as she nears it.
+
+    Two phases: (1) `_reverse_brake` kills the hot EBS on-line (as in `decel_place`); (2) the homing
+    glide (`_homing_glide`) chases the moving standoff to a metered crawl, coast-probing to REST each
+    frame for the clean frozen placement, sweeping ``standoff`` + gain and keeping the best frozen
+    min-pd release. Measured on `synthetic_hot_arrival(lat_off=+-28..40)`: Tetra pd < 0.1 u ON a
+    genuine coord, `centre_feet >= 80` (freeze_ok), lateral offset nulled (|lat| < 3) -- so it closes
+    the arrival for the off-thread chain endpoint, the deliverable `walk_to_entry` then consumes.
+
+    Returns ``dict(run, log, frames, pd, centre_feet, lat_drift, approach, arrival_ok, standoff, gain,
+    brake_frames, coord_idx)``; `log`/`frames` carry the FULL placed -> brake -> homing sequence, so
+    `confirm_plan` replays it 0-ULP once the placement is chain-reachable (a synthetic arrival does not
+    replay, like `decel_place`/`walk_to_entry`). ``lat_drift`` is Tetra's net lateral move over the
+    homing (intentionally large here -- the correction -- unlike `decel_place`'s ~0)."""
+    if placements is None:
+        placements, _ = seeds.load_placements()
+    br = placed['run'].clone()
+    br, br_inputs = _reverse_brake(br, hl, msd=brake_msd, max_frames=brake_frames)
+    if coord_idx is None:
+        coord_idx = min(range(len(placements)),
+                        key=lambda i: math.hypot(placements[i]['x'] - br.tx,
+                                                 placements[i]['z'] - br.tz))
+    cp = placements[coord_idx]
+    lat0 = hl.lateral(br.tx, br.tz)
+    best = None
+    for standoff in standoffs:
+        for k in gains:
+            b = _homing_glide(br.clone(), cp, hl, placements, standoff, k,
+                              min_crawl=min_crawl, max_walk=max_walk, coast_max=coast_max)
+            if b is None:
+                continue
+            if best is None or b['key'] < best['key'] or (b['key'] == best['key']
+                                                          and b['n_walk'] < best['n_walk']):
+                best = dict(b, standoff=standoff, gain=k)
+    if best is None:                                        # brake never produced a homing glide
+        pd = _placement_dist(br, placements)
+        return dict(run=br, log=list(placed.get('log', [])) + br_inputs,
+                    frames=placed.get('frames', 0) + len(br_inputs), pd=pd,
+                    centre_feet=_centre_feet(br), lat_drift=0.0, approach=_approach_rate(br),
+                    arrival_ok=False, standoff=None, gain=None, brake_frames=len(br_inputs),
+                    coord_idx=coord_idx)
+    run = best['run']
+    glide_log = best['inputs'][:best['n_walk']] + [_neutral_input()] * best['coast']
+    log = list(placed.get('log', [])) + br_inputs + glide_log
+    frames = placed.get('frames', 0) + len(br_inputs) + len(glide_log)
+    cf = best['centre_feet']
+    approach = _approach_rate(run)
+    return dict(run=run, log=log, frames=frames, pd=best['pd'], centre_feet=cf,
+                lat_drift=hl.lateral(run.tx, run.tz) - lat0, approach=approach,
+                arrival_ok=(cf >= CO_RADII_BAR and best['pd'] <= 2.0 and approach <= 3.0),
+                standoff=best['standoff'], gain=best['gain'], brake_frames=len(br_inputs),
+                coord_idx=coord_idx)
+
+
+def synthetic_hot_arrival(env, hl, coord_idx=241, *, d_short=40.0, feet=64.0, lat_off=0.0):
     """**A SYNTHETIC below-the-bar HOT pre-placement, the state the grazing chain terminal produces**
-    (session 50): Link in the hot post-untarget EBS, ON the herd line ``feet`` u BEHIND Tetra, with
+    (session 50): Link in the hot post-untarget EBS, ``feet`` u BEHIND Tetra along the herd line, with
     Tetra ``d_short`` u UP-herd (short) of genuine coord ``coord_idx`` -- the deep-contact, closing
     arrival whose hot glide s49 showed drags Tetra laterally. It is the testbed `decel_place` must
     beat, the hot counterpart of `synthetic_frozen_arrival` (which mints the ABOVE-the-bar frozen
-    arrival for the walk). Relocation only (position does not feed anim/momentum), so it is
-    self-consistent but NOT reachable by a state-2 input log -- it gates the decel recipe's
-    physics/regime, not a bit-confirm. Returns a ``placed`` node (``dict(run, log=[], frames=0))``."""
+    arrival for the walk).
+
+    ``lat_off`` (session 51) shifts BOTH actors ``lat_off`` u off the thread laterally (Tetra
+    off-thread, Link still on-line-behind HER) -- the s44 lateral OFFSET the REAL 3-cycle chain
+    endpoint carries (~28 u; endpoint pd 74.7 = hypot(69 along, 28 lat)). With ``lat_off=0`` this is
+    the s50 on-line testbed; with ``lat_off != 0`` it is the real-chain testbed the lateral-bias
+    `decel_place` must correct (approach from the HIGH-lateral side so the plow pulls Tetra onto the
+    thread). Relocation only (position does not feed anim/momentum), so it is self-consistent but NOT
+    reachable by a state-2 input log -- it gates the decel recipe's physics/regime, not a bit-confirm.
+    Returns a ``placed`` node (``dict(run, log=[], frames=0))``."""
     from harness.tetrapush.reposition import seed_to_untarget
     import tww_sim.core.fp as fp
     placements, _ = seeds.load_placements()
     p = placements[coord_idx]
-    tx = float(p['x']) - d_short * hl.dx
-    tz = float(p['z']) - d_short * hl.dz
+    tx = float(p['x']) - d_short * hl.dx + lat_off * hl.px
+    tz = float(p['z']) - d_short * hl.dz + lat_off * hl.pz
     run, _aim = seed_to_untarget(env)                       # the hot post-untarget EBS
     run.link.pos_x = fp.f32(tx - feet * hl.dx)
     run.link.pos_z = fp.f32(tz - feet * hl.dz)
@@ -1535,6 +1666,34 @@ def _cmd_decel(env, hl, kw):
           "     is the arrival `walk_to_entry` needs; the open piece is feeding it a REAL chain endpoint.")
 
 
+def _cmd_homing(env, hl, kw):
+    """**Route (a), piece 1 demo** (session 51): the HOMING placement terminal that corrects the s44
+    lateral OFFSET the on-line `decel_place` cannot. On an OFF-THREAD synthetic hot pre-placement
+    (`synthetic_hot_arrival(lat_off=...)` -- Tetra seeded ~28 u off the thread, the state the real
+    3-cycle chain endpoint leaves), it contrasts:
+      * `decel_place` (s50, on-line herd) -- stalls at the lateral offset (pd ~ the offset);
+      * `homing_place` -- aims Link at a moving standoff behind Tetra rel. the coord so the plow pulls
+        her ONTO the thread, landing her ON a coord (arrival_ok), the lateral offset nulled.
+    Sweeps lat_off (both signs) to show the correction is not a single-case tune."""
+    idx = int(kw.get('coord', 241))
+    placements, _ = seeds.load_placements()
+    print("HOMING PLACE (milestone 2b, route a piece 1): coord idx %d\n" % idx)
+    print("  lat_off |  decel_place (s50): pd   lat_drift aok | homing_place (s51): pd   lat_drift aok  frames")
+    for lo in (0.0, 28.0, -28.0):
+        d = synthetic_hot_arrival(env, hl, idx, d_short=40.0, feet=64.0, lat_off=lo)
+        h = synthetic_hot_arrival(env, hl, idx, d_short=40.0, feet=64.0, lat_off=lo)
+        rd = decel_place(d, hl, placements, coord_idx=idx)
+        rh = homing_place(h, hl, placements, coord_idx=idx)
+        print("   %+5.0f  |            %6.2f  %+8.3f %-5s |           %6.3f  %+8.3f %-5s  %d"
+              % (lo, rd['pd'], rd['lat_drift'], rd['arrival_ok'],
+                 rh['pd'], rh['lat_drift'], rh['arrival_ok'], rh['frames']))
+    print("\n  => homing_place corrects the lateral offset the on-line decel cannot: the plow ejects\n"
+          "     Tetra AWAY from Link's exec centre, so aiming Link at a standoff behind her RELATIVE to\n"
+          "     the coord pushes her toward it in along AND lateral -> she lands ON a coord (arrival_ok)\n"
+          "     with the offset nulled (lat_drift cancels the seed). This is the terminal the off-thread\n"
+          "     chain endpoint needs; feeding it a REAL ranked chain endpoint closes 2b.")
+
+
 def main(argv):
     import warnings
     warnings.simplefilter('ignore')
@@ -1558,9 +1717,11 @@ def main(argv):
         _cmd_place(env, hl, kw)
     elif cmd == 'decel':
         _cmd_decel(env, hl, kw)
+    elif cmd == 'homing':
+        _cmd_homing(env, hl, kw)
     else:
         print("usage: python -m harness.tetrapush.full_herd "
-              "{sep | box | plan | endgame | walk | arrivals | place | decel}")
+              "{sep | box | plan | endgame | walk | arrivals | place | decel | homing}")
 
 
 if __name__ == '__main__':
