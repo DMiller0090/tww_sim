@@ -738,6 +738,17 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               46.60 u). A tiny residue seeds between plan frames 20-30 and amplifies ~1.4x/frame -- the
               known ~1.35x/contact-frame plow amplifier -- until the 4th roll passes to Tetra's LEFT and
               misses her entirely (observed live), leaving her 113 u short.
+            - **THE GATE = `tests/test_node1_console.py`** (offline, 0.3 s, runs by default). The locked
+              fixture `fixtures/courtyard_node1_console.json` carries node 1's 241-frame log AND the
+              console-measured state at each sample; the test replays the log and demands the sim predict
+              it **0-ULP**. Correct polarity: for a fixed input log the console is ground truth and never
+              moves, so the SIM converges to the fixture -- never edit it to pass (immutability hard rule).
+              Currently n=20 PASSES bit-exact and n={30,40,45,50,55,60} are **`xfail(strict=True)`**, so a
+              model fix XPASSes and FAILS the suite until its `n` is removed from `OPEN` -- the frontier
+              ratchets and cannot regress (`test_the_frontier_is_contiguous...` keeps the exact region a
+              prefix). Two assertions double as the diagnosis: proc/facing/stt match at EVERY sample, and
+              the Link/Tetra error magnitudes are EXACTLY equal (the push-split signature) -- pinned so a
+              "fix" that moves the foot term instead of the push is caught, not mistaken for progress.
             - **NEXT:** root-cause the push residue that appears by plan frame ~30, decomp-first. Link's
               foot term is exonerated, so suspect the **animated exec Co-centre** (`body_co_center` at poses
               the recorded window never visited) or the f32 Tetra-track rounding. The existing 0-ULP gates
