@@ -323,6 +323,9 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         # frames ago -- the whole controller poll is delivered together.
         self._inbuf.append((int(sx), int(sy), int(buttons), int(triggerL), int(csx), int(csy)))
         asx, asy, abtn, atrig, acsx, acsy = self._inbuf.pop(0)
+        # Frame-START proc: "a proc *_init ran" == post-step state != this. Captured before the A-roll
+        # trigger (which would mask a roll entry); the deferred draw needs it (model/draw-base.md).
+        entry_state = self.state
         # setStickData reads the camera value as of the START of the frame (the camera integrator
         # advances LATER in the frame): m34E8 = m34DC(stick) + csangle[f-1]. Mirror swim_predict.
         self.csangle = self._cam.csangle
@@ -667,8 +670,10 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         if self._gnd is not None:
             _gnd_frame_end_fn(self)
         if self._foot is not None and self._foot.defer_draw:
+            # A proc *_init frame draws UPRIGHT: commonProcInit zeroes shape_angle.z (:5841) before
+            # setWorldMatrix, setMoveSlantAngle restores it after. See knowledge/model/draw-base.md.
             self._foot.set_pos(self.pos_x, self.pos_z, facing=self.facing, py=self.pos_y,
-                               lean=self._draw_lean)
+                               lean=0 if self.state != entry_state else self._draw_lean)
             self._foot.finish_draw()
             self._set_move_slant_angle()
             d = math.hypot(self.pos_x - px0, self.pos_z - pz0)

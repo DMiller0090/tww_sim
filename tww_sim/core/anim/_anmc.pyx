@@ -787,12 +787,18 @@ DEF C_ATNDRS=11
 DEF C_ATNWB=12
 DEF C_ATNDB=13
 DEF C_FREEB=14
+# The SWORD-DRAWN under-body pair: with mEquipItem == daPyItem_SWORD_e, getAnmData
+# (d_a_player_main.cpp:12950) serves ANM_WALK/ANM_DASH out of mSwordAnmIndexTable, i.e. WALKS/DASHS.
+# Feet-only difference, but posMoveFromFootPos reads the feet -- selected by `_sword`/`set_sword`.
+DEF C_WALKS=15
+DEF C_DASHS=16
+DEF N_ANIM=17
 DEF D_FORWARD=0
 DEF D_BACKWARD=1
 DEF D_LEFT=2
 
-cdef double _MMAX[15]                 # frameMax per anim code
-cdef int _MATTR[15]                   # J3DFrameCtrl attribute (EMode) per anim code
+cdef double _MMAX[N_ANIM]             # frameMax per anim code
+cdef int _MATTR[N_ANIM]               # J3DFrameCtrl attribute (EMode) per anim code
 cdef double _H_MAXSPEED, _H_2C, _H_30, _H_38, _H_40, _H_48, _H_60
 cdef double _ATN_1C, _ATN_20, _ATN_24, _ATN_28, _ATN_2C
 cdef double _ATNB_1C, _ATNB_20, _ATNB_24, _ATNB_28
@@ -806,7 +812,7 @@ def init_anim_consts(meta_max, meta_attr, hio):
     global _H_MAXSPEED, _H_2C, _H_30, _H_38, _H_40, _H_48, _H_60
     global _ATN_1C, _ATN_20, _ATN_24, _ATN_28, _ATN_2C, _ATNB_1C, _ATNB_20, _ATNB_24, _ATNB_28
     cdef int i
-    for i in range(15):
+    for i in range(N_ANIM):
         _MMAX[i] = meta_max[i]; _MATTR[i] = meta_attr[i]
     _H_MAXSPEED = hio['maxspeed']; _H_2C = hio['h2c']; _H_30 = hio['h30']; _H_38 = hio['h38']
     _H_40 = hio['h40']; _H_48 = hio['h48']; _H_60 = hio['h60']
@@ -960,7 +966,8 @@ cdef class PoseEngine:
     cdef double _base[12]           # worldBase (set by set_pos)
     cdef double _inv[12]            # m37B4 = PSMTXInverse(worldBase)
     # ---- fused anim-state machine + toe-stream state (UnderAnimState + FootSpeedF port) --------
-    cdef int _code2idx[15]          # anim code -> AnimData data-index (set by init_anim)
+    cdef int _code2idx[N_ANIM]      # anim code -> AnimData data-index (set by init_anim)
+    cdef bint _sword                # mEquipItem == SWORD: walk/dash pose as WALKS/DASHS (getAnmData)
     cdef bint _fused_ready          # init_anim done
     cdef int _fc0_attr, _fc1_attr
     cdef double _fc0_start, _fc0_end, _fc0_loop, _fc0_rate, _fc0_frame
@@ -972,6 +979,12 @@ cdef class PoseEngine:
     cdef double _t1[12]             # toe drawn last frame
     cdef double _t2[12]             # toe drawn the frame before
     cdef double _prev_f312, _m35B4
+    # Deferred draw (FootSpeedF.defer_draw): the game draws the model at frame END, from the
+    # POST-posMove base, while the compose that consumes t1/t2 runs mid-frame -- so the pose is
+    # stashed here and `_finish_draw_c` lands it once the caller has moved. See finish_draw.
+    cdef bint _defer_draw, _has_pd
+    cdef int _pd_m0, _pd_m1
+    cdef double _pd_f0, _pd_f1, _pd_ratio, _pd_morf, _pd_f312, _pd_msd
     cdef bint _started, _stopped
     cdef double _idle_frame
     cdef int _idle_code
@@ -1037,9 +1050,10 @@ cdef class PoseEngine:
                 c._olds_bc[i][j] = self._olds_bc[i][j]
         c._m_counter = self._m_counter; c._m_f8 = self._m_f8; c._m_rate = self._m_rate
         c._m_f10 = self._m_f10; c._m_f14 = self._m_f14
-        for i in range(15):
+        for i in range(N_ANIM):
             c._code2idx[i] = self._code2idx[i]
         c._fused_ready = self._fused_ready
+        c._sword = self._sword
         c._fc0_attr = self._fc0_attr; c._fc1_attr = self._fc1_attr
         c._fc0_start = self._fc0_start; c._fc0_end = self._fc0_end; c._fc0_loop = self._fc0_loop
         c._fc0_rate = self._fc0_rate; c._fc0_frame = self._fc0_frame
@@ -1052,6 +1066,10 @@ cdef class PoseEngine:
         c._idle_frame = self._idle_frame; c._idle_code = self._idle_code
         c._single_entered = self._single_entered
         c._pending_morf = self._pending_morf; c._has_pending = self._has_pending
+        c._defer_draw = self._defer_draw; c._has_pd = self._has_pd
+        c._pd_m0 = self._pd_m0; c._pd_m1 = self._pd_m1
+        c._pd_f0 = self._pd_f0; c._pd_f1 = self._pd_f1; c._pd_ratio = self._pd_ratio
+        c._pd_morf = self._pd_morf; c._pd_f312 = self._pd_f312; c._pd_msd = self._pd_msd
         return c
 
     @property
@@ -1063,18 +1081,36 @@ cdef class PoseEngine:
         return (self._fc0_frame, self._fc1_frame, self._m_counter, self._m_f8, self._m_rate,
                 self._m_f10, self._m_f14, self._prev_f312, self._m35B4, self._a_ratio, self._m3598)
 
-    cdef void _set_pos_c(self, double px, double py, double pz, long long facing) noexcept nogil:
-        cdef long long fc = facing & 0xFFFF
+    cdef void _set_pos_c(self, double px, double py, double pz, long long facing,
+                         long long lean) noexcept nogil:
+        """worldBase = transS(p) . YrotM(facing) [. ZrotM(lean)] + its PSMTXInverse. `lean` is
+        shape_angle.z (the m351C>>1 MOVE turn lean): mDoMtx_ZXYrotM concats the Z rotation onto the
+        Y-rotated base, skipped entirely at 0 -- the same build as `_co_center_impl` and the Python
+        `fk.world_base`. It only moves the pose by ULPs (the base is cancelled by m37B4 afterwards),
+        but those ULPs ARE the toe stream's last digits."""
+        cdef long long fc = facing & 0xFFFF, lc = lean & 0xFFFF
         cdef double c = jma_cos(fc), s = jma_sin(fc), ns = f32(-s)
         self._base[0] = c;   self._base[1] = 0.0; self._base[2] = s;   self._base[3] = f32(px)
         self._base[4] = 0.0; self._base[5] = 1.0; self._base[6] = 0.0; self._base[7] = f32(py)
         self._base[8] = ns;  self._base[9] = 0.0; self._base[10] = c;  self._base[11] = f32(pz)
+        cdef double rz[12]
+        cdef double leaned[12]
+        cdef double cz_, sz_
+        if lc != 0:
+            cz_ = jma_cos(lc); sz_ = jma_sin(lc)
+            rz[0] = cz_; rz[1] = f32(-sz_); rz[2] = 0.0;  rz[3] = 0.0
+            rz[4] = sz_; rz[5] = cz_;       rz[6] = 0.0;  rz[7] = 0.0
+            rz[8] = 0.0; rz[9] = 0.0;       rz[10] = 1.0; rz[11] = 0.0
+            _concat_c(self._base, rz, leaned)
+            memcpy(self._base, leaned, 12 * sizeof(double))
         _psmtx_inverse_c(self._base, self._inv)
 
-    def set_pos(self, px, py, pz, facing):
+    def set_pos(self, px, py, pz, facing, lean=0):
         """Set Link's world pose for the frame about to be posed: build worldBase + m37B4 into C
-        (was fk.world_base + a Python list round-trip per frame). Flat ground: base = transS.ZXYrotM(Y)."""
-        self._set_pos_c(<double>px, <double>py, <double>pz, (<long long>facing) & 0xFFFF)
+        (was fk.world_base + a Python list round-trip per frame). `lean` = shape_angle.z (0 = the
+        flat base = transS.ZXYrotM(Y))."""
+        self._set_pos_c(<double>px, <double>py, <double>pz, (<long long>facing) & 0xFFFF,
+                        (<long long>lean) & 0xFFFF)
 
     cdef void _init_morf(self, double i_morf) noexcept nogil:
         i_morf = f32(i_morf)
@@ -1380,9 +1416,17 @@ cdef class PoseEngine:
         cdef int i
         if not _ANIM_CONSTS_READY:
             raise RuntimeError("init_anim_consts() must be called before init_anim()")
-        for i in range(15):
+        for i in range(N_ANIM):
             self._code2idx[i] = code2idx[i]
         self._fused_ready = True
+
+    def set_sword(self, bint sword):
+        """mEquipItem == daPyItem_SWORD_e: the under-body walk/dash anims come from
+        `mSwordAnmIndexTable` (ANM_WALK -> WALKS, ANM_DASH -> DASHS; getAnmData,
+        d_a_player_main.cpp:12950). Everything else in the courtyard set maps to itself (the table
+        ends at ANM_CUTTURNPWLR 0x1A, so ANM_ROLLF 0x32 falls through to mAnmDataTable), so this
+        flag only re-points the two walk codes. Mirrors `FootSpeedF(sword=)`."""
+        self._sword = sword
 
     def w_init(self, int idle_code, double idle_frame, draw0):
         """Seed the fused toe-stream + anim state at the rest anchor. `draw0` is the flat 12-tuple
@@ -1443,16 +1487,19 @@ cdef class PoseEngine:
             an = -an
         cdef double f30 = fdivs(an, _H_MAXSPEED)
         cdef double f25_2, f1
+        # getAnmData: sword equipped -> the WALKS/DASHS pair (see set_sword).
+        cdef int cw = C_WALKS if self._sword else C_WALK
+        cdef int cd = C_DASHS if self._sword else C_DASH
         if f30 < _H_2C:
             f25_2 = fdivs(f30, _H_2C)
             self._m3598 = fsubs(1.0, fmuls(fsubs(1.0, _H_60), f25_2))
-            self._anim_set_move(f25_2, _H_38, _H_40, C_WAITS, C_WALK, 1)
+            self._anim_set_move(f25_2, _H_38, _H_40, C_WAITS, cw, 1)
         elif f30 < _H_30:
             f1 = fdivs(fsubs(f30, _H_2C), fsubs(_H_30, _H_2C))
-            self._anim_set_move(f1, _H_40, _H_48, C_WALK, C_DASH, 1)
+            self._anim_set_move(f1, _H_40, _H_48, cw, cd, 1)
             self._m3598 = fmuls(_H_60, fsubs(1.0, f1))
         else:
-            self._anim_set_move(1.0, _H_48, _H_48, C_DASH, C_DASH, 1)
+            self._anim_set_move(1.0, _H_48, _H_48, cd, cd, 1)
             self._m3598 = 0.0
 
     cdef void _anim_atn_side(self, double f31, bint is_left) noexcept nogil:
@@ -1501,9 +1548,18 @@ cdef class PoseEngine:
         delayed toe delta + compose speedF, then shift the toe stream. Port of foot_speedf._foot_speedf."""
         cdef double cur[12]
         cdef int i
+        cdef double speedF, f312
+        if self._defer_draw:
+            # Compose first (it reads only t1/t2), stash the pose for the end-of-frame base.
+            _foot_compose_c(self._t1, self._t2, nspeed, msd, m3598, self._prev_f312, self._m35B4,
+                            &speedF, &f312)
+            self._pd_m0 = m0; self._pd_m1 = m1
+            self._pd_f0 = f0; self._pd_f1 = f1; self._pd_ratio = ratio
+            self._pd_morf = morf; self._pd_f312 = f312; self._pd_msd = msd
+            self._has_pd = True
+            return speedF
         self._pose_toe_core(self._code2idx[m0], self._code2idx[m1 if m1 >= 0 else m0],
                             f0, f1, ratio, morf, cur)
-        cdef double speedF, f312
         _foot_compose_c(self._t1, self._t2, nspeed, msd, m3598, self._prev_f312, self._m35B4,
                         &speedF, &f312)
         self._m35B4 = msd
@@ -1512,6 +1568,31 @@ cdef class PoseEngine:
             self._t1[i] = cur[i]
         self._prev_f312 = f312
         return speedF
+
+    cdef void _finish_draw_c(self, double px, double py, double pz, long long facing,
+                             long long lean) noexcept nogil:
+        """Deferred-draw completion: pose the stashed frame at the CURRENT (post-posMove) base and
+        shift the toe stream. No-op when nothing was stashed (a frozen / non-posing frame). Twin of
+        FootSpeedF.finish_draw."""
+        cdef double cur[12]
+        cdef int i
+        if not self._has_pd:
+            return
+        self._has_pd = False
+        self._set_pos_c(px, py, pz, facing, lean)
+        self._pose_toe_core(self._code2idx[self._pd_m0],
+                            self._code2idx[self._pd_m1 if self._pd_m1 >= 0 else self._pd_m0],
+                            self._pd_f0, self._pd_f1, self._pd_ratio, self._pd_morf, cur)
+        self._m35B4 = self._pd_msd
+        for i in range(12):
+            self._t2[i] = self._t1[i]
+            self._t1[i] = cur[i]
+        self._prev_f312 = self._pd_f312
+
+    def set_defer_draw(self, bint defer):
+        """Draw at frame END from the post-posMove base (`FootSpeedF.defer_draw`). Carried by
+        `seed_from_foot`; `LandCore.step_courtyard` calls `_finish_draw_c` every frame."""
+        self._defer_draw = defer
 
     def w_step(self, double nspeed, double msd, double anim_nspeed, bint has_anim):
         """One walk (MOVE / MOVE_TURN tail) frame. Port of FootSpeedF.step. `has_anim` splits the
@@ -1643,7 +1724,7 @@ cdef class PoseEngine:
                    &self._fc0_frame, &self._fc0_rate)
         _fc_update(self._fc1_attr, self._fc1_start, self._fc1_end, self._fc1_loop,
                    &self._fc1_frame, &self._fc1_rate)
-        self._anim_set_move(0.0, _H_38, _H_40, C_WAITS, C_WALK, 2)
+        self._anim_set_move(0.0, _H_38, _H_40, C_WAITS, C_WALKS if self._sword else C_WALK, 2)
         self._m3598 = 0.0
         self._foot_speedf_c(0.0, f32(msd), self._move0, self._move1,
                             self._fc0_frame, self._fc1_frame, self._a_ratio, self._m3598, morf)
@@ -1692,6 +1773,9 @@ cdef class PoseEngine:
             self.init_anim(code2idx)
         st = foot.st
         ff = foot.ff
+        self._sword = bool(foot.sword)      # carry the getAnmData WALKS/DASHS swap (see set_sword)
+        self._defer_draw = bool(foot.defer_draw)     # and the end-of-frame draw base
+        self._has_pd = False
         self._move0 = ANIM_CODE[st.move0]
         self._move1 = ANIM_CODE[st.move1] if st.move1 is not None else -1
         self._m34C3 = int(st.m34C3)
@@ -2938,7 +3022,9 @@ cdef class LandCore:
             self._pe._w_set_pending_c(_L_MOVE_REENTRY_MORF)
 
         # --- pose + speedF (posMoveFromFootPos via the seeded fused engine) ---
-        self._pe._set_pos_c(self.pos_x, self.pos_y, self.pos_z, self.facing)
+        # Pre-posMove base: the legacy (non-deferred) draw poses here. With the deferred draw on,
+        # `_finish_draw_c` re-sets the base at frame end and this is inert.
+        self._pe._set_pos_c(self.pos_x, self.pos_y, self.pos_z, self.facing, 0)
         cdef double sf_native, f31, na, ratio
         cdef long long r3, r3a
         cdef int r27
@@ -3000,6 +3086,13 @@ cdef class LandCore:
             self._tetra_z = f32(self._tetra_z + self._pend_tetra_z)
         # end-of-frame: the draw lean (pre-update m351C), the setMoveSlantAngle update, m34de/m34ea.
         self._draw_lean_c = <double>(_s16c(<long long>self.m351C) >> 1)
+        # The model is DRAWN here -- post-posMove base, no lean on a proc *_init frame (commonProcInit
+        # zeroed shape_angle.z before setWorldMatrix). Same law and same moment as the exec Co-centre
+        # below, because both come from the one mpCLModel->calc() per frame. No-op unless the seeded
+        # foot deferred (`PoseEngine.set_defer_draw`). Twin of state.py's finish_draw block.
+        cdef bint init_frame = self.state != entry_state
+        self._pe._finish_draw_c(self.pos_x, self.pos_y, self.pos_z, self.facing,
+                                0 if init_frame else <long long>self._draw_lean_c)
         self._set_move_slant_angle_c()
         self.m34de = self.facing
         self.m34ea = self.m34dc
@@ -3008,12 +3101,10 @@ cdef class LandCore:
         # then compute NEXT frame's push pair (Link recoil obj1, Tetra push obj2). Runs AFTER
         # setMoveSlantAngle so the BODY_CHN twist uses the post-update lean and the base uses the
         # draw lean (0 on a proc-init frame) -- the from_f0._computed_center timing law.
-        cdef bint init_frame
         cdef long long base_lean_v, body_lean_v
         cdef double cxz[2]
         cdef double push[4]
         if native_push != 0:
-            init_frame = self.state != entry_state
             body_lean_v = _s16c(<long long>self.m351C) >> 1
             base_lean_v = 0 if init_frame else (<long long>self._draw_lean_c)
             self._pe._body_co_center(self.pos_x, self.pos_y, self.pos_z, self.facing,

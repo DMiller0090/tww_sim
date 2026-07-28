@@ -79,8 +79,11 @@ ATNB_28 = fp.f32(0.95)       # mAtnMoveB.field_0x28 (back DASH single rate)
 
 # Canonical anim-CODE order for the native fused engine (_anmc): fixed small codes mapped to the JSON
 # data-index via foot_fk._anim_idx. Keep in sync with the DEF codes in _anmc.pyx.
+# The sword-drawn pair ('walks'/'dashs') is APPENDED, so every existing code keeps its value (the
+# .pyx DEF C_* constants are positional). Keep in sync with _anmc's DEF N_ANIM.
 ANIM_ORDER = ['waits', 'walk', 'dash', 'rollf', 'rot', 'slip', 'atnwls', 'atnwrs',
-              'atnls', 'atnrs', 'atndls', 'atndrs', 'atnwb', 'atndb', 'freeb']
+              'atnls', 'atnrs', 'atndls', 'atndrs', 'atnwb', 'atndb', 'freeb',
+              'walks', 'dashs']
 ANIM_CODE = {name: i for i, name in enumerate(ANIM_ORDER)}
 NATIVE_META_MAX = [float(ANIM_META[n][0]) for n in ANIM_ORDER]
 NATIVE_META_ATTR = [int(ANIM_META[n][1]) for n in ANIM_ORDER]

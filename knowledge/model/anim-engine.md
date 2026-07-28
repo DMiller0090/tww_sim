@@ -150,9 +150,10 @@ via `fk.psmtx_inverse` (the retail **PSMTXInverse**: cofactor/determinant with a
 reciprocal, **not** a transpose - they diverge at non-axis facings because `worldBase`'s `R` from the
 sin/cos tables isn't exactly orthonormal; this is what made `waitturn`/`ebs` bit-exact). Run the chain
 from `cur = worldBase`, then apply `m37B4` (`FootFK` world mode).
-`LandState.step` feeds the current pre-integration `pos.x/pos.z/facing` each frame via
-`FootSpeedF.set_pos` - the FK quantizes the toe at world magnitude, so the driver **must** get the
-live position each frame.
+`LandState.step` feeds `pos.x/pos.z/facing` each frame via `FootSpeedF.set_pos` - the FK quantizes
+the toe at world magnitude, so the driver **must** get the live position each frame, and **which**
+position (and lean) is itself a law: the game draws AFTER `posMove`, upright on a proc-init frame -
+see [draw-base](draw-base.md).
 
 ## `jointCB1` foot rebuild (not IK)
 
@@ -203,3 +204,5 @@ Diagnostic rule: when a world-space-FK toe residual cancels between `m37B4` and 
 
 - [FP faithfulness](fp-faithfulness.md) · [Land sim](land-sim.md) ·
   [Land movement](../mechanics/land-movement.md) · [Animation / head-bob (swim)](../mechanics/animation.md).
+- [Draw base](draw-base.md) (where/when the pose is taken) · [Equipped anim set](equipped-anim-set.md)
+  (which anims get posed).

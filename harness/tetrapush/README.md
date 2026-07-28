@@ -224,7 +224,8 @@ deliberately unported.
 | `tetra_plow.py` | **The Courtyard Co-overlap GEOMETRY**: `plow_depth` (`cM3d_Cross_CylCyl` cross_len) + the Link/Tetra Co radii (30/50). The per-frame PUSH LAW is now `from_f0.cc_push_pair`; `plow_step`/`reconstruct` (the session-8 DERIVED full-depth-from-settled law) were RETIRED session 27 (superseded, ~1e-5 u off the console -- git history archives them). Gated `tests/test_tetra_plow.py`: the regime discriminator (frac==1.0) + `test_console_push_bit_exact_vs_deterministic`. |
 | `from_f0.cc_push_pair` | **THE console CC push law (session 27)**: `cc_push.co_move_pair` = `dCcS::SetPosCorrect` -- the decomp 50/50 half-depth rank split on Link's EXEC centre, obj1/obj2 EXACT-opposite. 0-ULP vs the deterministic per-op ΔTetra f2..f43. Replaces `full_depth_push` (now the seed-frame f0->f1 fallback only). |
 | `link_plow.py` | **The Courtyard Link-recoil LAW** (session 9, now the SEED-frame fallback path): Link's per-frame recoil = the FULL Co overlap depth AWAY from Tetra (`link += depth·unit(link_centre−Tetra)`). `recoil()`/`recoil_step()`, used by `from_f0.full_depth_push` (the f0->f1 seed push). Superseded for f1..f43 by `cc_push_pair`. Gated `tests/test_link_plow.py` (frac==1.0 regime discriminator). Reuses `tetra_plow.plow_depth`. |
-| `from_f0.py` | **The from-f0 COUPLED replay** (session 10-12): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay(..., seed_nspeed=)`. Session 17 refactored the loop into **`FreeRun`** -- the planner's novel-input stepper (seed once, `step()` arbitrary raw inputs; eye/tattn per-step injectables; warns if a stepped state leaves the stt-3 plow regime, dist > `FOLLOW_ENGAGE_DIST`) -- with `replay` a thin wrapper over it. Session 19 wired the MODELED land camera in (`camera=` a seeded `LandCamera`), replacing the csangle injection entirely (see the planner box). **Session 29** closed the f1 seed-frame boundary: `FreeRun(seed_push=)` / `replay(..., seed_push=)` take the exact perop f0->f1 ΔTetra push (`full_depth_push` is now the roll-entry / no-perop fallback), and `step()` rounds the tracked Tetra point to f32 each frame (console storage) -- so the self-contained closed loop from state 2 is now bit-exact in POSITION too, f1..f43, both actors. Gated `tests/test_from_f0.py`: from the roll entry, from **state 2 itself** (dynamics), the one-step-from-exact gates (position f1..f43), and `test_closed_loop_computed_replay_bit_exact` (accumulating position f1..43). |
+| `from_f0.py` | **The from-f0 COUPLED replay** (session 10-12): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay(..., seed_nspeed=)`. Session 17 refactored the loop into **`FreeRun`** -- the planner's novel-input stepper (seed once, `step()` arbitrary raw inputs; eye/tattn per-step injectables; warns if a stepped state leaves the stt-3 plow regime, dist > `FOLLOW_ENGAGE_DIST`) -- with `replay` a thin wrapper over it. Session 19 wired the MODELED land camera in (`camera=` a seeded `LandCamera`), replacing the csangle injection entirely (see the planner box). **Session 29** closed the f1 seed-frame boundary: `FreeRun(seed_push=)` / `replay(..., seed_push=)` take the exact perop f0->f1 ΔTetra push (`full_depth_push` is now the roll-entry / no-perop fallback), and `step()` rounds the tracked Tetra point to f32 each frame (console storage) -- so the self-contained closed loop from state 2 is now bit-exact in POSITION too, f1..f43, both actors. Gated `tests/test_from_f0.py`: from the roll entry, from **state 2 itself** (dynamics), the one-step-from-exact gates (position f1..f43), and `test_closed_loop_computed_replay_bit_exact` (accumulating position f1..43). **Session 58** pinned the two POSE-STREAM seed facts in `_seed_link`: `SWORD_DRAWN = True` (mEquipItem 0x103 -> the WALKS/DASHS pair) and `defer_draw = True` (the end-of-frame post-posMove draw base). Both are inert until an anim-driven speedF frame and then they ARE the position -- do not "simplify" either away; `tests/test_foot_draw_base.py` fails immediately if you do. |
+| `fixtures/courtyard_node1_foot_s57.json` | **The POSE-STREAM ground truth (session-57 footscan, baked + LOCKED session 58)**: the console's `mFootData` model-local toe/heel poses at plan frames 62/64/66/68/69, plus `m3598`/`m359C`/`m35B4`/`msd`/plant. Deterministic truncate-and-read halts. Gated by `tests/test_foot_draw_base.py`: every x/z 0-ULP (Y carries the unmodeled `m35B8` draw-base shift and is excluded, deliberately, so the gap stays visible). This is the gate that discriminates a draw-base / anim-set fault from a composition one WITHOUT a live run -- score a candidate against the toes, not the endpoint. |
 | `fixtures/courtyard_push_cyl.json` | Session-8 live ground truth: per-frame Link **mCyl Co-centre** + **csangle** + Tetra pos, single-stepped from slot 2 (`capture_push`). The Co-centre/csangle source the from-f0 replay needs. **Single-step, so cyc2 is edge-jittery** (the `_dedup` in the plow test drops the f44==f45 double-read); NOT a pinned edge oracle. |
 | `fixtures/courtyard_push_setcol.json` | Session-14 breakpoint ground truth (f1..f12): at each JP-`setCollision` hit, the nodeMtx root/neck translates + pos/anim/facing AT CALL TIME and the freshly-written **`cyl_exec`**. Pins the mCyl timing law (exec midpoint) + the half-depth settled-centre map. Source probe `_notes/tetrapush-setcol_probe.py`. |
 | `fixtures/courtyard_push_perop.json` | **Session-26 DETERMINISTIC per-op ground truth (f0..f43)**: both actors' `current.pos` (+ proc/facing/travel/speedF/shape_z/anim/csangle/`cyl`/`cc_move`/Tetra stt) read at the JP `posMove` (0x80106514) breakpoint, ONE hit per game frame (the bp pins the frame count -- immune to single-step edge jitter). PROVES the cyl POSITIONS are exact 0-ULP over the whole window (`test_perop_confirms_cyl_positions_are_deterministic`), so the two open push/foot bugs are REAL sim-vs-console residuals, not fixture noise. Tetra has no foot term (stt-3), so her per-frame push = ΔTetra (bug-#1 truth); Link's foot term = ΔLink + ΔTetra (recoil = −ΔTetra, same-rank Newton) -- deterministically a CONSTANT 26.0 u/frame during each roll, with the entry-morf RAMP at roll-start (bug #2). Source probe `_notes/tetrapush-perop_probe.py` (advance+breakpoint, NEVER resume). |
@@ -308,9 +309,11 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
   animated head-joint world pos, the proc-9 re-aim target). Link waist twist `m34E0` `la+0x34E0`
   (s16; jointBeforeCB WAIST_JNT=30 z-rot, LEGS subtree only; f0 residual 1325 decaying
   addCalcAngleS(2,0x800,0x200) to 0 by f3); `m35B8` `la+0x35B8` (f32, footBgCheck draw-base Y shift;
-  f0 -5.198 -- the anmmtx-probe root/neck Y offset, XZ-irrelevant); equipped item `m3562` `la+0x3562`
-  (u16; 0x103 = sword DRAWN, true the whole courtyard window); `m34EC` (extra draw yaw) + `shape.x`
-  `la+0x20C` both 0 all window.
+  f0 -5.198 -- the anmmtx-probe root/neck Y offset, XZ-irrelevant, still unmodeled: it is the
+  residual Y in the `courtyard_node1_foot_s57` toe gate); equipped item `m3562` `la+0x3562`
+  (u16; 0x103 = sword DRAWN, true the whole courtyard window -- so `getAnmData` poses **WALKS/DASHS**,
+  which IS the position wherever `m3598 != 0`; see `knowledge/model/equipped-anim-set.md`); `m34EC`
+  (extra draw yaw) + `shape.x` `la+0x20C` both 0 all window.
 - **dCamera_c (session 17, decomp US GZLE; chain base = `[[0x803AD380]+0x34]` = `camera_class`):**
   `dCamera_c` = `camera_class + 0x244`; `mAngleY` (cSAngle, == csangle) `+0x6C` (chain `+0x2B0`, as
   already used); `mDirection` (cSGlobe `mEye-mCenter`) `+0x008` -- radius f32 `+0`, `mAzimuth`
@@ -669,6 +672,9 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
         m3730/m36B8) stands -- those were all correctly eliminated. Sword-drawn note kept: `m3562 =
         0x103` all window, physics-inert (dash/dashs identical at joints 0-4/14; only feet differ),
         may matter for the final CUT pose set.
+        **"Physics-inert" was true only of the CO-CENTRE and only while `m3598 == 0` -- OVERTURNED by
+        session 58 (box below): the FEET are `posMoveFromFootPos`, so the dash/dashs swap IS the
+        position from plan frame 72 on. The replay now seeds `sword_drawn`.**
 - [~] **Build the planner** -- STARTED (session 28); the forward model is now FULLY BIT-EXACT from
       state 2 -- dynamics AND position 0-ULP f1..f43 (session 27 closed f2..f43; **session 29 closed
       the f1 seed-frame boundary, entirely offline** -- see the search-proper box below). So an
@@ -813,7 +819,55 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               operands in Python, 40k push pairs native-vs-Python). The native push therefore uses
               `_sqrtf_msl_c`, but `_frsqrte` is UNDIAGNOSED and still sits under the acch/WallCorrect
               call sites (`_shovec` ~297/467/549/668/856). Worth root-causing before trusting it.
-      - [~] **THE SECOND UNTARGET CYCLE NOW DISPATCHES ON THE CONSOLE'S FRAME, AND THE FRONTIER IS
+      - [~] **THE POSE STREAM IS NOW CONSOLE-EXACT, AND THE FRONTIER IS THE WAIT STOP (session 58).
+            Bit-exact through plan frame 77; the next seed at 78 is the walk RE-ENTRY out of WAIT.**
+            Session 57 handed over "the toe stream leaves the console at sim frame 69". It was two
+            independent faults in WHAT gets posed, both invisible until plan frame 72 -- the first
+            frame whose speedF is anim-driven -- because the toe stream is warmed and unused while
+            `m3598 == 0`.
+            - **BUG 1: the sword-drawn anim pair.** `mEquipItem` is SWORD all window (`m3562 == 0x103`,
+              noted in `## Addresses` since s15 and explicitly filed as "physics-inert"), so
+              `getAnmData` (`d_a_player_main.cpp`:12950) serves the under-body anims out of
+              `mSwordAnmIndexTable`: **ANM_WALK -> WALKS, ANM_DASH -> DASHS**. That table ends at
+              0x1A, so ANM_ROLLF (0x32) and the ATN strafe set map to themselves -- which is exactly
+              why the roll and proc-9 poses were already right and only the first DASH pose was not.
+              The pair differs ONLY at the feet (joints 0-4/14 identical -> the CC push never saw it),
+              and the feet ARE `posMoveFromFootPos`. `from_f0.SWORD_DRAWN`; truth page
+              `knowledge/model/equipped-anim-set.md`. Alone it took n=72 from 12/58 ULP to 0.
+            - **BUG 2: the draw base.** The game draws at frame END, from the POST-posMove position,
+              with the lean (`m351C >> 1`) in the base EXCEPT on a proc `*_init` frame (`commonProcInit`
+              zeroes `shape_angle.z` before `setWorldMatrix`) -- the same base the exec Co-centre has
+              been live-pinned to since s16, because both come from the one `mpCLModel->calc()`. The
+              replay posed pre-integration with no lean. `defer_draw` + the init-lean rule in
+              `state.py`'s frame-end block; truth page `knowledge/model/draw-base.md`. It closed the
+              1-ULP residue at 73/75/76/77 -- and forcing the lean to 0 puts it back (1-3 ULP), so
+              the lean term is load-bearing, not decoration.
+            - **HOW IT WAS SETTLED -- against the live TOES, not the endpoint.** s57's footscan already
+              held the console's `mFootData` model-local poses (n=62..69). Scoring both draw bases
+              against them is decisive and offline: pre-integration is 32-128 ULP off on x/z, deferred
+              is **0 ULP on all 20 x/z components**. (Y stays off by 16-36 ULP: `m35B8`, footBgCheck's
+              draw-base Y shift, is unmodeled and XZ-irrelevant -- the gate says so.) That capture is
+              now the LOCKED fixture `fixtures/courtyard_node1_foot_s57.json` +
+              `tests/test_foot_draw_base.py` (7), so the pose stream has its own gate instead of only
+              being visible through the endpoint.
+            - **BOTH ENGINES.** The native twin carries both: `_anmc` gained the WALKS/DASHS codes
+              (`ANIM_ORDER` 15/16, `PoseEngine.set_sword`, `N_ANIM` 17) and the deferred draw
+              (`_finish_draw_c` + a leaned `_set_pos_c`), wired into `LandCore.step_courtyard` at the
+              same moment as the Co-centre. `test_freerun_native.py` (native == Python over the whole
+              241-frame plan) is green, so the search fast path did not silently fork.
+            - **GATE.** `OPEN` = {78, 79, 80, 100, 120, 160, 200}; the localization test is REPLACED by
+              `test_the_first_open_sample_is_the_walk_re_entry_out_of_wait`. 634 offline pass.
+            - **NEXT: plan frame 78 = the WAIT stop / re-walk tier.** Link stops (proc 4 at 76-77) and
+              the sim stops posing: `FootSpeedF.step` early-returns at `|mNormalSpeed| <= 0.001`, so
+              its toe stream still holds the walking poses from 74/75 and the re-walk's `f31_2` is
+              **2.617** where the console's is an idle-drift **0.379** (same direction, 6.9x long).
+              The game keeps drawing: `procWait_init` re-poses via `setBlendMoveAnime(field_0xC)` and
+              `procWait` leaves `m34C3 == 2` so the ctrls just advance -- the shape
+              `enter_subjectivity`/`step_subjectivity` already implement for the C-up freeze (a WAIT
+              whose anim keeps running). Confirm the branch live first (one footscan at n=76..78 reads
+              `m3598`/`m359C`/the toes and says whether `ModeFlg_00000001` took the idle arm), then
+              reuse those two, since `foot_speedf`'s own docstring lists this tier as unmodeled.
+      - [x] **THE SECOND UNTARGET CYCLE NOW DISPATCHES ON THE CONSOLE'S FRAME, AND THE FRONTIER IS
             THE FOOT POSE (session 57). Bit-exact through plan frame 71; the next seed at 72 is the
             first ANIM-DRIVEN speedF frame since the roll.**
             - **THE BUG: `chaseAttention`'s front cone is an ACQUIRE/LOCK gate, never a RELEASE one.**

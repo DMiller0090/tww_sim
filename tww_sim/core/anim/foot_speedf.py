@@ -176,8 +176,8 @@ class FootSpeedF:
         self._pending_py = None                        # morf to apply on the next step (Python fallback store)
         # Fused native path (one C call/frame): the Python seeding above already left the engine's
         # old-pose correct + produced draw0; w_init captures the toe stream. Python st/ff = fallback.
-        # The native _anmc hardcodes C_DASH (no DASHS in its 15-anim array), so sword=True forces the
-        # pure-Python foot path here (correctness over speed). See knowledge/model/anim-engine.md.
+        # sword=True keeps the Python foot STATE (the C engine poses the pair via PoseEngine.set_sword
+        # but has no subjectivity proc, which this path's sword callers need). anim-engine.md.
         use_native = native and not self.sword
         if use_native and _N is not None and getattr(self.ff, '_engine', None) is not None:
             _N.init_anim_consts(NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO)   # idempotent

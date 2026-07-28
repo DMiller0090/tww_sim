@@ -143,7 +143,7 @@ def _seed_pose_f0(link, anim_frame, m351c, old_pose=None):
     fsf.ff.body_co = True
     st = fsf.st
     ph = float(anim_frame)
-    dash = st._dash                      # 'dash' (sword_drawn=False)
+    dash = st._dash                      # 'dashs' (SWORD_DRAWN -- the mSwordAnmIndexTable swap)
     end = float(ANIM_META[dash][0])
     st.move0 = st.move1 = dash
     st.m34C3 = 1
@@ -255,6 +255,11 @@ def _cc_settled_center(exec_center, tetra_xz):
     return float(fadds(lx, fmuls(dx, f))), float(fadds(lz, fmuls(dz, f)))
 
 
+# `mEquipItem` is 0x103 (SWORD) the whole window, so the walk/dash anims are WALKS/DASHS -- a
+# feet-only swap, hence position wherever m3598 != 0. knowledge/model/equipped-anim-set.md.
+SWORD_DRAWN = True
+
+
 def _seed_link(row, csangle, seed_nspeed=None):
     """Seed a Python-path `LandState` from a captured frame ``row`` (``{proc, pos, facing, travel,
     speedF}`` under ``row['link']``). A roll entry is seeded FRONT_ROLL with speedF pinned at 26.0
@@ -277,16 +282,19 @@ def _seed_link(row, csangle, seed_nspeed=None):
         link = LandState(pos_x=ll['pos'][0], pos_z=ll['pos'][2], pos_y=ll['pos'][1],
                          facing=ll['facing'], travel=ll['travel'], csangle=csangle,
                          state=FRONT_ROLL, nspeed=26.0, speedF=26.0,
-                         use_anim=True, native=False, sword_drawn=False, input_delay=1)
+                         use_anim=True, native=False, sword_drawn=SWORD_DRAWN, input_delay=1)
         link._roll_m3570 = False           # seeded mid-roll: live grinds (no bonk) -> m3570 False
     else:
         ns = ll['speedF'] if seed_nspeed is None else float(seed_nspeed)
         link = LandState(pos_x=ll['pos'][0], pos_z=ll['pos'][2], pos_y=ll['pos'][1],
                          facing=ll['facing'], travel=ll['travel'], csangle=csangle,
                          state=proc, nspeed=ns, speedF=ll['speedF'],
-                         use_anim=True, native=False, foot_native=False, sword_drawn=False,
+                         use_anim=True, native=False, foot_native=False, sword_drawn=SWORD_DRAWN,
                          input_delay=1)
         link._foot.started = True
+    # Draw at frame END from the post-posMove base -- 0 ULP vs the live toes where pre-integration is
+    # 32-128 ULP off (`tests/test_foot_draw_base.py`). knowledge/model/draw-base.md.
+    link._foot.defer_draw = True
     return link
 
 

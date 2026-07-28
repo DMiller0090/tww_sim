@@ -207,10 +207,9 @@ class FootFK:
         the ALREADY-BUILT matrices (never re-derived) -- Python path only; 0.0 skips (byte-
         identical flat)."""
         if self._engine is not None:
-            if lean or m35b8:
-                raise NotImplementedError("turn lean / m35B8 need the pure-Python foot path "
-                                          "(native=False)")
-            self._engine.set_pos(px, py, pz, facing)
+            if m35b8:
+                raise NotImplementedError("m35B8 needs the pure-Python foot path (native=False)")
+            self._engine.set_pos(px, py, pz, facing, int(lean) & 0xFFFF)
         elif self.world:
             self.base, self.m37b4 = fk.world_base(px, py, pz, facing, lean)
             if m35b8:
