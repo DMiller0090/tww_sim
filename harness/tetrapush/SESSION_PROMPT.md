@@ -21,11 +21,17 @@ position (a genuine coord in `_generated/tetra_placements.tsv`), found ENTIRELY 
 DTM-verified. This is a ONE-TIME sequence for the real run, not a generalized solver, so a >2-minute
 search is fine. Two milestones, in order:
   1. the sim reproduces the ~45 hand-performed push frames after state 2 **bit-exact** (Link + Tetra);
-  2. the planner: state-2 config to the input sequence that lands Tetra on a genuine coord AND sets up
-     the matching final roll entry (the two are coupled; there is runway from state 2 to steer both).
+  2. the planner: state-2 config to the input sequence that lands Tetra on a genuine coord. Link's
+     roll position/angle for the recorded solution is a **SEPARATE search afterwards**, NOT coupled
+     into this one (Dereck, session 60 -- this overturns the older "coupled entry" framing).
      The objective is **FRAME-MINIMAL -- the OPTIMAL, better-than-human solution** (`[[tetrapush-frame-minimal]]`):
      fewest total frames, the recorded human TAS a lower bound to BEAT, not the proc-9 slide and not
-     a mere replica of the human cadence.
+     a mere replica of the human cadence. It is EXECUTABLE, not a slogan -- `harness/tetrapush/
+     objective.py` holds the bar and the constraints, and `score_plan`/`verdict` is the acceptance
+     test. Its four rules (session 60): land Tetra on a coord; at most **2 frames** (1 preferred)
+     over the all-out-push frame floor; end with Link still MOVING for the 1-frame 180 turnaround;
+     and keep BOTH actors off the walls during the herd, since the Courtyard sim models no wall
+     collision (the clip's own wall contact belongs to the recorded solution list).
 
 HARD RULES:
 - **0-ULP is the bar**, validated against a locked live capture, never offline plausibility.
