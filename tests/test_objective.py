@@ -60,6 +60,45 @@ def test_the_budget_is_dereck_s_two_frame_spec(env):
     assert (f['frames_int'], f['preferred'], f['budget']) == (73, 74, 75)
 
 
+def test_the_push_ceiling_is_a_sustained_rate_not_a_per_frame_law(env):
+    """**Session 61, measured off the human's own recording**: `PUSH_CEILING` (13.0 u/frame) is the
+    STEADY STATE of the CC split, and single frames beat it badly.
+
+    The push depth is measured to Link's ANIMATED exec Co-centre, which moves by the foot term plus
+    the pose swing that leads/trails his feet 6-28 u -- so his 4th recorded frame advances Tetra
+    ~18.8 u, nearly 1.5x the "ceiling", while his 44-frame mean sits at 12.758 because the swing
+    cancels over a long window. Pinned because a future session reading 13.0 as a per-frame law
+    would treat a search cycle that legitimately sustains 13.3 as a bug and "fix" the physics."""
+    from harness.tetrapush import search as S
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    rows = S.rollout_recorded(env, upto=45)['rows']
+    t0 = env['cyl'][0]['tetra']['pos']
+
+    prev, worst, mean = (t0[0], t0[2]), 0.0, None
+    for r in rows:
+        t = r['tetra']
+        worst = max(worst, hl.along(t[0], t[1]) - hl.along(prev[0], prev[1]))
+        prev = t
+    mean = hl.along(prev[0], prev[1]) / len(rows)
+
+    assert worst > O.PUSH_CEILING * 1.4, \
+        "no recorded frame beats the ceiling -- re-derive before trusting `plan_bound`'s h"
+    assert mean == pytest.approx(12.758, abs=0.01), "the human's sustained rate moved"
+    assert mean < O.PUSH_CEILING, "the SUSTAINED rate must still sit under the split-law ceiling"
+
+
+def test_the_plan_bound_is_frames_plus_the_steady_state_remainder():
+    """`plan_bound` is the search's rank and the budget cut's test, so its shape is pinned: exact
+    frames spent plus distance over the sustained ceiling, and EXACT (== frames) once Tetra is on the
+    coord. It counts a lateral miss as cost, which is the whole reason it replaced the herd rate."""
+    assert O.plan_bound(40, 0.0) == 40
+    assert O.plan_bound(40, O.PUSH_CEILING) == 41
+    assert O.remaining_frames(130.0) == pytest.approx(10.0)
+    # 100 u down-herd and 100 u down-herd-plus-lateral are NOT the same cost (a rate says they are)
+    assert O.plan_bound(40, math.hypot(100.0, 28.0)) > O.plan_bound(40, 100.0)
+
+
 # --------------------------------------------------------------------------- the walls
 
 def test_the_wall_metric_reproduces_the_console_s_own_brace_point(walls):
@@ -88,6 +127,54 @@ def test_the_wall_radii_are_the_collision_model_s_own(env):
     from tww_sim.core.npc_zl1 import WALL_R as ZL1_R
     from tww_sim.land.walls import WALL_R as LINK_R
     assert (O.LINK_WALL_R, O.TETRA_WALL_R) == (LINK_R, ZL1_R) == (35.0, 50.0)
+
+
+def test_the_target_is_a_segment_across_the_herd_axis_not_a_cluster(env):
+    """**Session 61, measured: the placement target's SHAPE, and what it implies for a plan.**
+
+    The 288 genuine coords are a nearly straight 47.6 u segment sitting 12.2 deg off the herd axis,
+    which in `HerdLine` coordinates makes them a LINE: lateral falls ~0.216 u per u of along, from
+    +7.9 at the near end (along 937.5, coord idx 287) to -2.1 at the far end (along 984.1).
+
+    That is the difference between "hit a point" and "hit a line", and it is the whole reason the
+    s43-s51 endgame needed a reposition phase: Tetra has ~46 u of freedom in WHERE along she stops
+    (~3.6 frames of pushing), but her lateral has to be inside a ~10 u window, and no amount of
+    further down-herd pushing moves a lateral miss into it -- pushing only trades along for lateral
+    at 0.216 u per u. Pinned so the next search states its lateral requirement in these numbers."""
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    th = O.placement_thread(hl)
+
+    assert th['length'] == pytest.approx(47.606, abs=0.01)
+    assert th['deg_off_axis'] == pytest.approx(12.16, abs=0.05)
+    assert th['max_chord_dev'] < 2.0, "the coord set is no longer a near-straight segment"
+    assert (th['along_lo'], th['along_hi']) == pytest.approx((937.535, 984.072), abs=0.01)
+    assert (th['lat_lo'], th['lat_hi']) == pytest.approx((-2.270, 7.943), abs=0.01)
+
+    # the ALONG direction is slack: every lateral in the window has an along that matches it
+    assert th['lat_at'](th['along_lo']) == pytest.approx(th['lat_hi'], abs=0.02)
+    assert th['lat_at'](th['along_hi']) == pytest.approx(th['lat_lo'], abs=0.2)
+    # ... and a lateral outside it has none, at any along on the thread (the s44 +36 u case)
+    assert not (th['lat_lo'] <= 36.0 <= th['lat_hi'])
+    span = [th['lat_at'](a) for a in (th['along_lo'], th['along_hi'])]
+    assert max(span) < 36.0 - 20.0, "a +36 u lateral must be far outside the placeable window"
+
+
+def test_score_plan_reports_where_the_endpoint_sits_on_the_thread(env, walls, node1_rows):
+    """The `placeable` / `lat_error` half of the score, gated on definition (the numbers themselves
+    belong to whatever plan is being scored): `lat_error` is the endpoint's lateral minus the
+    thread's own lateral at that along, and `placeable` says whether any along could place her."""
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    th = O.placement_thread(hl)
+    sc = O.score_plan(env, node1_rows, hl=hl, walls=walls)
+    tol = sc['band'] / math.cos(math.atan(th['slope']))
+
+    a = min(max(sc['tetra_along'], th['along_lo']), th['along_hi'])
+    assert sc['lat_error'] == pytest.approx(sc['tetra_lat'] - th['lat_at'](a))
+    assert sc['placeable'] == (th['lat_lo'] - tol <= sc['tetra_lat'] <= th['lat_hi'] + tol)
+    # on a coord => on the thread: `complete` cannot be true while `placeable` is false
+    assert (not sc['complete']) or sc['placeable']
 
 
 def test_every_genuine_coord_is_wall_free_for_tetra(walls):
@@ -197,6 +284,18 @@ def test_the_locked_plan_fails_the_objective_on_three_independent_rules(env, wal
     assert not sc['terminal_ok'] and sc['terminal']['speed'] == 0.0, \
         "the plan should end at REST -- the near-rest arrival the new terminal rule retires"
     assert sc['timeloss'] > O.TIMELOSS_BUDGET
+
+
+def test_replay_and_score_reproduces_the_score_of_the_rows_it_replays(env, walls, node1_rows):
+    """`replay_and_score` is what a session quotes: a plan's raw input log in, the verdict out, with
+    no search node in between (a node carries its beam's own prunes; this re-derives everything from
+    state 2 on the 0-ULP forward model). It must agree exactly with scoring the same rows."""
+    fix = json.load(open(os.path.join(_FX, 'courtyard_node1_console.json')))
+    direct = O.score_plan(env, node1_rows, walls=walls)
+    replayed = O.replay_and_score(env, fix['log'], walls=walls)
+    for k in ('frames', 'placement_dist', 'wall_margin', 'wall_margin_at', 'left_regime_at',
+              'bound', 'herd', 'complete', 'terminal_ok'):
+        assert replayed[k] == direct[k], "replay disagreed on %s" % k
 
 
 def test_the_locked_plan_leaves_the_regime_before_the_first_open_console_sample(node1_rows):

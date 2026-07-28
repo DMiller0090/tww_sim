@@ -61,8 +61,8 @@ from tww_sim.land.walls import WALL_R as LINK_WALL_R, load_ordered_mesh
 
 # --------------------------------------------------------------------------- the bar
 
-# The sustained-herd ceiling: a contact frame SPLITS Link's step, so Tetra advances |speedF|/2 at
-# best (`steered_search.push_ceiling`, human 98.2%), and the fastest |speedF| is the roll cap.
+# The SUSTAINED-herd ceiling (`steered_search.push_ceiling`, human 98.2% of it). A STEADY STATE, never
+# a per-frame law -- single frames reach 18.84 u: knowledge/mechanics/actor-push.md#how-far.
 PUSH_CEILING = ROLL_SPEED_CAP / 2.0
 
 # DERECK'S SPEC (session 60), not a measured quantity: how many frames a placement-precise plan may
@@ -75,9 +75,12 @@ def frame_floor(env, placements=None, hl=None):
     """The all-out-push FRAME FLOOR: the fewest frames in which any plan could put Tetra on a
     genuine coord, i.e. the distance to the NEAREST one divided by `PUSH_CEILING`.
 
-    This is a bound, not a plan -- it assumes contact and perfect down-herd alignment on every
-    frame, which the human very nearly achieves (95% contact, 0.996 alignment), so it is a tight
-    one. Returns ``dict(frames, frames_int, coord, dist, budget, preferred)`` where ``frames_int``
+    This is an estimate, not a plan -- it assumes contact and perfect down-herd alignment on every
+    frame, which the human very nearly achieves (95% contact, 0.996 alignment), so it is a tight one.
+    It is also ASYMPTOTIC rather than a hard floor: `PUSH_CEILING` is a steady-state rate that a
+    finite window can beat, so a 73-frame plan is not proven impossible in 72. Dereck's budget is a
+    spec, so this only affects how the bar is DESCRIBED, never what is accepted.
+    Returns ``dict(frames, frames_int, coord, dist, budget, preferred)`` where ``frames_int``
     is the integer floor (a plan is a whole number of frames) and ``budget`` is the worst plan
     length this objective accepts.
     """
@@ -91,6 +94,32 @@ def frame_floor(env, placements=None, hl=None):
                 budget=n + TIMELOSS_BUDGET, preferred=n + TIMELOSS_PREFERRED)
 
 
+def remaining_frames(placement_dist):
+    """The fewest FURTHER frames in which a plan could still put Tetra on the coord she is
+    ``placement_dist`` u from: the distance over the SUSTAINED `PUSH_CEILING`.
+
+    A lower bound at the steady state, not a hard one -- see `PUSH_CEILING`: the pose swing lets a
+    short window beat the split-law rate by ~0.3-0.6 u/frame, so over ~25 frames this can read ~1
+    frame pessimistic. It is exact in the only place it has to be: `placement_dist == 0`."""
+    return placement_dist / PUSH_CEILING
+
+
+def plan_bound(frames, placement_dist):
+    """**The frame-minimal rank**, ``f = g + h``: frames already spent (exact) plus
+    `remaining_frames` (the steady-state estimate of what is left).
+
+    Ranking a beam on it, ascending, is frame-minimal by construction. What it counts that a herd
+    RATE does not: the distance to the coord is a DISTANCE, so lateral drift costs frames here, while
+    `u/frame` measures only the down-herd projection. That difference is the s43-s51 endgame's whole
+    problem -- the rate-ranked chain left Tetra 28 u off the thread laterally, and no terminal could
+    pay for it inside the budget.
+
+    As a PRUNE (`full_herd._budget_cut`) it is admissible at the steady state but not proven, since
+    ``h`` inherits `PUSH_CEILING`'s finite-window slack; a plan beating the bound by a frame is a
+    real possibility, so cut on ``budget`` plus a frame if that ever matters. It is a rank first."""
+    return frames + remaining_frames(placement_dist)
+
+
 # --------------------------------------------------------------------------- rule 4: the walls
 
 # The game's wall classification (`cBgW_CheckB*`; the |ny| < 0.03 threshold used before 2026-07-15
@@ -100,22 +129,31 @@ _BODY_Y = 60.0                  # inside every ground wall-cylinder height (30.1
 
 _MESH_CACHE = {}
 
+# The grid the fast path's BRACKET lives on (`_cell_distance`; any size is exact, so this only trades
+# cell-warming against how often the bracket decides -- 32 u decides both sides at the 35/50 u radii).
+_CELL = 32.0
+_CELL_REACH = _CELL * 0.7071067811865476        # half the cell diagonal
+
 
 class _Walls(object):
-    """The relevant wall tris plus their XZ bounding boxes.
+    """The relevant wall tris plus their XZ bounding boxes and the memoised cell-centre distances.
 
     The box is a broad phase: a search calls `clear_of_walls` once per actor per frame, and the
     honest answer needs every tri, but a tri whose BOX is already farther than the radius cannot
     violate it. In the courtyard the herd runs hundreds of units from anything, so the box test
-    rejects nearly all 177 tris on four comparisons."""
+    rejects nearly all 177 tris on four comparisons.
 
-    __slots__ = ('tris', 'boxes')
+    `cells` is the second phase, and the one that makes the predicate affordable per frame: the
+    exact distance from each visited grid cell's CENTRE, which brackets every point in that cell."""
+
+    __slots__ = ('tris', 'boxes', 'cells')
 
     def __init__(self, tris):
         self.tris = tris
         self.boxes = [(min(t.v0[0], t.v1[0], t.v2[0]), max(t.v0[0], t.v1[0], t.v2[0]),
                        min(t.v0[2], t.v1[2], t.v2[2]), max(t.v0[2], t.v1[2], t.v2[2]))
                       for t in tris]
+        self.cells = {}
 
     def __len__(self):
         return len(self.tris)
@@ -148,10 +186,31 @@ def _box_gap(px, pz, box):
     return math.hypot(dx, dz)
 
 
+def _cell_distance(walls, x, z):
+    """The exact wall distance from the CENTRE of the grid cell holding ``(x, z)``, memoised.
+
+    Every point in that cell lies within `_CELL_REACH` of the centre, so this one number brackets
+    the point's own distance from both sides -- which is what lets `clear_of_walls` answer most
+    frames without touching a triangle, while staying EXACT rather than conservative."""
+    key = (int(math.floor(x / _CELL)), int(math.floor(z / _CELL)))
+    d = walls.cells.get(key)
+    if d is None:
+        d = walls.cells[key] = _exact_distance(walls, (key[0] + 0.5) * _CELL,
+                                              (key[1] + 0.5) * _CELL)
+    return d
+
+
 def clear_of_walls(x, z, r, walls=None):
-    """Is the point farther than ``r`` from every wall edge? The per-frame search predicate --
-    exact, but it early-rejects on the bounding boxes so the common (wide-open) case is cheap."""
+    """Is the point at least ``r`` from every wall edge? The per-frame search predicate -- EXACT,
+    but decided by the cell bracket (`_cell_distance`) wherever that suffices, and by the bounding
+    boxes when it does not, so the common (wide-open) case costs a dict lookup rather than 177
+    triangles. Identical answers to ``wall_distance(x, z) >= r``, gated."""
     walls = courtyard_walls() if walls is None else walls
+    dc = _cell_distance(walls, x, z)
+    if dc - _CELL_REACH >= r:                   # the whole cell clears the radius
+        return True
+    if dc + _CELL_REACH < r:                    # no point in the cell can clear it
+        return False
     tris, boxes = walls.tris, walls.boxes
     for i, t in enumerate(tris):
         if _box_gap(x, z, boxes[i]) >= r:
@@ -181,16 +240,21 @@ def _edge_dist(px, pz, a, b):
     return math.hypot(px - (a[0] + t * dx), pz - (a[2] + t * dz))
 
 
-def wall_distance(x, z, walls=None):
-    """XZ distance from a point to the nearest courtyard wall edge (u)."""
-    walls = courtyard_walls() if walls is None else walls
+def _exact_distance(walls, x, z):
+    """The measurement, over every triangle: XZ distance to the nearest wall edge."""
     best = float('inf')
-    for t in walls:
+    for t in walls.tris:
         d = min(_edge_dist(x, z, t.v0, t.v1), _edge_dist(x, z, t.v1, t.v2),
                 _edge_dist(x, z, t.v2, t.v0))
         if d < best:
             best = d
     return best
+
+
+def wall_distance(x, z, walls=None):
+    """XZ distance from a point to the nearest courtyard wall edge (u) -- the MEASUREMENT (never
+    bracketed or cached), used for reporting and as `clear_of_walls`' reference in the gate."""
+    return _exact_distance(courtyard_walls() if walls is None else walls, x, z)
 
 
 def wall_margin(lx, lz, tx, tz, walls=None):
@@ -251,9 +315,51 @@ def turnaround_ready(speedF, facing, lx, lz, tx, tz):
 
 # --------------------------------------------------------------------------- the whole score
 
-#: Placement tolerance: the 288 coords are a dense SAMPLING (step 0.004 u) of a CONTINUOUS clippable
+#: Placement tolerance: the 288 coords are a dense SAMPLING (0.166 u apart) of a CONTINUOUS clippable
 #: thread, so landing between two samples clips too -- this is the sampling's slack, not a fudge.
 PLACEMENT_BAND = 1.0
+
+
+def placement_thread(hl, placements=None):
+    """**What the target actually IS, in the herd frame** (session 61, measured -- and it is not a
+    cluster).
+
+    The 288 genuine coords are a nearly straight **47.6 u SEGMENT** (no sample deviates more than
+    1.9 u from the chord) whose axis sits **12.2 deg off the herd axis**. In `HerdLine` coordinates
+    that makes them a LINE, not a point: lateral rises ~0.219 u per u of along, across along
+    937.5..984.1 and lateral -2.3..+7.9.
+
+    Two consequences that decide how a plan must be built, neither of them obvious from "land Tetra
+    on a viable coord":
+
+      * **The along direction is slack and the lateral is razor.** A push down the herd axis gives
+        Tetra ~46 u of freedom in WHERE along the thread she stops -- ~3.6 frames of pushing -- so
+        the terminal does not have to hit a point. But her lateral offset has to be inside a ~10 u
+        window, and `lat_at` says which along matches which lateral. Pushing her further down-herd
+        does not fix a lateral miss; it only trades one for the other at 0.219 u per u.
+      * **Therefore a lateral offset outside that window can never be placed, at any along.** The
+        s43-s51 rate-ranked chain left her at lateral ~+36 -- ~28 u outside it -- which is why the
+        endgame needed a whole reposition phase, and why `plan_bound` (which counts lateral as the
+        frames it costs) is the rank rather than a herd rate.
+
+    Returns ``dict(along_lo, along_hi, lat_lo, lat_hi, slope, intercept, length, deg_off_axis,
+    max_chord_dev)`` plus ``lat_at(along)`` -- the thread's own lateral at a given along."""
+    rows = placements if placements is not None else seeds.load_placements()[0]
+    pts = [(hl.along(p['x'], p['z']), hl.lateral(p['x'], p['z'])) for p in rows]
+    a0, a1 = min(p[0] for p in pts), max(p[0] for p in pts)
+    l0, l1 = min(p[1] for p in pts), max(p[1] for p in pts)
+    # the chord through the extreme samples (the set is straight to ~1.9 u, asserted by the gate)
+    lo = min(pts, key=lambda p: p[0])
+    hi = max(pts, key=lambda p: p[0])
+    slope = (hi[1] - lo[1]) / (hi[0] - lo[0])
+    intercept = lo[1] - slope * lo[0]
+    ax, az = rows[-1]['x'] - rows[0]['x'], rows[-1]['z'] - rows[0]['z']
+    length = math.hypot(ax, az)
+    cos = abs((ax / length) * hl.dx + (az / length) * hl.dz)
+    dev = max(abs(p[1] - (slope * p[0] + intercept)) for p in pts) * math.cos(math.atan(slope))
+    return dict(along_lo=a0, along_hi=a1, lat_lo=l0, lat_hi=l1, slope=slope, intercept=intercept,
+                length=length, deg_off_axis=math.degrees(math.acos(min(1.0, cos))),
+                max_chord_dev=dev, lat_at=lambda a: slope * a + intercept)
 
 
 def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMENT_BAND):
@@ -293,20 +399,49 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
     pd = math.hypot(near['x'] - tx, near['z'] - tz)
     term = turnaround_ready(speedF or 0.0, facing or 0, lx, lz, tx, tz)
 
+    # Where the endpoint sits on the target SEGMENT (`placement_thread`): the lateral must be inside
+    # its ~10 u window or NO along can place her, however far she is pushed.
+    th = placement_thread(hl, rows_p)
+    t_along, t_lat = hl.along(tx, tz), hl.lateral(tx, tz)
+    lat_tol = band / math.cos(math.atan(th['slope']))
+
     frames = len(rows)
     timeloss = frames - floor['frames_int']
     complete = pd <= band
     return dict(
         frames=frames, floor=floor['frames_int'], floor_exact=floor['frames'],
-        timeloss=timeloss,
+        timeloss=timeloss, bound=plan_bound(frames, pd),
         within_budget=complete and timeloss <= TIMELOSS_BUDGET,
         within_preferred=complete and timeloss <= TIMELOSS_PREFERRED,
         herd=hl.along(tx, tz), rate=hl.along(tx, tz) / frames if frames else 0.0,
         placement_dist=pd, placement_idx=near['idx'], complete=complete, band=band,
+        tetra_along=t_along, tetra_lat=t_lat,
+        lat_error=t_lat - th['lat_at'](min(max(t_along, th['along_lo']), th['along_hi'])),
+        placeable=(th['lat_lo'] - lat_tol <= t_lat <= th['lat_hi'] + lat_tol),
         wall_margin=worst_margin, wall_margin_at=worst_at, wall_ok=worst_margin > 0.0,
         left_regime_at=left_regime, regime_ok=left_regime is None,
         terminal=term, terminal_ok=term['ready'],
     )
+
+
+def replay_and_score(env, log, **kw):
+    """**THE ACCEPTANCE TEST, from a plan's raw input log alone.** Replay ``log`` on a fresh
+    self-contained `FreeRun` -- the same 0-ULP forward model the console gate is measured against --
+    and score every frame of it.
+
+    A search's own node carries its beam's prunes, which are cheap filters; this replays from state 2
+    and scores the whole trajectory with the exact metrics, so it is what a session should quote. The
+    FreeRun follow warning is suppressed because leaving the regime is one of the things being
+    MEASURED (`left_regime_at`), not an exception to raise."""
+    import warnings
+    run = seeds.make_freerun(env)
+    run.pre_seed_input(seeds.dtm_input_at(env)(0))
+    rows = []
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        for d in log:
+            rows.append(run.step(d))
+    return score_plan(env, rows, **kw)
 
 
 def verdict(sc):
@@ -361,7 +496,6 @@ def _cmd_walls(env):
 def _cmd_score(env):
     """Score the two plans that exist: the recorded human window, and node 1's locked plan."""
     import json
-    import warnings
     from harness.tetrapush import search as S
 
     hl = HerdLine.from_env(env)
@@ -376,14 +510,7 @@ def _cmd_score(env):
     p = os.path.join(_d, 'fixtures', 'courtyard_node1_console.json')
     print("\n=== node 1's LOCKED plan, replayed on today's model ===")
     fix = json.load(open(p))
-    run = seeds.make_freerun(env)
-    run.pre_seed_input(seeds.dtm_input_at(env)(0))
-    rows = []
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        for d in fix['log']:
-            rows.append(run.step(d))
-    sc = score_plan(env, rows, hl=hl, placements=rows_p, walls=walls)
+    sc = replay_and_score(env, fix['log'], hl=hl, placements=rows_p, walls=walls)
     _print_score(sc)
 
 
@@ -394,6 +521,9 @@ def _print_score(sc):
              "OVER BUDGET" if sc['complete'] else "n/a -- herd INCOMPLETE"))
     print("  herd %.2f u @ %.3f u/frame   placement %.3f u from coord idx %d"
           % (sc['herd'], sc['rate'], sc['placement_dist'], sc['placement_idx']))
+    print("  frame bound %.1f (`plan_bound`: frames + the steady-state remainder)" % sc['bound'])
+    print("  Tetra along %.1f lat %+.2f -> %+.2f u off the target thread   placeable %s"
+          % (sc['tetra_along'], sc['tetra_lat'], sc['lat_error'], sc['placeable']))
     print("  wall margin %+.3f u (frame %s)   %s"
           % (sc['wall_margin'], sc['wall_margin_at'], "OK" if sc['wall_ok'] else "VIOLATED"))
     print("  regime      %s" % ("in regime throughout" if sc['regime_ok']

@@ -79,6 +79,7 @@ solved (Link reaches the entry to ~7 u clean); the open piece is the chain that 
 import math
 
 from harness.tetrapush import seeds
+from harness.tetrapush import objective as O
 from harness.tetrapush import search as S
 from harness.tetrapush import two_roll as T
 from harness.tetrapush.reposition import HerdLine, ESS_DOWN
@@ -97,6 +98,23 @@ CO_RADII_BAR = LINK_CO_R + TETRA_CO_R
 # .camera_authority`) bounds the reachable band; 128 BAM resolves the ~+-300 BAM viable window.
 TCS_SPAN = 1536
 TCS_STEP = 128
+
+
+def frame_in_model(run, walls=None):
+    """**Both MODEL-BOUNDARY prunes, in one place** (`objective` rules 4 and 4b, session 60).
+
+    Every search stage below used to test only the first half: `run._follow_warned`, Tetra past
+    `FOLLOW_ENGAGE_DIST` where she self-locomotes in stt 4. Session 60 measured the second half and
+    found it enforced NOWHERE -- the Courtyard `FreeRun` models no BG collision at all, so a plan is
+    free to walk Link straight THROUGH the courtyard back wall (node 1's does, from plan frame 84,
+    while the console has him braced at exactly `LINK_WALL_R`). Both are boundaries of what the
+    forward model covers, not preferences, so they belong side by side and are checked together.
+
+    This is a PRUNE, not a wall model: it keeps the search in the region where the missing
+    `WallCorrect` cannot act. If a plan ever genuinely needs wall contact during the herd, this has
+    to become a model -- widening the radius instead would only hide the infidelity again."""
+    return (not run._follow_warned) and O.frame_is_wall_free(
+        run.link.pos_x, run.link.pos_z, run.tx, run.tz, walls)
 
 
 def derived_target_css(run, span=TCS_SPAN, step=TCS_STEP):
@@ -217,7 +235,8 @@ def junction_alphabet(run, hl, *, ess_step=4, aim_step=64):
     return out
 
 
-def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_window=0x2800):
+def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_window=0x2800,
+               dead=None):
     """**Is this junction endpoint ROLLABLE at all?** -- a coarse aim sweep returning the best
     surviving roll's down-herd rate, or None.
 
@@ -226,16 +245,31 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     node NONE of them were among the flattest (they sat at |lat| ~17) while on the other two the
     rollable ones were the flattest (|lat| 0.2-0.4). So a flatness keep silently empties the stage on
     some entry states and works on others -- which is exactly how the cycle-2 stage kept reporting
-    hundreds of valid-looking endpoints and zero surviving rolls. Probe; do not rank by proxy."""
+    hundreds of valid-looking endpoints and zero surviving rolls. Probe; do not rank by proxy.
+
+    ``dead`` accumulates WHY each aim died. A stalled cycle is the recurring failure mode here, and
+    "no aim rolled" is not a diagnosis -- talk-unsafe, never-rolled, weak (+5 not +26), off-line and
+    wall are four different problems with four different fixes."""
+    walls = O.courtyard_walls()
+    dead = {} if dead is None else dead
     best = None
     for (_want, aim) in T.roll_facing_fan(endpoint['run'], hl.bearing_bam(), half_window, step):
         rr = endpoint['run'].clone()
         seg = T.roll_segment(rr, aim, target_cs=None, l_window=l_window)
-        if seg['talk_unsafe'] or not seg['ok'] or seg['roll_speedF'] is None \
-                or seg['roll_speedF'] < min_roll:
+        why = ('talk' if seg['talk_unsafe'] else
+               'no_roll' if not seg['ok'] or seg['roll_speedF'] is None else
+               'weak' if seg['roll_speedF'] < min_roll else
+               'followed' if rr._follow_warned else
+               'wall' if not O.frame_is_wall_free(rr.link.pos_x, rr.link.pos_z, rr.tx, rr.tz,
+                                                 walls) else None)
+        if why is None:
+            m = T.metrics(rr, hl, endpoint['frames'] + seg['frames'])
+            if not T.alive(m):
+                why = 'offline'
+        if why is not None:
+            dead[why] = dead.get(why, 0) + 1
             continue
-        m = T.metrics(rr, hl, endpoint['frames'] + seg['frames'])
-        if T.alive(m) and (best is None or m['per_frame'] > best):
+        if best is None or m['per_frame'] > best:
             best = m['per_frame']
     return best
 
@@ -294,6 +328,7 @@ def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step
     does use three distinct sticks, but the family sweeps enough sticks to reach the same box.)"""
     live = [dict(run=node['run'], log=node['log'], jf=0)]
     ends = []
+    walls = O.courtyard_walls()
     dead = {} if dead is None else dead
     for _f in range(int(max_frames)):
         nxt, seen = [], set()
@@ -306,8 +341,14 @@ def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step
                     d = dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
                              triggerL=255 if l else 0, substickX=T.CSTICK_NEUTRAL, substickY=0)
                     r.step(d)
-                    if r._follow_warned or not in_pursuit_box(r, hl, box):
-                        dead['outbox'] = dead.get('outbox', 0) + 1
+                    # counted separately on purpose: "the beam emptied" is only diagnosable if the
+                    # regime, the walls and the posture box are distinguishable afterwards.
+                    why = ('followed' if r._follow_warned else
+                           'wall' if not O.frame_is_wall_free(r.link.pos_x, r.link.pos_z,
+                                                              r.tx, r.tz, walls) else
+                           'outbox' if not in_pursuit_box(r, hl, box) else None)
+                    if why is not None:
+                        dead[why] = dead.get(why, 0) + 1
                         continue
                     jf = nd['jf'] + 1
                     tag = (round(r.link.pos_x, 1), round(r.link.pos_z, 1), r.link.facing >> 5,
@@ -358,6 +399,7 @@ def junction_quality(run, hl, box, *, frames=6, sticks=None):
 
     The full `junction_beam` is the expensive exact stage that runs only on the kept targets."""
     sticks = sticks or (ESS_DOWN, (111, 111), (145, 146))
+    walls = O.courtyard_walls()
     best = None
     for st in sticks:
         r = run.clone()
@@ -365,7 +407,7 @@ def junction_quality(run, hl, box, *, frames=6, sticks=None):
         for _ in range(int(frames)):
             r.step(dict(stickX=st[0], stickY=st[1], buttons=0, triggerL=0,
                         substickX=T.CSTICK_NEUTRAL, substickY=0))
-            if r._follow_warned or not in_pursuit_box(r, hl, box):
+            if not frame_in_model(r, walls) or not in_pursuit_box(r, hl, box):
                 break
             inbox += 1
         if inbox < 2:
@@ -379,11 +421,12 @@ def junction_quality(run, hl, box, *, frames=6, sticks=None):
 
 def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4, 7), (5, 8)),
                     aim_keep=3, min_roll=20.0, tcs_keep=3, target_css=None,
-                    fan_center=None, require_quality=True):
+                    fan_center=None, require_quality=True, key=None):
     """The cycle's ROLL stage from a junction endpoint, factored by the separability above.
 
     R1: sweep the reachable aim fan (camera frozen) x the L windows, prune talk-unsafe / weak /
-    off-line, keep the ``aim_keep`` best by chained down-herd rate.
+    off-line / wall-touching, keep the ``aim_keep`` best by ``key`` (`rank_key` -- the frame bound
+    by default, the s43 herd rate if asked).
     R2: re-run each kept aim over the DERIVED `target_cs` grid and keep the ``tcs_keep`` camera
     targets whose endpoint the NEXT junction can actually continue from, ranked by
     `junction_quality` -- a tcs that strands the plan is worthless however fast the roll was.
@@ -391,6 +434,8 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
     Returns the surviving post-roll nodes (each ``dict(run, log, frames, m, knobs, quality)``)."""
     out = []
     r1 = []
+    walls = O.courtyard_walls()
+    key = rank_key() if key is None else key
     center = hl.bearing_bam() if fan_center is None else int(fan_center)
     for (want, aim) in T.roll_facing_fan(node['run'], center, half_window, step):
         for lw in l_windows:
@@ -401,11 +446,11 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                 continue
             fr = node['frames'] + seg['frames']
             m = T.metrics(rr, hl, fr)
-            if not T.alive(m):
+            if not T.alive(m) or not frame_in_model(rr, walls):
                 continue
-            r1.append((m['per_frame'], want, aim, lw, seg))
-    r1.sort(key=lambda t: -t[0])
-    for (_pf, want, aim, lw, _seg) in r1[:int(aim_keep)]:
+            r1.append((key(rr, fr, m), want, aim, lw, seg))
+    r1.sort(key=lambda t: t[0])
+    for (_k, want, aim, lw, _seg) in r1[:int(aim_keep)]:
         css = derived_target_css(node['run']) if target_css is None else target_css
         graded = []
         for tcs in css:
@@ -417,7 +462,7 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                 continue
             fr = node['frames'] + seg['frames']
             m = T.metrics(rr, hl, fr)
-            if not T.alive(m):
+            if not T.alive(m) or not frame_in_model(rr, walls):
                 continue
             q = junction_quality(rr, hl, box)
             if q is None and require_quality:     # this camera target strands the plan next cycle
@@ -427,14 +472,45 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                                               roll_speedF=seg['roll_speedF'], jframes=node['jf'],
                                               junction=node['jv']['kind'],
                                               phases=node['jv']['phases']))))
-        # unscored (quality None) only occurs on a terminal roll -- rank those by herd rate
+        # unscored (quality None) only occurs on a terminal roll -- rank those by `key`
         graded.sort(key=lambda t: t[0] if t[0] is not None
-                    else (0, -t[1]['m']['per_frame']))
+                    else (0, key(t[1]['run'], t[1]['frames'], t[1]['m'])))
         out.extend(n for _q, n in graded[:int(tcs_keep)])
     return out
 
 
 # --------------------------------------------------------------------------- the N-cycle chain
+
+def rank_key(rank='bound', placements=None):
+    """**The beam's ordering, ASCENDING either way** (lower is better) -- built here so every stage
+    ranks the same way and the choice is a measured one rather than a habit.
+
+    ``'bound'`` (the session-60 default) is the OBJECTIVE's own metric, `objective.plan_bound`:
+    frames spent plus the fewest that could still land the coord. Ranking on it is frame-minimal by
+    construction, and it counts LATERAL drift, because the distance to a coord is a distance and not
+    a down-herd projection. ``'rate'`` is the s43 herd rate (`-u/frame`), kept selectable so the
+    difference is measurable instead of asserted -- it was the rank that produced the 868 u / 69 f
+    chain whose 28 u lateral offset the endgame then could not pay for."""
+    if rank == 'rate':
+        return lambda run, frames, m: -m['per_frame']
+    if rank != 'bound':
+        raise ValueError("rank must be 'bound' or 'rate', not %r" % (rank,))
+    rows = placements if placements is not None else seeds.load_placements()[0]
+    return lambda run, frames, m: O.plan_bound(frames, _placement_dist(run, rows))
+
+
+def _budget_cut(nodes, key, budget, label='', verbose=False):
+    """Drop nodes whose `objective.plan_bound` already exceeds the frame budget -- a SOUND prune (the
+    bound is admissible, so such a node cannot finish in time whatever follows it). Never silent:
+    it says how many it dropped, since a stage that empties itself here is a finding."""
+    if budget is None:
+        return nodes
+    kept = [n for n in nodes if key(n['run'], n['frames'], n['m']) <= float(budget)]
+    if verbose and len(kept) != len(nodes):
+        print("    (budget %g: dropped %d of %d %s -- bound already over)"
+              % (budget, len(nodes) - len(kept), len(nodes), label))
+    return kept
+
 
 def _state_tag(run):
     """Beam dedup key: the coupled state at a cycle boundary, coarse enough to collapse duplicates
@@ -446,15 +522,19 @@ def _state_tag(run):
 
 def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=16,
                  max_frames=12, beam=8, aim_keep=3, half_window=0x2800, step=8,
-                 probe_cap=250, verbose=False):
+                 probe_cap=250, rank='bound', budget=None, placements=None, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
-    ``beam`` by down-herd rate.
+    ``beam`` by ``rank`` (`rank_key`; the frame bound by default).
+
+    ``budget`` (frames) drops any survivor whose `objective.plan_bound` is already over it --
+    admissible, so nothing solvable is lost (`_budget_cut`).
 
     Every node carries its FULL delivered input log, so any survivor is replayable end-to-end on a
     fresh `FreeRun` (`confirm_plan`)."""
     out = []
+    key = rank_key(rank, placements)
     jdead = {}
     for node in nodes:
         ends = junction_beam(node, hl, box, max_frames=max_frames, beam=jn_beam,
@@ -466,18 +546,23 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                 print("    (probing %d of %d unique endpoints -- capped)"
                       % (probe_cap, len(uniq)))
             uniq = uniq[:int(probe_cap)]
-        scored = [(p, e) for p, e in ((roll_probe(e, hl), e) for e in uniq) if p is not None]
+        rdead = {}
+        scored = [(p, e) for p, e in ((roll_probe(e, hl, dead=rdead), e) for e in uniq)
+                  if p is not None]
         scored.sort(key=lambda t: -t[0])
         kept = [e for _p, e in scored[:int(jn_keep)]]
         jdead['unrollable'] = jdead.get('unrollable', 0) + (len(uniq) - len(scored))
+        for k, v in rdead.items():                     # WHY the aims died, not just how many
+            jdead['aim_' + k] = jdead.get('aim_' + k, 0) + v
         for j in kept:
             for cand in roll_candidates(j, hl, box, aim_keep=aim_keep, half_window=half_window,
-                                        step=step):
+                                        step=step, key=key):
                 cand['plan'] = list(node.get('plan', [])) + [cand['knobs']]
                 out.append(cand)
-    # rate first, then continuability -- a faster cycle that strands the plan is worth less than a
-    # marginally slower one the next junction can pick up (the s42 entry-state lesson).
-    out.sort(key=lambda n: (-n['m']['per_frame'], n.get('quality')))
+    out = _budget_cut(out, key, budget, 'roll survivors', verbose)
+    # the rank first, then continuability -- a faster cycle that strands the plan is worth less than
+    # a marginally slower one the next junction can pick up (the s42 entry-state lesson).
+    out.sort(key=lambda n: (key(n['run'], n['frames'], n['m']), n.get('quality')))
     seen, beamed = set(), []
     for n in out:
         t = _state_tag(n['run'])
@@ -495,7 +580,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
 
 def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x2000, step=4,
                  l_windows=((5, 8), (4, 7), (6, 9)), aim_keep=4, beam=8,
-                 tcs_keep=3, verbose=False):
+                 tcs_keep=3, rank='bound', budget=None, placements=None, verbose=False):
     """Cycle 1 from state 2, FACTORED like every later cycle (`roll_candidates`) rather than as the
     s42 full aim x tcs cross product -- same search space, ~20x fewer rollouts (159 s -> 10 s for
     the identical 13.147 u/f best), and the `target_cs` values are ranked by `junction_quality`
@@ -504,6 +589,7 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
     At state 2 Tetra is ~122 deg BEHIND Link (out of the +-90 cone), so the L-held flip prologue
     re-targets straight into the proc-7 flip -- no turnaround is needed to start."""
     dtm = seeds.dtm_input_at(env)
+    key = rank_key(rank, placements)
     out = []
     for nflip in nflips:
         base = seeds.make_freerun(env)
@@ -520,7 +606,7 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
                     jv=dict(kind='prologue', phases=[]))
         cands = roll_candidates(node, hl, box, half_window=half_window, step=step,
                                 l_windows=l_windows, aim_keep=aim_keep, fan_center=center,
-                                tcs_keep=tcs_keep)
+                                tcs_keep=tcs_keep, key=key)
         for c in cands:
             c['knobs']['nflip'] = nflip
             c['plan'] = [c['knobs']]
@@ -528,9 +614,10 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
             print("  nflip=%d: preroll %+.2f -> %d cycle-1 survivors"
                   % (nflip, base.link.speedF, len(cands)))
         out.extend(cands)
-    # rate first, then continuability -- a faster cycle that strands the plan is worth less than a
-    # marginally slower one the next junction can pick up (the s42 entry-state lesson).
-    out.sort(key=lambda n: (-n['m']['per_frame'], n.get('quality')))
+    out = _budget_cut(out, key, budget, 'cycle-1 survivors', verbose)
+    # the rank first, then continuability -- a faster cycle that strands the plan is worth less than
+    # a marginally slower one the next junction can pick up (the s42 entry-state lesson).
+    out.sort(key=lambda n: (key(n['run'], n['frames'], n['m']), n.get('quality')))
     seen, beamed = set(), []
     for n in out:
         t = _state_tag(n['run'])
@@ -544,33 +631,43 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
 
 
 def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
-               c1_step=4, jn_beam=24, ess_step=1, nodes=None, box=None, verbose=False):
+               c1_step=4, jn_beam=24, ess_step=1, nodes=None, box=None,
+               rank='bound', budget=None, placements=None, verbose=False):
     """**The full-herd chain**: cycle 1 from state 2 (`cycle1_nodes`), then ``ncycles - 1``
     applications of `extend_cycle`, every cycle sweeping its OWN derived `target_cs` grid.
+
+    ``rank`` / ``budget`` are the objective (session 60): rank every beam by the admissible frame
+    bound and drop anything that already cannot finish inside ``budget`` frames.
 
     Returns ``dict(beams, best, bar, box)`` -- the per-cycle beams (so a stalled cycle is
     diagnosable), the best final node, the human's 2-roll rate, and the pursuit box in force."""
     import time
     t0 = time.perf_counter()
     box = pursuit_box(env, hl) if box is None else box
+    rows = placements if placements is not None else seeds.load_placements()[0]
     if nodes is None:
-        nodes = cycle1_nodes(env, hl, box, step=c1_step, beam=c1_beam,
-                             aim_keep=aim_keep + 1, verbose=verbose)
+        nodes = cycle1_nodes(env, hl, box, step=c1_step, beam=c1_beam, aim_keep=aim_keep + 1,
+                             rank=rank, budget=budget, placements=rows, verbose=verbose)
     beams = [nodes]
-    if verbose:
-        print("  cycle 1: %d nodes, best %.3f u/f (%.1f s)"
-              % (len(nodes), nodes[0]['m']['per_frame'] if nodes else 0.0,
+    if verbose and nodes:
+        print("  cycle 1: %d nodes, best %.3f u/f, bound %.1f f (%.1f s)"
+              % (len(nodes), nodes[0]['m']['per_frame'],
+                 O.plan_bound(nodes[0]['frames'], _placement_dist(nodes[0]['run'], rows)),
                  time.perf_counter() - t0))
     for c in range(2, int(ncycles) + 1):
         t1 = time.perf_counter()
         nodes = extend_cycle(nodes, hl, box, jn_keep=jn_keep, jn_beam=jn_beam,
-                             ess_step=ess_step, beam=beam, aim_keep=aim_keep, verbose=verbose)
+                             ess_step=ess_step, beam=beam, aim_keep=aim_keep,
+                             rank=rank, budget=budget, placements=rows, verbose=verbose)
         beams.append(nodes)
-        if verbose:
-            print("  cycle %d: %d nodes, best %.3f u/f, herd %.1f u in %d f (%.1f s)"
-                  % (c, len(nodes), nodes[0]['m']['per_frame'] if nodes else 0.0,
-                     nodes[0]['m']['herd'] if nodes else 0.0,
-                     nodes[0]['frames'] if nodes else 0, time.perf_counter() - t1))
+        if verbose and nodes:
+            n = nodes[0]
+            print("  cycle %d: %d nodes, best %.3f u/f, herd %.1f u in %d f, %.1f u from a coord "
+                  "(bound %.1f f) (%.1f s)"
+                  % (c, len(nodes), n['m']['per_frame'], n['m']['herd'], n['frames'],
+                     _placement_dist(n['run'], rows),
+                     O.plan_bound(n['frames'], _placement_dist(n['run'], rows)),
+                     time.perf_counter() - t1))
         if not nodes:
             break
     return dict(beams=beams, best=(nodes[0] if nodes else None), box=box,
@@ -583,15 +680,23 @@ def confirm_plan(env, hl, node, want_rolls=None):
     """**The winner-confirmation gate, generalized to N rolls** (`two_roll.confirm_chain` is the
     2-roll case): re-run the node's own delivered input log on a FRESH self-contained `FreeRun` and
     require the endpoint to be BIT-IDENTICAL to the search's node -- both actors' positions, Link's
-    facing, csangle -- with every grounded A-press talk-safe and the whole log in the plow regime."""
+    facing, csangle -- with every grounded A-press talk-safe and the whole log in the plow regime.
+
+    The wall clearance (`objective`, rule 4) is measured here on EVERY frame with the exact metric,
+    not the search's cell-bracketed prune: a stage prune only has to filter, but the confirm is what
+    says a plan is deliverable, so it reports the binding margin and the frame it occurs on."""
     run = seeds.make_freerun(env)
     dtm = seeds.dtm_input_at(env)
     run.pre_seed_input(dtm(0))
     rolls, in_roll, talk_safe = 0, False, True
-    for d in node['log']:
+    worst_margin, worst_at = float('inf'), None
+    for i, d in enumerate(node['log'], 1):
         if S.a_press_is_talk(run, d):
             talk_safe = False
         run.step(d)
+        wm = O.wall_margin(run.link.pos_x, run.link.pos_z, run.tx, run.tz)['margin']
+        if wm < worst_margin:
+            worst_margin, worst_at = wm, i
         if run.link.state == FRONT_ROLL:
             if not in_roll:
                 rolls += 1
@@ -604,11 +709,13 @@ def confirm_plan(env, hl, node, want_rolls=None):
                  and run.tz == ref.tz and int(run.csangle) == int(ref.csangle))
     frames = len(node['log'])
     herd = hl.along(run.tx, run.tz)
-    ok = bit_exact and talk_safe and not run._follow_warned
+    wall_ok = worst_margin > 0.0
+    ok = bit_exact and talk_safe and wall_ok and not run._follow_warned
     if want_rolls is not None:
         ok = ok and rolls == int(want_rolls)
     return dict(ok=ok, per_frame=herd / frames if frames else 0.0, frames=frames, rolls=rolls,
-                herd=herd, talk_safe=talk_safe, bit_exact=bit_exact)
+                herd=herd, talk_safe=talk_safe, bit_exact=bit_exact, wall_ok=wall_ok,
+                wall_margin=worst_margin, wall_margin_at=worst_at)
 
 
 def placement_report(node, placements=None):
@@ -1343,32 +1450,51 @@ def _terminal_alphabet(run, hl, *, n_dirs=24, mags=(0.08, 0.2, 0.35, 0.5, 0.7, 1
     return list(out)
 
 
-def _terminal_score(run, hl, placements, objective, w_deficit, w_approach):
-    """The terminal beam's rank key. ``'placement'`` (the s44 default) = pure Tetra->coord distance,
-    the deepest-contact lander. ``'grazing'`` (route a, session 48) additionally penalises the
-    coupled-entry `deficit` (`CO_RADII_BAR - centre_feet`, below the bar) and a closing
-    `approach_rate`, so the endpoint the beam seeks is on-thread AND freeze_ok AND near-rest --
-    the arrival `walk_to_entry` needs, not merely the closest coord. Returns ``(score, placement)``;
-    in placement mode ``score == placement`` so the existing rank is byte-for-byte unchanged."""
+def _terminal_ready(run):
+    """Rule 3 (`objective.turnaround_ready`) off a live run: is Link still MOVING at this frame, so
+    the 1-frame 180 carries him away from Tetra with speed in hand?"""
+    return O.turnaround_ready(run.link.speedF, run.link.facing,
+                              run.link.pos_x, run.link.pos_z, run.tx, run.tz)
+
+
+def _terminal_score(run, hl, placements, objective, w_deficit, w_approach, frames=0):
+    """The terminal beam's rank key.
+
+    ``'frame_minimal'`` (session 60, THE objective) = `objective.plan_bound(frames, pd)`: the plan
+    length this trajectory implies. Within one generation every live node has the same ``frames``, so
+    it orders exactly as ``'placement'`` does -- the difference is in the GLOBAL best, which now
+    prefers an earlier adequate placement over a later perfect one. That is the whole change Dereck's
+    rule 2 asks for.
+
+    ``'placement'`` (the s44 default) = pure Tetra->coord distance, the deepest-contact lander.
+    ``'grazing'`` (route a, session 48) additionally penalises the coupled-entry `deficit`
+    (`CO_RADII_BAR - centre_feet`) and a closing `approach_rate` -- the near-rest arrival the s44-s51
+    endgame needed, which rule 3 RETIRES (kept because its physics is still true and measurable).
+    Returns ``(score, placement)``; in placement mode ``score == placement`` so that rank is
+    byte-for-byte unchanged."""
     pd = _placement_dist(run, placements)
     if objective == 'placement':
         return pd, pd
+    if objective == 'frame_minimal':
+        return O.plan_bound(frames, pd), pd
     deficit = max(0.0, CO_RADII_BAR - _centre_feet(run))
     return pd + w_deficit * deficit + w_approach * max(0.0, _approach_rate(run)), pd
 
 
 def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                        n_dirs=24, objective='placement', w_deficit=1.0, w_approach=2.0,
-                       verbose=False):
+                       band=None, verbose=False):
     """**The TERMINAL cycle, ranked by PLACEMENT distance instead of u/frame** -- the endgame stage
     the chain hands off to once one more full roll would OVERSHOOT the cluster.
 
-    ``objective`` selects the rank (`_terminal_score`): the s44 ``'placement'`` (nearest coord, the
-    deep-contact lander) or ``'grazing'`` (route a, session 48) -- the same beam, but ranked to seek
-    an on-thread endpoint that is ALSO `freeze_ok` and near-rest, the coupled-entry arrival
-    `walk_to_entry` needs. Grazing is the rank the re-ranked chain will inherit; run here it MEASURES
-    how close the terminal alone can graze from a given endpoint (s46: from the deep 3-cycle endpoint
-    it cannot -- the grazing term belongs on the chain).
+    ``objective`` selects the rank (`_terminal_score`). ``'frame_minimal'`` is the session-60 one:
+    it also STOPS at the first generation that satisfies the objective -- Tetra inside ``band`` of a
+    genuine coord (rule 1) with Link still MOVING (rule 3, `_terminal_ready`) -- and returns it as
+    ``placed``, because nothing found later can be shorter. That is what "the placement RIDES the
+    last push" means operationally: the terminal stops when the coord is landed, instead of spending
+    further frames polishing a distance that is already inside the band.
+    ``'placement'`` is the s44 rank (nearest coord, the deep-contact lander) and ``'grazing'``
+    (route a, session 48) the near-rest one -- kept, measurable, but retired by rule 3.
 
     The geometry forces this (`endgame_geom`): each full cycle herds ~280 u but only ~99 u along
     (and a ~28 u lateral correction) separate the 3-cycle endpoint from the nearest coord, so a full
@@ -1380,29 +1506,40 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
     So this is a per-frame BEAM (the atom is one frame's (stick, L), as in `junction_beam`) ranked by
     the CURRENT Tetra-to-nearest-coord distance, tracking the global closest state reached at ANY
     frame (a glide sweeps THROUGH the coord band, so the best endpoint is mid-glide, not at the
-    horizon). Returns ``dict(best, dist, per_node)`` -- the closest terminal node (with its full
-    input log, so `confirm_plan` replays it end-to-end), its coord distance, and the best per start
-    node.
+    horizon). Returns ``dict(best, dist, per_node, placed, closest, band)``: ``best`` by the chosen
+    rank (carrying its full input log, so `confirm_plan` replays it end-to-end), ``placed`` = the
+    frame-minimal objective actually hit, and ``closest`` = the smallest placement distance reached at
+    ANY frame. **In ``frame_minimal`` mode read ``closest``, not ``best``**: there a frame costs 1.0
+    of score and can win back at most `PUSH_CEILING`/`PUSH_CEILING` = 1.0 of it, so ``best`` sits at
+    the start of the glide by construction and says nothing about how close the glide came.
 
-    **Why the prune is REGIME-ONLY, not the pursuit box** (measured, `probe_glide`): the deepest
-    approach happens AFTER Link overtakes Tetra and leaves the box -- e.g. a plain (111,111) glide off
-    the 3-cycle endpoint carries her from 74.7 u to **6.4 u**, but the minimum lands at f8 when Link
-    is already lead +18 (out of the box). The pursuit box exists to keep a posture for the NEXT roll;
-    the terminal has none, so the only hard constraint is staying in the stt-3 plow regime (Tetra must
-    not start FOLLOWING) and talk-safety (there is no A-press in a glide, so it holds trivially)."""
+    **Why the prune is the MODEL BOUNDARY, not the pursuit box** (measured, `probe_glide`): the
+    deepest approach happens AFTER Link overtakes Tetra and leaves the box -- e.g. a plain (111,111)
+    glide off the 3-cycle endpoint carries her from 74.7 u to **6.4 u**, but the minimum lands at f8
+    when Link is already lead +18 (out of the box). The pursuit box exists to keep a posture for the
+    NEXT roll; the terminal has none, so the only hard constraints are the ones the MODEL imposes --
+    the stt-3 plow regime and the unmodelled walls (`frame_in_model`) -- plus talk-safety, which
+    holds trivially in a glide (no A-press)."""
     if placements is None:
         placements, _ = seeds.load_placements()
+    band = O.PLACEMENT_BAND if band is None else float(band)
+    walls = O.courtyard_walls()
     best = None
+    placed = None                     # the EARLIEST frame that satisfies rules 1 + 3
+    closest = None                    # the smallest placement distance at ANY frame (diagnostic)
     per_node = []
     for node in nodes:
-        s0, d0 = _terminal_score(node['run'], hl, placements, objective, w_deficit, w_approach)
+        s0, d0 = _terminal_score(node['run'], hl, placements, objective, w_deficit, w_approach,
+                                 node['frames'])
         node_best = dict(run=node['run'], log=node['log'], frames=node['frames'], dist=d0,
                          score=s0, plan=node.get('plan', []))
         if best is None or s0 < best['score']:
             best = node_best
+        if closest is None or (d0, node['frames']) < (closest['dist'], closest['frames']):
+            closest = node_best
         live = [dict(run=node['run'], log=node['log'], frames=node['frames'])]
         for _f in range(int(max_frames)):
-            nxt, seen = [], set()
+            nxt, seen, done = [], set(), []
             for nd in live:
                 for (sx, sy) in _terminal_alphabet(nd['run'], hl, n_dirs=n_dirs):
                     for l in (0, 1):
@@ -1410,7 +1547,7 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                         d = dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
                                  triggerL=255 if l else 0, substickX=T.CSTICK_NEUTRAL, substickY=0)
                         r.step(d)
-                        if r._follow_warned:           # regime only -- see the docstring
+                        if not frame_in_model(r, walls):   # regime + walls -- see the docstring
                             continue
                         tag = (round(r.link.pos_x, 1), round(r.link.pos_z, 1),
                                r.link.facing >> 5, round(r.link.speedF, 2),
@@ -1418,24 +1555,40 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                         if tag in seen:
                             continue
                         seen.add(tag)
-                        score, dist = _terminal_score(r, hl, placements,
-                                                      objective, w_deficit, w_approach)
-                        cand = dict(run=r, log=nd['log'] + [d], frames=nd['frames'] + 1,
+                        fr = nd['frames'] + 1
+                        score, dist = _terminal_score(r, hl, placements, objective,
+                                                      w_deficit, w_approach, fr)
+                        cand = dict(run=r, log=nd['log'] + [d], frames=fr,
                                     dist=dist, score=score)
                         nxt.append(cand)
+                        if dist <= band and _terminal_ready(r)['ready']:
+                            done.append(cand)          # rules 1 + 3 both met, at THIS frame
                         if score < best['score']:
                             best = dict(cand, plan=node.get('plan', []))
                         if score < node_best['score']:
                             node_best = dict(cand, plan=node.get('plan', []))
+                        if (dist, fr) < (closest['dist'], closest['frames']):
+                            closest = dict(cand, plan=node.get('plan', []))
+            if done:
+                done.sort(key=lambda c: c['dist'])
+                cand = dict(done[0], plan=node.get('plan', []))
+                if placed is None or (cand['frames'], cand['dist']) < (placed['frames'],
+                                                                      placed['dist']):
+                    placed = cand
+                if objective == 'frame_minimal':
+                    break        # frame-minimal: no later generation can be shorter than this one
             nxt.sort(key=lambda c: c['score'])
             live = nxt[:int(beam)]
             if not live:
                 break
         per_node.append(node_best)
         if verbose:
-            print("    start dist %.1f -> best %.1f (%d frames)"
-                  % (d0, node_best['dist'], node_best['frames']))
-    return dict(best=best, dist=best['dist'] if best else None, per_node=per_node)
+            print("    start dist %.1f -> best %.1f (%d frames)%s"
+                  % (d0, node_best['dist'], node_best['frames'],
+                     '' if placed is None else '   [PLACED at %d f, %.3f u]'
+                     % (placed['frames'], placed['dist'])))
+    return dict(best=best, dist=best['dist'] if best else None, per_node=per_node,
+                placed=placed, closest=closest, band=band)
 
 
 def cluster_distance(env, hl):
@@ -1694,6 +1847,62 @@ def _cmd_homing(env, hl, kw):
           "     chain endpoint needs; feeding it a REAL ranked chain endpoint closes 2b.")
 
 
+def _cmd_solve(env, hl, kw):
+    """**THE SOLVE, end to end, under the session-60 objective** -- chain, frame-minimal terminal,
+    then the acceptance test on the winner's own input log (`objective.replay_and_score` from state 2,
+    not the search node, so no beam prune is taken on trust).
+
+    This is the command a session runs and quotes. It prints the frame accounting against the bar and
+    where the endpoint sits on the target thread, because those are the two things that decide whether
+    a plan is a plan: frames versus the budget, and whether Tetra's LATERAL is inside the window any
+    along could place her at (`objective.placement_thread`)."""
+    import time
+    placements, _ = seeds.load_placements()
+    bar = O.frame_floor(env, placements)
+    th = O.placement_thread(hl, placements)
+    ncyc = int(kw.get('cycles', 3))
+    rank = kw.get('rank', 'bound')
+    print("SOLVE: %d cycles (rank %s) -> frame-minimal terminal -> the objective\n" % (ncyc, rank))
+    print("  bar: floor %d frames, accepted %d, preferred %d (nearest coord idx %d, %.1f u)"
+          % (bar['frames_int'], bar['budget'], bar['preferred'], bar['coord']['idx'], bar['dist']))
+    print("  target thread: along %.1f..%.1f, lateral %+.2f..%+.2f, %.1f deg off the herd axis\n"
+          % (th['along_lo'], th['along_hi'], th['lat_lo'], th['lat_hi'], th['deg_off_axis']))
+    t0 = time.perf_counter()
+    res = chain_herd(env, hl, ncycles=ncyc, beam=int(kw.get('beam', 8)),
+                     jn_keep=int(kw.get('jkeep', 6)), rank=rank, placements=placements,
+                     budget=(float(kw['budget']) if 'budget' in kw else None), verbose=True)
+    last = res['beams'][-1]
+    if not last:
+        print("\n  CHAIN STALLED at cycle %d -- read the per-cycle dead counts above (they are split "
+              "by reason)" % len(res['beams']))
+        return
+    tt = terminal_targeting(last, hl, placements, max_frames=int(kw.get('tframes', 12)),
+                            beam=int(kw.get('tbeam', 48)), objective='frame_minimal', verbose=True)
+    win = tt['placed'] or tt['closest']
+    print("\n(%.0f s)  terminal: %s" % (time.perf_counter() - t0,
+                                        "PLACED at frame %d, %.3f u from coord"
+                                        % (win['frames'], win['dist']) if tt['placed'] else
+                                        "NOT placed -- closest %.3f u at frame %d"
+                                        % (win['dist'], win['frames'])))
+    c = confirm_plan(env, hl, win)
+    sc = O.replay_and_score(env, win['log'], hl=hl, placements=placements)
+    print("  confirm (fresh replay of its own log): bit_exact=%s talk_safe=%s wall_ok=%s -> %s"
+          % (c['bit_exact'], c['talk_safe'], c['wall_ok'], 'CONFIRMED' if c['ok'] else 'NOT'))
+    print("\n  ACCEPTANCE TEST (`objective.score_plan`):")
+    print("    frames %d vs floor %d -> timeloss %+d (budget %+d)"
+          % (sc['frames'], sc['floor'], sc['timeloss'], O.TIMELOSS_BUDGET))
+    print("    placement %.3f u from coord idx %d -> complete=%s"
+          % (sc['placement_dist'], sc['placement_idx'], sc['complete']))
+    print("    Tetra along %.1f lat %+.2f -> %+.2f u off the thread, placeable=%s"
+          % (sc['tetra_along'], sc['tetra_lat'], sc['lat_error'], sc['placeable']))
+    print("    walls %+.1f u (frame %s) | regime %s | terminal speed %.2f ready=%s"
+          % (sc['wall_margin'], sc['wall_margin_at'],
+             'ok' if sc['regime_ok'] else 'LEFT at %d' % sc['left_regime_at'],
+             sc['terminal']['speed'], sc['terminal_ok']))
+    print("    frame bound %.1f          VERDICT %s"
+          % (sc['bound'], 'PASS' if O.verdict(sc) else 'fail'))
+
+
 def main(argv):
     import warnings
     warnings.simplefilter('ignore')
@@ -1719,9 +1928,11 @@ def main(argv):
         _cmd_decel(env, hl, kw)
     elif cmd == 'homing':
         _cmd_homing(env, hl, kw)
+    elif cmd == 'solve':
+        _cmd_solve(env, hl, kw)
     else:
         print("usage: python -m harness.tetrapush.full_herd "
-              "{sep | box | plan | endgame | walk | arrivals | place | decel | homing}")
+              "{solve | sep | box | plan | endgame | walk | arrivals | place | decel | homing}")
 
 
 if __name__ == '__main__':

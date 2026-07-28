@@ -15,7 +15,7 @@ Three properties, in the order the search depends on them:
 """
 import pytest
 
-from harness.tetrapush import seeds, two_roll as T, full_herd as F
+from harness.tetrapush import seeds, two_roll as T, full_herd as F, objective as O
 from harness.tetrapush.reposition import HerdLine
 
 
@@ -182,6 +182,121 @@ def test_terminal_targeting_reduces_placement_distance_and_bit_confirms(env, hl,
     c = F.confirm_plan(env, hl, best)
     assert c['bit_exact'], "the terminal plan did not replay 0-ULP"
     assert c['talk_safe'] and not best['run']._follow_warned
+
+
+def test_the_wall_prune_bites_on_the_locked_plan_and_is_inert_on_a_clean_one(env, hl, box):
+    """**Session 61: the wall half of the objective, wired into the search.**
+
+    Session 60 found the Courtyard `FreeRun` models no BG collision at all and that the regime half
+    (`_follow_warned`) was enforced everywhere while the wall half was enforced NOWHERE. Both halves
+    now go through `frame_in_model`, and `confirm_plan` measures the clearance on every frame with the
+    exact metric. Two things are gated, because a prune that never fires and a prune that fires on
+    everything look identical from the pass/fail line:
+
+      * it BITES: node 1's locked plan walks Link ~34 u through the courtyard back wall, so its
+        confirm reports `wall_ok=False` (and `ok=False`) even though the replay is still bit-exact --
+        the plan is faithful to the model and the MODEL is what is out of bounds;
+      * it is INERT on a real search node: a cycle-1 plan runs hundreds of u from anything.
+    """
+    import json
+    import os
+    import warnings
+
+    fx = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                      'fixtures', 'courtyard_node1_console.json')
+    log = json.load(open(fx))['log']
+    run = seeds.make_freerun(env)
+    run.pre_seed_input(seeds.dtm_input_at(env)(0))
+    with warnings.catch_warnings():         # the follow guard fires; that is the OTHER half
+        warnings.simplefilter('ignore')
+        for d in log:
+            run.step(d)
+        c = F.confirm_plan(env, hl, dict(run=run, log=log))
+    assert c['bit_exact'], "the replay itself must still be exact -- the plan is model-faithful"
+    assert not c['wall_ok'] and c['wall_margin'] < -1.0
+    assert c['wall_margin_at'] is not None and not c['ok']
+
+    clean = F.cycle1_nodes(env, hl, box, beam=2)
+    assert clean, "cycle 1 found nothing -- the wall prune should be inert here"
+    cc = F.confirm_plan(env, hl, clean[0])
+    assert cc['wall_ok'] and cc['wall_margin'] > 50.0 and cc['ok']
+    # and the shared predicate agrees with the per-frame metric it stands in for
+    assert F.frame_in_model(clean[0]['run'])
+    assert not F.frame_in_model(run)
+
+
+def test_the_frame_bound_rank_and_the_budget_cut(env, hl, box):
+    """**Session 61: the objective as the search's rank.** `rank_key('bound')` orders by
+    `objective.plan_bound` (frames spent + the steady-state remainder), which is what makes the beam
+    frame-minimal AND makes it pay for lateral drift; `_budget_cut` drops nodes whose bound is already
+    past the frame budget.
+
+    The substantive difference is gated where it actually lives: a herd RATE is a down-herd
+    projection, so it cannot see a lateral miss at all, while the bound counts it as the frames it
+    will cost. (On cycle 1 the two happen to produce the same ORDER -- the nodes barely differ
+    laterally there -- which is exactly why the difference has to be gated on the definition rather
+    than on a beam's ordering.)"""
+    nodes = F.cycle1_nodes(env, hl, box, beam=6)
+    kb, kr = F.rank_key('bound'), F.rank_key('rate')
+    vb = [kb(n['run'], n['frames'], n['m']) for n in nodes]
+    assert vb == sorted(vb), "cycle 1 must come back ordered by the rank it was given"
+    with pytest.raises(ValueError):
+        F.rank_key('whatever')
+
+    n = nodes[0]
+    on_line, off_line = n['run'].clone(), n['run'].clone()
+    off_line.tx += hl.px * 30.0          # 30 u PURELY lateral: the same down-herd progress
+    off_line.tz += hl.pz * 30.0
+    assert hl.along(off_line.tx, off_line.tz) == pytest.approx(hl.along(on_line.tx, on_line.tz))
+    assert kr(on_line, n['frames'], n['m']) == kr(off_line, n['frames'], n['m']), \
+        "the rate is supposed to be blind to lateral offset -- that is the point being made"
+    assert kb(on_line, n['frames'], n['m']) < kb(off_line, n['frames'], n['m'])
+
+    # the cut keeps what can still finish and drops what cannot; it is monotone in the budget
+    assert F._budget_cut(nodes, kb, None) == nodes
+    assert F._budget_cut(nodes, kb, 10 ** 6) == nodes
+    assert F._budget_cut(nodes, kb, 0.0) == []
+    mid = sorted(vb)[len(vb) // 2]
+    assert len(F._budget_cut(nodes, kb, mid)) == sum(1 for v in vb if v <= mid)
+
+
+def test_the_frame_minimal_terminal_stops_at_the_first_placement_with_link_moving(env, hl, box):
+    """**Session 61: the re-aimed terminal.** Rule 3 replaced the near-rest arrival, so the terminal
+    stops the moment Tetra is inside the placement band with Link STILL MOVING (`_terminal_ready`) --
+    "the placement rides the last push" -- instead of spending further frames polishing a distance
+    already inside it.
+
+    Gated on the CLOSING synthetic arrival (`synthetic_hot_arrival` -- Link hot behind Tetra, a few
+    tens of u short of a coord), because that is the geometry rule 3 keys on: at a push frame Link is
+    travelling INTO Tetra, so the 180 sends him away. (A post-roll cycle-1 endpoint is already
+    receding, where the 180 would turn him back into her, so it correctly reads NOT ready -- that is
+    the predicate working, not a wrinkle in the terminal.) Synthetic, so no bit-confirm -- the same
+    convention as the s49-s51 recipe gates; the band is widened because a sub-unit placement is the
+    search problem, not the stop rule under test here.
+
+    EARLIEST is gated by construction: with the horizon cut one frame shorter, nothing is placed."""
+    hot = F.synthetic_hot_arrival(env, hl, 241, d_short=40.0, feet=64.0)
+    assert F._approach_rate(hot['run']) > 10.0, "the arrival must be CLOSING for rule 3 to apply"
+
+    def terminal(max_frames):
+        return F.terminal_targeting([F.synthetic_hot_arrival(env, hl, 241, d_short=40.0, feet=64.0)],
+                                    hl, max_frames=max_frames, beam=16,
+                                    objective='frame_minimal', band=6.0)
+
+    tt = terminal(8)
+    p = tt['placed']
+    assert p is not None, "no in-band state reached -- the stop rule cannot be observed"
+    assert p['dist'] <= 6.0 and tt['band'] == 6.0
+    assert F._terminal_ready(p['run'])['ready'], "rule 3: the placement frame must be MOVING"
+    assert p['score'] == pytest.approx(O.plan_bound(p['frames'], p['dist']))
+    assert p['frames'] == len(p['log'])
+    assert terminal(p['frames'] - 1)['placed'] is None, \
+        "an earlier in-band ready state existed -- the stop is not returning the first one"
+
+    # the placement-ranked terminal is UNCHANGED by any of this (score == distance, s44)
+    nodes = F.cycle1_nodes(env, hl, box, beam=2)
+    tt_p = F.terminal_targeting(nodes, hl, max_frames=4, beam=12, objective='placement')
+    assert tt_p['best']['score'] == tt_p['best']['dist'] == tt_p['dist']
 
 
 def test_separation_scan_reports_the_coupled_entry_barrier(env, hl, box):
