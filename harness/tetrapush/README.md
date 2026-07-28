@@ -886,9 +886,11 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               `turnaround_ready` + placement-on-the-last-push, and run the chain against a hard
               75-frame budget. `objective.score_plan` is the acceptance test.
               **DONE in session 61 (box below) -- and it moved the blocker onto the CHAIN.**
-      - [~] **THE OBJECTIVE IS NOW THE SEARCH'S RANK AND PRUNE, AND RUNNING IT PUT THE BLOCKER ON THE
-            CHAIN: s43's 3-CYCLE RESULT DOES NOT REPRODUCE (session 61).** All three of session 60's
-            next-step pieces landed; the terminal is measured and exonerated; the chain is not.
+      - [~] **THE OBJECTIVE IS NOW THE SEARCH'S RANK AND PRUNE, AND RUNNING IT FOUND WHY THE CHAIN
+            "STALLED": ITS LAST CYCLE WAS OVER-CONSTRAINED (session 61).** All three of session 60's
+            next-step pieces landed. The terminal is measured and exonerated (3-4 frames); the chain
+            reaches 69-70 frames at `plan_bound` 74.4-74.7 -- inside the 75-frame budget -- with Tetra
+            57.5-71.5 u still to go, and THAT last stretch is the open blocker.
             - **WIRED (piece 1): the wall prune, at every active site, behind ONE predicate.**
               `full_herd.frame_in_model` carries the regime half (`_follow_warned`, which was
               everywhere) and the wall half (which was nowhere) TOGETHER, so they cannot drift apart
@@ -930,8 +932,11 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               `lat_at(along)`** -- that is the chain's spec now, and it is a lateral spec.
             - **THE CHAIN, RE-MEASURED ON TODAY'S MODEL (piece 3): cycle 1 275.8 u / 21 f / 13.135 u/f
               (bound 71.9), cycle 2 590.9 u / 46 f / 12.846 (bound 72.9), and cycle 3 initially
-              produced ZERO roll survivors.** s43's 868.3 u / 69 f did not reproduce -- and the cause
-              turned out to be an OVER-CONSTRAINT in the chain, not the model, the rank or the walls.
+              produced ZERO roll survivors** -- which read as "s43's 868.3 u / 69 f no longer
+              reproduces". **It does**: with the over-constraint below removed, cycle 3 comes back at
+              **869.2 u / 69 f / 12.597 u/f, bound 74.4, 8 nodes** -- s43's number to within a unit, on
+              a model that has moved five times since. The cause was never the model, the rank or the
+              walls.
             - **THE STALL'S CAUSE, FOUND AND FIXED: `chain_herd` required its LAST cycle to be
               CONTINUABLE.** `junction_quality` asks whether the next junction could carry on from a
               roll's endpoint; the final cycle has no next junction -- only the terminal glide, which
@@ -985,20 +990,33 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               `aim_talk`/`aim_no_roll`/`aim_weak`/`aim_offline`/`aim_wall`) -- "the beam emptied" is not
               a diagnosis, and folding the wall prune into the existing `outbox` counter (which I did
               first) destroyed exactly the diagnostic the stall needed.
-            - **NEXT: close the last 57-71 u.** The fixed chain reaches 69-70 frames at bound
-              74.4-74.7 with Tetra 57.5-71.5 u out, and the terminal PLACES from **25-40 u** but
-              missed from 69 u (69 u of along moves the thread's required lateral 14.9 u). So either
-              the chain delivers ~25-40 u out (a shorter third cycle, or a longer glide before it) or
-              the terminal learns a ~60 u run-in. Run `full_herd solve` and read its acceptance-test
-              block first -- it names which of `complete` / `placeable` / the frame budget failed
-              rather than leaving it to be inferred. If more roll survivors are wanted, the gate to
-              attack is **`followed`** (26670 of 27.5k cycle-3 aims), i.e. the ~400 u roll leaving the
-              230 u follow shell -- a shorter roll or a contact-preserving fan, not the rank. And do
-              not over-fit the lateral: it OSCILLATES (+5.8 -> -39.9 -> +8.9), so ranking a mid-chain
-              beam on it would have discarded the survivor that came back inside the window.
-              Cheap iteration exists now: dump a beam's input LOGS and rebuild it bit-exact on a fresh
-              `FreeRun` (verified this session over all 7 cycle-2 nodes) instead of re-paying the
-              ~475 s stage.
+            - **THE END-TO-END SOLVE (`full_herd solve cycles=3`, 940 s): 73 FRAMES AT TIMELOSS +0,
+              wall-free, in regime, bit-exact -- and 31.4 u short of the coord.** The full acceptance
+              test on the winner's own log: `frames 73 vs floor 73 -> timeloss +0`, `wall +50.4 u`,
+              `regime ok`, `confirm bit_exact=True talk_safe=True wall_ok=True`, Tetra at **along 907.9
+              lat -2.44, `placeable` TRUE**, `placement 31.406 u` (idx 287), terminal `speed 23.87 but
+              ready=False`, bound 75.4, **VERDICT fail -- on `complete`, and only on it**. So the frame
+              budget is NOT the binding constraint; the plan runs out of thread, not of frames.
+            - **THE REMAINING GAP IS NOW ARITHMETIC, and it is ~10 u of LATERAL worth ~4 frames.** At
+              lat **-2.44** Tetra matches the thread only at its FAR end (`lat_at(984.1) = -2.09`), so
+              she needs **+76 u** of further along (~6 frames, blowing the budget). Sitting ~10 u higher
+              (**lat ~+8**) she would match it at the NEAR end (`lat_at(937.5) = +7.95`), only **+30 u**
+              away (~2.4 frames, INSIDE the budget). Same distance to the coord, four frames apart,
+              decided entirely by the lateral the last cycle leaves. Note the cheap-node contrast in the
+              same run: a 1-cycle solve lands lat **+7.91**, `lat_error` **-0.04** -- dead on the near
+              end -- so the on-thread lateral is reachable and the later cycles lose it.
+            - **NEXT, in this order.** (1) **Rank/steer the LAST cycle on `lat_error` against the NEAR
+              end**, not on down-herd progress: +8 rather than -2.4 is worth ~4 frames and turns a
+              73-frame `fail` into a candidate PASS. (2) **Rule 3 is a separate miss**: the terminal
+              ends `ready=False` (speed 23.87, but travelling AWAY, so the 180 would turn Link back
+              into her) -- the placement frame has to be one where he is closing, which is a phase
+              choice inside the glide, not a new mechanic. (3) If more roll survivors are wanted the
+              gate to attack is **`followed`** (26670 of 27.5k cycle-3 aims; `aim_wall` is 76), i.e.
+              the ~400 u roll leaving the 230 u shell -- a shorter roll or a contact-preserving fan,
+              not the rank. And do NOT over-fit the mid-chain lateral: it OSCILLATES (+5.8 -> -39.9 ->
+              +8.9 -> -2.4), so ranking a mid-chain beam on it would have discarded the survivor that
+              came back. Iterate from `solve dump=<path>` + `beam_io.rebuild_beam` (bit-exact) rather
+              than re-paying the 940 s.
       - [x] **THE LAST FIDELITY SEED IS CLOSED: 0-ULP ON EVERY IN-REGIME SAMPLE THE CONSOLE
             MEASURED, n=1..80 (session 59). What is still open is SCOPE, not fidelity.**
             Session 58 handed over "model the WAIT stop". The sim did not pose at all across it

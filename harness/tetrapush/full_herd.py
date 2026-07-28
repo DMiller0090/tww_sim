@@ -1911,6 +1911,13 @@ def _cmd_solve(env, hl, kw):
              sc['terminal']['speed'], sc['terminal_ok']))
     print("    frame bound %.1f          VERDICT %s"
           % (sc['bound'], 'PASS' if O.verdict(sc) else 'fail'))
+    if 'dump' in kw:
+        # persist the whole run: a 3-cycle solve costs ~16 min, and every node's log rebuilds
+        # bit-exact (`beam_io`), so the next session continues instead of re-searching.
+        from harness.tetrapush import beam_io
+        beam_io.dump_beams(kw['dump'], res['beams'] + [[win]], hl, placements)
+        print("\n  dumped %d beams + the winner -> %s (rebuild with beam_io.rebuild_beam)"
+              % (len(res['beams']), kw['dump']))
 
 
 def main(argv):
