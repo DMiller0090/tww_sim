@@ -30,7 +30,8 @@ import os
 from .. import fp
 from . import fk
 from .anim_state import (UnderAnimState, ANIM_META, ANIM_CODE, ANIM_ORDER,
-                         NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO, H_38, H_40)
+                         NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO, H_38, H_40,
+                         H_10, H_68, H_6C, H_70)
 
 # Optional native composition (anim/_anmc.foot_compose); bit-exact with _py_foot_compose below.
 try:
@@ -394,19 +395,30 @@ class FootSpeedF:
         self._pending_morf = m
         return 0.0
 
-    def enter_subjectivity(self, msd, morf=2.4):
-        """procSubjectivity_init on-axis (d_a_player_main.cpp:5948) -- the C-up-cancel FREEZE.
-        The J3DFrameCtrl advances the walk one frame (actor execute), then setBlendMoveAnime's
-        ModeFlg_00000001 idle arm (line 3114) re-poses as
-        setMoveAnime(f27=0, f28=H_38, f25=H_40, ANM_WAITS, ANM_WALK, r29=2, field_0xC):
-        MOVE0=WAITS (rate 1.1), MOVE1=WALK (rate (1/60)*1.1*32=0.587), m34C3=2, ratio 0, m3598=0,
-        phase f31 PRESERVED from the walk (old m34C3=1). mNormalSpeed=0 so speedF/position is frozen;
-        the pose warms the toe stream at the carried WAITS phase so the eventual re-walk is bit-exact
-        (its f31 is preserved BECAUSE m34C3=2, vs a cold FREE_WAIT walk's m34C3=0 -> f31=0 reset).
-        Python-path only (the native fused engine has no subjectivity proc)."""
+    def pose_idle_blend(self, msd, morf=None):
+        """setBlendMoveAnime's ModeFlg_00000001 IDLE arm, plain sub-branch (d_a_player_main.cpp:3114).
+
+        The one law behind every standing re-pose: the J3DFrameCtrls advance one frame (actor
+        execute), then setBlendMoveAnime -- reached at mNormalSpeed == 0, so f30 == 0 puts it in
+        regime 1 -- takes the idle arm and calls
+        setMoveAnime(f27=0, f28=H_38, f25=H_40, ANM_WAITS, ANM_WALK, r29=2, param_1):
+        MOVE0=WAITS (rate 1.1), MOVE1=WALK (rate (1/60)*1.1*32=0.587), m34C3=2, ratio 0, and
+        **m3598 = 0** (the idle arm's defining difference from the regime-1 blend, which would set
+        m3598 = 1 and let the idle toe drift drive speedF). Phase f31 is PRESERVED from the walk
+        (old m34C3 == 1), so the eventual re-walk resumes on the carried WAITS phase.
+
+        mNormalSpeed is 0, so speedF and position are frozen; the pose's real job is to keep the toe
+        stream advancing at the idle drift -- which is what the NEXT walk frame's f31_2 measures.
+
+        `morf` = the setBlendMoveAnime argument: mBasic.field_0xC on a proc *_init (procWait_init
+        6068, procSubjectivity_init 5948, procMove_init 6215), None/-1 on a steady body frame
+        (procWait 6144 passes -1.0f). Callers own `started`. Python-path only; the native twin is
+        `_anmc.PoseEngine._w_pose_idle_blend_c`.
+
+        The two sub-branches this does NOT take: the turn-step arm (shape_angle.y != m34DE and no
+        attention lock -> WAITS/ATNW{L,R}S, `enter_wait_idle`) and the confused WAITQ single."""
         if self._core is not None:
-            raise NotImplementedError("subjectivity freeze needs the pure-Python foot path (native=False)")
-        self.started = True
+            raise NotImplementedError("the idle-blend re-pose needs the pure-Python foot path (native=False)")
         msd = _f32(msd)
         m = float(morf) if morf is not None else -1.0
         self.st.fc0.update()                        # actor execute advances the walk ctrl this frame
@@ -417,6 +429,61 @@ class FootSpeedF:
                      f1=self.st.fc1.frame, ratio=self.st.ratio, m3598=0.0, morf=(m >= 0.0))
         self._foot_speedf(0.0, msd, state, m)
         return 0.0
+
+    def enter_subjectivity(self, msd, morf=2.4):
+        """procSubjectivity_init on-axis (d_a_player_main.cpp:5948) -- the C-up-cancel FREEZE.
+        setBlendMoveAnime(mBasic.field_0xC) -> the idle arm; see `pose_idle_blend`. Its HOLD frames
+        are `step_subjectivity` (procSubjectivity does NOT re-pose), unlike WAIT's."""
+        self.started = True
+        return self.pose_idle_blend(msd, morf)
+
+    def enter_wait(self, msd, morf=2.4):
+        """procWait_init (d_a_player_main.cpp:6068): commonProcInit(WAIT), mNormalSpeed = 0, then
+        setBlendMoveAnime(mBasic.field_0xC) -- the same idle arm as the subjectivity freeze. The
+        proc that routed here (procMove 6229 / procAtnMove 6242 / ...) SKIPS its own
+        setBlendMoveAnime when checkNextMode returns true, so this is the frame's only pose."""
+        self.started = True
+        return self.pose_idle_blend(msd, morf)
+
+    def enter_wait_rest_hp(self):
+        """procWait_init's LOW-LIFE arm (d_a_player_main.cpp:6072):
+        `setSingleMoveAnime(ANM_WAITATOB, field_0x68, field_0x6C, field_0x10, field_0x70)`.
+
+        Reached instead of setBlendMoveAnime when `checkRestHPAnime()` holds and the player is not
+        guarding, and it is a completely different shape from the WAITS/WALK idle blend: a SINGLE
+        anim (m34C3 -> 0), the wait A->B transition, at rate 0.6 from frame 0, with the frame ctrl's
+        end forced to 12 (H_10) rather than the clip's own 13. Because m34C3 lands at 0, the WALK
+        blend that follows re-inits its phase to 0 (`setMoveAnime` f31 = 0 when m34C3 == 0) instead
+        of carrying the WAITS phase -- so this arm changes the RE-WALK too, not just the stop.
+
+        commonProcInit (5805) zeroes m3598 on the way in; setSingleMoveAnime itself does not touch
+        it, so it is set here (the caller's proc init is what did it).
+
+        The frame controllers advance ONCE first (the actor-execute update for this frame, before
+        the proc re-poses). MOVE0's is then overwritten by the single, so only MOVE1's advance
+        survives -- and it is the LAST one it gets, because setSingleMoveAnime clears MOVE1's heap
+        index (12798) and the model calc stops advancing a slot it no longer draws. Live: MOVE1's
+        frame steps 12.4498 -> 13.0777 on the stop frame and then holds it through the whole single.
+
+        Call once on the WAIT init frame, then `step_single_anim` per WAIT frame (that frame
+        included -- `enter_single` holds the ctrl at the start frame for the entry pose)."""
+        if self._core is not None:
+            self.started = True
+            self._core.w_enter_wait_rest_hp()
+            return
+        self.st.fc0.update()
+        self.st.fc1.update()
+        self.enter_single('waitatob', H_70, H_6C, H_10, H_68)
+        self.st.m3598 = 0.0
+
+    def step_wait(self, msd):
+        """One procWait body frame (d_a_player_main.cpp:6093). Unlike procSubjectivity, procWait
+        RE-POSES every frame -- `setBlendMoveAnime(-1.0f)` at 6144 (the m34C3 != 0, no-restHP arm)
+        -- so the WAITS/WALK pair is re-derived and MOVE1's frame is re-slaved to MOVE0's phase
+        instead of advancing on its own rate. The f31 = frame/60 -> frame = f31*60 round-trip is not
+        an f32 identity, so the re-pose is not a no-op even when nothing else changes."""
+        self.started = True
+        return self.pose_idle_blend(msd, None)
 
     def step_subjectivity(self, msd):
         """One SUBJECTIVITY (or the post-B WAIT) HOLD frame. procSubjectivity only setBodyAngleToCamera,
@@ -476,26 +543,12 @@ class FootSpeedF:
         if not self.started:
             if nspeed <= 0.0:
                 if self._rest_blend:
-                    # seed_rest_blend WAIT frame (see its docstring): alignment no-ops touch
-                    # NOTHING; then real rest frames advance the ctrls + run the toe recursion.
+                    # A rest frame IS a procWait body frame (same idle re-pose as `step_wait`);
+                    # alignment no-ops touch NOTHING, and `started` must stay False for the morf.
                     if self._rest_noops > 0:
                         self._rest_noops -= 1
                         return 0.0
-                    st = self.st
-                    st.fc0.update()
-                    st.fc1.update()
-                    # procWait re-inits the blend EVERY idle frame: the f31 frame/60*60 round-trip
-                    # is NOT an f32 identity and fc1 = f31*32 (setBlendMoveAnime idle arm, no morf).
-                    st._set_move_anime(0.0, H_38, H_40, 'waits', st._walk, 2, -1.0)
-                    st.m3598 = 0.0
-                    self._apply_base()
-                    cur = self.ff.step_feet(st.move0, st.move1, st.fc0.frame, st.fc1.frame,
-                                            st.ratio, -1.0)
-                    compose = _N.foot_compose if _N is not None else _py_foot_compose
-                    _, f312 = compose(self.t1, self.t2, 0.0, msd, st.m3598,
-                                      self.prev_f312, self.m35B4)
-                    self._shift(cur, f312, msd)
-                    return 0.0
+                    return self.pose_idle_blend(msd)
                 # input-latency / standing frame: keep drawing the idle so its drift is carried
                 # into the toe stream; the game's m3598 here is 0 so speedF is 0 regardless.
                 self.idle_frame = fp.fadds(self.idle_frame, 1.0)

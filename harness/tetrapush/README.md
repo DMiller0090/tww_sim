@@ -224,7 +224,8 @@ deliberately unported.
 | `tetra_plow.py` | **The Courtyard Co-overlap GEOMETRY**: `plow_depth` (`cM3d_Cross_CylCyl` cross_len) + the Link/Tetra Co radii (30/50). The per-frame PUSH LAW is now `from_f0.cc_push_pair`; `plow_step`/`reconstruct` (the session-8 DERIVED full-depth-from-settled law) were RETIRED session 27 (superseded, ~1e-5 u off the console -- git history archives them). Gated `tests/test_tetra_plow.py`: the regime discriminator (frac==1.0) + `test_console_push_bit_exact_vs_deterministic`. |
 | `from_f0.cc_push_pair` | **THE console CC push law (session 27)**: `cc_push.co_move_pair` = `dCcS::SetPosCorrect` -- the decomp 50/50 half-depth rank split on Link's EXEC centre, obj1/obj2 EXACT-opposite. 0-ULP vs the deterministic per-op ΔTetra f2..f43. Replaces `full_depth_push` (now the seed-frame f0->f1 fallback only). |
 | `link_plow.py` | **The Courtyard Link-recoil LAW** (session 9, now the SEED-frame fallback path): Link's per-frame recoil = the FULL Co overlap depth AWAY from Tetra (`link += depth·unit(link_centre−Tetra)`). `recoil()`/`recoil_step()`, used by `from_f0.full_depth_push` (the f0->f1 seed push). Superseded for f1..f43 by `cc_push_pair`. Gated `tests/test_link_plow.py` (frac==1.0 regime discriminator). Reuses `tetra_plow.plow_depth`. |
-| `from_f0.py` | **The from-f0 COUPLED replay** (session 10-12): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay(..., seed_nspeed=)`. Session 17 refactored the loop into **`FreeRun`** -- the planner's novel-input stepper (seed once, `step()` arbitrary raw inputs; eye/tattn per-step injectables; warns if a stepped state leaves the stt-3 plow regime, dist > `FOLLOW_ENGAGE_DIST`) -- with `replay` a thin wrapper over it. Session 19 wired the MODELED land camera in (`camera=` a seeded `LandCamera`), replacing the csangle injection entirely (see the planner box). **Session 29** closed the f1 seed-frame boundary: `FreeRun(seed_push=)` / `replay(..., seed_push=)` take the exact perop f0->f1 ΔTetra push (`full_depth_push` is now the roll-entry / no-perop fallback), and `step()` rounds the tracked Tetra point to f32 each frame (console storage) -- so the self-contained closed loop from state 2 is now bit-exact in POSITION too, f1..f43, both actors. Gated `tests/test_from_f0.py`: from the roll entry, from **state 2 itself** (dynamics), the one-step-from-exact gates (position f1..f43), and `test_closed_loop_computed_replay_bit_exact` (accumulating position f1..43). **Session 58** pinned the two POSE-STREAM seed facts in `_seed_link`: `SWORD_DRAWN = True` (mEquipItem 0x103 -> the WALKS/DASHS pair) and `defer_draw = True` (the end-of-frame post-posMove draw base). Both are inert until an anim-driven speedF frame and then they ARE the position -- do not "simplify" either away; `tests/test_foot_draw_base.py` fails immediately if you do. |
+| `from_f0.py` | **The from-f0 COUPLED replay** (session 10-12): wires BOTH plow laws (`link_plow`+`tetra_plow`, full-depth) into a closed-loop `LandState` replay seeded at f0 (or a roll entry), driven by the real DTM bytes, Link's mCyl Co centre + csangle INJECTED per frame. Tetra tracked as a bare XZ plow point (stt-3 the whole window). `full_depth_push()` + `replay(..., seed_nspeed=)`. Session 17 refactored the loop into **`FreeRun`** -- the planner's novel-input stepper (seed once, `step()` arbitrary raw inputs; eye/tattn per-step injectables; warns if a stepped state leaves the stt-3 plow regime, dist > `FOLLOW_ENGAGE_DIST`) -- with `replay` a thin wrapper over it. Session 19 wired the MODELED land camera in (`camera=` a seeded `LandCamera`), replacing the csangle injection entirely (see the planner box). **Session 29** closed the f1 seed-frame boundary: `FreeRun(seed_push=)` / `replay(..., seed_push=)` take the exact perop f0->f1 ΔTetra push (`full_depth_push` is now the roll-entry / no-perop fallback), and `step()` rounds the tracked Tetra point to f32 each frame (console storage) -- so the self-contained closed loop from state 2 is now bit-exact in POSITION too, f1..f43, both actors. Gated `tests/test_from_f0.py`: from the roll entry, from **state 2 itself** (dynamics), the one-step-from-exact gates (position f1..f43), and `test_closed_loop_computed_replay_bit_exact` (accumulating position f1..43). **Session 58** pinned the two POSE-STREAM seed facts in `_seed_link`: `SWORD_DRAWN = True` (mEquipItem 0x103 -> the WALKS/DASHS pair) and `defer_draw = True` (the end-of-frame post-posMove draw base). Both are inert until an anim-driven speedF frame and then they ARE the position -- do not "simplify" either away; `tests/test_foot_draw_base.py` fails immediately if you do. **Session 59** added the third: `LOW_LIFE = True` (Link is on his last hearts, so the WAIT stop poses the `ANM_WAITATOB` single, which also resets the re-walk's anim phase); `tests/test_wait_stop_pose.py` is its gate. |
+| `fixtures/courtyard_node1_wait_s59.json` | **The WAIT-STOP ground truth (session 59, LOCKED)**: the console's UNDER-BODY ANIM REGISTERS at plan frames 74..78 -- both J3DFrameCtrls (attr/end/rate/frame), the two blend ratios, `m34C3`, `m_anm_heap_under[0].mIdx`, `mModeFlg` -- plus the foot internals and the model-local `mFootData` toes. This is what identified the stop's pose as `procWait_init`'s low-life `ANM_WAITATOB` SINGLE (idx 285, ctrl end/rate/start 12/0.6/0.0 == `mMove.field_0x10/0x68/0x6C`) rather than the WAITS/WALK idle blend everything else in `setBlendMoveAnime` would give. Gated by `tests/test_wait_stop_pose.py` (5): the branch, every anim clock 0-ULP across the stop, the toe stream (x/z, Y excluded like the s57 gate), and the composition state. Probe `_notes/tetrapush-s59_waitscan.py`. |
 | `fixtures/courtyard_node1_foot_s57.json` | **The POSE-STREAM ground truth (session-57 footscan, baked + LOCKED session 58)**: the console's `mFootData` model-local toe/heel poses at plan frames 62/64/66/68/69, plus `m3598`/`m359C`/`m35B4`/`msd`/plant. Deterministic truncate-and-read halts. Gated by `tests/test_foot_draw_base.py`: every x/z 0-ULP (Y carries the unmodeled `m35B8` draw-base shift and is excluded, deliberately, so the gap stays visible). This is the gate that discriminates a draw-base / anim-set fault from a composition one WITHOUT a live run -- score a candidate against the toes, not the endpoint. |
 | `fixtures/courtyard_push_cyl.json` | Session-8 live ground truth: per-frame Link **mCyl Co-centre** + **csangle** + Tetra pos, single-stepped from slot 2 (`capture_push`). The Co-centre/csangle source the from-f0 replay needs. **Single-step, so cyc2 is edge-jittery** (the `_dedup` in the plow test drops the f44==f45 double-read); NOT a pinned edge oracle. |
 | `fixtures/courtyard_push_setcol.json` | Session-14 breakpoint ground truth (f1..f12): at each JP-`setCollision` hit, the nodeMtx root/neck translates + pos/anim/facing AT CALL TIME and the freshly-written **`cyl_exec`**. Pins the mCyl timing law (exec midpoint) + the half-depth settled-centre map. Source probe `_notes/tetrapush-setcol_probe.py`. |
@@ -819,7 +820,58 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               operands in Python, 40k push pairs native-vs-Python). The native push therefore uses
               `_sqrtf_msl_c`, but `_frsqrte` is UNDIAGNOSED and still sits under the acch/WallCorrect
               call sites (`_shovec` ~297/467/549/668/856). Worth root-causing before trusting it.
-      - [~] **THE POSE STREAM IS NOW CONSOLE-EXACT, AND THE FRONTIER IS THE WAIT STOP (session 58).
+      - [~] **THE LAST FIDELITY SEED IS CLOSED: 0-ULP ON EVERY IN-REGIME SAMPLE THE CONSOLE
+            MEASURED, n=1..80 (session 59). What is still open is SCOPE, not fidelity.**
+            Session 58 handed over "model the WAIT stop". The sim did not pose at all across it
+            (`FootSpeedF.step` early-returns at `|mNormalSpeed| <= 0.001`), so the re-walk at 78
+            measured its `f31_2` off the WALKING poses from 74/75: 2.617 u where the console takes
+            0.379 u. The handoff's expected fix -- reuse `enter_subjectivity`/`step_subjectivity`,
+            the WAITS/WALK idle blend -- was the RIGHT SHAPE and the WRONG ARM.
+            - **THE BRANCH, read live rather than inferred.** A plain WAITS idle at rate 1.1 drifts
+              at most 0.230 u/frame ANYWHERE in its 60-frame cycle, so 0.379 was never reachable by
+              tuning the phase or the morf (swept: no value hits both 78 and 79). One truncate-and-read
+              pass over n=74..78 reading the under-body anim registers settled it:
+              **`m34C3 == 0`** at 76/77 -- a SINGLE, not a blend -- on arc entry **285 =
+              `waitatob.bck`**, frame ctrl end/rate/start **12 / 0.6 / 0.0**. Those three are
+              `mMove.field_0x10`/`0x68`/`0x6C`, and they appear together in exactly one place:
+              `procWait_init`'s `checkRestHPAnime()` arm (`setSingleMoveAnime(ANM_WAITATOB, ...)`,
+              6072). **Link is on his last hearts here**, so the stop plays the low-life wait A-to-B
+              transition. Truth page `knowledge/model/wait-stop-pose.md`.
+            - **IT ALSO OWNS THE RE-WALK.** A single leaves `m34C3` at 0, and `setMoveAnime` carries
+              the anim phase only when `m34C3` is not 0/9/10 (12729) -- so the walk at 78 restarts
+              BOTH controllers at frame 0 instead of resuming the carried WAITS phase. The console
+              agrees to the bit (fc0 0.0, fc1 0.0, ratio 0.343418986). Two more shape facts, both
+              gated: MOVE1's ctrl takes its actor-execute advance on the stop frame and then FREEZES
+              (`setSingleMoveAnime` clears its heap idx), and `procWait` re-poses only if the
+              single's rate died or life recovered -- here it just advances 0.6/frame.
+            - **AND `procMove_init`'s MORF FIRES ON THE WAIT EXIT**, exactly as it already did on the
+              ATN->MOVE one (6215). That was the whole of frames 79-80; with it, 78/79/80 went 0-ULP
+              together.
+            - **WHAT `low_life` IS.** `checkRestHPAnime` is `getLife() <= mMove.field_0xE` (6) AND
+              `mpAttnActorLockOn == NULL` AND no upper anime AND no guard. Link's life is not
+              simulated, so `LandState(low_life=)` seeds that half (`from_f0.LOW_LIFE`, defaulting
+              False so every anchor and golden keeps the idle-blend arm) and
+              `_check_rest_hp_anime()` evaluates the half that varies inside a run: the actor lock.
+            - **GATE.** `fixtures/courtyard_node1_wait_s59.json` (NEW, LOCKED -- the live under-body
+              anim registers + `mFootData` toes at n=74..78) + `tests/test_wait_stop_pose.py` (5),
+              which scores a WAIT-pose candidate offline in 0.2 s instead of a live run. It caught a
+              real gap while being written (MOVE1's missing advance on the stop frame). `OPEN` is now
+              **{100, 120, 160, 200}**, all of them at or past the regime break; the localization
+              test is REPLACED by `test_the_first_open_sample_is_the_follow_flip_not_a_fidelity_gap`.
+              655 offline pass, 0 fail. Native twin ported (`C_WAITATOB`, `_w_pose_idle_blend_c`,
+              `_w_enter_wait_rest_hp_c`) and `test_freerun_native` green over the whole 241-frame plan.
+            - **CAPTURE-ALIGNMENT FACT worth keeping** (it cost a wrong-looking diff): a
+              truncate-and-read halt lands AFTER `posMoveFromFootPos` but BEFORE the end-of-execute
+              tail (11285-11289). So position and `m359C` are frame N's, while `m35B4`, `m34DE` and
+              `m34EA` still hold N-1's -- like `mFootData`. Check it on a field that actually CHANGES
+              (facing at the re-walk) before reading a mismatch as a bug.
+            - **NEXT: the SCOPE decision, and it wants Dereck.** From plan frame 100 the console's
+              Tetra reads stt 4 (FOLLOW) and `FreeRun` raises its own FOLLOW_ENGAGE_DIST warning on
+              that exact frame. The plan's second half is outside the stt-3 plow model BY
+              CONSTRUCTION and is the likely real cause of the 113 u endpoint miss. Two ways: model
+              stt-4 follow, or re-solve the plan under a Link-Tetra distance < 230 u constraint.
+              This is NOT another FP hunt -- the FP/pose frontier is closed.
+      - [x] **THE POSE STREAM IS NOW CONSOLE-EXACT, AND THE FRONTIER IS THE WAIT STOP (session 58).
             Bit-exact through plan frame 77; the next seed at 78 is the walk RE-ENTRY out of WAIT.**
             Session 57 handed over "the toe stream leaves the console at sim frame 69". It was two
             independent faults in WHAT gets posed, both invisible until plan frame 72 -- the first

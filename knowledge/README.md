@@ -93,6 +93,7 @@ you can triage in one glance.
 - **Why must the euler→quat half-angle be sign-extended / why isn't a negated quaternion bit-equivalent?** → [model/euler-quat-signed-half.md](model/euler-quat-signed-half.md)
 - **Which position/lean is the model POSED from (before or after `posMove`) / why does a proc-init frame draw upright / why do ULPs of base matter?** → [model/draw-base.md](model/draw-base.md)
 - **Does a drawn sword change the walk anims (WALKS/DASHS) / which anims does `getAnmData` swap / why can that move `speedF`?** → [model/equipped-anim-set.md](model/equipped-anim-set.md)
+- **Does the anim keep running while Link is STOPPED / why is a re-walk's first step tiny / when does a stop reset the walk phase / what does low health change?** → [model/wait-stop-pose.md](model/wait-stop-pose.md)
 
 ### Model - swim
 - **Why f32 / the console cosine table / CHARGE_DISP_FACTOR / cold-start mRate?** → [model/swim-sim.md](model/swim-sim.md)

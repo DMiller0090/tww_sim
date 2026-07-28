@@ -259,6 +259,10 @@ def _cc_settled_center(exec_center, tetra_xz):
 # feet-only swap, hence position wherever m3598 != 0. knowledge/model/equipped-anim-set.md.
 SWORD_DRAWN = True
 
+# Link is on his last hearts, so the WAIT stop plays the ANM_WAITATOB single (measured live at plan
+# frame 76: anm idx 285, ctrl 12/0.6/0.0). knowledge/model/wait-stop-pose.md (the low-life arm).
+LOW_LIFE = True
+
 
 def _seed_link(row, csangle, seed_nspeed=None):
     """Seed a Python-path `LandState` from a captured frame ``row`` (``{proc, pos, facing, travel,
@@ -282,7 +286,8 @@ def _seed_link(row, csangle, seed_nspeed=None):
         link = LandState(pos_x=ll['pos'][0], pos_z=ll['pos'][2], pos_y=ll['pos'][1],
                          facing=ll['facing'], travel=ll['travel'], csangle=csangle,
                          state=FRONT_ROLL, nspeed=26.0, speedF=26.0,
-                         use_anim=True, native=False, sword_drawn=SWORD_DRAWN, input_delay=1)
+                         use_anim=True, native=False, sword_drawn=SWORD_DRAWN, input_delay=1,
+                         low_life=LOW_LIFE)
         link._roll_m3570 = False           # seeded mid-roll: live grinds (no bonk) -> m3570 False
     else:
         ns = ll['speedF'] if seed_nspeed is None else float(seed_nspeed)
@@ -290,7 +295,7 @@ def _seed_link(row, csangle, seed_nspeed=None):
                          facing=ll['facing'], travel=ll['travel'], csangle=csangle,
                          state=proc, nspeed=ns, speedF=ll['speedF'],
                          use_anim=True, native=False, foot_native=False, sword_drawn=SWORD_DRAWN,
-                         input_delay=1)
+                         input_delay=1, low_life=LOW_LIFE)
         link._foot.started = True
     # Draw at frame END from the post-posMove base -- 0 ULP vs the live toes where pre-integration is
     # 32-128 ULP off (`tests/test_foot_draw_base.py`). knowledge/model/draw-base.md.
@@ -416,6 +421,7 @@ class FreeRun:
         core.seed_courtyard(pe, link.pos_y, link.m351C, int(link._atn.state), self.tx, self.tz,
                             self.pend_link[0], self.pend_link[1],
                             self.pend_tetra[0], self.pend_tetra[1])
+        core.low_life = link.low_life        # checkRestHPAnime's seeded half (wait-stop-pose.md)
         return core
 
     def clone(self):

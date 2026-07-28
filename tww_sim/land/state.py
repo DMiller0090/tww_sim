@@ -72,7 +72,7 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
                  state=FREE_WAIT, nspeed=0.0, speedF=0.0, idle_frame=DEFAULT_IDLE_FRAME,
                  use_anim=True, cam_scale=LAND_SCALE, pos_y=0.0, native=True, foot_native=True,
                  sword_drawn=False, idle_anim=None, walls=None, model_draw=False,
-                 floors=None, gnd_seed=None, input_delay=INPUT_DELAY):
+                 floors=None, gnd_seed=None, input_delay=INPUT_DELAY, low_life=False):
         self.pos_x = float(pos_x)
         self.pos_z = float(pos_z)
         # Phase W: `walls` = WALL tris in game traversal order -> the per-frame CrrPos wall
@@ -144,6 +144,9 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         # Sword-thrust cut (CUT_F / CUT_A) state -- the "roll stab". sword_drawn gates the roll->cut
         # trigger (a cut only fires out of a roll if the sword is out; a bare roll routes to MOVE).
         self.sword_drawn = bool(sword_drawn)   # gates the roll->cut trigger; see land-movement.md (roll stab)
+        # checkRestHPAnime's SEEDED life half (life isn't simulated); False = healthy, the arm every
+        # anchor and golden takes. See knowledge/model/wait-stop-pose.md (the low-life arm).
+        self.low_life = bool(low_life)
         # Mid-walk sword pull-out (opt-in; FootSpeedF.draw_sword). OFF by default => byte-identical;
         # requires the pure-Python foot path (native _anmc has no DASHS), forced below.
         self._model_draw = bool(model_draw)
@@ -493,9 +496,11 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         prev_dir = self.direction
         if self.state in (ATN_MOVE, ATN_ACTOR_MOVE, ATN_ACTOR_WAIT):
             self._update_atn_direction()         # setBlendAtnMoveAnime mDirection (proc 7/8/9 share it)
-        # ATN[_ACTOR] -> MOVE (attention dropped): the next frame is procMove_init, which re-triggers the
-        # oldframe-morf (setBlendMoveAnime(mBasic.field_0xC), 6215) -- the walk re-warms from the strafe pose.
-        if proc in (ATN_MOVE, ATN_ACTOR_MOVE, ATN_ACTOR_WAIT) and self.state == MOVE and self._foot is not None:
+        # ATN[_ACTOR] / WAIT -> MOVE: procMove_init re-triggers the oldframe-morf (6215), so the walk
+        # re-warms from the pose it left. `started` gates WAIT (see the WAIT branch below).
+        if (self.state == MOVE and self._foot is not None
+                and (proc in (ATN_MOVE, ATN_ACTOR_MOVE, ATN_ACTOR_WAIT)
+                     or (proc in (WAIT, FREE_WAIT) and self._foot.started))):
             self._foot._pending_morf = self.MOVE_REENTRY_MORF
 
         # Before posing, set Link's CURRENT (pre-integration) world pos + shape_angle.y: the foot FK runs
@@ -591,6 +596,24 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
                              f32(f32(sp5c[2] * c) - f32(sp5c[0] * s)))
         elif proc in (CUT_F, CUT_A):
             # The cut EXITED to WAIT this frame (checkNextMode(1) set mNormalSpeed=0) -> position freezes.
+            self.speedF = 0.0
+        elif self.state == WAIT and self._foot is not None and self._foot.started:
+            # THE WALK -> WAIT STOP: procWait_init (6068) / procWait (6093) keep POSING while Link is
+            # stopped, and the re-walk's f31_2 measures that. knowledge/model/wait-stop-pose.md.
+            rest_hp = self._check_rest_hp_anime()   # `started`: a never-walked stream poses in step()
+            if proc != WAIT:                          # procWait_init
+                if rest_hp:
+                    self._foot.enter_wait_rest_hp()   # low life -> the ANM_WAITATOB single
+                    self._foot.step_single_anim(0.0, self.msd)
+                else:
+                    self._foot.enter_wait(self.msd, self.MOVE_REENTRY_MORF)   # setBlendMoveAnime(field_0xC)
+            elif self._foot.st.m34C3 == 0:            # procWait mid-single (6119): re-pose only if
+                if self._foot.st.fc0.rate < 0.01 or not rest_hp:   # the rate died or life recovered
+                    self._foot.enter_wait(self.msd, self.MOVE_REENTRY_MORF)
+                else:
+                    self._foot.step_single_anim(0.0, self.msd)
+            else:                                     # procWait, in the blend (6144)
+                self._foot.step_wait(self.msd)        # setBlendMoveAnime(-1.0f)
             self.speedF = 0.0
         elif self.state == ATN_MOVE and self._foot is not None:
             # ATN_MOVE: setBlendAtnMoveAnime poses the strafe/back anim. f31 = |nspeed*cos(m34E2)|/max

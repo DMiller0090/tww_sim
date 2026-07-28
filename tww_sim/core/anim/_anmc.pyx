@@ -792,7 +792,10 @@ DEF C_FREEB=14
 # Feet-only difference, but posMoveFromFootPos reads the feet -- selected by `_sword`/`set_sword`.
 DEF C_WALKS=15
 DEF C_DASHS=16
-DEF N_ANIM=17
+# ANM_WAITATOB: the low-life wait A->B transition procWait_init plays as a SINGLE instead of the
+# WAITS idle blend when checkRestHPAnime() holds (6072). knowledge/model/wait-stop-pose.md.
+DEF C_WAITATOB=17
+DEF N_ANIM=18
 DEF D_FORWARD=0
 DEF D_BACKWARD=1
 DEF D_LEFT=2
@@ -800,6 +803,7 @@ DEF D_LEFT=2
 cdef double _MMAX[N_ANIM]             # frameMax per anim code
 cdef int _MATTR[N_ANIM]               # J3DFrameCtrl attribute (EMode) per anim code
 cdef double _H_MAXSPEED, _H_2C, _H_30, _H_38, _H_40, _H_48, _H_60
+cdef double _H_10, _H_68, _H_6C, _H_70      # the ANM_WAITATOB single: end / rate / start / morf
 cdef double _ATN_1C, _ATN_20, _ATN_24, _ATN_28, _ATN_2C
 cdef double _ATNB_1C, _ATNB_20, _ATNB_24, _ATNB_28
 cdef bint _ANIM_CONSTS_READY = False
@@ -810,12 +814,14 @@ def init_anim_consts(meta_max, meta_attr, hio):
     into C. Idempotent; called once when the first fused engine is built."""
     global _ANIM_CONSTS_READY
     global _H_MAXSPEED, _H_2C, _H_30, _H_38, _H_40, _H_48, _H_60
+    global _H_10, _H_68, _H_6C, _H_70
     global _ATN_1C, _ATN_20, _ATN_24, _ATN_28, _ATN_2C, _ATNB_1C, _ATNB_20, _ATNB_24, _ATNB_28
     cdef int i
     for i in range(N_ANIM):
         _MMAX[i] = meta_max[i]; _MATTR[i] = meta_attr[i]
     _H_MAXSPEED = hio['maxspeed']; _H_2C = hio['h2c']; _H_30 = hio['h30']; _H_38 = hio['h38']
     _H_40 = hio['h40']; _H_48 = hio['h48']; _H_60 = hio['h60']
+    _H_10 = hio['h10']; _H_68 = hio['h68']; _H_6C = hio['h6c']; _H_70 = hio['h70']
     _ATN_1C = hio['atn1c']; _ATN_20 = hio['atn20']; _ATN_24 = hio['atn24']; _ATN_28 = hio['atn28']
     _ATN_2C = hio['atn2c']; _ATNB_1C = hio['atnb1c']; _ATNB_20 = hio['atnb20']
     _ATNB_24 = hio['atnb24']; _ATNB_28 = hio['atnb28']
@@ -1715,11 +1721,17 @@ cdef class PoseEngine:
         return 0.0
 
     def w_enter_subjectivity(self, double msd, double morf):
-        """procSubjectivity_init on-axis (5948) -- the C-up-cancel FREEZE. Advance the walk ctrl one
-        frame, then setMoveAnime(0, H_38, H_40, WAITS, WALK, 2): MOVE0=WAITS(1.1), MOVE1=WALK, m34C3=2,
-        ratio 0, m3598=0, phase preserved. Pose (nspeed=0) to warm the toe stream. Port of
-        FootSpeedF.enter_subjectivity."""
+        """procSubjectivity_init on-axis (5948) -- the C-up-cancel FREEZE. See
+        `_w_pose_idle_blend_c`. Port of FootSpeedF.enter_subjectivity."""
         self._started = True
+        return self._w_pose_idle_blend_c(msd, morf)
+
+    cdef double _w_pose_idle_blend_c(self, double msd, double morf) noexcept nogil:
+        """setBlendMoveAnime's ModeFlg_00000001 IDLE arm, plain sub-branch (3114): advance both
+        ctrls (actor execute), then setMoveAnime(0, H_38, H_40, WAITS, WALK(S), 2) -- m34C3=2,
+        ratio 0, m3598=0, phase preserved -- and pose at nspeed 0 to warm the toe stream.
+        `morf` < 0 = no oldframe-morf (procWait's steady setBlendMoveAnime(-1.0f), 6144).
+        Port of FootSpeedF.pose_idle_blend; callers own `_started`."""
         _fc_update(self._fc0_attr, self._fc0_start, self._fc0_end, self._fc0_loop,
                    &self._fc0_frame, &self._fc0_rate)
         _fc_update(self._fc1_attr, self._fc1_start, self._fc1_end, self._fc1_loop,
@@ -1729,6 +1741,23 @@ cdef class PoseEngine:
         self._foot_speedf_c(0.0, f32(msd), self._move0, self._move1,
                             self._fc0_frame, self._fc1_frame, self._a_ratio, self._m3598, morf)
         return 0.0
+
+    def w_enter_wait_rest_hp(self):
+        """Port of FootSpeedF.enter_wait_rest_hp -- see `_w_enter_wait_rest_hp_c`."""
+        self._w_enter_wait_rest_hp_c()
+
+    cdef void _w_enter_wait_rest_hp_c(self) noexcept nogil:
+        """procWait_init's LOW-LIFE arm (6072): setSingleMoveAnime(ANM_WAITATOB, field_0x68,
+        field_0x6C, field_0x10, field_0x70) -- a SINGLE (m34C3 -> 0) at rate 0.6 from frame 0 with
+        the frame ctrl's end forced to 12, plus commonProcInit's m3598 = 0 (5805). Both ctrls take
+        their actor-execute update first; MOVE0's is overwritten by the single, MOVE1's is its last
+        (setSingleMoveAnime clears its heap index). Port of FootSpeedF.enter_wait_rest_hp."""
+        _fc_update(self._fc0_attr, self._fc0_start, self._fc0_end, self._fc0_loop,
+                   &self._fc0_frame, &self._fc0_rate)
+        _fc_update(self._fc1_attr, self._fc1_start, self._fc1_end, self._fc1_loop,
+                   &self._fc1_frame, &self._fc1_rate)
+        self._w_enter_single_c(C_WAITATOB, _H_70, _H_6C, _H_10, _H_68, True)
+        self._m3598 = 0.0
 
     def w_step_subjectivity(self, double msd):
         """One SUBJECTIVITY / post-B WAIT hold frame: the WAITS/WALK ctrls advance (no re-pose),
@@ -2186,6 +2215,7 @@ cdef class LandCore:
     cdef int _cbuf[6]                       # delay-1 pending controller input
     cdef bint _has_cbuf
     cdef bint _court_locked                 # mpAttnActorLockOn != NULL (courtyard; False in walk step)
+    cdef public bint low_life               # checkRestHPAnime's life half (seeded; wait-stop-pose.md)
 
     @property
     def pe_phase(self):
@@ -2256,6 +2286,7 @@ cdef class LandCore:
         self._pend_tetra_x = 0.0; self._pend_tetra_z = 0.0
         self._has_cbuf = False
         self._court_locked = False
+        self.low_life = False
         for i in range(6):
             self._cbuf[i] = 128 if i == 0 or i == 1 or i == 4 or i == 5 else 0
 
@@ -2294,6 +2325,7 @@ cdef class LandCore:
         c._pend_link_x = self._pend_link_x; c._pend_link_z = self._pend_link_z
         c._pend_tetra_x = self._pend_tetra_x; c._pend_tetra_z = self._pend_tetra_z
         c._court_locked = self._court_locked; c._has_cbuf = self._has_cbuf
+        c.low_life = self.low_life
         for j in range(6):
             c._cbuf[j] = self._cbuf[j]
         return c
@@ -3017,8 +3049,11 @@ cdef class LandCore:
         if (self.state == LS_ATN_MOVE or self.state == LS_ATN_ACTOR_MOVE
                 or self.state == LS_ATN_ACTOR_WAIT):
             self._update_atn_direction()        # _court_locked already set above (locked gate)
-        if ((proc == LS_ATN_MOVE or proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT)
-                and self.state == LS_MOVE):
+        # ATN[_ACTOR] / WAIT -> MOVE: procMove_init re-triggers the oldframe-morf (6215). Twin of
+        # state.py's `_pending_morf` block; the WAIT arm needs `_started` for the same reason.
+        if (self.state == LS_MOVE
+                and (proc == LS_ATN_MOVE or proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT
+                     or ((proc == LS_WAIT or proc == LS_FREE_WAIT) and self._pe._started))):
             self._pe._w_set_pending_c(_L_MOVE_REENTRY_MORF)
 
         # --- pose + speedF (posMoveFromFootPos via the seeded fused engine) ---
@@ -3028,7 +3063,7 @@ cdef class LandCore:
         cdef double sf_native, f31, na, ratio
         cdef long long r3, r3a
         cdef int r27
-        cdef bint entered, morf_on
+        cdef bint entered, morf_on, rest_hp
         cdef int st_now = self.state
         if st_now == LS_FRONT_ROLL or st_now == LS_SLIP:
             self._pe._w_step_single_c(self.nspeed, self.msd)
@@ -3062,6 +3097,25 @@ cdef class LandCore:
             if ratio > 1.0:
                 ratio = 1.0
             self._pe._w_enter_wait_idle_c(ratio, r27, _L_MOVE_REENTRY_MORF, self.msd)
+            sf_native = 0.0
+        elif st_now == LS_WAIT and self._pe._started:
+            # THE WALK -> WAIT STOP: procWait_init (6068) / procWait (6093) keep posing while
+            # stopped, so the toe stream advances and the re-walk's f31_2 is the standing drift.
+            # Twin of state.py's WAIT branch; knowledge/model/wait-stop-pose.md.
+            rest_hp = self.low_life and not self._atn_locked()
+            if proc != LS_WAIT:                              # procWait_init
+                if rest_hp:
+                    self._pe._w_enter_wait_rest_hp_c()       # the ANM_WAITATOB single
+                    self._pe._w_step_single_c(0.0, self.msd)
+                else:
+                    self._pe._w_pose_idle_blend_c(self.msd, _L_MOVE_REENTRY_MORF)
+            elif self._pe._m34C3 == 0:                       # procWait, mid-single (6119)
+                if self._pe._fc0_rate < 0.01 or not rest_hp:
+                    self._pe._w_pose_idle_blend_c(self.msd, _L_MOVE_REENTRY_MORF)
+                else:
+                    self._pe._w_step_single_c(0.0, self.msd)
+            else:                                            # procWait, in the blend (6144)
+                self._pe._w_pose_idle_blend_c(self.msd, -1.0)
             sf_native = 0.0
         else:
             sf_native = self._pe._w_step_c(self.nspeed, self.msd,

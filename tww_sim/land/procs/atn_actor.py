@@ -52,6 +52,20 @@ class _AtnActorMixin:
             return bool(self._atn_force_present)
         return getattr(self, "_atn_actor_pos", None) is not None
 
+    def _check_rest_hp_anime(self):
+        """``checkRestHPAnime`` (d_a_player_main.cpp:5618) -- "play the low-life idle set".
+
+        Two halves. The LIFE half (``dComIfGs_getLife() <= mMove.field_0xE``, 6 quarter-hearts) is
+        not simulated, so it is the seeded `low_life` flag. The half that VARIES inside a run is
+        the actor lock: the check requires ``mpAttnActorLockOn == NULL``, so the same low-life Link
+        takes the ordinary idle blend while a lock-on is live and the WAITATOB single once it drops.
+        (``checkNoUpperAnime`` / ``checkPlayerGuard`` / demo / ship-mode are the remaining terms;
+        none of them is modeled and none is reachable on the flat free-walk tier.)
+
+        Only the WAIT proc consults this -- see `wait-stop-pose.md`. Healthy (the default) keeps
+        every anchor and golden on the pre-existing path."""
+        return bool(getattr(self, 'low_life', False)) and not self._atn.locked
+
     def _set_shape_angle_to_atn_actor(self):
         """setShapeAngleToAtnActor (2625): chase shape_angle.y toward the bearing to the locked
         actor's EYE position (cLib_targetAngleY(current.pos, mpAttnActorLockOn->eyePos)). No-op while

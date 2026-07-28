@@ -1,0 +1,289 @@
+{
+ "source": "session 59 -- truncate-and-read on node 1's locked 241-frame log (fixtures/courtyard_node1_console.json), delivered by harness/tetrapush/deliver.py: playmovie the spliced boot movie + savestate load 1, PauseMovie halts at plan frame N-1. Probe: _notes/tetrapush-s59_waitscan.py. Covers the WALK -> WAIT -> re-walk band (the s58 frontier), reading the under-body anim STATE (both J3DFrameCtrls, the blend ratios, m34C3, the anm-heap indices, mModeFlg) alongside the foot internals and the model-local mFootData toes.",
+ "immutable": "LOCKED live capture. For a fixed input log the console is ground truth -- never edit a value to make the sim pass; fix the model (tests/dolphin/README.md#locked-tests-are-immutable-hard-rule).",
+ "method": "deterministic PauseMovie halt, not a single-step: one full run per N, nothing issued but playmovie + savestate load 1. Live mFootData at frame N is the pose DRAWN at N-1.",
+ "plan": "fixtures/courtyard_node1_console.json (log, 241 frames)",
+ "note": "The decisive rows are n=76/77: m34C3 == 0 with anm0 == 285 (waitatob.bck) and the frame ctrl at end/rate/start 12/0.6/0.0 == mMove.field_0x10/0x68/0x6C -- the unique signature of procWait_init's checkRestHPAnime arm (d_a_player_main.cpp:6072). MOVE1's ctrl FREEZES across the single (setSingleMoveAnime clears its heap idx), and n=78's re-walk restarts the WAITS/WALK blend at frame 0 because the single left m34C3 at 0. NOTE the probe read MOVE1's heap index at an offset that is not the array stride; only MOVE0's (`anm0`, player +0x2F04) is captured. MOVE1's is +0x2F14 (knowledge/model/anim-engine.md) if a future capture wants it.",
+ "samples": [
+  {
+   "n": 74,
+   "link": {
+    "proc": 6,
+    "facing": 36817,
+    "m34DE": 36817,
+    "modeflg": 135620,
+    "speedF": -0.7544552683830261,
+    "nspeed": -4.1090497970581055,
+    "msd": 0.058560699224472046
+   },
+   "under": {
+    "m34C3": 1,
+    "anm0": 294,
+    "ratio0": 0.5165823698043823,
+    "ratio1": 0.4834176301956177,
+    "fc0": {
+     "attr": 2,
+     "end": 60,
+     "rate": 1.2933670282363892,
+     "frame": 22.050039291381836
+    },
+    "fc1": {
+     "attr": 2,
+     "end": 32,
+     "rate": 0.6897957921028137,
+     "frame": 11.760021209716797
+    }
+   },
+   "foot": {
+    "m3598": 1.0,
+    "m359C": 0.7544552683830261,
+    "m35B4": 0.058560699224472046,
+    "plant": 0,
+    "rtoe": [
+     -10.382438659667969,
+     -0.9576379060745239,
+     0.4275174140930176
+    ],
+    "ltoe": [
+     10.09816837310791,
+     2.740161180496216,
+     4.036786079406738
+    ],
+    "rheel": [
+     -10.005212783813477,
+     2.050480842590332,
+     -11.183206558227539
+    ],
+    "lheel": [
+     9.46741008758545,
+     9.771461486816406,
+     -5.666975975036621
+    ]
+   }
+  },
+  {
+   "n": 75,
+   "link": {
+    "proc": 6,
+    "facing": 36817,
+    "m34DE": 36817,
+    "modeflg": 135620,
+    "speedF": -1.4104430675506592,
+    "nspeed": -1.6436197757720947,
+    "msd": 0.058560699224472046
+   },
+   "under": {
+    "m34C3": 1,
+    "anm0": 294,
+    "ratio0": 0.8066329956054688,
+    "ratio1": 0.19336703419685364,
+    "fc0": {
+     "attr": 2,
+     "end": 60,
+     "rate": 1.1773468255996704,
+     "frame": 23.343406677246094
+    },
+    "fc1": {
+     "attr": 2,
+     "end": 32,
+     "rate": 0.6279183626174927,
+     "frame": 12.449816703796387
+    }
+   },
+   "foot": {
+    "m3598": 1.0,
+    "m359C": 1.4104430675506592,
+    "m35B4": 0.058560699224472046,
+    "plant": 0,
+    "rtoe": [
+     -11.39957332611084,
+     -0.6990022659301758,
+     1.404649257659912
+    ],
+    "ltoe": [
+     11.718273162841797,
+     0.5513300895690918,
+     7.164615631103516
+    ],
+    "rheel": [
+     -9.476101875305176,
+     1.3671064376831055,
+     -10.258602142333984
+    ],
+    "lheel": [
+     9.685955047607422,
+     4.2701826095581055,
+     -4.062129974365234
+    ]
+   }
+  },
+  {
+   "n": 76,
+   "link": {
+    "proc": 4,
+    "facing": 36817,
+    "m34DE": 36817,
+    "modeflg": 135621,
+    "speedF": 0.0,
+    "nspeed": 0.0,
+    "msd": 0.058560699224472046
+   },
+   "under": {
+    "m34C3": 0,
+    "anm0": 285,
+    "ratio0": 1.0,
+    "ratio1": 0.0,
+    "fc0": {
+     "attr": 0,
+     "end": 12,
+     "rate": 0.6000000238418579,
+     "frame": 0.0
+    },
+    "fc1": {
+     "attr": 2,
+     "end": 32,
+     "rate": 0.6279183626174927,
+     "frame": 13.07773494720459
+    }
+   },
+   "foot": {
+    "m3598": 0.0,
+    "m359C": 1.7725093364715576,
+    "m35B4": 0.058560699224472046,
+    "plant": 0,
+    "rtoe": [
+     -13.127196311950684,
+     -0.3998103737831116,
+     3.370797634124756
+    ],
+    "ltoe": [
+     13.995530128479004,
+     -0.07852819561958313,
+     7.3394455909729
+    ],
+    "rheel": [
+     -9.274367332458496,
+     0.4623413681983948,
+     -7.961123943328857
+    ],
+    "lheel": [
+     10.10114574432373,
+     0.4567587673664093,
+     -3.998425006866455
+    ]
+   }
+  },
+  {
+   "n": 77,
+   "link": {
+    "proc": 4,
+    "facing": 36817,
+    "m34DE": 36817,
+    "modeflg": 135621,
+    "speedF": 0.0,
+    "nspeed": 0.0,
+    "msd": 0.058560699224472046
+   },
+   "under": {
+    "m34C3": 0,
+    "anm0": 285,
+    "ratio0": 1.0,
+    "ratio1": 0.0,
+    "fc0": {
+     "attr": 0,
+     "end": 12,
+     "rate": 0.6000000238418579,
+     "frame": 0.6000000238418579
+    },
+    "fc1": {
+     "attr": 2,
+     "end": 32,
+     "rate": 0.6279183626174927,
+     "frame": 13.07773494720459
+    }
+   },
+   "foot": {
+    "m3598": 0.0,
+    "m359C": 1.3571281433105469,
+    "m35B4": 0.058560699224472046,
+    "plant": 0,
+    "rtoe": [
+     -13.362682342529297,
+     -0.4350948929786682,
+     3.6790456771850586
+    ],
+    "ltoe": [
+     14.044111251831055,
+     -0.07520869374275208,
+     7.03794002532959
+    ],
+    "rheel": [
+     -9.350635528564453,
+     0.25976377725601196,
+     -7.609030723571777
+    ],
+    "lheel": [
+     10.012868881225586,
+     0.3420744240283966,
+     -4.2569684982299805
+    ]
+   }
+  },
+  {
+   "n": 78,
+   "link": {
+    "proc": 6,
+    "facing": 35295,
+    "m34DE": 36817,
+    "modeflg": 135620,
+    "speedF": 0.3793545961380005,
+    "nspeed": 2.9190614223480225,
+    "msd": 1.0
+   },
+   "under": {
+    "m34C3": 1,
+    "anm0": 294,
+    "ratio0": 0.6565810441970825,
+    "ratio1": 0.34341898560523987,
+    "fc0": {
+     "attr": 2,
+     "end": 60,
+     "rate": 1.2373676300048828,
+     "frame": 0.0
+    },
+    "fc1": {
+     "attr": 2,
+     "end": 32,
+     "rate": 0.6599294543266296,
+     "frame": 0.0
+    }
+   },
+   "foot": {
+    "m3598": 1.0,
+    "m359C": 0.3793545961380005,
+    "m35B4": 0.058560699224472046,
+    "plant": 0,
+    "rtoe": [
+     -13.579961776733398,
+     -0.416073203086853,
+     3.990011215209961
+    ],
+    "ltoe": [
+     14.105472564697266,
+     -0.06134870648384094,
+     6.727352619171143
+    ],
+    "rheel": [
+     -9.421178817749023,
+     0.11999833583831787,
+     -7.253527641296387
+    ],
+    "lheel": [
+     9.94305419921875,
+     0.24357488751411438,
+     -4.523482799530029
+    ]
+   }
+  }
+ ]
+}

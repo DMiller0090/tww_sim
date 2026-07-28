@@ -192,6 +192,9 @@ The walk/run, brakeslide/EBS, roll, and ballistic-hop constants. Decomp `d_a_pla
 | roll speed `clamp(speedF·field_0x18 + field_0x1C, field_0x20, cap)` | **×1.5 + 0.5, floor 5.0, cap 26.0** (= 0.5 + 17·1.5) | `mRoll` |
 | roll duration / exit frame `mRoll.field_0x10` | **17** (anim rate 1.1, ≈18 frames) | |
 | roll-EBS (frame-perfect) | full-run roll → hold L+down through roll → release L into ESS-down → **≈ −23.1** | live |
+| WAIT idle blend `setMoveAnime(0, f28, f25, WAITS, WALK, 2)` | f28 **1.1** / f25 **0.8** | `mMove.field_0x38`/`0x40` |
+| low-life stop `ANM_WAITATOB` (rate / start / ctrl end / morf) | **0.6** / **0.0** / **12** / **6.0** | `mMove.field_0x68`/`0x6C`/`0x10`/`0x70`; end overrides the clip's own frameMax 13 |
+| `checkRestHPAnime` life threshold | `getLife() <= ` **6** (quarter-hearts) | `mMove.field_0xE`; see [wait-stop-pose.md](../model/wait-stop-pose.md) |
 | sidehop `procSideStep_init` | `nspeed = cM_scos(6200)·30`, `speed.y = cM_ssin(6200)·30`, gravity **−2.4** | `mSideStep` `d_a_player_HIO_data.inc:223` |
 | backflip `procBackJump_init` | `nspeed = 22.5`, `speed.y = 19.0`, gravity **−3.0** | `mBackJump` `:102` |
 | default gravity (grounded speed.y at CrrPos) | **−2.5**/fr | `mAutoJump.field_0xC`, reset by `commonProcInit` (5826) |

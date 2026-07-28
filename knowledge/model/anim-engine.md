@@ -205,4 +205,5 @@ Diagnostic rule: when a world-space-FK toe residual cancels between `m37B4` and 
 - [FP faithfulness](fp-faithfulness.md) · [Land sim](land-sim.md) ·
   [Land movement](../mechanics/land-movement.md) · [Animation / head-bob (swim)](../mechanics/animation.md).
 - [Draw base](draw-base.md) (where/when the pose is taken) · [Equipped anim set](equipped-anim-set.md)
-  (which anims get posed).
+  (which anims get posed) · [WAIT stop pose](wait-stop-pose.md) (what gets posed while stopped, and
+  why the re-walk's first step depends on it).

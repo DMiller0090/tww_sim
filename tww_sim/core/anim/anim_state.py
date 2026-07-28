@@ -52,6 +52,9 @@ ANIM_META = {
     'atndrs': (18, EMode_LOOP),  # ANM_ATNDRS (attention strafe, dash R)
     'atnwb': (20, EMode_LOOP),   # ANM_ATNWB  (attention back walk); setBlendAtnBackMoveAnime
     'atndb': (20, EMode_LOOP),   # ANM_ATNDB  (attention back dash)
+    'waitatob': (13, EMode_NONE),  # ANM_WAITATOB (wait A->B, the low-life idle transition); the
+    #                                WAIT proc plays it as a SINGLE, and with an explicit frame-ctrl
+    #                                end of H_10 (12) -- not this frameMax. wait-stop-pose.md.
 }
 
 # HIO daPy_HIO_move_c0::m constants (flat free-walk subset), f32 members in the game -- keep them f32:
@@ -63,6 +66,12 @@ H_38 = fp.f32(1.1)           # field_0x38 (regime-1 f28)
 H_40 = fp.f32(0.8)           # field_0x40 (f29)
 H_48 = fp.f32(2.3)           # field_0x48 (DASH cruise rate / regime-2 f25)
 H_60 = fp.f32(1.0)           # field_0x60 (free-walk f28)
+# procWait_init's low-life arm, setSingleMoveAnime(ANM_WAITATOB, ...) -- see wait-stop-pose.md.
+H_0E = 6                     # field_0xE  (life threshold, quarter-hearts)
+H_10 = fp.f32(12.0)          # field_0x10 (WAITATOB frame-ctrl end)
+H_68 = fp.f32(0.6)           # field_0x68 (WAITATOB rate)
+H_6C = fp.f32(0.0)           # field_0x6C (WAITATOB start frame)
+H_70 = fp.f32(6.0)           # field_0x70 (WAITATOB oldframe-morf)
 
 # daPy_HIO_atnMove_c1 (side strafe) + daPy_HIO_atnMoveB_c1 (back), d_a_player_HIO_data.inc:14/18. f29 = 1.0
 # (not heavy); the abs2XZ()>=49 -> 1.9x rate branch is inert on flat ground (observed rates are field_0x2C/0x28).
@@ -83,14 +92,15 @@ ATNB_28 = fp.f32(0.95)       # mAtnMoveB.field_0x28 (back DASH single rate)
 # .pyx DEF C_* constants are positional). Keep in sync with _anmc's DEF N_ANIM.
 ANIM_ORDER = ['waits', 'walk', 'dash', 'rollf', 'rot', 'slip', 'atnwls', 'atnwrs',
               'atnls', 'atnrs', 'atndls', 'atndrs', 'atnwb', 'atndb', 'freeb',
-              'walks', 'dashs']
+              'walks', 'dashs', 'waitatob']
 ANIM_CODE = {name: i for i, name in enumerate(ANIM_ORDER)}
 NATIVE_META_MAX = [float(ANIM_META[n][0]) for n in ANIM_ORDER]
 NATIVE_META_ATTR = [int(ANIM_META[n][1]) for n in ANIM_ORDER]
 # HIO constants (already f32-quantized above) handed to the native engine, keyed by field.
 NATIVE_HIO = dict(maxspeed=H_MAXSPEED, h2c=H_2C, h30=H_30, h38=H_38, h40=H_40, h48=H_48, h60=H_60,
                   atn1c=ATN_1C, atn20=ATN_20, atn24=ATN_24, atn28=ATN_28, atn2c=ATN_2C,
-                  atnb1c=ATNB_1C, atnb20=ATNB_20, atnb24=ATNB_24, atnb28=ATNB_28)
+                  atnb1c=ATNB_1C, atnb20=ATNB_20, atnb24=ATNB_24, atnb28=ATNB_28,
+                  h10=H_10, h68=H_68, h6c=H_6C, h70=H_70)
 
 
 class FrameCtrl:

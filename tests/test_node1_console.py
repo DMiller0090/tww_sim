@@ -8,12 +8,15 @@ CONSOLE-MEASURED state at each truncate-and-read sample (session 54, delivered b
 expectation never moves and **the SIM is what must converge to it**. Never edit the fixture to make this
 pass (`tests/dolphin/README.md#locked-tests-are-immutable-hard-rule`); fixing the push model is the work.
 
-Where it stands (session 58): **bit-exact through plan frame 77**, then the next seed at n=78. The
-frontier has moved 20 -> 38 (s55, the CC push's unfused `dist_sq`) -> 67 (s56, the signed s16
-half-angle in `euler_to_quat`) -> 71 (s57, the attention RELEASE branch keying on `LockonTarget(0)`
-rather than the front cone) -> 77 (s58, two faults in the pose stream the anim-driven frames finally
-consumed: the sword-drawn WALKS/DASHS anim swap, and the end-of-frame draw base). Each of those was a
-different KIND of fault; see the localization test.
+Where it stands (session 59): **bit-exact through plan frame 80 -- every sample the console measured
+while Tetra is still in the modeled stt-3 plow regime**. The frontier has moved 20 -> 38 (s55, the CC
+push's unfused `dist_sq`) -> 67 (s56, the signed s16 half-angle in `euler_to_quat`) -> 71 (s57, the
+attention RELEASE branch keying on `LockonTarget(0)` rather than the front cone) -> 77 (s58, two
+faults in the pose stream the anim-driven frames finally consumed: the sword-drawn WALKS/DASHS anim
+swap, and the end-of-frame draw base) -> 80 (s59, the WAIT stop: the game keeps posing while Link is
+stopped, and at low life it poses the ANM_WAITATOB single rather than the WAITS idle blend). Each was
+a different KIND of fault; see the localization test. What is left is no longer a fidelity gap at
+all -- it is SCOPE, the stt-4 FOLLOW flip at n=100.
 
 Four captures feed it: the original 10-frame-stride samples, session 55's consecutive n=21..40,
 session 56's n=61..70 + 80..200, and session 57's consecutive n=71..79 -- so a regression in a swept
@@ -54,7 +57,7 @@ SAMPLES.update({s['n']: s for s in FIX['samples']})
 
 # The 0-ULP frontier. Shrink it as the model is fixed -- never grow it; why each n is open is in
 # `_OPEN_REASON`, and the out-of-regime subset is `OUT_OF_REGIME` below.
-OPEN = {78, 79, 80, 100, 120, 160, 200}
+OPEN = {100, 120, 160, 200}
 
 # The rows where the console left the stt-3 plow regime (a SCOPE gap, not a fidelity bug) -- see
 # `test_the_out_of_regime_rows_are_flagged_not_silently_expected` and the fixture's `regime_note`.
@@ -99,18 +102,18 @@ def rollout():
 
 
 _OPEN_REASON = (
-    "known-open, and the seed is plan frame 78 -- the WALK RE-ENTRY OUT OF WAIT. Session 58 closed "
-    "72..77 with two pose-stream fixes (the sword-drawn WALKS/DASHS anim swap that getAnmData makes "
-    "while mEquipItem == SWORD, and the end-of-frame draw base: the model is drawn post-posMove with "
-    "the proc-init lean rule, measured 0-ULP against the live mFootData toes). What is left at 78 is "
-    "not rounding: Link STOPS at 76-77 (proc 4 WAIT) and the sim does not pose during those frames -- "
-    "`FootSpeedF.step` early-returns at |mNormalSpeed| <= 0.001 -- so its toe stream still holds the "
-    "walking poses from 74/75 and the re-walk's f31_2 is a walk-sized 2.617 where the console's is an "
-    "idle-drift 0.379 (same direction, 6.9x long). The game keeps posing through procWait (its "
-    "setBlendMoveAnime idle arm) and the ctrls keep advancing, which is exactly the WAIT/idle tier "
-    "`foot_speedf`'s docstring lists as unmodeled ('re-entering idle after a stop'). From n=100 the "
-    "console additionally leaves the modeled stt-3 plow regime (see OUT_OF_REGIME). STRICT -- when a "
-    "model fix makes this exact it XPASSes and FAILS the suite; remove the n from OPEN then.")
+    "known-open, and what is open is now SCOPE, not fidelity. Session 59 closed 78..80 (the WAIT "
+    "stop: the game keeps posing while Link is stopped, and at low life procWait_init plays the "
+    "ANM_WAITATOB single instead of the WAITS idle blend -- which also resets the re-walk's anim "
+    "phase, since the single leaves m34C3 at 0). That was the last FIDELITY seed the console "
+    "measured: every sample from n=1 to n=80 is now 0-ULP on both actors. From n=100 the console's "
+    "Tetra reads stt 4 (FOLLOW) -- `FreeRun` raises its own FOLLOW_ENGAGE_DIST warning at that exact "
+    "frame -- so the plan's second half is outside the stt-3 plow model BY CONSTRUCTION, and is the "
+    "likely real cause of the 113 u endpoint miss. Closing it means MODELLING stt-4 follow or "
+    "RE-SOLVING the plan under a Link-Tetra distance constraint; it is not another FP hunt (n=160 "
+    "and n=200 read stt 3 again, but the trajectory left the regime at 100 and never rejoined it). "
+    "STRICT -- when a model fix makes this exact it XPASSes and FAILS the suite; remove the n from "
+    "OPEN then.")
 
 _XFAIL = pytest.mark.xfail(strict=True, reason=_OPEN_REASON)
 
@@ -142,58 +145,51 @@ def test_proc_facing_and_regime_match_the_console_on_the_exact_region(n, rollout
     assert s['tetra']['stt'] == 3, "fixture row left the stt-3 plow regime the model covers"
 
 
-def test_the_first_open_sample_is_the_walk_re_entry_out_of_wait(rollout):
-    """The LOCALIZATION, pinned so the next session starts where session 58 left off rather than
-    re-deriving it.
+def test_the_first_open_sample_is_the_follow_flip_not_a_fidelity_gap(rollout):
+    """The LOCALIZATION, pinned so the next session starts where session 59 left off rather than
+    re-deriving it -- and this time what it pins is that the FP/pose hunt is OVER.
 
     Each frontier has had its own signature, and reading the new one off the old one is how sessions
     get lost. Through s55 it was push MAGNITUDE (equal displacement on both actors, the 50/50 split).
     At s56 it was a PROC divergence. At s57/s58 it was the POSE STREAM feeding an anim-driven speedF
-    (the sword anim swap, then the draw base). Now it is a MISSING PROC BEHAVIOUR, and it is 7x, not
-    a rounding: Link stops into WAIT at 76-77 and the sim stops posing there, so the toe stream it
-    re-walks from at 78 is the one it stopped with.
+    (the sword anim swap, then the draw base). At s59 it was a MISSING PROC BEHAVIOUR: the game keeps
+    posing while Link is STOPPED, and at low life it poses ANM_WAITATOB as a single instead of the
+    WAITS idle blend. Now there is no fidelity seed left in range -- the first open sample is where
+    the console leaves the regime the model is defined on.
 
-    The evidence, all of it here: proc and facing MATCH the console at 78 and Tetra is 0-ULP (so
-    neither the procs nor the CC push are implicated), the sim's step is ~6.9x the console's, and the
-    sim's own stored toe pose is IDENTICAL at 75, 76 and 77 -- the stream never advanced across the
-    stop. The game keeps drawing through procWait -- setBlendMoveAnime's idle arm re-poses on the
-    stop frame (procWait_init, morf 2.4) and the frame controllers keep advancing after it -- so the
-    console's re-walk delta is the idle drift (0.379) and the sim's is the last walking step (2.617).
+    The evidence, all of it here: every sample the console measured up to n=80 is 0-ULP on BOTH
+    actors, the last in-regime sample (80) is exact, and the first open one (100) is exactly where
+    Tetra's stt flips 3 -> 4. That is a SCOPE boundary, not a bug: `FreeRun` announces it with its
+    own FOLLOW_ENGAGE_DIST warning on the same frame. Closing it is a modelling DECISION (port stt-4
+    follow, or re-solve the plan so Link never lets her past 230 u), and it is the live suspect for
+    the 113 u endpoint miss -- so do NOT open it as another rounding hunt.
 
-    The direction is NOT implicated: the two steps are parallel to 0.7 BAM, which is inside what the
-    console's own 0.379-u step can resolve (a position ULP at this magnitude is ~1.2e-4 u, i.e. ~1.7
-    BAM of direction). Do not read a travel bug into that -- and do not derive one by comparing
-    atan2(step) against `travel` either: cM_ssin/cM_scos are jmaSinTable lookups, so a step taken
-    along `travel` returns an atan2 up to ~15 BAM away from it. Closing 78 is the WAIT/idle tier
-    `foot_speedf` lists as unmodeled ('re-entering idle after a stop');
-    `enter_subjectivity`/`step_subjectivity` are the same shape (the C-up freeze is a WAIT whose anim
-    keeps running) and are the pieces to reuse."""
+    Note n=160/200 read stt 3 again; that is Tetra falling back out of follow long after the
+    trajectories separated, not the model rejoining the console."""
     first = min(OPEN)
-    assert first == 78, "the frontier moved -- re-derive the diagnosis before trusting this test"
-    s, sim = SAMPLES[first], rollout[first]
-    assert s['tetra']['stt'] == 3, "n=78 is inside the plow regime, so scope is not the issue there"
-    assert sim['proc'] == 6 and s['link']['proc'] == 6, "n=78 is no longer the re-walk frame"
+    assert first == 100, "the frontier moved -- re-derive the diagnosis before trusting this test"
+    assert first in OUT_OF_REGIME, \
+        "n=100 is no longer the follow flip -- the open frontier changed KIND, re-diagnose"
+    assert SAMPLES[first]['tetra']['stt'] == 4 and SAMPLES[80]['tetra']['stt'] == 3, \
+        "the stt 3 -> 4 flip is no longer between the last exact sample and the first open one"
+
+    # The whole in-regime measured range is bit-exact -- both actors, every sample, no tolerance.
+    for n in sorted(n for n in SAMPLES if n < first):
+        s, sim = SAMPLES[n], rollout[n]
+        assert _bits(sim['x']) == _bits(s['link']['x']) and _bits(sim['z']) == _bits(s['link']['z']), \
+            "n=%d regressed: the exact region must stay a prefix" % n
+        assert _bits(sim['tx']) == _bits(s['tetra']['x']) and \
+            _bits(sim['tz']) == _bits(s['tetra']['z']), "n=%d Tetra regressed" % n
+
+    # The s59 WAIT stop, in sim-side state so a regression names itself: the toe stream ADVANCES
+    # across both stopped frames, and the re-walk's step is the standing drift, not a stride.
     assert SAMPLES[76]['link']['proc'] == 4 and SAMPLES[77]['link']['proc'] == 4, \
-        "the console no longer stops into WAIT before n=78 -- re-diagnose"
-    assert sim['facing'] == s['link']['facing'], "n=78 grew a facing divergence -- re-diagnose"
-    assert _bits(sim['tx']) == _bits(s['tetra']['x']) and _bits(sim['tz']) == _bits(s['tetra']['z']), \
-        "Tetra is no longer bit-exact at n=78 -- the push IS implicated again, re-diagnose"
-
-    # The sim takes a walking stride where the console idles forward -- same direction, 6.9x the step.
-    p = SAMPLES[first - 1]['link']
-    cdx, cdz = s['link']['x'] - p['x'], s['link']['z'] - p['z']
-    sdx, sdz = sim['x'] - p['x'], sim['z'] - p['z']
-    assert math.hypot(sdx, sdz) / math.hypot(cdx, cdz) > 5.0, \
-        "the sim no longer overshoots the console's re-walk step several-fold -- re-diagnose"
-    sine = abs(cdx * sdz - cdz * sdx) / (math.hypot(cdx, cdz) * math.hypot(sdx, sdz))
-    assert sine < 3e-4, \
-        "the steps are no longer parallel (%.1f BAM apart) -- travel is implicated now, re-diagnose" \
-        % (sine * 65536.0 / (2.0 * math.pi))
-
-    # The cause, stated in sim-side state: the toe stream is frozen from the last WALKING frame
-    # (75) through both WAIT frames -- the sim draws neither the stop frame nor the holds.
-    assert rollout[75]['t1'] == rollout[76]['t1'] == rollout[77]['t1'], \
-        "the sim now advances its toe stream across the WAIT stop -- the tier may be modeled; re-check"
+        "the console no longer stops into WAIT at 76-77 -- the s59 tier is not being exercised"
+    assert rollout[75]['t1'] != rollout[76]['t1'] != rollout[77]['t1'], \
+        "the sim stopped posing across the WAIT stop again -- the WAITATOB tier regressed"
+    p, s78 = SAMPLES[77]['link'], SAMPLES[78]['link']
+    assert math.hypot(s78['x'] - p['x'], s78['z'] - p['z']) < 0.5, \
+        "the console's re-walk step is no longer the standing drift -- re-derive"
 
 
 def test_the_out_of_regime_rows_are_flagged_not_silently_expected():
