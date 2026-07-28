@@ -522,7 +522,8 @@ def _state_tag(run):
 
 def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=16,
                  max_frames=12, beam=8, aim_keep=3, half_window=0x2800, step=8,
-                 probe_cap=250, rank='bound', budget=None, placements=None, verbose=False):
+                 probe_cap=250, rank='bound', budget=None, placements=None,
+                 require_quality=True, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -530,6 +531,13 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
 
     ``budget`` (frames) drops any survivor whose `objective.plan_bound` is already over it --
     admissible, so nothing solvable is lost (`_budget_cut`).
+
+    ``require_quality`` must be **False for the LAST cycle of a chain**: `junction_quality` asks
+    whether the next junction could continue from this roll's endpoint, and the last cycle has no next
+    junction -- only the terminal glide, which needs contact and the regime, not a junction posture.
+    Session 61 measured what leaving it True costs: from the cycle-2 beam it produced **zero** cycle-3
+    survivors (the s43 chain "stalling"), where False produces **7**, at 69-70 frames and
+    `plan_bound` 74.4-74.7 -- inside the 75-frame budget.
 
     Every node carries its FULL delivered input log, so any survivor is replayable end-to-end on a
     fresh `FreeRun` (`confirm_plan`)."""
@@ -556,7 +564,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             jdead['aim_' + k] = jdead.get('aim_' + k, 0) + v
         for j in kept:
             for cand in roll_candidates(j, hl, box, aim_keep=aim_keep, half_window=half_window,
-                                        step=step, key=key):
+                                        step=step, key=key, require_quality=require_quality):
                 cand['plan'] = list(node.get('plan', [])) + [cand['knobs']]
                 out.append(cand)
     out = _budget_cut(out, key, budget, 'roll survivors', verbose)
@@ -658,7 +666,9 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
         t1 = time.perf_counter()
         nodes = extend_cycle(nodes, hl, box, jn_keep=jn_keep, jn_beam=jn_beam,
                              ess_step=ess_step, beam=beam, aim_keep=aim_keep,
-                             rank=rank, budget=budget, placements=rows, verbose=verbose)
+                             rank=rank, budget=budget, placements=rows,
+                             # the LAST cycle hands off to the terminal glide, not to a junction
+                             require_quality=(c < int(ncycles)), verbose=verbose)
         beams.append(nodes)
         if verbose and nodes:
             n = nodes[0]

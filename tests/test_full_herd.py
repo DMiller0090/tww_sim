@@ -299,6 +299,63 @@ def test_the_frame_minimal_terminal_stops_at_the_first_placement_with_link_movin
     assert tt_p['best']['score'] == tt_p['best']['dist'] == tt_p['dist']
 
 
+def test_a_dumped_beam_rebuilds_bit_exact_from_its_input_logs(env, hl, box, tmp_path):
+    """**The cheap-iteration path, gated** (`beam_io`, session 61): a node's identity IS its delivered
+    input log, so a beam round-trips through JSON and comes back BIT-IDENTICAL -- both actors'
+    positions, Link's facing and the camera -- which is what makes it legitimate to iterate on cycle N
+    from a dump instead of re-running the ~475 s stages that produced it.
+
+    Gated on a cheap cycle-1 beam; the property is the same at any depth (session 61 verified it over
+    all 7 real cycle-2 nodes), and it is exactly `confirm_plan`'s own convention."""
+    from harness.tetrapush import beam_io
+
+    nodes = F.cycle1_nodes(env, hl, box, beam=2)
+    assert nodes
+    p = str(tmp_path / 'beams.json')
+    beam_io.dump_beams(p, [nodes], hl)
+    back = beam_io.rebuild_beam(env, beam_io.load_beams(p), cycle=1, hl=hl)
+
+    assert len(back) == len(nodes)
+    for orig, reb in zip(nodes, back):
+        assert _fingerprint(reb['run']) == _fingerprint(orig['run']), "the rebuild is not bit-exact"
+        assert reb['frames'] == orig['frames'] and reb['log'] == orig['log']
+        assert reb['m']['per_frame'] == pytest.approx(reb['dumped']['per_frame'])
+        assert F._placement_dist(reb['run'], seeds.load_placements()[0]) == \
+            pytest.approx(reb['dumped']['placement_dist'])
+    # a rebuilt node is a usable search node, not just a comparison target
+    assert F.confirm_plan(env, hl, back[0])['ok']
+
+
+def test_the_chain_does_not_require_its_LAST_cycle_to_be_continuable(env, hl):
+    """**The session-61 stall, gated.** `junction_quality` asks whether the NEXT junction could
+    continue from a roll's endpoint -- so requiring it on the FINAL cycle demands continuability from
+    a junction that never runs, and the terminal glide that actually follows needs contact and the
+    regime, not a junction posture.
+
+    Measured cost of getting this wrong: from the real cycle-2 beam, `require_quality=True` produced
+    **zero** cycle-3 survivors -- which is what "the chain stalls at cycle 3" was -- where False
+    produced **7**, at 69-70 frames and `plan_bound` 74.4-74.7, inside the 75-frame budget.
+
+    This gates the WIRING (a spy on `extend_cycle`), because reproducing the measurement itself costs
+    ~15 minutes of search: the last cycle must be asked with `require_quality=False` and every earlier
+    cycle with True."""
+    seen = []
+    real = F.extend_cycle
+    fake = [dict(run=None, log=[], frames=0, m=dict(per_frame=0.0), plan=[])]
+    try:
+        F.extend_cycle = lambda nodes, hl_, box_, **kw: (seen.append(kw['require_quality']), fake)[1]
+        F.chain_herd(env, hl, ncycles=4, nodes=fake, box={}, verbose=False)
+    finally:
+        F.extend_cycle = real
+    assert seen == [True, True, False], \
+        "cycles 2..N-1 must require continuability and the LAST must not (got %s)" % (seen,)
+
+    # and the flag really reaches the roll stage rather than being accepted and dropped
+    import inspect
+    assert 'require_quality' in inspect.signature(F.extend_cycle).parameters
+    assert 'require_quality=require_quality' in inspect.getsource(F.extend_cycle)
+
+
 def test_separation_scan_reports_the_coupled_entry_barrier(env, hl, box):
     """The coupled-entry barrier metric (milestone 2b): from a placement state, `separation_scan`
     reports the deep-contact gap, the best one-step Tetra-still-on-coord placement, whether a CLEAN
