@@ -597,8 +597,8 @@ def _state_tag(run):
 def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=16,
                  max_frames=12, beam=8, aim_keep=3, half_window=0x2800, step=8,
                  probe_cap=250, rank='bound', budget=None, placements=None,
-                 require_quality=True, glide_keep=False, corridor_keep=True, align_keep=True,
-                 verbose=False):
+                 require_quality=True, glide_keep=False, escape_keep=False, corridor_keep=True,
+                 align_keep=True, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -636,6 +636,12 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     than by where the roll left Tetra. Measured, the two disagree by two frames of finish (see
     `glide_probe`). It costs ~1 s per survivor, so it re-ranks the final list, never the aim fan.
 
+    ``escape_keep`` (session 67) supersedes it on the last cycle, one stage further out: the terminal
+    glide has NO authority over Tetra (`escape_probe` / `aim` -- the whole alphabet moves her
+    identically for four frames), so what a last-cycle endpoint is worth is what its ESCAPE lands.
+    The survivors are probed with the real atom and ranked by `aim.landing_miss`, with a share of the
+    beam kept by that miss. It costs ~2-5 s per survivor and takes precedence over ``glide_keep``.
+
     Every node carries its FULL delivered input log, so any survivor is replayable end-to-end on a
     fresh `FreeRun` (`confirm_plan`)."""
     out = []
@@ -667,7 +673,24 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                 cand['plan'] = list(node.get('plan', [])) + [cand['knobs']]
                 out.append(cand)
     out = _budget_cut(out, cut, budget, 'roll survivors', verbose)
-    if glide_keep and out:
+    if escape_keep and out:
+        # the LAST cycle's endpoint is handed to the ESCAPE, and nothing between them has authority
+        # (`escape_probe`) -- so rank it by what the escape lands, and keep a share by that miss.
+        rows_p = placements if placements is not None else seeds.load_placements()[0]
+        th = O.placement_thread(hl, rows_p)
+        for n in out:
+            n['escape'] = escape_probe(n['run'], n['frames'], hl, rows_p, th)
+        out.sort(key=lambda n: n['escape']['bound'])
+        if verbose:
+            fired = [n for n in out if n['escape']['fires']]
+            print("    (escape-probed %d survivors: %d fire; best lands %.2f u off the thread at "
+                  "%d f (bound %.2f), worst firing %.2f u)"
+                  % (len(out), len(fired),
+                     fired[0]['escape']['miss'] if fired else float('nan'),
+                     fired[0]['escape']['frames'] if fired else -1,
+                     fired[0]['escape']['bound'] if fired else float('nan'),
+                     fired[-1]['escape']['miss'] if fired else float('nan')))
+    elif glide_keep and out:
         # the LAST cycle is keeping endpoints for a TERMINAL, so measure the terminal (`glide_probe`)
         rows_p = placements if placements is not None else seeds.load_placements()[0]
         th = O.placement_thread(hl, rows_p)
@@ -695,6 +718,10 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     if align_keep and out:
         # ...and a share by Link's lateral offset from her, the axis that predicts a terminal
         orders.append(sorted(out, key=lambda n: abs(n['m']['lat'])))
+    if escape_keep and out:
+        # ...and a share by where the ESCAPE lands her, which is what ends the plan (session 67)
+        orders.append(sorted(out, key=lambda n: (n['escape']['miss'] is None,
+                                                 n['escape']['miss'] or 0.0)))
     beamed = _mixed_beam(orders, beam)
     if verbose:
         print("    -> %d roll survivors, %d after dedup/beam (junction dead: %s)"
@@ -762,7 +789,7 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
 def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                c1_step=4, jn_beam=24, ess_step=1, nodes=None, box=None,
                rank='bound', last_rank='thread', budget=None, placements=None,
-               corridor_keep=True, verbose=False):
+               corridor_keep=True, last_escape=True, verbose=False):
     """**The full-herd chain**: cycle 1 from state 2 (`cycle1_nodes`), then ``ncycles - 1``
     applications of `extend_cycle`, every cycle sweeping its OWN derived `target_cs` grid.
 
@@ -780,6 +807,11 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
     `'bound'`. At the END it is the whole remaining gap -- the s61 solve finished 73 frames INSIDE
     budget and 31.4 u short purely because the last cycle and terminal traded lateral for along at
     par -- so the final cycle ranks on `'thread'` (`objective.thread_cost`), which prices them apart.
+
+    ``last_escape`` (session 67, default ON) makes the last cycle's endpoint keep `escape_probe` --
+    the real escape atom's landing miss -- instead of `glide_probe`'s terminal glide, because the
+    glide was measured to have no authority over Tetra at all (`aim`). Set it False to reproduce the
+    s62-s66 keep.
 
     Returns ``dict(beams, best, bar, box)`` -- the per-cycle beams (so a stalled cycle is
     diagnosable), the best final node, the human's 2-roll rate, and the pursuit box in force."""
@@ -805,7 +837,8 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                              rank=(last_rank if c == int(ncycles) else rank),
                              budget=budget, placements=rows,
                              require_quality=(c < int(ncycles)),
-                             glide_keep=(c == int(ncycles)),
+                             glide_keep=(c == int(ncycles) and not last_escape),
+                             escape_keep=(c == int(ncycles) and last_escape),
                              corridor_keep=corridor_keep, verbose=verbose)
         beams.append(nodes)
         if verbose and nodes:
@@ -1780,6 +1813,40 @@ def glide_probe(run, frames, hl, placements, thread, *, max_frames=5, beam=4, n_
         nxt.sort(key=lambda t: t[2])
         live = [(r, f) for (r, f, _b) in nxt[:int(beam)]]
     return best
+
+
+def escape_probe(run, frames, hl, placements, thread):
+    """**The LAST cycle's endpoint keep, one stage further out than `glide_probe`: what its ESCAPE
+    lands, not what its glide reaches** (session 67).
+
+    `glide_probe` exists because ranking a post-roll endpoint on where the ROLL left Tetra says
+    nothing about what the terminal can do from it. Session 67 measured that the terminal can do
+    NOTHING from it: sweep the whole `_terminal_alphabet` off a real cycle-3 endpoint and Tetra's
+    position is bit-identical across every branch for four frames (the input pipeline acts 2 frames
+    late, and by then the actors have separated -- see `aim`), which is why six terminal rank
+    configurations returned byte-identical results across s61-s63. The only inputs with authority
+    left are the escape's own conversion frames, and they are placement frames.
+
+    So probe THEM: run the escape atom (`away_walk.probe`, the exact rule-3 acceptance) and rank the
+    endpoint by where it leaves Tetra -- `aim.landing_miss` against the target thread, and the frames
+    that landing costs. ~2-5 s per endpoint (16 atom variants), so it re-ranks the final survivor
+    list, never an aim fan.
+
+    Returns ``dict(fires, miss, pd, frames, bound, resid, freeze_f, spec)``; a non-firing endpoint
+    reads ``fires=False`` with an infinite bound so it sorts last (it cannot end a plan: rule 3)."""
+    from harness.tetrapush import away_walk as AW
+    from harness.tetrapush import aim as A
+    res = AW.probe(run, hl)
+    if res is None or not AW.fires(res):
+        return dict(fires=False, miss=None, pd=None, frames=frames, bound=float('inf'),
+                    resid=None, freeze_f=None if res is None else res['freeze_f'], spec=None)
+    resid = (res['resid_along'], res['resid_lat'])
+    lm = A.landing_miss(run, hl, thread, resid)
+    fr = frames + res['freeze_f']
+    return dict(fires=True, miss=lm['miss'], pd=_placement_dist(res['run'], placements), frames=fr,
+                bound=fr + O.thread_frames(lm['along'], lm['lat'], thread), resid=resid,
+                freeze_f=res['freeze_f'],
+                spec=A.handoff_spec(run, hl, thread, frames, resid=resid))
 
 
 def _terminal_score(run, hl, placements, objective, w_deficit, w_approach, frames=0, thread=None,
