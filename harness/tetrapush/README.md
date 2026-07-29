@@ -1273,19 +1273,73 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               bit-exact result can move, because every path that reached it crashed.
               Gated by `tests/test_land.py::test_near_reversal_slide_keeps_dvar9_zero_and_does_not_raise`
               (verified RED without the fix).
-            - **NEXT: enrich the ROLL-ENTRY set, which is the one lever the join leaves open.** Every
-              measurement this session says the correction cannot happen inside a junction or a roll,
-              and the reachability join says no cycle-2 roll endpoint is both corridor-good and
-              continuable. What has never been varied as the controlled variable is **where Link
-              STANDS relative to Tetra when the roll starts** -- and the data says it decides the
-              outcome (dl 0.2-0.5 -> exit off 1.14; dl 17.0 -> exit off 102-165) while the search
-              only ever offers 6 entry geometries. So: sweep the roll ENTRY (lead x |Link - Tetra
-              lateral| x Tetra's own corridor offset) as a first-class axis and ask which entries can
-              exit BOTH corridor-good and in-box; if none can, the 27.24 u of sideways is structural
-              under this cycle shape and the objective's 75-frame bar needs Dereck's call.
-              Do NOT re-pay: the junction moves above (measured, this box), terminal ranks (six
+            - **RULE 3 IS WRONG, TWICE OVER (Dereck, session 64) -- and the correction disqualifies
+              the current best plan.** `objective.turnaround_ready` asserts "a 180 turnaround snaps
+              the facing across travel; the resulting motion is the reverse" and scores it at ZERO
+              frames. Measured, both halves fail:
+              - **THE NEGATION DOES NOT REVERSE MOTION.** The proc-7 DIR_BACKWARD branch
+                (2913-2915) flips `current.angle.y` by 0x8000 AND negates `mNormalSpeed`, so the two
+                cancel and the HEADING IS UNCHANGED: cycle-3 endpoint travel **4666 @ -23.2** ->
+                travel **35434 @ +17.6**, same motion direction (s47 saw the consequence -- "a
+                turnaround PRESERVES the -25.7 so doesn't rescue it" -- without naming the cause).
+                So the flip is the LAUNCH, not the escape.
+              - **AND THE RULE PASSES PLANS THAT CANNOT DO THE MANEUVER.** `ready = speed > 0 and
+                away > 0` is nearly a tautology in the backslide. The negation MIRRORS the entry
+                speed, so what a terminal can arm is set by the EBS speed it leaves: **-25.73 ->
+                +17.6** (roll-capable; `_roll_init` clamps 17.6*1.5+0.5 to the full **26**) but
+                **-20.86 -> +14.3**, under the +17 a full roll needs. The 74-frame winner ends at
+                -20.86, so it reads `ready=True` and **cannot arm at all**. Rule 3 is really a floor
+                on the terminal's EBS speed (~-22), which is a constraint on where the HERD stops.
+              - **THE CONVERSION IS THE ROLL-CHAIN PRIMITIVE, and it is aim-sensitive.** L + a stick
+                along Link's TRUE heading -- `current.angle.y + 0x8000` while speedF is negative --
+                fires the negation; aiming at the raw `current.angle.y` field reads DIR_FORWARD and
+                never flips (cost me a probe). Two L-frames land it, and the window is **ONE frame**:
+                the negation re-fires while the ATN condition holds, so the next frame flips back
+                (+17.6 -> -17.3). It is landed on deliberately, exactly as each herd cycle arms.
+              - **THE EBS SUSTAINS; A NEUTRAL STICK DOES NOT.** The right `ess_fan` stick holds
+                **-25.7 FLAT over 6 frames** (terminal: -20.8 flat) where neutral brakes -25.7 ->
+                -11.1. Any away-turn measurement that shows the glide bleeding 2-3 u/frame is
+                measuring its own alphabet, not the mechanic.
+              - **THE SKID GATE, decomp-exact** (`checkNextMode` 4499-4509): procSlip needs
+                `dist(m34E8, travel) > 0x7800` AND `speedF/mMaxNormalSpeed > 0.6` AND
+                `getDirectionFromAngle(m34EA - m34DC) == DIR_BACKWARD`. **m34DC is THIS frame's stick
+                want-angle and m34EA the PREVIOUS frame's**, so the skid arm fires only on a SLAMMED
+                stick (|delta| > 0x6000 in one frame); rotating the stick around routes to
+                `procMoveTurn(1)` instead, at any speed.
+              - **GROUND-MOTION reversal is a DIFFERENT quantity from the travel field**, and far
+                more expensive: searched over the full circle + the ESS fan, the motion 180 lands in
+                **2 frames but at speedF ~ -9**, and NO sequence reverses ground motion while holding
+                |speedF| >= 17 within 5 frames. Also, every away-turn traced moved **Tetra 7-19 u**,
+                which would undo a placement -- she is frozen only above `CO_RADII_BAR` (centre_feet
+                >= 80).
+              - **NOT WIRED.** `turnaround_ready` is unchanged on disk; the correction above is
+                measured, not shipped. Wiring it will invalidate the 74-frame plan and most of the
+                beam (the terminal glide is what bleeds -25.7 to -20.9), so it moves the BAR, not
+                just the score.
+            - **NEXT (Dereck, end of session 64): WORK OUT THE AWAY-WALK. It is KNOWN TECH -- the
+              task is to figure out HOW IT WORKS, not to establish that it is possible.** Once Tetra
+              is in position, Link has to walk AWAY from her to start the roll clip into the corner.
+              The pieces above are the launch half and they are settled; what is not worked out is
+              the ESCAPE, and the constraints it has to satisfy are all now measured:
+                * the negation cannot do it (heading unchanged -- it is the launch, so it belongs
+                  LAST, as the two frames before the roll, not first as the escape);
+                * Tetra must not move, so the escape has to respect `CO_RADII_BAR` (centre_feet >= 80);
+                * the flip mirrors the entry speed, so the EBS has to still be ~-25.7 when it fires
+                  (a brake-to-rest-then-walk escape cannot then arm above +17);
+                * ground-motion reversal at speed is NOT available (2 frames at -9, nothing >= 17 in 5).
+              Read those four together before proposing a shape. Reference material for the mechanic:
+              `reposition.turnaround` / `l_release_early` (s33's retention + 1-frame facing snap),
+              `two_roll.turnaround_and_flip` (the arming pair), and `full_herd.walk_to_entry` /
+              `decel_place` / `homing_place` (s47-51, the Link-only navigation above the freeze bar).
+              The synthetic beds `synthetic_frozen_arrival` / `synthetic_hot_arrival` develop it
+              WITHOUT the ~930 s chain.
+              Do NOT re-pay: the junction moves (measured, this box), terminal ranks (six
               configurations, byte-identical 31.406), the cycle count (atom 23-25 frames), "more
               push" (98.5% saturated everywhere), or any keep over roll ENDPOINTS mid-chain.
+              Still open behind it, when the away-walk is understood: the ROLL-ENTRY set is
+              impoverished (6 geometries, all 8-14 u off the corridor) and entry geometry predicts the
+              cycle outcome (dl 0.2-0.5 -> exit off 1.14; dl 17.0 -> exit off 102-165), so sweeping
+              the entry as a first-class axis is the lever the reachability join leaves open.
       - [x] **THE LAST FIDELITY SEED IS CLOSED: 0-ULP ON EVERY IN-REGIME SAMPLE THE CONSOLE
             MEASURED, n=1..80 (session 59). What is still open is SCOPE, not fidelity.**
             Session 58 handed over "model the WAIT stop". The sim did not pose at all across it
