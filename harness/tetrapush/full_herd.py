@@ -236,9 +236,10 @@ def junction_alphabet(run, hl, *, ess_step=4, aim_step=64):
 
 
 def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_window=0x2800,
-               dead=None):
-    """**Is this junction endpoint ROLLABLE at all?** -- a coarse aim sweep returning the best
-    surviving roll's down-herd rate, or None.
+               dead=None, corridor=None):
+    """**Is this junction endpoint ROLLABLE at all, and how STRAIGHT can its roll be?** -- a coarse
+    aim sweep, returning ``dict(rate, off, off_rate, n)`` for the surviving rolls, or None if none
+    survive.
 
     This is the endpoint keep's real criterion, because FLATNESS DOES NOT PREDICT IT. Measured over
     three cycle-1 nodes (400 endpoints probed each): 32 / 43 / 71 were rollable, and on the first
@@ -247,11 +248,21 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     some entry states and works on others -- which is exactly how the cycle-2 stage kept reporting
     hundreds of valid-looking endpoints and zero surviving rolls. Probe; do not rank by proxy.
 
+    ``off`` (session 68) is the same lesson applied to SQUARENESS, and it is why the endpoint's own
+    `aim.corridor_aim_error` is not what the keep should rank on: at a LONG junction (jf 10-12) the aim
+    swings 5-8 deg per frame, so an endpoint measuring +1.12 deg fires a roll that leaves Tetra
+    **37.6 u off the corridor** with Link 51 u off her lateral and a next junction that arms NOTHING.
+    The sweep already fires every aim, so the straightness it can actually DELIVER (the corridor offset
+    of the best surviving roll's endpoint, `objective.push_corridor`) costs nothing to report -- and
+    unlike the entry aim it cannot lie. ``off_rate`` is the straightest roll's own down-herd rate, so a
+    caller can see what the straightness costs in frames.
+
     ``dead`` accumulates WHY each aim died. A stalled cycle is the recurring failure mode here, and
     "no aim rolled" is not a diagnosis -- talk-unsafe, never-rolled, weak (+5 not +26), off-line and
     wall are four different problems with four different fixes."""
     walls = O.courtyard_walls()
     dead = {} if dead is None else dead
+    cor = O.push_corridor(hl) if corridor is None else corridor
     best = None
     for (_want, aim) in T.roll_facing_fan(endpoint['run'], hl.bearing_bam(), half_window, step):
         rr = endpoint['run'].clone()
@@ -269,8 +280,14 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
         if why is not None:
             dead[why] = dead.get(why, 0) + 1
             continue
-        if best is None or m['per_frame'] > best:
-            best = m['per_frame']
+        off = cor['offset'](hl.along(rr.tx, rr.tz), hl.lateral(rr.tx, rr.tz))
+        if best is None:
+            best = dict(rate=m['per_frame'], off=off, off_rate=m['per_frame'], n=1)
+            continue
+        best['n'] += 1
+        best['rate'] = max(best['rate'], m['per_frame'])
+        if off < best['off']:
+            best['off'], best['off_rate'] = off, m['per_frame']
     return best
 
 
@@ -292,6 +309,27 @@ def _dedup_endpoints(ends):
     return out
 
 
+#: BAM -> degrees, so a cone deficit and an aim error can be added as one scalar (`_armable_square`).
+_BAM_DEG = 360.0 / 65536.0
+
+
+def _cone_deficit(run):
+    """How far Link's facing still is from leaving the +-90 deg talk/target cone, in BAM (0 = out).
+    That cone is the gate on BOTH the talk-safe roll-A and the proc-7 arming flip
+    (`two_roll.junction_gates`)."""
+    tb = _bearing((run.link.pos_x, run.link.pos_z), (run.tx, run.tz))
+    return max(0, 0x4000 - abs(_s16(run.link.facing - tb)))
+
+
+def _physics_tag(run):
+    """A frontier candidate's PHYSICS identity -- `_state_tag`'s neighbourhood WITHOUT the pending
+    input. The distinction is the whole of the session-68 frontier fix: children of one node differ
+    ONLY in their pending input (the pipeline acts a frame late), so a frontier deduped by
+    (physics, pending) can hold `beam` copies of one physics state."""
+    return (round(run.link.pos_x, 1), round(run.link.pos_z, 1), run.link.facing >> 5,
+            round(run.link.speedF, 2), run.link.state)
+
+
 def _frontier_score(hl):
     """The junction frontier's ranking: get Link's facing OUT of the +-90 deg talk/target cone
     first (that is the gate that blocks arming), then hug the herd line.
@@ -299,22 +337,70 @@ def _frontier_score(hl):
     Ranking on |lat| ALONE is myopic in exactly the wrong direction -- the flattest states are the
     ones still facing Tetra, which can never arm, so they crowd out the productive branch. Measured:
     a beam of 16 then found ZERO endpoints where a beam of 12 found 162 (a wider beam finding
-    strictly less is the tell)."""
+    strictly less is the tell).
+
+    Kept as ONE SHARE of the frontier rather than the whole of it (session 68): on its own it is a
+    greedy walk that maximises TURN RATE, and the turn is what swings Link's ~17 u exec-centre lead
+    laterally -- so it degrades the push aim monotonically (kept aim -12 -> -20 -> -26 -> -34 -> -41
+    over five generations off a real cycle-1 exit). See `junction_beam`."""
     def score(n):
         r = n['run']
-        tb = _bearing((r.link.pos_x, r.link.pos_z), (r.tx, r.tz))
-        deficit = max(0, 0x4000 - abs(_s16(r.link.facing - tb)))
         lat = abs(hl.lateral(r.link.pos_x, r.link.pos_z) - hl.lateral(r.tx, r.tz))
-        return (deficit, lat)
+        return (_cone_deficit(r), lat)
     return score
 
 
+def _armable_square(hl, corridor):
+    """**The frontier's second and third orders (session 68): how close this state is to being an
+    ARMED SQUARE one**, in degrees.
+
+    The endpoint a cycle wants is out of the cone (so it can arm) AND square (so the roll it fires
+    carries Tetra down the push corridor rather than across it -- `aim.corridor_aim_error`). Those
+    two pull against each other frame by frame, and a lexicographic key starves whichever comes
+    second: cone-first walks the aim out to -41 deg, |aim|-first never leaves the cone and finds
+    **zero** armed endpoints. So one order is the aim alone and one is the SUM of the aim error and
+    the cone deficit in degrees -- a single scalar that wants both at once, no weight to tune.
+
+    Returns ``(aim_only, aim_plus_cone)`` as two key functions."""
+    from harness.tetrapush import aim as A          # deferred: `aim` reads `objective` back
+
+    def aim(n):
+        v = A.corridor_aim_error(n['run'], hl, corridor)
+        return 1e9 if v is None else abs(v)
+
+    return aim, (lambda n: aim(n) + _cone_deficit(n['run']) * _BAM_DEG)
+
+
 def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step=16,
-                  keep=12, collect=None, dead=None):
+                  keep=12, collect=None, dead=None, per_state=4, aim_share=True, corridor=None):
     """**The junction as a per-frame BEAM, not an enumerated family.** The atom is one frame's
     (stick, L): each generation extends every live node by the whole alphabet
     (`junction_alphabet`), prunes anything that leaves the pursuit box, dedups by state, and keeps
     ``beam``. Any node that also passes `two_roll.junction_gates` is collected as a usable endpoint.
+
+    **THE FRONTIER WAS A GREEDY SINGLE-STATE WALK, AND THAT IS WHY EVERY ENDPOINT CAME OUT UNSQUARE
+    (session 68).** A node's children all share IDENTICAL physics -- the input pipeline acts a frame
+    late, so the stick delivered here does not move Link until the next generation -- and the frontier
+    ranked them with a key computed on that shared physics, which TIES. A stable sort then filled all
+    ``beam`` slots with pending-input variants of ONE state, so the beam walked a single trajectory and
+    its "diversity" (636 / 2288 endpoints off a cycle-1 exit) was pending variants of one path. Worse,
+    the single path it walked was `_frontier_score`'s fastest TURN out of the cone, and the turn is what
+    rotates Link's ~17 u exec-centre lead: the kept aim degraded -12 -> -20 -> -26 -> -34 -> -41 over
+    five generations, and every armed endpoint landed at -33..-36 deg off the push corridor. Two fixes,
+    both keeps and neither a rank:
+
+      * ``per_state`` caps the slots one PHYSICS state (`_physics_tag`) may take, so the frontier holds
+        ``beam / per_state`` genuinely different states. The pending input still belongs in the dedup
+        `ident` (the s42 arming lesson: two states identical in physics differ in whether the roll-A
+        fires 26 or the weak 5), it just may no longer monopolise the beam.
+      * ``aim_share`` adds the two `_armable_square` orders to the keep, so the branch that stays SQUARE
+        while it turns survives the cut.
+
+    Measured off the dumped s66 cycle-1 beam, squarest armed endpoint per exit, stock -> fixed:
+    node 1 **-15.34 -> +0.03**, node 2 **-15.56 -> -1.90**, the human's own exit -2.98 -> +2.42 -- and
+    it is FASTER (46 s -> 22 s at the same budget, the beam no longer re-expanding one state). Nodes 0
+    and 3 stay at -33 / +29: squareness is a property of the cycle EXIT, and those two do not have it,
+    which is exactly why it belongs in the cycle keep as well (`extend_cycle`).
 
     WHY, measured (from the human's own cycle-1 exit, 8 frames): the beam returns **432** distinct
     gate-passing in-box endpoints where `two_roll.junction_variants` returns **7**, at the SAME best
@@ -330,6 +416,8 @@ def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step
     ends = []
     walls = O.courtyard_walls()
     dead = {} if dead is None else dead
+    cor = O.push_corridor(hl) if corridor is None else corridor
+    aim_only, aim_cone = _armable_square(hl, cor)
     for _f in range(int(max_frames)):
         nxt, seen = [], set()
         for nd in live:
@@ -368,11 +456,19 @@ def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step
                         ends.append(e)
                         if collect is not None:
                             collect.append(e)
-        # cone deficit first, then flatness (see `_frontier_score`)
-        nxt.sort(key=_frontier_score(hl))
-        live = nxt[:int(beam)]
-        if not live:
+        # the frontier keep: shares by turn-out-of-the-cone AND by squareness, capped per physics
+        # state so no single state can take the whole beam (see the docstring -- session 68)
+        if not nxt:
             break
+        orders = [sorted(nxt, key=_frontier_score(hl))]
+        if aim_share:
+            orders.append(sorted(nxt, key=aim_only))
+            orders.append(sorted(nxt, key=aim_cone))
+        live = _mixed_beam(orders, beam,
+                           ident=lambda n: (_physics_tag(n['run']),
+                                            n['log'][-1]['stickX'], n['log'][-1]['stickY'],
+                                            bool(n['log'][-1]['triggerL'])),
+                           group=lambda n: _physics_tag(n['run']), per_group=per_state)
     # MIXED keep (the s42 lesson): half by flatness, half by shortness -- neither ranking alone
     # keeps the survivors. `extend_cycle` re-keeps by ROLLABILITY, which is stronger than both.
     ends.sort(key=lambda e: (abs(e['m']['lat']), e['jf']))
@@ -546,9 +642,15 @@ def _budget_cut(nodes, key, budget, label='', verbose=False):
     return kept
 
 
-def _mixed_beam(orders, beam, ident=None):
+def _mixed_beam(orders, beam, ident=None, group=None, per_group=None):
     """Cut a beam by SEVERAL orders at once, an equal share of the slots each, deduped by ``ident``
     across all of them -- the same shape as `junction_beam`'s flat/short keep, one stage up.
+
+    ``group``/``per_group`` cap how many members of ONE group may take slots. Without it a beam whose
+    members TIE fills every slot with variants of a single state, which is not a hypothetical: it is
+    what `junction_beam`'s frontier did for twenty-five sessions (session 68 -- see its docstring),
+    because the input pipeline acts a frame late so all of a node's children share identical physics
+    and every rank ties across them.
 
     A keep, never a rank: whatever is best by the first order is still kept, so this can only ADD
     alternatives. That is the point -- see `objective.push_corridor`. Session 61 measured that ranking
@@ -561,7 +663,21 @@ def _mixed_beam(orders, beam, ident=None):
     re-solve came back byte-identical, same 9 survivors, corridor offsets 44.9-59.0). A keep can only
     preserve what reaches it."""
     ident = (lambda n: _state_tag(n['run'])) if ident is None else ident
-    seen, out = set(), []
+    seen, out, used = set(), [], {}
+
+    def _take(n):
+        t = ident(n)
+        if t in seen:
+            return False
+        if group is not None and per_group is not None:
+            g = group(n)
+            if used.get(g, 0) >= int(per_group):
+                return False
+            used[g] = used.get(g, 0) + 1
+        seen.add(t)
+        out.append(n)
+        return True
+
     per = max(1, int(beam) // max(1, len(orders)))
     for i, order in enumerate(orders):
         room = int(beam) - len(out) if i == len(orders) - 1 else per
@@ -569,20 +685,13 @@ def _mixed_beam(orders, beam, ident=None):
         for n in order:
             if taken >= room or len(out) >= int(beam):
                 break
-            t = ident(n)
-            if t in seen:
-                continue
-            seen.add(t)
-            out.append(n)
-            taken += 1
+            if _take(n):
+                taken += 1
     # any slots the later orders could not fill go back to the first (the rank)
     for n in orders[0]:
         if len(out) >= int(beam):
             break
-        t = ident(n)
-        if t not in seen:
-            seen.add(t)
-            out.append(n)
+        _take(n)
     return out
 
 
@@ -594,11 +703,43 @@ def _state_tag(run):
             round(run.link.speedF, 2), round(run.tx, 1), round(run.tz, 1), int(run.csangle) >> 5)
 
 
+def _probe_pool(ends, cap, sq_key=None, tag=None):
+    """**Which endpoints get roll-probed when there are more than ``cap`` of them.**
+
+    `extend_cycle` takes the first ``cap`` in COLLECTION order (generation order), i.e. the earliest
+    junction frames. That IS a coverage limit and session 68 measured exactly what it hides: off
+    cycle-1 node 1 the fixed frontier returns 4158 armed endpoints of which **932 are within 5 deg** of
+    the push corridor, and every one of them is past index 250 (the 250 probed are all -15.5..-15.8;
+    the square ones sit at junction frame 10+).
+
+    And it measured that closing that gap COSTS MORE THAN IT BUYS, which is why ``sq_key`` is opt-in.
+    Spending a share of the pool on squareness -- with or without spreading it over the distinct
+    physics states -- took cycle 2 from **8 survivors to ZERO**, twice. The rollable-AND-continuable
+    endpoints are concentrated in the few early states, and only some PENDING inputs of those states
+    roll at all (the s42 arming lesson), so a pool spread over 45 states holds one pending each of
+    mostly-uncontinuable ones: 250 consecutive endpoints yield 6 rollable whose rolls pass
+    `junction_quality`, while the spread pool yields 7 rollable whose rolls (the square ones included)
+    strand the next junction -- confirmed against the REAL next junction, which arms 0 endpoints from
+    the +1.12 deg endpoint's roll.
+
+    So the prefix stays the default and the square share is a knob (`extend_cycle`'s ``square_pool``).
+    The conclusion the numbers point at is not a better cut here: squareness that survives to a
+    continuable roll is a property of the cycle EXIT, and that is one stage further up."""
+    ends = list(ends)
+    if len(ends) <= int(cap) or sq_key is None:
+        return ends[:int(cap)]
+    tag = (lambda e: _physics_tag(e['run'])) if tag is None else tag
+    nstates = len({tag(e) for e in ends})
+    return _mixed_beam([ends, sorted(ends, key=sq_key)], int(cap), ident=id,
+                       group=tag, per_group=max(1, int(cap) // max(1, nstates)))
+
+
 def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=16,
                  max_frames=12, beam=8, aim_keep=3, half_window=0x2800, step=8,
                  probe_cap=250, rank='bound', budget=None, placements=None,
                  require_quality=True, glide_keep=False, escape_keep=False, corridor_keep=True,
-                 align_keep=True, verbose=False):
+                 align_keep=True, per_state=4, aim_share=True, square_keep=True,
+                 square_pool=False, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -631,6 +772,19 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     recovered **39.0 u** of placement distance, 22.8 u off recovered 14.0, 47.0 u off recovered 7.6 --
     and the human himself never exceeds **12 u** (`pursuit_box`) where `two_roll.alive` admits 60.
 
+    ``per_state`` / ``aim_share`` / ``square_keep`` (session 68) are the SQUARENESS keeps, one at each
+    of the two cuts this stage makes. The first two are `junction_beam`'s frontier fix (its docstring
+    has the measurement: the frontier was a greedy walk over ONE physics state whose kept aim degraded
+    to -41 deg, and the fix takes the squarest armed endpoint from -15.3 to +0.03 off a real cycle-1
+    exit). ``square_keep`` is this stage's own: `roll_probe`'s rate stays the RANK, and a share of
+    ``jn_keep`` goes to the endpoints whose probed roll leaves Tetra CLOSEST TO THE CORRIDOR
+    (`roll_probe`'s ``off``), because the rate does not predict the direction -- the squarest rollable
+    endpoint measured 28th of 60 by rate, so a pure rate keep of 6 never sees it. Ranked on the roll's
+    DELIVERED offset, not the endpoint's own `aim.corridor_aim_error`: keeping by the entry aim took
+    cycle 2 from 8 survivors to ZERO, because at a long junction the aim swings 5-8 deg per frame and a
+    +1.12 deg endpoint fires a roll landing 37.6 u off (see `roll_probe`). The cheap entry aim is still
+    the right key one stage earlier, where nothing has been probed yet (`_probe_pool`).
+
     ``glide_keep`` (session 62) belongs with it, and for the same reason: on the LAST cycle the
     survivors are re-ranked by `glide_probe` -- what their terminal glide actually reaches -- rather
     than by where the roll left Tetra. Measured, the two disagree by two frames of finish (see
@@ -648,22 +802,36 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     key = rank_key(rank, placements, hl)
     # the RANK may be the (inadmissible) thread cost; the hard budget CUT never is -- see `rank_key`
     cut = key if rank == 'bound' else rank_key('bound', placements)
+    rows_j = placements if placements is not None else seeds.load_placements()[0]
+    cor_j = O.push_corridor(hl, rows_j)
+    sq_key, _ = _armable_square(hl, cor_j)
     jdead = {}
     for node in nodes:
         ends = junction_beam(node, hl, box, max_frames=max_frames, beam=jn_beam,
-                             ess_step=ess_step, aim_step=aim_step, keep=10 ** 6, dead=jdead)
+                             ess_step=ess_step, aim_step=aim_step, keep=10 ** 6, dead=jdead,
+                             per_state=per_state, aim_share=aim_share, corridor=cor_j)
         uniq = _dedup_endpoints(ends)
         if len(uniq) > int(probe_cap):
             # never a silent truncation: say what was dropped
             if verbose:
                 print("    (probing %d of %d unique endpoints -- capped)"
                       % (probe_cap, len(uniq)))
-            uniq = uniq[:int(probe_cap)]
+            uniq = _probe_pool(uniq, probe_cap, sq_key if square_pool else None)
         rdead = {}
-        scored = [(p, e) for p, e in ((roll_probe(e, hl, dead=rdead), e) for e in uniq)
-                  if p is not None]
-        scored.sort(key=lambda t: -t[0])
-        kept = [e for _p, e in scored[:int(jn_keep)]]
+        scored = [(p, e) for p, e in ((roll_probe(e, hl, dead=rdead, corridor=cor_j), e)
+                                      for e in uniq) if p is not None]
+        scored.sort(key=lambda t: -t[0]['rate'])
+        if square_keep and scored:
+            # rollability stays the rank, a share goes to the straightness the roll DELIVERS
+            # (`roll_probe`'s ``off``, never the endpoint's own aim -- see the docstring)
+            kept = _mixed_beam([[e for _p, e in scored],
+                                [e for _p, e in sorted(scored, key=lambda t: t[0]['off'])]],
+                               int(jn_keep),
+                               ident=lambda e: (_physics_tag(e['run']), e['log'][-1]['stickX'],
+                                                e['log'][-1]['stickY'],
+                                                bool(e['log'][-1]['triggerL'])))
+        else:
+            kept = [e for _p, e in scored[:int(jn_keep)]]
         jdead['unrollable'] = jdead.get('unrollable', 0) + (len(uniq) - len(scored))
         for k, v in rdead.items():                     # WHY the aims died, not just how many
             jdead['aim_' + k] = jdead.get('aim_' + k, 0) + v
@@ -676,10 +844,9 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     if escape_keep and out:
         # the LAST cycle's endpoint is handed to the ESCAPE, and nothing between them has authority
         # (`escape_probe`) -- so rank it by what the escape lands, and keep a share by that miss.
-        rows_p = placements if placements is not None else seeds.load_placements()[0]
-        th = O.placement_thread(hl, rows_p)
+        th = O.placement_thread(hl, rows_j)
         for n in out:
-            n['escape'] = escape_probe(n['run'], n['frames'], hl, rows_p, th)
+            n['escape'] = escape_probe(n['run'], n['frames'], hl, rows_j, th)
         out.sort(key=lambda n: n['escape']['bound'])
         if verbose:
             fired = [n for n in out if n['escape']['fires']]
@@ -692,10 +859,9 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                      fired[-1]['escape']['miss'] if fired else float('nan')))
     elif glide_keep and out:
         # the LAST cycle is keeping endpoints for a TERMINAL, so measure the terminal (`glide_probe`)
-        rows_p = placements if placements is not None else seeds.load_placements()[0]
-        th = O.placement_thread(hl, rows_p)
+        th = O.placement_thread(hl, rows_j)
         for n in out:
-            n['glide'] = glide_probe(n['run'], n['frames'], hl, rows_p, th)
+            n['glide'] = glide_probe(n['run'], n['frames'], hl, rows_j, th)
         out.sort(key=lambda n: n['glide']['bound'])
         if verbose:
             print("    (glide-probed %d survivors: best hands the terminal bound %.2f, worst %.2f)"
@@ -704,12 +870,10 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
         # the rank first, then continuability -- a faster cycle that strands the plan is worth less
         # than a marginally slower one the next junction can pick up (the s42 entry-state lesson).
         out.sort(key=lambda n: (key(n['run'], n['frames'], n['m']), n.get('quality')))
-    rows_c = placements if placements is not None else seeds.load_placements()[0]
-    cor = O.push_corridor(hl, rows_c)
 
     def _off(n):
-        return cor['offset'](hl.along(n['run'].tx, n['run'].tz),
-                             hl.lateral(n['run'].tx, n['run'].tz))
+        return cor_j['offset'](hl.along(n['run'].tx, n['run'].tz),
+                               hl.lateral(n['run'].tx, n['run'].tz))
 
     orders = [out]
     if corridor_keep and out:
@@ -789,7 +953,8 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
 def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                c1_step=4, jn_beam=24, ess_step=1, nodes=None, box=None,
                rank='bound', last_rank='thread', budget=None, placements=None,
-               corridor_keep=True, last_escape=True, verbose=False):
+               corridor_keep=True, last_escape=True, per_state=4, aim_share=True,
+               square_keep=True, verbose=False):
     """**The full-herd chain**: cycle 1 from state 2 (`cycle1_nodes`), then ``ncycles - 1``
     applications of `extend_cycle`, every cycle sweeping its OWN derived `target_cs` grid.
 
@@ -839,7 +1004,8 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                              require_quality=(c < int(ncycles)),
                              glide_keep=(c == int(ncycles) and not last_escape),
                              escape_keep=(c == int(ncycles) and last_escape),
-                             corridor_keep=corridor_keep, verbose=verbose)
+                             corridor_keep=corridor_keep, per_state=per_state,
+                             aim_share=aim_share, square_keep=square_keep, verbose=verbose)
         beams.append(nodes)
         if verbose and nodes:
             n = nodes[0]

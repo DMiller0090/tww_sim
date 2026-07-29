@@ -15,7 +15,7 @@ Three properties, in the order the search depends on them:
 """
 import pytest
 
-from harness.tetrapush import seeds, two_roll as T, full_herd as F, objective as O
+from harness.tetrapush import seeds, two_roll as T, full_herd as F, objective as O, search as S
 from harness.tetrapush.reposition import HerdLine
 
 
@@ -132,6 +132,134 @@ def test_junction_beam_gives_far_more_endpoints_than_the_family(env, hl, box):
     fam = [j for j in kept if F.in_pursuit_box(j['run'], hl, box)]
     assert len(ends) > 10 * max(1, len(fam))
     assert min(abs(e['m']['lat']) for e in ends) <= min(abs(j['m']['lat']) for j in fam)
+
+
+def test_a_frontier_generation_is_one_physics_state_so_every_rank_ties(env, hl, box):
+    """**The session-68 root cause, structural and exact.** The input pipeline acts a frame late, so
+    every child of a frontier node has IDENTICAL physics -- the stick just delivered has not moved
+    Link yet, it has only entered the buffer. So any frontier key computed on that physics (which is
+    every key: cone deficit, lateral, aim) is the SAME NUMBER for the whole alphabet, and a stable
+    sort keeps the first ``beam`` of them: `beam` pending-input variants of ONE state.
+
+    That is why `junction_beam` was a greedy single-trajectory walk for twenty-five sessions while
+    reporting hundreds of "distinct" endpoints. Both halves are gated here -- the tie, and that
+    `_mixed_beam`'s ``per_group`` cap is what breaks it -- because the fix is worthless if a later
+    change lets the frontier fill with one state again."""
+    dtm = seeds.dtm_input_at(env)
+    base = seeds.make_freerun(env)
+    base.pre_seed_input(dtm(0))
+    for k in range(1, 21):
+        base.step(dtm(k))
+
+    kids = []
+    for (sx, sy) in F.junction_alphabet(base, hl, ess_step=2, aim_step=32):
+        for l in (0, 1):
+            r = base.clone()
+            d = dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
+                     triggerL=255 if l else 0, substickX=T.CSTICK_NEUTRAL, substickY=0)
+            r.step(d)
+            kids.append(dict(run=r, log=[d], jf=1))
+    assert len(kids) > 100
+    # the tie: one physics state, hence one value of every frontier key
+    assert len({F._physics_tag(n['run']) for n in kids}) == 1
+    score = F._frontier_score(hl)
+    assert len({score(n) for n in kids}) == 1
+    aim_only, aim_cone = F._armable_square(hl, O.push_corridor(hl))
+    assert len({round(aim_only(n), 9) for n in kids}) == 1
+    assert len({round(aim_cone(n), 9) for n in kids}) == 1
+
+    # ...so an uncapped keep takes `beam` variants of that one state, and the cap does not
+    def ident(n):
+        return (F._physics_tag(n['run']), n['log'][-1]['stickX'], n['log'][-1]['stickY'],
+                bool(n['log'][-1]['triggerL']))
+
+    order = sorted(kids, key=score)
+    assert len(F._mixed_beam([order], 8, ident=ident)) == 8
+    capped = F._mixed_beam([order], 8, ident=ident, group=lambda n: F._physics_tag(n['run']),
+                           per_group=1)
+    assert len(capped) == 1
+
+
+def test_the_probe_pool_is_a_prefix_by_default_and_a_keep_when_asked():
+    """**The cap the session-68 frontier fix ran into, and the measurement that kept it a prefix.**
+
+    `extend_cycle` roll-probes at most ``probe_cap`` endpoints, in COLLECTION order -- the earliest
+    junction frames. That hides real coverage (4158 armed endpoints off cycle-1 node 1, **932 within
+    5 deg of the corridor, every one past index 250**), but buying them back cost more than it paid:
+    a squareness share took cycle 2 from **8 survivors to ZERO**, twice, because the rollable-AND-
+    continuable endpoints are concentrated in a few early states and only some pending inputs of those
+    states roll at all. So the prefix is the DEFAULT and the keep is a knob (``square_pool``).
+
+    Gated as pure selection (no simulator), which is the level both behaviours live at, so a future
+    session cannot flip the default without noticing what it costs."""
+    ends = [dict(run=None, sq=90.0 - i * 0.02, st=i // 100) for i in range(4000)]
+    # the default: a prefix, exactly the cap, in order
+    assert F._probe_pool(ends, 250) == ends[:250]
+    assert all(e['sq'] > 80.0 for e in F._probe_pool(ends, 250))
+    # asked for: the squarest survive, spread over states, early share still present
+    pool = F._probe_pool(ends, 250, lambda e: e['sq'], tag=lambda e: e['st'])
+    assert 200 <= len(pool) <= 250
+    assert ends[-1] in pool
+    assert min(e['sq'] for e in pool) == min(e['sq'] for e in ends)
+    assert len({e['st'] for e in pool}) > 10
+    assert any(e['sq'] > 80.0 for e in pool)
+    # under the cap it is the identity, in order, either way
+    assert F._probe_pool(ends[:100], 250) == ends[:100]
+    assert F._probe_pool(ends[:100], 250, lambda e: e['sq'], tag=lambda e: e['st']) == ends[:100]
+
+
+@pytest.mark.slow
+def test_the_frontier_fix_squares_an_exit_the_stock_frontier_cannot(env, hl, box):
+    """**The session-68 fix, gated against the frontier it replaces, on a state minted from state 2**
+    (no dumped beam -- `cycle1_nodes` reproduces it in ~12 s).
+
+    The stock frontier walks the fastest turn out of the talk cone, and the turn is what rotates
+    Link's ~17 u exec-centre lead: off a real cycle-1 exit its armed endpoints all land 15-36 deg off
+    the push corridor, which is the whole of the roll-2 excursion the chain then spends two cycles
+    undoing. With the slot cap per physics state and the squareness shares, the same budget finds an
+    armed endpoint essentially ON the corridor.
+
+    Asserted as a CONTRAST, not a literal, and asserted per EXIT rather than on one of them: some
+    exits cannot be squared at all (measured -- the cycle-1 beam's node 0 stays at -33 deg under a
+    frontier four times as wide), which is precisely why squareness has to be a keep at the CYCLE cut
+    too (`extend_cycle`'s ``square_keep``) and not only inside the junction. So: walk the exits the
+    stock frontier leaves unsquare and require the fix to square at least one of them -- and require
+    every endpoint it returns to still pass the junction gates, since a keep that smuggled in unarmed
+    endpoints would look like progress and be worthless."""
+    from harness.tetrapush import aim as A
+    rows = seeds.load_placements()[0]
+    cor = O.push_corridor(hl, rows)
+    cfg = dict(max_frames=8, beam=16, ess_step=2, aim_step=32, keep=10 ** 6, corridor=cor)
+
+    def squarest(node, **kw):
+        got = []
+        F.junction_beam(node, hl, box, collect=got, **cfg, **kw)
+        u = F._dedup_endpoints(got)
+        errs = [A.corridor_aim_error(e['run'], hl, cor) for e in u]
+        errs = [v for v in errs if v is not None]
+        return (min(errs, key=abs) if errs else None), u
+
+    nodes = F.cycle1_nodes(env, hl, box, placements=rows)
+    assert nodes, "cycle 1 minted no nodes"
+    seen = won = None
+    for nd in nodes:
+        stock_sq, _u = squarest(nd, per_state=10 ** 6, aim_share=False)
+        if stock_sq is None or abs(stock_sq) < 12.0:
+            continue                                  # already square (or unarmable): nothing to fix
+        seen = stock_sq
+        fixed_sq, ends = squarest(nd, per_state=4, aim_share=True)
+        if fixed_sq is not None and abs(fixed_sq) <= 5.0:
+            won = (stock_sq, fixed_sq, ends)
+            break
+    assert seen is not None, "no cycle-1 exit is left unsquare by the stock frontier"
+    assert won is not None, (
+        "the fixed frontier squared none of the exits the stock one left unsquare (last %+.2f)"
+        % seen)
+    stock_sq, fixed_sq, ends = won
+    assert abs(fixed_sq) < abs(stock_sq) / 2.0
+    for e in ends[:40]:
+        assert T.junction_gates(e['run'], hl, e['frames']) is None
+        assert F.in_pursuit_box(e['run'], hl, box)
 
 
 def test_derived_target_css_is_entry_relative(env):
