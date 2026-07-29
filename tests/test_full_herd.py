@@ -453,6 +453,126 @@ def test_the_chain_does_not_require_its_LAST_cycle_to_be_continuable(env, hl):
     assert 'require_quality=require_quality' in inspect.getsource(F.extend_cycle)
 
 
+def test_the_cycle_beam_keeps_the_corridor_branch_the_frame_bound_ranks_away(env, hl):
+    """**Session 63: the beam KEEPS by the push corridor as well as by the rank** -- because a lateral
+    excursion's bill arrives two cycles after the rank that took it.
+
+    The measurement behind it (`reach2.py`/`reach3.py`, ~20 min of search, so gated here as the
+    selection logic plus a wiring spy): at the cycle-2 stage the beam kept an endpoint **45.5 u** off
+    the corridor and `plan_bound` ranked it BEST (72.94) with a **7.0 u**-off endpoint 0.12 frames
+    behind (73.06); at cycle 3 only SEVEN roll endpoints are reachable at all, and the one **0.95 u**
+    off the corridor (along 875.9, lat +8.90) is ranked 0.33 frames worse than the 13-17 u-off ones the
+    beam took. The excursion then cost the plan 21.5 u of sideways push -- ~1.7 frames -- in the last
+    roll and the terminal (`objective.push_budget`).
+
+    A KEEP and not a rank, deliberately: `_mixed_beam`'s first order is the rank, so whatever was best
+    by frames is still kept, and the s61 warning holds -- the mid-chain lateral oscillates, so the
+    branch that comes back must stay in the beam."""
+    import types
+    cor = O.push_corridor(hl)
+
+    def node(along, lat, tag):
+        run = types.SimpleNamespace(
+            tx=hl.ox + hl.dx * along + hl.px * lat, tz=hl.oz + hl.dz * along + hl.pz * lat,
+            csangle=tag, link=types.SimpleNamespace(pos_x=float(tag), pos_z=0.0, facing=0,
+                                                    speedF=0.0))
+        return dict(run=run, frames=46, m=dict(per_frame=0.0), name=tag)
+
+    off, on = node(590.7, -40.49, 1), node(585.9, -2.02, 2)
+    assert cor['offset'](hl.along(off['run'].tx, off['run'].tz),
+                         hl.lateral(off['run'].tx, off['run'].tz)) == pytest.approx(45.5, abs=0.2)
+    # a rank order that puts the off-corridor branch first, as `plan_bound` measurably does
+    ranked = [off] + [node(590.0, -40.0 - k, 10 + k) for k in range(6)] + [on]
+    order_cor = sorted(ranked, key=lambda n: cor['offset'](hl.along(n['run'].tx, n['run'].tz),
+                                                           hl.lateral(n['run'].tx, n['run'].tz)))
+
+    rank_only = F._mixed_beam([ranked], 4)
+    assert [n['name'] for n in rank_only] == [n['name'] for n in ranked[:4]], \
+        "one order must behave exactly like the plain rank cut"
+    assert on not in rank_only, "the corridor branch is what a rank-only cut loses"
+
+    mixed = F._mixed_beam([ranked, order_cor], 4)
+    assert off is mixed[0], "the rank's best must survive the mixed keep (it is a keep, not a rank)"
+    assert on in mixed, "the corridor branch must make the beam"
+    assert len(mixed) == 4 and len(set(id(n) for n in mixed)) == 4, "no duplicates, beam respected"
+    # and it degrades gracefully: a beam of 1 is the rank's own pick
+    assert F._mixed_beam([ranked, order_cor], 1) == [off]
+
+    # the wiring: every cycle is asked with both keeps on
+    seen = []
+    real = F.extend_cycle
+    fake = [dict(run=None, log=[], frames=0, m=dict(per_frame=0.0), plan=[])]
+    try:
+        F.extend_cycle = lambda nodes, hl_, box_, **kw: (
+            seen.append((kw['corridor_keep'], kw.get('align_keep', True))), fake)[1]
+        F.chain_herd(env, hl, ncycles=3, nodes=fake, box={}, verbose=False)
+    finally:
+        F.extend_cycle = real
+    assert seen == [(True, True), (True, True)], \
+        "both keeps must reach every chained cycle (got %s)" % (seen,)
+    import inspect
+    src = inspect.getsource(F.extend_cycle)
+    assert 'corridor_keep' in inspect.signature(F.extend_cycle).parameters
+    assert 'align_keep' in inspect.signature(F.extend_cycle).parameters
+    assert '_mixed_beam(orders, beam)' in src
+    # ...and the same diversity at the aim cut (keeping it at the beam alone was measured inert)
+    r1src = inspect.getsource(F.roll_candidates)
+    assert 'mixed_aims' in inspect.signature(F.roll_candidates).parameters
+    assert '_mixed_beam(' in r1src and "abs(t['m']['lat'])" in r1src
+
+
+def test_the_terminal_reports_the_rule_3_frontier_as_well_as_the_closest(env, hl, box):
+    """**`closest` is rule-3-blind, and session 63 measured the two disagreeing.** The same chain under
+    two different cycle-3 keeps ends either 31.406 u out with `ready=False` or 33.482 u out at 74 frames
+    with `ready=True` -- and the second is the one a frame of herding from a PASS, so a solve that
+    reports only the smaller number hides the better plan. `closest_ready` is that second frontier.
+
+    Gated on the invariant rather than on a beam's numbers: whatever it returns must satisfy rule 3,
+    must be no closer than `closest` (which is unconstrained), and must be absent only when no state in
+    the whole glide was ready."""
+    nodes = F.cycle1_nodes(env, hl, box, beam=1)
+    tt = F.terminal_targeting(nodes, hl, max_frames=3, beam=12, objective='placement')
+    assert 'closest_ready' in tt
+    cr, cl = tt['closest_ready'], tt['closest']
+    if cr is not None:
+        assert F._terminal_ready(cr['run'])['ready'], "closest_ready must satisfy rule 3"
+        assert cr['dist'] >= cl['dist'] - 1e-9, "the unconstrained frontier cannot be the worse one"
+
+
+def test_the_roll_endpoint_alignment_is_the_humans_envelope_not_alives_60_u(env, hl, box):
+    """**Session 63: what a terminal recovers is set by LINK's lateral offset from Tetra**, and the
+    search admits five times the offset the human ever takes.
+
+    `two_roll.metrics['lat']` already IS that offset (Link's lateral minus Tetra's). It is the push's
+    squareness: the plow ejects her along the line from Link's exec Co-centre to her feet, so an
+    off-line Link spends the push sideways -- which `objective.push_budget` measures as the whole of the
+    s61/s62 shortfall. Across the three cycle-3 endpoints whose terminals were actually run, the
+    placement distance the terminal recovers is monotone in it: **16.6 u off -> 39.0 u recovered,
+    22.8 -> 14.0, 47.0 -> 7.6**. All seven endpoints reachable at that stage sit 16.6-56.7 u off, i.e.
+    entirely outside the envelope the human holds -- and `alive` waves every one of them through.
+
+    Gated here as the CONTAINMENT gap, since reproducing the reachable set costs ~20 minutes of
+    search: the human's own envelope, the box read off it, and what `alive` admits instead."""
+    from harness.tetrapush import search as S
+    rows = S.rollout_recorded(env, upto=45)['rows']
+    worst = max(abs(hl.lateral(r['link'][0], r['link'][-1])
+                    - hl.lateral(r['tetra'][0], r['tetra'][-1])) for r in rows)
+    assert worst < 13.0, "the human's Link-Tetra lateral envelope moved (%.2f u)" % worst
+    assert box['max_lat'] == pytest.approx(worst * 1.5, rel=1e-6), \
+        "the pursuit box's lateral half is that envelope widened -- they must stay tied"
+
+    # `alive`'s default admits ~5x the human, and it is the ROLL ENDPOINT that goes through it
+    hostile = dict(followed=False, lead=-40.0, lat=55.0)
+    assert T.alive(hostile), "the gap being stated: a 55 u off-line roll endpoint is 'alive'"
+    assert not T.alive(hostile, max_lat=box['max_lat']), "...and outside the human's own envelope"
+    assert T.alive(dict(followed=False, lead=-40.0, lat=worst))
+    # metrics['lat'] is the LINK-minus-TETRA lateral, not Tetra's own offset from the herd line
+    n = F.cycle1_nodes(env, hl, box, beam=1)[0]
+    m = T.metrics(n['run'], hl, n['frames'])
+    assert m['lat'] == pytest.approx(hl.lateral(n['run'].link.pos_x, n['run'].link.pos_z)
+                                     - hl.lateral(n['run'].tx, n['run'].tz))
+
+
 def test_separation_scan_reports_the_coupled_entry_barrier(env, hl, box):
     """The coupled-entry barrier metric (milestone 2b): from a placement state, `separation_scan`
     reports the deep-contact gap, the best one-step Tetra-still-on-coord placement, whether a CLEAN

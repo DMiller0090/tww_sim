@@ -149,11 +149,17 @@ def test_thread_cost_charges_for_lateral_only_near_the_finish(env):
     """**Why this is the LAST cycle's rank and not the chain's** -- and the answer is the max form's,
     not a policy bolted on top.
 
-    Mid-chain the lateral is FREE, correctly: at the s62 cycle-2 endpoint 39.9 u off the thread there
-    are still ~26 frames of along to push, which is more than the ~14 the lateral needs, so fixing it
-    costs nothing extra and the cost is identical to the on-thread endpoint's. That agrees with the
-    session-61 measurement that the mid-chain lateral OSCILLATES (+5.8, -39.9, +8.9) and ranking a
-    mid-chain beam on it would have discarded the survivor that came back.
+    Mid-chain the lateral is free IN THIS MODEL: at the s62 cycle-2 endpoint 39.9 u off the thread
+    there are still ~26 frames of along to push, which is more than the ~14 the lateral needs, so the
+    max form charges nothing extra and reads identical to the on-thread endpoint. That is the right
+    shape for a rank -- ranking a mid-chain beam on the lateral would discard the branch that comes
+    back (s61: it oscillates +5.8, -39.9, +8.9).
+
+    It is NOT free in the plan, though, and session 63 measured the difference: that same -39.9
+    endpoint cost 21.5 u of sideways push (~1.7 frames) once the last roll and the terminal actually
+    corrected it (`objective.push_budget`). Both statements are true and they act in different places
+    -- the rank stays as gated here, and the corridor branch is kept instead of ranked
+    (`objective.push_corridor`, `full_herd._mixed_beam`).
 
     At the cycle-3 endpoint, with only ~68 u of along left, the same arithmetic flips: 16.7 u of
     lateral now needs MORE frames than the along does, so it becomes the binding term and the rank
@@ -191,6 +197,95 @@ def test_thread_cost_floors_the_remainder_at_a_frame_while_rule_3_is_unmet(env):
     assert far > 1.0, "pick a state whose remainder already exceeds a frame"
     assert O.thread_cost(70, th['along_lo'] - 40.0, on_thread, th, ready=False) == \
         O.thread_cost(70, th['along_lo'] - 40.0, on_thread, th, ready=True)
+
+
+# ------------------------------------------------------- where the push goes (session 63)
+
+def test_the_push_budget_splits_a_plan_into_magnitude_and_straightness(env):
+    """**The accounting that reframed the s62 blocker**, pinned as an identity on constructed
+    geometry: Tetra has no foot term, so her displacement IS the push, and
+
+        push == along + sideways
+
+    exactly, with ``sideways`` the projection excess of a bent path. A straight down-herd path has
+    ZERO sideways -- not approximately zero -- which is what makes the number readable as "push that
+    did not close the distance"."""
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine((0.0, 0.0), (0.0, 1.0))            # along = +z, lateral = -x
+    assert hl.along(0.0, 10.0) == pytest.approx(10.0)
+
+    straight = [dict(tetra=(0.0, k * O.PUSH_CEILING)) for k in range(1, 9)]
+    b = O.push_budget(straight, hl, origin=(0.0, 0.0))
+    assert b['push'] == b['along'], "a straight path must spend nothing sideways -- exactly"
+    assert b['sideways'] == 0.0 and b['sideways_frames'] == 0.0
+    assert b['per_frame'] == pytest.approx(O.PUSH_CEILING) and b['saturation'] == pytest.approx(1.0)
+
+    # a constant-angle path: 12 u of along and 3 u of lateral per frame
+    bent = [dict(tetra=(-3.0 * k, 12.0 * k)) for k in range(1, 9)]
+    bb = O.push_budget(bent, hl, origin=(0.0, 0.0))
+    assert bb['along'] == pytest.approx(96.0)
+    assert bb['push'] == pytest.approx(8 * math.hypot(12.0, 3.0))
+    assert bb['sideways'] == pytest.approx(bb['push'] - bb['along'], abs=1e-12)
+    assert bb['sideways_frames'] == pytest.approx(bb['sideways'] / O.PUSH_CEILING)
+    # ... and the same magnitude buys strictly less along than the straight path did
+    assert bb['along'] < b['along'] and bb['saturation'] < 1.0
+
+    # without an origin the first frame is unmeasurable: the totals drop it, the RATE does not
+    no_origin = O.push_budget(straight, hl)
+    assert no_origin['push'] == pytest.approx(b['push'] - O.PUSH_CEILING)
+    assert no_origin['per_frame'] == pytest.approx(b['per_frame'])
+
+
+def test_the_recorded_human_s_push_is_saturated_and_straight(env):
+    """**THE session-63 measurement, on the one plan that is ground truth.** The recorded human buys
+    12.80 u/frame of push magnitude -- 98.5% of `PUSH_CEILING`, not 100% -- and spends only ~2 u of it
+    sideways over 44 frames. Both halves are load-bearing:
+
+      * the magnitude is what it is for anybody. The search's own 73-frame plan buys the SAME
+        12.81 u/frame at the same 98.5%, so a shortfall cannot be blamed on being "out of push"
+        (which is how s62's terminal diagnostic read it) -- only on direction.
+      * therefore a STRAIGHT plan needs ``dist / 12.80``, not ``dist / 13.0``: 73.2 frames rather than
+        72.1. That is inside Dereck's accepted 75 but it leaves under 2 frames of slack, which is why
+        27 u of sideways (the s61/s62 plan's) is fatal and 2 u (the human's) is not."""
+    from harness.tetrapush import search as S
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    rows = S.rollout_recorded(env, upto=45)['rows']
+    t0 = env['cyl'][0]['tetra']['pos']
+    b = O.push_budget(rows, hl, origin=(t0[0], t0[-1]))
+    floor = O.frame_floor(env)
+
+    assert b['per_frame'] == pytest.approx(12.805, abs=0.02), "the human's push magnitude moved"
+    assert 0.97 < b['saturation'] < 1.0, \
+        "even the human does not reach PUSH_CEILING -- if he now does, the ceiling is wrong"
+    assert b['sideways'] < 3.0, "the human's herd is straight: that is why his along rate is 12.758"
+    assert b['along'] / (len(rows)) == pytest.approx(12.758, abs=0.01)
+    # the frames a straight plan needs, at the magnitude anybody actually achieves
+    straight_frames = floor['dist'] / b['per_frame']
+    assert straight_frames == pytest.approx(73.2, abs=0.2)
+    assert floor['frames'] < straight_frames <= floor['budget'], \
+        "a straight plan must be inside Dereck's budget but above the PUSH_CEILING floor"
+
+
+def test_the_push_corridor_is_the_line_the_frame_floor_assumes(env):
+    """`push_corridor` is not a new target -- it is the straight line from Tetra's start to the
+    coord `frame_floor` already prices the bar against, expressed in herd coordinates. Pinned so it
+    cannot drift into a tuned band: it passes through the origin and through the bar's own coord, and
+    it rates the s62 cycle-2 endpoints the way the measurement did."""
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    cor = O.push_corridor(hl)
+    floor = O.frame_floor(env)
+
+    assert cor['lat_at'](0.0) == 0.0, "the corridor starts where Tetra does"
+    assert cor['target'][0] == pytest.approx(floor['dist'], abs=0.5), \
+        "the corridor's target IS the bar's nearest coord"
+    assert cor['offset'](*cor['target']) == pytest.approx(0.0, abs=1e-9)
+    assert cor['offset'](500.0, cor['lat_at'](500.0) + 7.0) == pytest.approx(7.0)
+    # the two reachable cycle-2 endpoints session 63 measured: the beam's pick is ~6.5x further off
+    assert cor['offset'](590.7, -40.49) == pytest.approx(45.5, abs=0.2)
+    assert cor['offset'](585.9, -2.02) == pytest.approx(7.0, abs=0.2)
+    assert cor['offset'](590.7, -40.49) > 6.0 * cor['offset'](585.9, -2.02)
 
 
 # --------------------------------------------------------------------------- the walls

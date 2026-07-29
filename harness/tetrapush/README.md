@@ -1095,6 +1095,114 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               nothing left. Do not spend more on the terminal or on ranks: the terminal is measured at
               3-4 frames and ~30 u before Link is gone, and three ranks now produce byte-identical
               beams.
+              **Session 63 measured the cycle atom and this next step is RETIRED, unrun: a cycle is
+              junction 4-5 + arm 2 + roll 16 + exit 2 = 23-25 frames, so four of them cost >= 90
+              frames against a 75-frame budget, and a fourth roll would herd Tetra to along ~1120
+              past a thread that ends at 984. See the s63 box below -- "out of push" was also wrong.**
+      - [~] **THE PLAN IS NOT OUT OF PUSH -- IT SPENDS 27 u OF IT SIDEWAYS (session 63). The
+            shortfall is DIRECTIONAL, and the axis is LINK's lateral, not Tetra's.** Session 62
+            handed over "the terminal is exhausted; the cycle COUNT is the phasing knob left".
+            Both halves are now measured out, and the accounting that replaced them is exact
+            rather than inferred, because Tetra is stt-3 and has no foot term: her whole
+            displacement IS the push, so a plan's along shortfall decomposes with nothing to fit
+            (`objective.push_budget`).
+            - **THE LEDGER of the s61/s62 winner (73 frames, 29.64 u short), phase by phase.**
+              Push MAGNITUDE bought **935.13 u = 98.5% of 73 x `PUSH_CEILING`**, and it is saturated
+              EVERYWHERE -- junction1 106.9%, roll1 98.9%, junction2 98.0%, roll2 98.2%, junction3
+              96.2%, roll3 98.6%, **the terminal 99.2%**. What reached the target axis was 907.89 u.
+              The difference, **27.24 u, went sideways** -- against a 29.64 u miss. So s62's "the
+              terminal is out of push / along FREEZES" reads a 99.2%-saturated stage as exhausted:
+              its 6 frames buy 77.41 u of push where the straight line to coord 287 is 70.4 u. It
+              had enough. It spent 10.89 u of it sideways, and roll3 spent 10.57.
+            - **AND THE HUMAN IS THE CONTROL.** His recorded 44 frames buy **12.805 u/frame at the
+              same 98.5%** -- the search's plan buys 12.810 -- and he spends **2.10 u** sideways
+              where it spends 27.24. Identical push, different straightness. Two consequences: a
+              shortfall can never again be blamed on push magnitude, and **the frames a STRAIGHT
+              plan needs is 937.53/12.805 = 73.2**, not the 72.1 that `PUSH_CEILING` implies. That
+              is inside Dereck's accepted 75 with under 2 frames of slack -- which is exactly why
+              27 u of sideways is fatal and 2 u is not.
+            - **THE CYCLE-COUNT LEVER IS DEAD ARITHMETICALLY, and it cost nothing to find out.**
+              Read off the dumped logs (roll triggers at log idx 1/26/50, `FRONT_ROLL` spans
+              3-18/28-43/52-67): a cycle is **junction 4-5 + arm 2 + roll 16 + exit 2 = 23-25
+              frames**. Four cycles therefore cost **>= 90 frames** against a 75-frame budget, and a
+              fourth roll would herd Tetra to along ~1120 past a thread that ends at **984**. The
+              s62 next step was retired without running the 30-minute solve.
+            - **THE TERMINAL IS RANK-INERT, MEASURED SIX WAYS -- so its limit is geometric.**
+              `terminal_targeting` from the dumped cycle-3 beam under `placement` / `thread` /
+              `frame_minimal` x beam 48 / 192 returns the **identical 31.406 u at frame 73**, every
+              time. That is the third rank-inertness result in a row (s61's two, s62's two), and it
+              is what redirected this session from ranks to reachability.
+            - **REACHABILITY, the measurement the two inert ranks left open** (`reach2.py`/
+              `reach3.py`: every R1 roll survivor off every ROLLABLE junction endpoint, both stages
+              widened past the real stage's `jn_keep`/`aim_keep` funnels, ~20 min):
+              - **Cycle 2 HAS an on-corridor alternative and the rank throws it away.** The beam
+                kept along 590.7 / lat **-40.49** (45.5 u off the push corridor) at `plan_bound`
+                **72.94** -- BEST -- with along 585.9 / lat **-2.02** (7.0 u off) at 73.06, **0.12
+                frames behind**, and along 571.7 / lat +5.98 (1.1 u off) at 73.14. That 45 u
+                excursion is what the last roll and terminal then paid 21.5 u of sideways to undo.
+              - **Cycle 3 is a razor: SEVEN reachable roll endpoints in total** (1000 junction
+                endpoints probed, 4 rollable) -- which is exactly s62's 21 = 7 x 3 camera targets.
+                The lateral cannot be fixed at cycle 3; there is nothing there to choose.
+            - **THE AXIS IS LINK'S LATERAL, NOT TETRA'S -- a hypothesis of mine, killed by
+              measurement.** The one cycle-3 endpoint ON the corridor (Tetra lat +8.90, 0.95 u off,
+              70 frames) leaves **Link 47.0 u off her lateral**, so his push points sideways: its
+              terminal recovers **7.6 u** (pd 61.6 -> 54.0) where the beam's own endpoint recovers
+              **39.0** (70.4 -> 31.4). Across all three endpoints whose terminals were run the
+              recovery is monotone in Link's offset -- **16.6 u -> 39.0, 22.8 -> 14.0, 47.0 -> 7.6**
+              -- and all seven reachable endpoints sit **16.6-56.7 u** off, while the human never
+              exceeds **12 u** and `two_roll.alive` admits **60**. `glide_probe`'s s62 demotion of
+              the +8.90 endpoint was therefore RIGHT, for a reason s62 did not have.
+            - **AND THE TWO ARE ANTI-CORRELATED INSIDE A ROLL -- which is the session's structural
+              finding, and it explains four sessions of inert ranks.** The plow ejects Tetra AWAY from
+              Link's exec Co-centre, so moving her TOWARD the corridor requires him to sit off it on
+              the far side. Measured at cycle 2, from a cycle-1 endpoint with Tetra 3.5 u off the
+              corridor and Link +7.9 u off her lateral, every reachable roll breaks one or the other:
+              the corridor-good endpoints (Tetra lat -0.03 / -1.81 / -2.02) leave **Link -50.8 /
+              -58.1 / -50.2** u off her, and the ones that keep Link inside the human's envelope
+              (+10.2..+14.9) leave **Tetra 45-59 u off the corridor**. The corridor-good ones are
+              REACHED and KEPT by the rollability stage, then correctly dropped by `require_quality`
+              -- with Link 50 u off-line the next junction cannot continue -- so they never appear in
+              a mid-chain beam whatever the rank. That is why s61's lateral rank, s62's `thread_cost`
+              + `glide_keep`, and this session's first two keeps were all inert mid-chain: **within a
+              single 16-frame roll the two cannot both be had.** The human has both (Link within 12 u
+              AND 2.10 u of total sideways), so it is reachable -- just not by choosing a roll aim.
+            - **WHERE THE KEEP DOES BITE: the LAST cycle, where `require_quality` is off** -- and it
+              buys rule 3. Wiring the corridor keep into the beam cut left cycles 1-2 byte-identical
+              (same 9 survivors, offsets 44.9-59.0) and changed cycle 3, whose beam then held offsets
+              **1.5..17.2**. Two full solves, ~930 s each, differing only in the last cycle's keep:
+              - keep = glide bound + **corridor** -> **74 frames (timeloss +1), terminal speed 20.86
+                `ready=True`** (rule 3 PASSES, where s61/s62 ended `ready=False`), thread error
+                **-4.22 u** (Tetra along 904.3 lat +3.72, `placeable`), wall +57.4, in regime,
+                bit-exact, **33.5 u short**;
+              - keep = glide bound + **alignment** -> s62's plan reproduced to the digit: 73 frames,
+                `ready=False`, thread error -10.38, **31.4 u short**.
+              So the two frontiers TRADE rule 3 against placement distance, and the 74-frame one is the
+              one a frame of herding from a PASS. The final code keeps all three orders at every cycle,
+              and `terminal_targeting` now reports `closest_ready` beside `closest` -- because `closest`
+              is rule-3-blind and would have reported only the 31.4 (gated).
+            - **BUILT + GATED.** `objective.push_budget` (the accounting, wired into `score_plan` as
+              `push`/`sideways`/`push_saturation`/`sideways_frames`), `objective.push_corridor` (the
+              straight line `frame_floor` already prices the bar against -- derived, no new
+              constant), and `full_herd._mixed_beam`: both the cycle beam cut AND
+              `roll_candidates`' `aim_keep` cut are now MIXED keeps over the rank PLUS the corridor
+              offset PLUS |Link - Tetra lateral| (`metrics['lat']`, which already existed). Keeps,
+              never ranks, so the rank's own best always survives and s61's oscillation warning still
+              holds. Honest scope: the aim-cut half is **inert on today's stages** (R1 rarely exceeds
+              `aim_keep` -- ~1.7 survivors per endpoint at cycle 2), kept because it is the correct
+              shape and costs nothing; the beam-cut half is what produced the s63 result above.
+              `tests/test_objective.py` 21 -> **24**, `tests/test_full_herd.py` +2.
+            - **NEXT: correct the lateral in the JUNCTION, not in the roll.** The anti-correlation says
+              a roll cannot fix Tetra's lateral without putting Link where the next cycle cannot
+              continue -- but the junction can, because Link repositions there in single frames with no
+              400 u commitment, and the plan only needs **~9 u of net lateral** (Tetra +5.8 -> +7.94)
+              across 73 frames. So: (1) rank roll aims by DRIFT (Tetra's lateral CHANGE across the
+              roll) instead of by where the lateral lands -- low-drift aims exist (+0.14 u was measured
+              at cycle 2) and a chain of them needs no correction at all; (2) give `junction_beam`'s
+              frontier a corridor term beside its cone-deficit/flatness pair, so the few junction
+              frames are spent moving her onto the line while Link re-arms. Do NOT re-pay: terminal
+              ranks (six configurations, byte-identical 31.406), the cycle count (the atom is 23-25
+              frames), "more push" (98.5% saturated everywhere), or a keep that only re-orders roll
+              ENDPOINTS mid-chain (`require_quality` gates them, measured above).
       - [x] **THE LAST FIDELITY SEED IS CLOSED: 0-ULP ON EVERY IN-REGIME SAMPLE THE CONSOLE
             MEASURED, n=1..80 (session 59). What is still open is SCOPE, not fidelity.**
             Session 58 handed over "model the WAIT stop". The sim did not pose at all across it

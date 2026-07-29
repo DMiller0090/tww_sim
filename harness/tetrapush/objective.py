@@ -180,6 +180,84 @@ def thread_frames(t_along, t_lat, thread, *, lateral_rate=None, ceiling=PUSH_CEI
     return cost(0.5 * (lo + hi))
 
 
+def push_budget(rows, hl, origin=None):
+    """**Where a plan's push actually GOES** -- the accounting that reframed the session-62 blocker,
+    and the one number to read before blaming a stage for a shortfall.
+
+    Tetra is stt-3 and has no foot term of her own (`tetra_plow`), so her whole per-frame displacement
+    IS the push. The along shortfall therefore decomposes with nothing to fit:
+
+        ``push``      = sum of |delta Tetra| per frame -- the push MAGNITUDE the plan bought
+        ``along``     = sum of delta along            -- what reached the target axis
+        ``sideways``  = push - along                  -- push spent going sideways, in u of along
+
+    Measured on the s61/s62 winner (73 frames, 29.64 u short of the thread): push **935.13 u = 98.5%
+    of 73 x `PUSH_CEILING`**, and phase by phase it is saturated everywhere -- junctions 96-98%, all
+    three rolls 98-99%, the terminal **99.2%**. So that plan was never "out of push", which is how
+    its terminal diagnostic read: it spent **27.24 u sideways** against a 29.64 u shortfall. Two
+    phases own 21.5 u of that -- the last roll (10.57) and the terminal (10.89) -- both correcting a
+    lateral excursion built earlier, and a straight herd at the same magnitude rate reaches the
+    thread's near end at frame **73.19**, inside Dereck's 75.
+
+    The lesson for a rank: with magnitude saturated, frames and push are the same currency, and the
+    only slack left in a plan is DIRECTIONAL. `sideways_frames` is that slack priced in frames.
+
+    ``rows`` is the `score_plan` row shape. ``origin`` is Tetra's position BEFORE the first row (her
+    state-2 start, which `score_plan` passes) -- without it the first frame's push is unmeasurable and
+    the totals run one frame short, though the rate does not.
+
+    Returns ``dict(frames, push, along, sideways, per_frame, saturation, sideways_frames)``."""
+    def _tetra(r):
+        t = r['sim_tetra'] if 'sim_tetra' in r else r['tetra']
+        return hl.along(t[0], t[-1]), hl.lateral(t[0], t[-1])
+
+    push = along = 0.0
+    prev = None if origin is None else (hl.along(origin[0], origin[-1]),
+                                       hl.lateral(origin[0], origin[-1]))
+    steps = 0
+    for r in rows:
+        cur = _tetra(r)
+        if prev is not None:
+            push += math.hypot(cur[0] - prev[0], cur[1] - prev[1])
+            along += cur[0] - prev[0]
+            steps += 1
+        prev = cur
+    n = max(1, steps)
+    return dict(frames=len(rows), push=push, along=along, sideways=push - along,
+                per_frame=push / n, saturation=(push / n) / PUSH_CEILING,
+                sideways_frames=(push - along) / PUSH_CEILING)
+
+
+def push_corridor(hl, placements=None):
+    """**The straight line the frame floor assumes** -- Tetra's start to the NEAREST genuine coord,
+    expressed in herd coordinates -- and how far off it a state sits.
+
+    `frame_floor` prices an all-out push as ``dist / PUSH_CEILING``, and that price is only payable
+    ALONG THIS LINE: every unit of push spent off it is a unit that does not close the distance
+    (`push_budget`). Session 63 measured that this is the whole of the s61/s62 shortfall -- 27.24 u
+    of sideways against a 29.64 u miss -- and that the excursion which caused it was already visible
+    27 frames earlier, at the cycle-2 endpoint the beam kept: lateral **-40.5** where the corridor is
+    **+5.0**, with an on-corridor endpoint reachable at the same frame count for 4.8 u of along.
+
+    Deliberately NOT offered as a rank or a prune. `plan_bound` is a correct optimistic bound -- it
+    charges the remaining lateral as the hypotenuse, i.e. as if the correction were spread across
+    every remaining frame -- and the corridor offset is what says whether a plan is in a position to
+    realise that spread. The measured gap between the two is ~6x (the search defers the correction to
+    the last roll and then over-corrects), which is why the cycle beam KEEPS by both
+    (`full_herd.extend_cycle`'s mixed keep) rather than re-ranking on either. Ranking on the offset
+    alone is the mistake session 61 warned about: the lateral OSCILLATES mid-chain, so the branch that
+    comes back would be thrown away.
+
+    Returns ``dict(target, slope, lat_at, offset)`` -- the target coord in ``(along, lat)``, the
+    corridor's lateral per unit of along, its lateral at an along, and ``offset(along, lat)``."""
+    rows = placements if placements is not None else seeds.load_placements()[0]
+    best = min(rows, key=lambda p: math.hypot(p['x'] - hl.ox, p['z'] - hl.oz))
+    ta, tl = hl.along(best['x'], best['z']), hl.lateral(best['x'], best['z'])
+    slope = tl / ta
+    return dict(target=(ta, tl), slope=slope, lat_at=lambda a: slope * a,
+                offset=lambda a, l: abs(l - slope * a))
+
+
 def thread_cost(frames, t_along, t_lat, thread, *, ready=True, lateral_rate=None):
     """**The rank for the LAST cycle and the terminal**: frames spent plus `thread_frames`, floored
     at one frame while rule 3 is unmet.
@@ -482,6 +560,11 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
     t_along, t_lat = hl.along(tx, tz), hl.lateral(tx, tz)
     lat_tol = band / math.cos(math.atan(th['slope']))
 
+    # WHERE THE PUSH WENT (session 63): with the magnitude saturated at ~98.5% of the ceiling on
+    # every phase, a shortfall is directional, and this says how much of it is.
+    t0 = env['cyl'][0]['tetra']['pos']
+    budget = push_budget(rows, hl, origin=(t0[0], t0[-1]))
+
     frames = len(rows)
     timeloss = frames - floor['frames_int']
     complete = pd <= band
@@ -499,6 +582,8 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
         wall_margin=worst_margin, wall_margin_at=worst_at, wall_ok=worst_margin > 0.0,
         left_regime_at=left_regime, regime_ok=left_regime is None,
         terminal=term, terminal_ok=term['ready'],
+        push=budget['push'], sideways=budget['sideways'],
+        push_saturation=budget['saturation'], sideways_frames=budget['sideways_frames'],
     )
 
 

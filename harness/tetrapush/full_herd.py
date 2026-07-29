@@ -421,12 +421,24 @@ def junction_quality(run, hl, box, *, frames=6, sticks=None):
 
 def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4, 7), (5, 8)),
                     aim_keep=3, min_roll=20.0, tcs_keep=3, target_css=None,
-                    fan_center=None, require_quality=True, key=None):
+                    fan_center=None, require_quality=True, key=None, mixed_aims=True):
     """The cycle's ROLL stage from a junction endpoint, factored by the separability above.
 
     R1: sweep the reachable aim fan (camera frozen) x the L windows, prune talk-unsafe / weak /
-    off-line / wall-touching, keep the ``aim_keep`` best by ``key`` (`rank_key` -- the frame bound
-    by default, the s43 herd rate if asked).
+    off-line / wall-touching, keep ``aim_keep`` of them -- by ``key`` (`rank_key` -- the frame bound by
+    default, the s43 herd rate if asked) MIXED with two geometric orders when ``mixed_aims``
+    (`_mixed_beam`): |Link - Tetra lateral| and distance off `objective.push_corridor`.
+
+    **What the fan actually contains, and where it is lost** (session 63, measured -- and the mixed keep
+    here is NOT what recovers it): widened past `aim_keep`, the cycle-2 fan holds endpoints 7.0 u off
+    the push corridor only 0.12 frames behind the -40.5 u one the bound picks. Those reach this stage
+    and are kept by it; they die at `require_quality` below, because putting Tetra on the corridor
+    requires LINK 50-58 u off her lateral (the plow ejects her AWAY from his centre, so the two are
+    ANTI-CORRELATED inside a roll) and the next junction cannot continue from there. So a mid-chain keep
+    over roll endpoints -- at this cut or at the beam's -- cannot help, and both were measured inert
+    (the beam one returned the same 9 cycle-2 survivors, all 44.9-59.0 u off). The lateral has to be
+    corrected in the JUNCTION, where Link repositions without a 400 u commitment. This keep stays
+    because it is correct where it does fire (the LAST cycle, whose `require_quality` is off).
     R2: re-run each kept aim over the DERIVED `target_cs` grid and keep the ``tcs_keep`` camera
     targets whose endpoint the NEXT junction can actually continue from, ranked by
     `junction_quality` -- a tcs that strands the plan is worthless however fast the roll was.
@@ -448,9 +460,18 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
             m = T.metrics(rr, hl, fr)
             if not T.alive(m) or not frame_in_model(rr, walls):
                 continue
-            r1.append((key(rr, fr, m), want, aim, lw, seg))
-    r1.sort(key=lambda t: t[0])
-    for (_k, want, aim, lw, _seg) in r1[:int(aim_keep)]:
+            r1.append(dict(k=key(rr, fr, m), want=want, aim=aim, lw=lw, m=m,
+                           along=hl.along(rr.tx, rr.tz), lat=hl.lateral(rr.tx, rr.tz)))
+    r1.sort(key=lambda t: t['k'])
+    # the mixed aim keep, and where it does and does not fire: see the docstring
+    if mixed_aims and len(r1) > int(aim_keep):
+        cor = O.push_corridor(hl)
+        r1 = _mixed_beam([r1,
+                          sorted(r1, key=lambda t: abs(t['m']['lat'])),          # push squareness
+                          sorted(r1, key=lambda t: cor['offset'](t['along'], t['lat']))],
+                         int(aim_keep), ident=lambda t: (t['want'], tuple(t['lw'])))
+    for t in r1[:int(aim_keep)]:
+        want, aim, lw = t['want'], t['aim'], t['lw']
         css = derived_target_css(node['run']) if target_css is None else target_css
         graded = []
         for tcs in css:
@@ -525,6 +546,46 @@ def _budget_cut(nodes, key, budget, label='', verbose=False):
     return kept
 
 
+def _mixed_beam(orders, beam, ident=None):
+    """Cut a beam by SEVERAL orders at once, an equal share of the slots each, deduped by ``ident``
+    across all of them -- the same shape as `junction_beam`'s flat/short keep, one stage up.
+
+    A keep, never a rank: whatever is best by the first order is still kept, so this can only ADD
+    alternatives. That is the point -- see `objective.push_corridor`. Session 61 measured that ranking
+    a mid-chain beam on the lateral throws away the branch that comes back, and session 63 measured
+    that keeping only the frame bound leaves the corridor branch out of the beam entirely (the cycle-2
+    endpoint kept sat 45 u off the corridor while one 4.8 u of along behind it sat 7 u off).
+
+    Used at BOTH cuts, which matters: applying it only to the cycle beam is measurably INERT, because
+    `roll_candidates`' ``aim_keep`` cut has already thrown the diverse aims away (session 63 -- the
+    re-solve came back byte-identical, same 9 survivors, corridor offsets 44.9-59.0). A keep can only
+    preserve what reaches it."""
+    ident = (lambda n: _state_tag(n['run'])) if ident is None else ident
+    seen, out = set(), []
+    per = max(1, int(beam) // max(1, len(orders)))
+    for i, order in enumerate(orders):
+        room = int(beam) - len(out) if i == len(orders) - 1 else per
+        taken = 0
+        for n in order:
+            if taken >= room or len(out) >= int(beam):
+                break
+            t = ident(n)
+            if t in seen:
+                continue
+            seen.add(t)
+            out.append(n)
+            taken += 1
+    # any slots the later orders could not fill go back to the first (the rank)
+    for n in orders[0]:
+        if len(out) >= int(beam):
+            break
+        t = ident(n)
+        if t not in seen:
+            seen.add(t)
+            out.append(n)
+    return out
+
+
 def _state_tag(run):
     """Beam dedup key: the coupled state at a cycle boundary, coarse enough to collapse duplicates
     and fine enough to keep genuinely different plans (the same granularity the junction stage
@@ -536,7 +597,8 @@ def _state_tag(run):
 def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=16,
                  max_frames=12, beam=8, aim_keep=3, half_window=0x2800, step=8,
                  probe_cap=250, rank='bound', budget=None, placements=None,
-                 require_quality=True, glide_keep=False, verbose=False):
+                 require_quality=True, glide_keep=False, corridor_keep=True, align_keep=True,
+                 verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -551,6 +613,23 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     Session 61 measured what leaving it True costs: from the cycle-2 beam it produced **zero** cycle-3
     survivors (the s43 chain "stalling"), where False produces **7**, at 69-70 frames and
     `plan_bound` 74.4-74.7 -- inside the 75-frame budget.
+
+    ``corridor_keep`` / ``align_keep`` (session 63) make the cut a MIXED keep (`_mixed_beam`) over
+    three orders -- ``rank``, distance off the push corridor (`objective.push_corridor`), and
+    |Link - Tetra lateral| (``metrics['lat']``, the push's squareness). Both are keeps and never ranks:
+    whatever is best by ``rank`` is still kept, which is what session 61's warning requires (the
+    mid-chain lateral OSCILLATES, so the branch that comes back must stay in). Note that the same
+    diversity has to be applied at `roll_candidates`' ``aim_keep`` cut to have any effect -- keeping it
+    here alone was measured INERT.
+
+    Measured reason, in one line each. CORRIDOR: the rank cannot see a lateral excursion whose bill
+    arrives two cycles later -- at the cycle-2 stage the beam kept an endpoint **45.5 u** off the
+    corridor and `plan_bound` ranked it BEST (72.94) while a **7.0 u**-off endpoint sat 0.12 frames
+    behind, and that excursion then cost 21.5 u of sideways push (~1.7 frames) in the last roll and the
+    terminal (`objective.push_budget`). ALIGNMENT: what a terminal recovers is monotone in it, measured
+    on the three cycle-3 endpoints whose terminals were actually run -- Link 16.6 u off Tetra's lateral
+    recovered **39.0 u** of placement distance, 22.8 u off recovered 14.0, 47.0 u off recovered 7.6 --
+    and the human himself never exceeds **12 u** (`pursuit_box`) where `two_roll.alive` admits 60.
 
     ``glide_keep`` (session 62) belongs with it, and for the same reason: on the LAST cycle the
     survivors are re-ranked by `glide_probe` -- what their terminal glide actually reaches -- rather
@@ -602,18 +681,28 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
         # the rank first, then continuability -- a faster cycle that strands the plan is worth less
         # than a marginally slower one the next junction can pick up (the s42 entry-state lesson).
         out.sort(key=lambda n: (key(n['run'], n['frames'], n['m']), n.get('quality')))
-    seen, beamed = set(), []
-    for n in out:
-        t = _state_tag(n['run'])
-        if t in seen:
-            continue
-        seen.add(t)
-        beamed.append(n)
-        if len(beamed) >= int(beam):
-            break
+    rows_c = placements if placements is not None else seeds.load_placements()[0]
+    cor = O.push_corridor(hl, rows_c)
+
+    def _off(n):
+        return cor['offset'](hl.along(n['run'].tx, n['run'].tz),
+                             hl.lateral(n['run'].tx, n['run'].tz))
+
+    orders = [out]
+    if corridor_keep and out:
+        # a share of the beam by Tetra's distance off the push corridor -- see the docstring
+        orders.append(sorted(out, key=_off))
+    if align_keep and out:
+        # ...and a share by Link's lateral offset from her, the axis that predicts a terminal
+        orders.append(sorted(out, key=lambda n: abs(n['m']['lat'])))
+    beamed = _mixed_beam(orders, beam)
     if verbose:
         print("    -> %d roll survivors, %d after dedup/beam (junction dead: %s)"
               % (len(out), len(beamed), ' '.join('%s=%d' % kv for kv in sorted(jdead.items()))))
+        if beamed:
+            print("       kept: corridor off %s | Link-Tetra lat %s"
+                  % (' '.join('%.1f' % _off(n) for n in beamed),
+                     ' '.join('%+.1f' % n['m']['lat'] for n in beamed)))
     return beamed
 
 
@@ -672,12 +761,17 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
 
 def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                c1_step=4, jn_beam=24, ess_step=1, nodes=None, box=None,
-               rank='bound', last_rank='thread', budget=None, placements=None, verbose=False):
+               rank='bound', last_rank='thread', budget=None, placements=None,
+               corridor_keep=True, verbose=False):
     """**The full-herd chain**: cycle 1 from state 2 (`cycle1_nodes`), then ``ncycles - 1``
     applications of `extend_cycle`, every cycle sweeping its OWN derived `target_cs` grid.
 
     ``rank`` / ``budget`` are the objective (session 60): rank every beam by the admissible frame
     bound and drop anything that already cannot finish inside ``budget`` frames.
+
+    ``corridor_keep`` (session 63) makes every cycle's cut a MIXED keep -- half by ``rank``, half by
+    distance off the push corridor -- because a lateral excursion's bill arrives cycles after the rank
+    that took it. See `extend_cycle` for the measurement.
 
     ``last_rank`` (session 62) is the LAST cycle's own rank, and it is deliberately a different one.
     Two measurements force the split. Mid-chain, Tetra's lateral OSCILLATES rather than accumulating
@@ -711,7 +805,8 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                              rank=(last_rank if c == int(ncycles) else rank),
                              budget=budget, placements=rows,
                              require_quality=(c < int(ncycles)),
-                             glide_keep=(c == int(ncycles)), verbose=verbose)
+                             glide_keep=(c == int(ncycles)),
+                             corridor_keep=corridor_keep, verbose=verbose)
         beams.append(nodes)
         if verbose and nodes:
             n = nodes[0]
@@ -1671,12 +1766,18 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
     So this is a per-frame BEAM (the atom is one frame's (stick, L), as in `junction_beam`) ranked by
     the CURRENT Tetra-to-nearest-coord distance, tracking the global closest state reached at ANY
     frame (a glide sweeps THROUGH the coord band, so the best endpoint is mid-glide, not at the
-    horizon). Returns ``dict(best, dist, per_node, placed, closest, band)``: ``best`` by the chosen
-    rank (carrying its full input log, so `confirm_plan` replays it end-to-end), ``placed`` = the
-    frame-minimal objective actually hit, and ``closest`` = the smallest placement distance reached at
+    horizon). Returns ``dict(best, dist, per_node, placed, closest, closest_ready, band)``: ``best`` by
+    the chosen rank (carrying its full input log, so `confirm_plan` replays it end-to-end),
+    ``placed`` = the frame-minimal objective actually hit, ``closest`` = the smallest distance reached at
     ANY frame. **In ``frame_minimal`` mode read ``closest``, not ``best``**: there a frame costs 1.0
     of score and can win back at most `PUSH_CEILING`/`PUSH_CEILING` = 1.0 of it, so ``best`` sits at
     the start of the glide by construction and says nothing about how close the glide came.
+
+    ``closest_ready`` (session 63) is ``closest`` restricted to states satisfying rule 3, and it exists
+    because ``closest`` is blind to that rule while the two measurably disagree: the same chain under
+    two different cycle-3 keeps ends either **31.406 u** out with ``ready=False`` or **33.482 u** out at
+    74 frames with ``ready=True``, and it is the second that is one frame of herding from a PASS. A
+    solve reporting only the smaller number hides the better plan, so `_cmd_solve` prints both.
 
     **Why the prune is the MODEL BOUNDARY, not the pursuit box** (measured, `probe_glide`): the
     deepest approach happens AFTER Link overtakes Tetra and leaves the box -- e.g. a plain (111,111)
@@ -1694,6 +1795,8 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
     best = None
     placed = None                     # the EARLIEST frame that satisfies rules 1 + 3
     closest = None                    # the smallest placement distance at ANY frame (diagnostic)
+    # ...and the same among rule-3-MET states, which `closest` is blind to -- see the docstring
+    closest_ready = None
     per_node = []
     for node in nodes:
         s0, d0 = _terminal_score(node['run'], hl, placements, objective, w_deficit, w_approach,
@@ -1736,6 +1839,10 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                             node_best = dict(cand, plan=node.get('plan', []))
                         if (dist, fr) < (closest['dist'], closest['frames']):
                             closest = dict(cand, plan=node.get('plan', []))
+                        if _terminal_ready(r)['ready'] and (
+                                closest_ready is None
+                                or (dist, fr) < (closest_ready['dist'], closest_ready['frames'])):
+                            closest_ready = dict(cand, plan=node.get('plan', []))
             if done:
                 done.sort(key=lambda c: c['dist'])
                 cand = dict(done[0], plan=node.get('plan', []))
@@ -1755,7 +1862,7 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                      '' if placed is None else '   [PLACED at %d f, %.3f u]'
                      % (placed['frames'], placed['dist'])))
     return dict(best=best, dist=best['dist'] if best else None, per_node=per_node,
-                placed=placed, closest=closest, band=band)
+                placed=placed, closest=closest, closest_ready=closest_ready, band=band)
 
 
 def cluster_distance(env, hl):
@@ -2078,6 +2185,13 @@ def _cmd_solve(env, hl, kw):
                                         % (win['frames'], win['dist']) if tt['placed'] else
                                         "NOT placed -- closest %.3f u at frame %d"
                                         % (win['dist'], win['frames'])))
+    if not tt['placed'] and tt['closest_ready'] is not None:
+        # `closest` is rule-3-blind, and the two disagree (session 63) -- print both frontiers
+        cr = tt['closest_ready']
+        print("            closest with rule 3 MET (`ready`): %.3f u at frame %d%s"
+              % (cr['dist'], cr['frames'],
+                 '  (same state)' if cr['frames'] == win['frames']
+                 and abs(cr['dist'] - win['dist']) < 1e-9 else ''))
     c = confirm_plan(env, hl, win)
     sc = O.replay_and_score(env, win['log'], hl=hl, placements=placements)
     print("  confirm (fresh replay of its own log): bit_exact=%s talk_safe=%s wall_ok=%s -> %s"
