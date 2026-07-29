@@ -116,8 +116,85 @@ def plan_bound(frames, placement_dist):
 
     As a PRUNE (`full_herd._budget_cut`) it is admissible at the steady state but not proven, since
     ``h`` inherits `PUSH_CEILING`'s finite-window slack; a plan beating the bound by a frame is a
-    real possibility, so cut on ``budget`` plus a frame if that ever matters. It is a rank first."""
+    real possibility, so cut on ``budget`` plus a frame if that ever matters. It is a rank first.
+
+    It has ONE measured blind spot, and `thread_cost` is the answer to it: ``h`` divides a straight
+    DISTANCE by the down-herd ceiling, so it prices a unit of lateral exactly like a unit of along.
+    Session 61 scored the recorded human's on-thread endpoint and the search's 39.9 u off-thread one
+    and `plan_bound` called them EQUAL. They are not -- see `LATERAL_RATE`."""
     return frames + remaining_frames(placement_dist)
+
+
+# ------------------------------------------------------- the lateral half of what a finish costs
+
+#: The plow's LATERAL authority in u/frame -- what a unit of lateral costs against `PUSH_CEILING`'s
+#: along. MEASURED, see `thread_frames`; the measurement is `full_herd.lateral_authority`.
+LATERAL_RATE = 2.92
+
+
+def thread_frames(t_along, t_lat, thread, *, lateral_rate=None, ceiling=PUSH_CEILING):
+    """The fewest FURTHER frames that could land Tetra on the target thread, counting ALONG and
+    LATERAL separately at the rates the plow actually achieves on each.
+
+    **`LATERAL_RATE` is measured, not chosen** (`full_herd.lateral_authority`, CLI `full_herd lat`,
+    gated by `tests/test_full_herd.py::test_the_lateral_rate_is_the_measured_plow_authority`). The
+    push moves Tetra along the line from Link's exec Co-centre to her feet, so its lateral component
+    is the push magnitude times the sine of Link's off-line angle -- and Link cannot swing far
+    off-line without giving up the contact and the down-herd progress that produced the push. The
+    measurement is the SPREAD of laterals the terminal alphabet reaches over a 6-frame glide, i.e.
+    how far apart two plans' lateral outcomes can be per frame: 2.92-2.96 u/f across contact depths
+    on the synthetic terminal bed and 3.5-5.9 on the real cycle-3 endpoints. The constant is the
+    SMALLEST of those, because pricing lateral optimistically is exactly what let the s61 beam trade
+    it away for free. Its precise value is not load-bearing -- what matters is that lateral is ~4.5x
+    dearer than along, not 1x as `plan_bound` has it. Session 62 re-ran the terminal across
+    2.0 / 2.94 / 5.0 and it moved nothing, which is a fact about that BEAM (it had no alternatives to
+    choose between) rather than a licence to pick freely.
+
+    `remaining_frames` divides the straight distance by `PUSH_CEILING`; this does not, and the
+    difference is the session-61 gap. Along and lateral progress happen on the SAME frames (one push
+    moves both), so the cost of a finish is the ``max`` of the two, not their sum -- but they are
+    bought at very different rates (`PUSH_CEILING` 13.0 against a measured `LATERAL_RATE` of 2.92),
+    so a unit of lateral costs ~4.5x what a unit of along costs.
+
+    Minimised over WHERE on the thread she stops, because `placement_thread` gives ~46 u of along
+    slack and the two ends want different laterals -- and the optimum is usually neither end. From
+    the s62 endpoint (along 907.9, lat -2.44): the far end is 76 u of along away (5.9 f), the near
+    end 30 u of along plus 10.4 u of lateral (3.6 f), and the best point on the thread is 38 u along,
+    a little past the near end, at **2.9 f**. A rank that aims at a fixed coord cannot see that.
+
+    Convex in the along target (a max of two V's), so the ternary search finds the true minimum."""
+    r = LATERAL_RATE if lateral_rate is None else float(lateral_rate)
+    lat_at = thread['lat_at']
+
+    def cost(a):
+        return max(abs(a - t_along) / ceiling, abs(lat_at(a) - t_lat) / r)
+
+    lo, hi = thread['along_lo'], thread['along_hi']
+    for _ in range(80):                      # 1e-13 of the 47.6 u segment: exact for this purpose
+        m1 = lo + (hi - lo) / 3.0
+        m2 = hi - (hi - lo) / 3.0
+        if cost(m1) <= cost(m2):
+            hi = m2
+        else:
+            lo = m1
+    return cost(0.5 * (lo + hi))
+
+
+def thread_cost(frames, t_along, t_lat, thread, *, ready=True, lateral_rate=None):
+    """**The rank for the LAST cycle and the terminal**: frames spent plus `thread_frames`, floored
+    at one frame while rule 3 is unmet.
+
+    Not a prune, and deliberately not offered as one -- unlike `plan_bound` this is NOT admissible.
+    `LATERAL_RATE` is what the plow SUSTAINS, and a single frame can beat it the same way a single
+    frame beats `PUSH_CEILING`, so a node whose lateral this over-prices by a frame is still a node
+    that might finish. It orders a beam; `_budget_cut` keeps cutting on the bound.
+
+    ``ready`` is rule 3 (`turnaround_ready`). A frame where Link is not still moving toward the 180
+    cannot BE the placement frame, so at least one more frame has to follow it -- which is a floor on
+    ``h``, not a penalty added to it: with three frames of herding still to do, being un-ready right
+    now is genuinely free, and pretending otherwise would rank on a condition that has not come due."""
+    h = thread_frames(t_along, t_lat, thread, lateral_rate=lateral_rate)
+    return frames + (h if ready else max(h, 1.0))
 
 
 # --------------------------------------------------------------------------- rule 4: the walls
@@ -411,6 +488,7 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
     return dict(
         frames=frames, floor=floor['frames_int'], floor_exact=floor['frames'],
         timeloss=timeloss, bound=plan_bound(frames, pd),
+        thread_bound=thread_cost(frames, t_along, t_lat, th, ready=term['ready']),
         within_budget=complete and timeloss <= TIMELOSS_BUDGET,
         within_preferred=complete and timeloss <= TIMELOSS_PREFERRED,
         herd=hl.along(tx, tz), rate=hl.along(tx, tz) / frames if frames else 0.0,
@@ -521,7 +599,8 @@ def _print_score(sc):
              "OVER BUDGET" if sc['complete'] else "n/a -- herd INCOMPLETE"))
     print("  herd %.2f u @ %.3f u/frame   placement %.3f u from coord idx %d"
           % (sc['herd'], sc['rate'], sc['placement_dist'], sc['placement_idx']))
-    print("  frame bound %.1f (`plan_bound`: frames + the steady-state remainder)" % sc['bound'])
+    print("  frame bound %.1f (`plan_bound`) / %.1f (`thread_cost`, lateral at its own rate)"
+          % (sc['bound'], sc['thread_bound']))
     print("  Tetra along %.1f lat %+.2f -> %+.2f u off the target thread   placeable %s"
           % (sc['tetra_along'], sc['tetra_lat'], sc['lat_error'], sc['placeable']))
     print("  wall margin %+.3f u (frame %s)   %s"

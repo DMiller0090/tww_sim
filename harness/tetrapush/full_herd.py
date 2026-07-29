@@ -481,22 +481,35 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
 
 # --------------------------------------------------------------------------- the N-cycle chain
 
-def rank_key(rank='bound', placements=None):
-    """**The beam's ordering, ASCENDING either way** (lower is better) -- built here so every stage
+def rank_key(rank='bound', placements=None, hl=None):
+    """**The beam's ordering, ASCENDING every way** (lower is better) -- built here so every stage
     ranks the same way and the choice is a measured one rather than a habit.
 
-    ``'bound'`` (the session-60 default) is the OBJECTIVE's own metric, `objective.plan_bound`:
-    frames spent plus the fewest that could still land the coord. Ranking on it is frame-minimal by
-    construction, and it counts LATERAL drift, because the distance to a coord is a distance and not
-    a down-herd projection. ``'rate'`` is the s43 herd rate (`-u/frame`), kept selectable so the
-    difference is measurable instead of asserted -- it was the rank that produced the 868 u / 69 f
-    chain whose 28 u lateral offset the endgame then could not pay for."""
+    ``'bound'`` (the session-60 default) is `objective.plan_bound`: frames spent plus the fewest that
+    could still land the coord. Ranking on it is frame-minimal by construction, and it counts LATERAL
+    drift, because the distance to a coord is a distance and not a down-herd projection.
+
+    ``'thread'`` (session 62) is `objective.thread_cost`, and it is the one for the LAST cycle and
+    the terminal: it counts along and lateral at the rates the plow achieves on each, so it can see
+    what `'bound'` measurably cannot -- that the human's on-thread endpoint and the search's 39.9 u
+    off-thread one are not the same plan four frames from the end. Needs ``hl``.
+
+    ``'rate'`` is the s43 herd rate (`-u/frame`), kept selectable so the difference is measurable
+    instead of asserted -- it was the rank that produced the 868 u / 69 f chain whose 28 u lateral
+    offset the endgame then could not pay for."""
     if rank == 'rate':
         return lambda run, frames, m: -m['per_frame']
-    if rank != 'bound':
-        raise ValueError("rank must be 'bound' or 'rate', not %r" % (rank,))
     rows = placements if placements is not None else seeds.load_placements()[0]
-    return lambda run, frames, m: O.plan_bound(frames, _placement_dist(run, rows))
+    if rank == 'bound':
+        return lambda run, frames, m: O.plan_bound(frames, _placement_dist(run, rows))
+    if rank != 'thread':
+        raise ValueError("rank must be 'bound', 'thread' or 'rate', not %r" % (rank,))
+    if hl is None:
+        raise ValueError("rank 'thread' needs the HerdLine (it is a herd-frame metric)")
+    th = O.placement_thread(hl, rows)
+    return lambda run, frames, m: O.thread_cost(
+        frames, hl.along(run.tx, run.tz), hl.lateral(run.tx, run.tz), th,
+        ready=_terminal_ready(run)['ready'])
 
 
 def _budget_cut(nodes, key, budget, label='', verbose=False):
@@ -523,7 +536,7 @@ def _state_tag(run):
 def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=16,
                  max_frames=12, beam=8, aim_keep=3, half_window=0x2800, step=8,
                  probe_cap=250, rank='bound', budget=None, placements=None,
-                 require_quality=True, verbose=False):
+                 require_quality=True, glide_keep=False, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -539,10 +552,17 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     survivors (the s43 chain "stalling"), where False produces **7**, at 69-70 frames and
     `plan_bound` 74.4-74.7 -- inside the 75-frame budget.
 
+    ``glide_keep`` (session 62) belongs with it, and for the same reason: on the LAST cycle the
+    survivors are re-ranked by `glide_probe` -- what their terminal glide actually reaches -- rather
+    than by where the roll left Tetra. Measured, the two disagree by two frames of finish (see
+    `glide_probe`). It costs ~1 s per survivor, so it re-ranks the final list, never the aim fan.
+
     Every node carries its FULL delivered input log, so any survivor is replayable end-to-end on a
     fresh `FreeRun` (`confirm_plan`)."""
     out = []
-    key = rank_key(rank, placements)
+    key = rank_key(rank, placements, hl)
+    # the RANK may be the (inadmissible) thread cost; the hard budget CUT never is -- see `rank_key`
+    cut = key if rank == 'bound' else rank_key('bound', placements)
     jdead = {}
     for node in nodes:
         ends = junction_beam(node, hl, box, max_frames=max_frames, beam=jn_beam,
@@ -567,10 +587,21 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                                         step=step, key=key, require_quality=require_quality):
                 cand['plan'] = list(node.get('plan', [])) + [cand['knobs']]
                 out.append(cand)
-    out = _budget_cut(out, key, budget, 'roll survivors', verbose)
-    # the rank first, then continuability -- a faster cycle that strands the plan is worth less than
-    # a marginally slower one the next junction can pick up (the s42 entry-state lesson).
-    out.sort(key=lambda n: (key(n['run'], n['frames'], n['m']), n.get('quality')))
+    out = _budget_cut(out, cut, budget, 'roll survivors', verbose)
+    if glide_keep and out:
+        # the LAST cycle is keeping endpoints for a TERMINAL, so measure the terminal (`glide_probe`)
+        rows_p = placements if placements is not None else seeds.load_placements()[0]
+        th = O.placement_thread(hl, rows_p)
+        for n in out:
+            n['glide'] = glide_probe(n['run'], n['frames'], hl, rows_p, th)
+        out.sort(key=lambda n: n['glide']['bound'])
+        if verbose:
+            print("    (glide-probed %d survivors: best hands the terminal bound %.2f, worst %.2f)"
+                  % (len(out), out[0]['glide']['bound'], out[-1]['glide']['bound']))
+    else:
+        # the rank first, then continuability -- a faster cycle that strands the plan is worth less
+        # than a marginally slower one the next junction can pick up (the s42 entry-state lesson).
+        out.sort(key=lambda n: (key(n['run'], n['frames'], n['m']), n.get('quality')))
     seen, beamed = set(), []
     for n in out:
         t = _state_tag(n['run'])
@@ -597,7 +628,8 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
     At state 2 Tetra is ~122 deg BEHIND Link (out of the +-90 cone), so the L-held flip prologue
     re-targets straight into the proc-7 flip -- no turnaround is needed to start."""
     dtm = seeds.dtm_input_at(env)
-    key = rank_key(rank, placements)
+    key = rank_key(rank, placements, hl)
+    cut = key if rank == 'bound' else rank_key('bound', placements)
     out = []
     for nflip in nflips:
         base = seeds.make_freerun(env)
@@ -622,7 +654,7 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
             print("  nflip=%d: preroll %+.2f -> %d cycle-1 survivors"
                   % (nflip, base.link.speedF, len(cands)))
         out.extend(cands)
-    out = _budget_cut(out, key, budget, 'cycle-1 survivors', verbose)
+    out = _budget_cut(out, cut, budget, 'cycle-1 survivors', verbose)
     # the rank first, then continuability -- a faster cycle that strands the plan is worth less than
     # a marginally slower one the next junction can pick up (the s42 entry-state lesson).
     out.sort(key=lambda n: (key(n['run'], n['frames'], n['m']), n.get('quality')))
@@ -640,12 +672,20 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
 
 def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                c1_step=4, jn_beam=24, ess_step=1, nodes=None, box=None,
-               rank='bound', budget=None, placements=None, verbose=False):
+               rank='bound', last_rank='thread', budget=None, placements=None, verbose=False):
     """**The full-herd chain**: cycle 1 from state 2 (`cycle1_nodes`), then ``ncycles - 1``
     applications of `extend_cycle`, every cycle sweeping its OWN derived `target_cs` grid.
 
     ``rank`` / ``budget`` are the objective (session 60): rank every beam by the admissible frame
     bound and drop anything that already cannot finish inside ``budget`` frames.
+
+    ``last_rank`` (session 62) is the LAST cycle's own rank, and it is deliberately a different one.
+    Two measurements force the split. Mid-chain, Tetra's lateral OSCILLATES rather than accumulating
+    (+5.8 after cycle 1, -39.9 after cycle 2, +8.9 after cycle 3): ranking an intermediate beam on it
+    would have thrown away the survivor that came back, so cycles 1..N-1 stay on the pure frame
+    `'bound'`. At the END it is the whole remaining gap -- the s61 solve finished 73 frames INSIDE
+    budget and 31.4 u short purely because the last cycle and terminal traded lateral for along at
+    par -- so the final cycle ranks on `'thread'` (`objective.thread_cost`), which prices them apart.
 
     Returns ``dict(beams, best, bar, box)`` -- the per-cycle beams (so a stalled cycle is
     diagnosable), the best final node, the human's 2-roll rate, and the pursuit box in force."""
@@ -666,9 +706,12 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
         t1 = time.perf_counter()
         nodes = extend_cycle(nodes, hl, box, jn_keep=jn_keep, jn_beam=jn_beam,
                              ess_step=ess_step, beam=beam, aim_keep=aim_keep,
-                             rank=rank, budget=budget, placements=rows,
-                             # the LAST cycle hands off to the terminal glide, not to a junction
-                             require_quality=(c < int(ncycles)), verbose=verbose)
+                             # the LAST cycle hands off to the terminal glide, not to a junction:
+                             # no continuability gate, the lateral rank, the glide keep
+                             rank=(last_rank if c == int(ncycles) else rank),
+                             budget=budget, placements=rows,
+                             require_quality=(c < int(ncycles)),
+                             glide_keep=(c == int(ncycles)), verbose=verbose)
         beams.append(nodes)
         if verbose and nodes:
             n = nodes[0]
@@ -1467,14 +1510,116 @@ def _terminal_ready(run):
                               run.link.pos_x, run.link.pos_z, run.tx, run.tz)
 
 
-def _terminal_score(run, hl, placements, objective, w_deficit, w_approach, frames=0):
+def lateral_authority(run, hl, *, frames=6, n_dirs=24):
+    """**MEASURE what a unit of lateral costs** -- the number behind `objective.LATERAL_RATE`, and
+    the reason the last cycle gets a rank of its own (session 62).
+
+    `objective.plan_bound` divides the straight distance to a coord by `PUSH_CEILING`, which prices a
+    unit of lateral exactly like a unit of along. Whether that is wrong, and by how much, is a
+    measurement: hold each stick of the terminal glide's own alphabet for ``frames`` frames and read
+    the SPREAD of Tetra laterals it reaches. That spread over the frames is the plan's lateral
+    authority -- how far apart two plans' lateral outcomes can be per frame of glide -- against
+    `PUSH_CEILING` for the along axis.
+
+    Held sticks, not a beam, deliberately. A per-frame beam is the stronger policy but its first
+    generation is degenerate (the input pipeline delays a frame, so every candidate's first step is
+    identical), which makes its early ranking arbitrary; holding is the simplest policy that isolates
+    the axis, and it UNDER-states the authority, which is the safe direction for a rank.
+
+    The mechanism behind the number: the plow ejects Tetra along the line from Link's exec Co-centre
+    to her feet, so the lateral component is the push magnitude times the sine of Link's off-line
+    angle -- and swinging far off-line is what costs the contact that produced the push.
+
+    Returns ``dict(hi, lo, spread, per_frame, along_max, frames, n)``, laterals relative to the start.
+    ``hi``/``lo`` also say whether the reachable set is ONE-SIDED, which at the cycle-3 endpoints it
+    is: every stick loses lateral, so what a rank chooses there is how FAST, not which way."""
+    walls = O.courtyard_walls()
+    lat0, al0 = hl.lateral(run.tx, run.tz), hl.along(run.tx, run.tz)
+    lats, alongs = [], []
+    for (sx, sy) in _terminal_alphabet(run, hl, n_dirs=n_dirs):
+        for l in (0, 1):
+            r, ok = run.clone(), True
+            for _ in range(int(frames)):
+                r.step(dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
+                            triggerL=255 if l else 0,
+                            substickX=T.CSTICK_NEUTRAL, substickY=0))
+                if not frame_in_model(r, walls):
+                    ok = False
+                    break
+            if ok:
+                lats.append(hl.lateral(r.tx, r.tz) - lat0)
+                alongs.append(hl.along(r.tx, r.tz) - al0)
+    if not lats:
+        return None
+    hi, lo = max(lats), min(lats)
+    return dict(hi=hi, lo=lo, spread=hi - lo, per_frame=(hi - lo) / float(frames),
+                along_max=max(alongs), frames=int(frames), n=len(lats))
+
+
+def glide_probe(run, frames, hl, placements, thread, *, max_frames=5, beam=4, n_dirs=12):
+    """**The LAST cycle's endpoint keep: GLIDE-ABILITY, not the frame bound** (session 62) -- the
+    terminal's counterpart of `roll_probe`, and the same lesson one stage later.
+
+    `roll_probe` exists because the endpoints that LOOK best (flattest) are measurably not the ones a
+    roll can fire from, and ranking on the proxy stalled the chain four times. The last cycle has the
+    same shape of bug against the terminal: `objective.thread_cost` scores a post-roll endpoint on
+    where TETRA is, and says nothing about how much push LINK has left -- yet that is what decides the
+    handoff. Measured on the s62 cycle-3 beam, the two disagree and the proxy is wrong: the endpoint
+    the thread cost likes best (node 6, lat +15.3, cost 74.47) glides to h 4.71, while the one it
+    ranks worst (node 3, cost 74.51) glides to **h 2.54** -- because node 6's Link has 11.7 u of
+    along left in him and node 3's has 40.3.
+
+    So: run the real terminal glide, short and narrow, and rank the endpoint by the best
+    ``frames + objective.thread_frames`` it reaches -- what this cycle actually hands the terminal.
+    ~1 s per endpoint, which is why it re-ranks the final survivors rather than the aim fan.
+
+    Returns ``dict(bound, h, frames, along, lat)`` for the best state the probe glide reached."""
+    walls = O.courtyard_walls()
+    a0, l0 = hl.along(run.tx, run.tz), hl.lateral(run.tx, run.tz)
+    best = dict(bound=frames + O.thread_frames(a0, l0, thread),
+                h=O.thread_frames(a0, l0, thread), frames=frames, along=a0, lat=l0)
+    live = [(run, frames)]
+    for _ in range(int(max_frames)):
+        nxt, seen = [], set()
+        for (r0, fr) in live:
+            for (sx, sy) in _terminal_alphabet(r0, hl, n_dirs=n_dirs):
+                for l in (0, 1):
+                    r = r0.clone()
+                    r.step(dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
+                                triggerL=255 if l else 0,
+                                substickX=T.CSTICK_NEUTRAL, substickY=0))
+                    if not frame_in_model(r, walls):
+                        continue
+                    tag = (round(r.link.pos_x, 1), round(r.link.pos_z, 1),
+                           round(r.tx, 1), round(r.tz, 1))
+                    if tag in seen:
+                        continue
+                    seen.add(tag)
+                    a, la = hl.along(r.tx, r.tz), hl.lateral(r.tx, r.tz)
+                    h = O.thread_frames(a, la, thread)
+                    cand = dict(bound=fr + 1 + h, h=h, frames=fr + 1, along=a, lat=la)
+                    if cand['bound'] < best['bound']:
+                        best = cand
+                    nxt.append((r, fr + 1, cand['bound']))
+        if not nxt:
+            break
+        nxt.sort(key=lambda t: t[2])
+        live = [(r, f) for (r, f, _b) in nxt[:int(beam)]]
+    return best
+
+
+def _terminal_score(run, hl, placements, objective, w_deficit, w_approach, frames=0, thread=None):
     """The terminal beam's rank key.
 
-    ``'frame_minimal'`` (session 60, THE objective) = `objective.plan_bound(frames, pd)`: the plan
-    length this trajectory implies. Within one generation every live node has the same ``frames``, so
-    it orders exactly as ``'placement'`` does -- the difference is in the GLOBAL best, which now
-    prefers an earlier adequate placement over a later perfect one. That is the whole change Dereck's
-    rule 2 asks for.
+    ``'thread'`` (session 62, THE objective's rank) = `objective.thread_cost`: the plan length this
+    trajectory implies with along and lateral counted at the rates the plow achieves on EACH, and
+    rule 3 (`_terminal_ready`) floored into it. It is `'frame_minimal'` with the two blind spots
+    closed -- the ones that made s61's terminal drift Tetra from lat +8.90 (on the thread's near end)
+    to -2.44 (off it) while its score improved, and finish `ready=False`.
+
+    ``'frame_minimal'`` (session 60) = `objective.plan_bound(frames, pd)`. Within one generation every
+    live node has the same ``frames``, so it orders exactly as ``'placement'`` does -- the difference
+    is in the GLOBAL best, which prefers an earlier adequate placement over a later perfect one.
 
     ``'placement'`` (the s44 default) = pure Tetra->coord distance, the deepest-contact lander.
     ``'grazing'`` (route a, session 48) additionally penalises the coupled-entry `deficit`
@@ -1487,6 +1632,9 @@ def _terminal_score(run, hl, placements, objective, w_deficit, w_approach, frame
         return pd, pd
     if objective == 'frame_minimal':
         return O.plan_bound(frames, pd), pd
+    if objective == 'thread':
+        return O.thread_cost(frames, hl.along(run.tx, run.tz), hl.lateral(run.tx, run.tz),
+                             thread, ready=_terminal_ready(run)['ready']), pd
     deficit = max(0.0, CO_RADII_BAR - _centre_feet(run))
     return pd + w_deficit * deficit + w_approach * max(0.0, _approach_rate(run)), pd
 
@@ -1497,12 +1645,19 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
     """**The TERMINAL cycle, ranked by PLACEMENT distance instead of u/frame** -- the endgame stage
     the chain hands off to once one more full roll would OVERSHOOT the cluster.
 
-    ``objective`` selects the rank (`_terminal_score`). ``'frame_minimal'`` is the session-60 one:
-    it also STOPS at the first generation that satisfies the objective -- Tetra inside ``band`` of a
-    genuine coord (rule 1) with Link still MOVING (rule 3, `_terminal_ready`) -- and returns it as
-    ``placed``, because nothing found later can be shorter. That is what "the placement RIDES the
-    last push" means operationally: the terminal stops when the coord is landed, instead of spending
-    further frames polishing a distance that is already inside the band.
+    ``objective`` selects the rank (`_terminal_score`). ``'thread'`` (session 62) is the current one:
+    the frame-minimal bound with along and lateral priced apart and rule 3 folded in, which is what
+    the glide needs, because the thing it spends is exactly the thing `'frame_minimal'` could not
+    see. Measured on the s61 winner: the terminal took Tetra from lat +8.90 -- essentially ON the
+    thread's near end -- to -2.44 over four frames, improving its score the whole way, and stopped
+    31.4 u short with `ready=False`. Both misses are the rank, not the alphabet.
+
+    ``'frame_minimal'`` is the session-60 one. Either of these two also STOPS at the first generation
+    that satisfies the objective -- Tetra inside ``band`` of a genuine coord (rule 1) with Link still
+    MOVING (rule 3, `_terminal_ready`) -- and returns it as ``placed``, because nothing found later
+    can be shorter. That is what "the placement RIDES the last push" means operationally: the terminal
+    stops when the coord is landed, instead of spending further frames polishing a distance that is
+    already inside the band.
     ``'placement'`` is the s44 rank (nearest coord, the deep-contact lander) and ``'grazing'``
     (route a, session 48) the near-rest one -- kept, measurable, but retired by rule 3.
 
@@ -1534,13 +1689,15 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
         placements, _ = seeds.load_placements()
     band = O.PLACEMENT_BAND if band is None else float(band)
     walls = O.courtyard_walls()
+    thread = O.placement_thread(hl, placements)
+    stop_when_placed = objective in ('frame_minimal', 'thread')
     best = None
     placed = None                     # the EARLIEST frame that satisfies rules 1 + 3
     closest = None                    # the smallest placement distance at ANY frame (diagnostic)
     per_node = []
     for node in nodes:
         s0, d0 = _terminal_score(node['run'], hl, placements, objective, w_deficit, w_approach,
-                                 node['frames'])
+                                 node['frames'], thread)
         node_best = dict(run=node['run'], log=node['log'], frames=node['frames'], dist=d0,
                          score=s0, plan=node.get('plan', []))
         if best is None or s0 < best['score']:
@@ -1567,7 +1724,7 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                         seen.add(tag)
                         fr = nd['frames'] + 1
                         score, dist = _terminal_score(r, hl, placements, objective,
-                                                      w_deficit, w_approach, fr)
+                                                      w_deficit, w_approach, fr, thread)
                         cand = dict(run=r, log=nd['log'] + [d], frames=fr,
                                     dist=dist, score=score)
                         nxt.append(cand)
@@ -1585,7 +1742,7 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                 if placed is None or (cand['frames'], cand['dist']) < (placed['frames'],
                                                                       placed['dist']):
                     placed = cand
-                if objective == 'frame_minimal':
+                if stop_when_placed:
                     break        # frame-minimal: no later generation can be shorter than this one
             nxt.sort(key=lambda c: c['score'])
             live = nxt[:int(beam)]
@@ -1857,6 +2014,31 @@ def _cmd_homing(env, hl, kw):
           "     chain endpoint needs; feeding it a REAL ranked chain endpoint closes 2b.")
 
 
+def _cmd_lat(env, hl, kw):
+    """`objective.LATERAL_RATE`'s measurement, reproducible in ~20 s: how much LATERAL a plan can buy
+    per frame of terminal glide, against `PUSH_CEILING` for the along axis.
+
+    Sweeps ``feet`` (the contact depth) and not `synthetic_hot_arrival`'s `d_short`/`lat_off`: those
+    two translate BOTH actors rigidly, so no relative measurement moves with them at all."""
+    placements, _ = seeds.load_placements()
+    th = O.placement_thread(hl, placements)
+    print("THE LATERAL AUTHORITY (`lateral_authority`) -- what a unit of lateral costs\n")
+    print("  along ceiling  %.2f u/frame (`PUSH_CEILING`, the CC split law)" % O.PUSH_CEILING)
+    print("  LATERAL_RATE   %.2f u/frame (the worst measured bed below)\n" % O.LATERAL_RATE)
+    for feet in (56.0, 64.0, 72.0):
+        nd = synthetic_hot_arrival(env, hl, int(kw.get('coord', 287)), d_short=40.0, feet=feet)
+        a = lateral_authority(nd['run'], hl)
+        print("  hot arrival, Link %2.0f u behind: lateral spread %6.2f u / %d f = %4.2f u/f "
+              "[%+7.2f .. %+7.2f], along_max %5.2f u/f  (%d sticks survived)"
+              % (feet, a['spread'], a['frames'], a['per_frame'], a['lo'], a['hi'],
+                 a['along_max'] / a['frames'], a['n']))
+    print("\n  => lateral is ~%.0fx dearer than along, which `plan_bound` (distance / the along"
+          % (O.PUSH_CEILING / O.LATERAL_RATE))
+    print("     ceiling) prices at 1x. `objective.thread_frames` is the version that counts them")
+    print("     apart; the target thread runs along %.1f..%.1f, lateral %+.2f..%+.2f."
+          % (th['along_lo'], th['along_hi'], th['lat_lo'], th['lat_hi']))
+
+
 def _cmd_solve(env, hl, kw):
     """**THE SOLVE, end to end, under the session-60 objective** -- chain, frame-minimal terminal,
     then the acceptance test on the winner's own input log (`objective.replay_and_score` from state 2,
@@ -1879,7 +2061,8 @@ def _cmd_solve(env, hl, kw):
           % (th['along_lo'], th['along_hi'], th['lat_lo'], th['lat_hi'], th['deg_off_axis']))
     t0 = time.perf_counter()
     res = chain_herd(env, hl, ncycles=ncyc, beam=int(kw.get('beam', 8)),
-                     jn_keep=int(kw.get('jkeep', 6)), rank=rank, placements=placements,
+                     jn_keep=int(kw.get('jkeep', 6)), rank=rank,
+                     last_rank=kw.get('last_rank', 'thread'), placements=placements,
                      budget=(float(kw['budget']) if 'budget' in kw else None), verbose=True)
     last = res['beams'][-1]
     if not last:
@@ -1887,7 +2070,8 @@ def _cmd_solve(env, hl, kw):
               "by reason)" % len(res['beams']))
         return
     tt = terminal_targeting(last, hl, placements, max_frames=int(kw.get('tframes', 12)),
-                            beam=int(kw.get('tbeam', 48)), objective='frame_minimal', verbose=True)
+                            beam=int(kw.get('tbeam', 48)),
+                            objective=kw.get('terminal', 'thread'), verbose=True)
     win = tt['placed'] or tt['closest']
     print("\n(%.0f s)  terminal: %s" % (time.perf_counter() - t0,
                                         "PLACED at frame %d, %.3f u from coord"
@@ -1909,8 +2093,8 @@ def _cmd_solve(env, hl, kw):
           % (sc['wall_margin'], sc['wall_margin_at'],
              'ok' if sc['regime_ok'] else 'LEFT at %d' % sc['left_regime_at'],
              sc['terminal']['speed'], sc['terminal_ok']))
-    print("    frame bound %.1f          VERDICT %s"
-          % (sc['bound'], 'PASS' if O.verdict(sc) else 'fail'))
+    print("    frame bound %.1f (`plan_bound`) / %.1f (`thread_cost`)   VERDICT %s"
+          % (sc['bound'], sc['thread_bound'], 'PASS' if O.verdict(sc) else 'fail'))
     if 'dump' in kw:
         # persist the whole run: a 3-cycle solve costs ~16 min, and every node's log rebuilds
         # bit-exact (`beam_io`), so the next session continues instead of re-searching.
@@ -1945,11 +2129,13 @@ def main(argv):
         _cmd_decel(env, hl, kw)
     elif cmd == 'homing':
         _cmd_homing(env, hl, kw)
+    elif cmd == 'lat':
+        _cmd_lat(env, hl, kw)
     elif cmd == 'solve':
         _cmd_solve(env, hl, kw)
     else:
         print("usage: python -m harness.tetrapush.full_herd "
-              "{solve | sep | box | plan | endgame | walk | arrivals | place | decel | homing}")
+              "{solve | lat | sep | box | plan | endgame | walk | arrivals | place | decel | homing}")
 
 
 if __name__ == '__main__':

@@ -260,6 +260,103 @@ def test_the_frame_bound_rank_and_the_budget_cut(env, hl, box):
     assert len(F._budget_cut(nodes, kb, mid)) == sum(1 for v in vb if v <= mid)
 
 
+def test_the_lateral_rate_is_the_measured_plow_authority(env, hl):
+    """**Session 62: `objective.LATERAL_RATE` is a MEASUREMENT, and this is the measurement.**
+
+    `plan_bound` divides the straight distance to a coord by `PUSH_CEILING`, i.e. it prices a unit of
+    lateral exactly like a unit of along. `lateral_authority` holds each stick of the terminal
+    alphabet for six frames and reads the SPREAD of Tetra laterals reached -- how far apart two
+    plans' lateral outcomes can be per frame of glide. It is several times smaller than the along
+    ceiling, which is the fact the last cycle's rank exists to use.
+
+    The constant is pinned only as an INEQUALITY against the measurement (it is the worst of the
+    measured beds, so it must not exceed this one), because pinning a float here would gate the
+    synthetic bed's exact geometry rather than the property."""
+    a = F.lateral_authority(F.synthetic_hot_arrival(env, hl, 287, d_short=40.0)['run'], hl)
+    assert a is not None and a['n'] > 100, "the alphabet should mostly survive a 6-frame glide"
+    assert a['hi'] > a['lo'], "no lateral authority at all would make the rank meaningless"
+    assert 2.0 < a['per_frame'] < 6.0, \
+        "the measured lateral authority moved (%.2f u/f) -- re-derive LATERAL_RATE" % a['per_frame']
+    assert O.LATERAL_RATE <= a['per_frame'] + 1e-9, \
+        "LATERAL_RATE must not be more optimistic than the worst measured bed"
+    # the point of the whole thing: lateral is several times dearer than along
+    assert a['along_max'] / a['frames'] > 3.0 * a['per_frame']
+
+
+def test_glide_probe_ranks_an_endpoint_by_what_its_terminal_reaches(env, hl):
+    """**Session 62: the last cycle's keep is GLIDE-ABILITY, one stage on from `roll_probe`.**
+
+    `roll_probe` exists because the endpoints that look best are measurably not the ones a roll can
+    fire from. The last cycle has the same bug against the TERMINAL: `objective.thread_cost` scores a
+    post-roll endpoint on where TETRA is and says nothing about how much push LINK has left -- which
+    is what decides the handoff.
+
+    Gated on two synthetic arrivals that make the disagreement unambiguous: the same Tetra, the same
+    coord, but Link either in contact behind her or parked outside the freeze bar with nothing left
+    to give. Tetra-only ranks them EQUAL; the glide probe does not."""
+    contact = F.synthetic_hot_arrival(env, hl, 287, d_short=40.0, feet=64.0)
+    spent = F.synthetic_hot_arrival(env, hl, 287, d_short=40.0, feet=150.0)
+    th = O.placement_thread(hl)
+    rows, _ = seeds.load_placements()
+
+    def tetra_only(nd):
+        return O.thread_cost(nd['frames'], hl.along(nd['run'].tx, nd['run'].tz),
+                             hl.lateral(nd['run'].tx, nd['run'].tz), th,
+                             ready=F._terminal_ready(nd['run'])['ready'])
+
+    assert tetra_only(contact) == pytest.approx(tetra_only(spent)), \
+        "same Tetra: a Tetra-only rank cannot tell these apart -- that is the gap being closed"
+    assert F._centre_feet(contact['run']) < F.CO_RADII_BAR < F._centre_feet(spent['run'])
+
+    g_contact = F.glide_probe(contact['run'], 0, hl, rows, th)
+    g_spent = F.glide_probe(spent['run'], 0, hl, rows, th)
+    assert g_contact['bound'] < g_spent['bound'], \
+        "the endpoint with push left must hand the terminal a better finish"
+    assert g_contact['along'] > g_spent['along'] + 10.0, "the contact endpoint should herd further"
+    # the probe never reports worse than doing nothing: the start state is its own floor
+    assert g_spent['bound'] <= O.thread_frames(hl.along(spent['run'].tx, spent['run'].tz),
+                                               hl.lateral(spent['run'].tx, spent['run'].tz), th)
+
+
+def test_the_thread_rank_is_wired_without_moving_the_budget_cut_off_the_bound(env, hl, box):
+    """A WIRING gate (reproducing the measurement costs ~8 min of search). Two things have to hold
+    together for the session-62 last-cycle rank to be safe:
+
+      * `rank_key('thread')` is available, needs the `HerdLine` (it is a herd-frame metric), and
+        orders by `objective.thread_cost`;
+      * the hard `_budget_cut` keeps cutting on `plan_bound`, NOT on the thread cost. `plan_bound` is
+        admissible at the steady state; the thread cost deliberately is not (`LATERAL_RATE` is a
+        SUSTAINED rate a single frame can beat), so cutting on it could drop a node that would have
+        finished. Rank on it; never prune on it."""
+    with pytest.raises(ValueError):
+        F.rank_key('thread')                       # no HerdLine
+    with pytest.raises(ValueError):
+        F.rank_key('whatever', hl=hl)
+    rows, _ = seeds.load_placements()
+    th = O.placement_thread(hl, rows)
+    key = F.rank_key('thread', rows, hl)
+    nodes = F.cycle1_nodes(env, hl, box, beam=4)
+    for n in nodes:
+        assert key(n['run'], n['frames'], n['m']) == pytest.approx(
+            O.thread_cost(n['frames'], hl.along(n['run'].tx, n['run'].tz),
+                          hl.lateral(n['run'].tx, n['run'].tz), th,
+                          ready=F._terminal_ready(n['run'])['ready']))
+
+    seen = []
+    real_cut = F._budget_cut
+    try:
+        F._budget_cut = lambda ns, k, b, label='', verbose=False: (seen.append(k), ns)[1]
+        F.cycle1_nodes(env, hl, box, beam=2, rank='thread', budget=10 ** 6)
+    finally:
+        F._budget_cut = real_cut
+    assert seen, "the budget cut was not reached"
+    n = nodes[0]
+    for k in seen:
+        assert k(n['run'], n['frames'], n['m']) == pytest.approx(
+            O.plan_bound(n['frames'], F._placement_dist(n['run'], rows))), \
+            "the budget cut must stay on the admissible bound even under the thread rank"
+
+
 def test_the_frame_minimal_terminal_stops_at_the_first_placement_with_link_moving(env, hl, box):
     """**Session 61: the re-aimed terminal.** Rule 3 replaced the near-rest arrival, so the terminal
     stops the moment Tetra is inside the placement band with Link STILL MOVING (`_terminal_ready`) --

@@ -99,6 +99,100 @@ def test_the_plan_bound_is_frames_plus_the_steady_state_remainder():
     assert O.plan_bound(40, math.hypot(100.0, 28.0)) > O.plan_bound(40, 100.0)
 
 
+# ------------------------------------------------- the lateral half of what a finish costs (s62)
+
+def test_thread_frames_prices_lateral_apart_from_along(env):
+    """**The correction `plan_bound` needed** (session 62): along and lateral are bought on the SAME
+    frames, so a finish costs the max of the two -- but at very different rates, `PUSH_CEILING` 13.0
+    against a measured `LATERAL_RATE` of ~3, so a unit of lateral is ~4x dearer.
+
+    Pinned as a shape, not as floats: on the thread the cost is zero; pure along is the along rate;
+    the same number of units of LATERAL costs strictly more; and two axes together cost the max, not
+    the sum (one push moves both)."""
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    th = O.placement_thread(hl)
+    lo, hi = th['along_lo'], th['along_hi']
+    mid = 0.5 * (lo + hi)
+
+    assert O.thread_frames(mid, th['lat_at'](mid), th) == pytest.approx(0.0, abs=1e-6)
+    # pure along, from behind the near end -- the along rate, and nothing else
+    assert O.thread_frames(lo - 26.0, th['lat_at'](lo), th) == \
+        pytest.approx(26.0 / O.PUSH_CEILING, abs=0.02)
+    # the SAME 26 u, but lateral: strictly dearer, by the ratio of the two rates
+    pure_lat = O.thread_frames(mid, th['lat_at'](mid) + 26.0, th)
+    assert pure_lat > 26.0 / O.PUSH_CEILING * 3.0
+    # both at once costs the max of the two, never their sum
+    both = O.thread_frames(lo - 26.0, th['lat_at'](lo) + 26.0, th)
+    assert both < 26.0 / O.PUSH_CEILING + pure_lat
+
+
+def test_thread_frames_is_minimised_over_where_on_the_thread_she_lands(env):
+    """The target is a 47.6 u SEGMENT, so a plan chooses WHERE on it to stop, and the two ends want
+    different laterals -- which is the whole session-61 arithmetic. From the s62 endpoint (along
+    907.9, lat -2.44) the far end is +76 u of along away and the near end +30 u plus 10.4 u of
+    lateral, and the search must find whichever is cheaper rather than aiming at a fixed point."""
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    th = O.placement_thread(hl)
+    h = O.thread_frames(907.9, -2.44, th)
+    at_near = max(abs(937.5 - 907.9) / O.PUSH_CEILING,
+                  abs(th['lat_at'](937.5) - (-2.44)) / O.LATERAL_RATE)
+    at_far = max(abs(984.1 - 907.9) / O.PUSH_CEILING,
+                 abs(th['lat_at'](984.1) - (-2.44)) / O.LATERAL_RATE)
+    assert h <= min(at_near, at_far) + 1e-9, "the minimum must beat aiming at either fixed end"
+    # ... and it is a genuine interior minimum here, not just the better endpoint
+    assert h < min(at_near, at_far) - 0.05
+
+
+def test_thread_cost_charges_for_lateral_only_near_the_finish(env):
+    """**Why this is the LAST cycle's rank and not the chain's** -- and the answer is the max form's,
+    not a policy bolted on top.
+
+    Mid-chain the lateral is FREE, correctly: at the s62 cycle-2 endpoint 39.9 u off the thread there
+    are still ~26 frames of along to push, which is more than the ~14 the lateral needs, so fixing it
+    costs nothing extra and the cost is identical to the on-thread endpoint's. That agrees with the
+    session-61 measurement that the mid-chain lateral OSCILLATES (+5.8, -39.9, +8.9) and ranking a
+    mid-chain beam on it would have discarded the survivor that came back.
+
+    At the cycle-3 endpoint, with only ~68 u of along left, the same arithmetic flips: 16.7 u of
+    lateral now needs MORE frames than the along does, so it becomes the binding term and the rank
+    finally sees it. `plan_bound` never does, at either range."""
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    th = O.placement_thread(hl)
+    near_lat = th['lat_at'](th['along_lo'])
+
+    mid_on = O.thread_cost(46, 590.9, near_lat, th)
+    mid_off = O.thread_cost(46, 590.9, near_lat - 39.9, th)
+    assert mid_off == pytest.approx(mid_on), \
+        "mid-chain, lateral must be free -- there are more along frames left than lateral ones"
+
+    end_on = O.thread_cost(69, 869.2, near_lat, th)
+    end_off = O.thread_cost(69, 869.2, 24.61, th)
+    assert end_off > end_on + 0.3, "at the endpoint the lateral must become the binding term"
+    # and it binds because it is the LATERAL, not because she is further from a point
+    assert O.thread_frames(869.2, 24.61, th) > abs(937.568 - 869.2) / O.PUSH_CEILING
+
+
+def test_thread_cost_floors_the_remainder_at_a_frame_while_rule_3_is_unmet(env):
+    """Rule 3 as a FLOOR on the remainder, not a penalty added to it: a frame where Link is not
+    still moving cannot BE the placement frame, so at least one more has to follow -- but with three
+    frames of herding still to do, being un-ready right now is genuinely free, and charging for it
+    would rank on a condition that has not come due."""
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    th = O.placement_thread(hl)
+    mid = 0.5 * (th['along_lo'] + th['along_hi'])
+    on_thread = th['lat_at'](mid)
+    assert O.thread_cost(70, mid, on_thread, th, ready=True) == pytest.approx(70.0, abs=1e-6)
+    assert O.thread_cost(70, mid, on_thread, th, ready=False) == pytest.approx(71.0, abs=1e-6)
+    far = O.thread_frames(th['along_lo'] - 40.0, on_thread, th)
+    assert far > 1.0, "pick a state whose remainder already exceeds a frame"
+    assert O.thread_cost(70, th['along_lo'] - 40.0, on_thread, th, ready=False) == \
+        O.thread_cost(70, th['along_lo'] - 40.0, on_thread, th, ready=True)
+
+
 # --------------------------------------------------------------------------- the walls
 
 def test_the_wall_metric_reproduces_the_console_s_own_brace_point(walls):
