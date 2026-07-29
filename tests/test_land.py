@@ -601,3 +601,34 @@ def test_sword_dash_forces_python_foot_path():
     assert sw._core is None, "sword-drawn dash must force the Python foot path (native can't pose DASHS)"
     assert sw.clone()._core is None, "the sword-mode Python-path fallback must survive clone()"
     FootSpeedF(native=True, sword=False)   # sheathed dash still constructs (native when built, else Py)
+
+
+def test_near_reversal_slide_keeps_dvar9_zero_and_does_not_raise():
+    """setSpeedAndAngleNormal's bVar2 arm (`d_a_player_main.cpp` 2780 / 2828): a near-reversal at
+    HIGH speed that is NOT a genuine stick flip keeps sliding with the travel chase skipped -- and
+    the decomp's explicit ``else { dVar9 = 0.0f; }`` means it also contributes NO acceleration.
+
+    The Python port dropped that else, so the arm left ``dVar9`` unbound and raised
+    UnboundLocalError from the `_set_normal_speed_f` call instead. It is reachable from a plain
+    junction search state (session 64 hit it), and the native port (`_anmc.pyx`
+    `_set_speed_and_angle_normal`, which inits dVar9 to 0.0) was always right -- so this gates the
+    Python path against BOTH the decomp and the native one.
+
+    Spying on the argument rather than the resulting speed keeps the assertion non-circular: the
+    decomp fact being gated is exactly "this arm passes 0.0"."""
+    from tww_sim.land.land import LandState, MOVE
+
+    s = LandState(state=MOVE, use_anim=False, native=False)
+    s.msd = 1.0                       # mStickDistance > 0.05
+    s.nspeed = 15.0
+    s.speedF = 15.0                   # speedF / max_nspeed > SLIP_THRESH (0.6) -> the fast arm
+    s.travel = 0x0000
+    s.target = 0x8000                 # cLib_distanceAngleS(target, travel) = 0x8000 > 0x7800
+    s.m34ea, s.m34dc = 0, 0           # getDirectionFromAngle(0) = DIR_FORWARD, NOT a genuine flip
+    assert s.speedF / s.max_nspeed > s.SLIP_THRESH, "setup must reach the fast near-reversal arm"
+
+    seen = []
+    s._set_normal_speed_f = lambda a, b, c, d: seen.append(a)
+    s._set_speed_and_angle_normal(s.F0, attention_lock=False)
+
+    assert seen == [0.0], "the bVar2 slide arm must pass dVar9 == 0.0 (decomp 2828-2830), got %r" % (seen,)

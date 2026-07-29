@@ -102,6 +102,9 @@ class _MoveMixin:
                     dVar9 = f32(dVar9 * f32(self.F14 * dVar11))
                 else:
                     dVar9 = 0.0
+            else:
+                # the bVar2 slide arm (2828): keep sliding, with NO acceleration.
+                dVar9 = 0.0
         else:
             dVar9 = 0.0
         # facing (shape_angle.y) chases m34E8 at DOUBLE travel's rate (<<1), snapping on if it crosses
