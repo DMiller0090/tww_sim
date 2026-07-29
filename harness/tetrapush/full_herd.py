@@ -1651,6 +1651,85 @@ def lateral_authority(run, hl, *, frames=6, n_dirs=24):
                 along_max=max(alongs), frames=int(frames), n=len(lats))
 
 
+def junction_authority(node, hl, placements=None, *, frames=5, box=None, ess_step=1, aim_step=16,
+                       arm_frames=12):
+    """**MEASURE what the JUNCTION can do to Tetra's corridor offset, and what it costs to use it**
+    -- `lateral_authority`'s method one stage earlier, and the measurement that retired session 63's
+    next step ("correct the lateral in the junction, not in the roll").
+
+    That next step rested on a premise worth checking before building a keep on it: that the junction
+    can move Tetra onto `objective.push_corridor` because Link repositions there in single frames.
+    The premise is TRUE and the conclusion does not follow, which only a measurement separates.
+
+    Hold each `junction_alphabet` member (with and without L) for ``frames`` frames and read the
+    corridor offsets reached; then walk every held family frame by frame to ``arm_frames`` and count
+    how many produce a gate-passing (`two_roll.junction_gates`) endpoint. Measured from the s62/s63
+    cycle-1 beam, entry offset 3.51:
+
+      * AUTHORITY IS REAL -- over the branches that SURVIVE every prune, 5 held frames span corridor
+        offset **0.79..14.10** on one cycle-1 node and **0.01..9.16** on another (Tetra lateral
+        spread 13.1 / 11.0 u, 2.6 / 2.2 u per frame, the same order as `LATERAL_RATE`; 14.6 u
+        unpruned). The corridor-good branches are not pruned and not exotic: they clear the box, the
+        walls and the regime with Link INSIDE the human's envelope (offset 0.01 at Link lat -7.56,
+        lead -46.6), against a beam that lands its own endpoints at 8.12 and 13.73.
+      * AND IT IS UNUSABLE, because those branches are CONSTANT-STICK families and a constant stick
+        never ARMS: **0** gate-passing endpoints over every held family, with the pursuit box on OR
+        off. Arming needs a varying sequence (clear the cone, then L + a toward-Tetra stick on the
+        delay-1 timing), so within the junction, steering Tetra and arming Link are mutually
+        exclusive. Running the shipped `junction_beam` from a corridor-good steered state confirms
+        it from the other side: 0 armed endpoints in 6 further frames.
+
+    So the junction's authority cannot be spent, and three frontier variants built on the premise are
+    inert or worse -- a corridor order MIXED into `_frontier_score`'s cut is byte-identical (every
+    candidate in a generation shares one corridor offset, and `sorted` is stable, so the corridor
+    order IS the base order), a uniform stride over the ties gives 74 endpoints and 0 rollable, and a
+    corridor order computed on a 2-frame lookahead gives 424 endpoints and 1.
+
+    Returns ``dict(entry_off, lo, hi, spread, per_frame, best, n_alive, n_held, armed, frames)``;
+    ``best`` is the corridor-best surviving hold. ``box`` prunes on `in_pursuit_box` when given."""
+    rows = placements if placements is not None else seeds.load_placements()[0]
+    cor = O.push_corridor(hl, rows)
+    walls = O.courtyard_walls()
+    run0 = node['run']
+    entry_off = cor['offset'](hl.along(run0.tx, run0.tz), hl.lateral(run0.tx, run0.tz))
+
+    def _alive(r):
+        return (not r._follow_warned
+                and O.frame_is_wall_free(r.link.pos_x, r.link.pos_z, r.tx, r.tz, walls)
+                and (box is None or in_pursuit_box(r, hl, box)))
+
+    reached, armed, n_held = [], 0, 0
+    for (sx, sy) in junction_alphabet(run0, hl, ess_step=ess_step, aim_step=aim_step):
+        for l in (0, 1):
+            n_held += 1
+            r = run0.clone()
+            for jf in range(1, max(int(frames), int(arm_frames)) + 1):
+                r.step(dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
+                            triggerL=255 if l else 0,
+                            substickX=T.CSTICK_NEUTRAL, substickY=0))
+                if not _alive(r):
+                    break
+                if jf <= int(arm_frames) \
+                        and T.junction_gates(r, hl, node['frames'] + jf) is None:
+                    armed += 1
+                if jf == int(frames):
+                    reached.append(dict(off=cor['offset'](hl.along(r.tx, r.tz),
+                                                          hl.lateral(r.tx, r.tz)),
+                                        t_lat=hl.lateral(r.tx, r.tz),
+                                        l_lat=hl.lateral(r.link.pos_x, r.link.pos_z),
+                                        lead=hl.lead(r.link.pos_x, r.link.pos_z, r.tx, r.tz),
+                                        stick=(sx, sy), l=l))
+    if not reached:
+        return None
+    lo = min(r['off'] for r in reached)
+    hi = max(r['off'] for r in reached)
+    lats = [r['t_lat'] for r in reached]
+    return dict(entry_off=entry_off, lo=lo, hi=hi, spread=max(lats) - min(lats),
+                per_frame=(max(lats) - min(lats)) / float(frames),
+                best=min(reached, key=lambda r: r['off']), n_alive=len(reached),
+                n_held=n_held, armed=armed, frames=int(frames))
+
+
 def glide_probe(run, frames, hl, placements, thread, *, max_frames=5, beam=4, n_dirs=12):
     """**The LAST cycle's endpoint keep: GLIDE-ABILITY, not the frame bound** (session 62) -- the
     terminal's counterpart of `roll_probe`, and the same lesson one stage later.

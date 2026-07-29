@@ -880,3 +880,46 @@ def test_cycle_unit_chains_from_the_recorded_entry_and_bit_confirms(env, hl, box
     c = F.confirm_plan(env, hl, best, want_rolls=2)
     assert c['bit_exact'] and c['talk_safe'] and c['rolls'] == 2 and c['ok']
     assert c['per_frame'] == best['m']['per_frame']    # same log, same frames -- exact
+
+
+def test_junction_authority_is_real_and_cannot_be_armed(env, hl, box):
+    """**Session 64: session 63's next step, retired by measurement.** It asked to correct Tetra's
+    lateral in the JUNCTION rather than the roll, on the premise that Link repositions there in
+    single frames. The premise is true; the conclusion is false, and the two halves are what this
+    pins so neither gets re-paid.
+
+    AUTHORITY IS REAL. Holding one `junction_alphabet` member for 5 frames spans several units of
+    Tetra's `objective.push_corridor` offset -- the same order as `LATERAL_RATE` -- and reaches
+    branches far closer to the corridor than the entry, all of them surviving the box, the walls and
+    the regime (`junction_authority`).
+
+    AND IT CANNOT BE SPENT: a constant stick NEVER arms. Zero held families produce a gate-passing
+    `two_roll.junction_gates` endpoint (measured with the pursuit box on and off), because arming
+    needs a VARYING sequence -- clear the +-90 deg cone, then L plus a toward-Tetra stick on the
+    delay-1 timing. Steering Tetra and arming Link are mutually exclusive inside the junction, which
+    is why a corridor term in `_frontier_score`'s cut is inert (session 63's move 2) and why running
+    the shipped `junction_beam` from a corridor-good steered state yields 0 armed endpoints.
+
+    Cheap by construction: one `cycle1_nodes` node, held sticks, no chain."""
+    n = F.cycle1_nodes(env, hl, box, beam=1)[0]
+    a = F.junction_authority(n, hl, box=box)
+    assert a is not None, "the junction must have SOME surviving held branch"
+
+    # the authority half
+    assert a['n_alive'] > 20, "too few surviving branches to call it authority (%d)" % a['n_alive']
+    assert a['spread'] > 5.0, \
+        "the junction's lateral authority over Tetra collapsed (%.2f u over %d frames)" \
+        % (a['spread'], a['frames'])
+    assert a['per_frame'] > 0.5 * O.LATERAL_RATE, \
+        "junction authority %.2f u/f is no longer the order of LATERAL_RATE %.2f" \
+        % (a['per_frame'], O.LATERAL_RATE)
+    assert a['lo'] < a['entry_off'], \
+        "the junction must be able to IMPROVE the corridor offset (%.2f vs entry %.2f)" \
+        % (a['lo'], a['entry_off'])
+
+    # the half that retires the move: none of it can be armed
+    assert a['armed'] == 0, \
+        "a held junction family now ARMS (%d gate-passing) -- session 63's move 2 is back on the " \
+        "table and the steer-then-arm probe should be re-run" % a['armed']
+    off = F.junction_authority(n, hl, box=None)
+    assert off['armed'] == 0, "still zero armed with the pursuit box removed -- the box is not the blocker"
