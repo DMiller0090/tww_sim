@@ -90,13 +90,27 @@ def _locked(run):
     return (atn is not None and atn.locked) or run.link.state == 9
 
 
+def _clone_for_atom(run0):
+    """Clone for the atom, in the planner's commanded-csangle convention: a WIRED camera is
+    detached (`seed_to_untarget` does the same for the reposition search) so `r.csangle = ...`
+    commands the value the sticks are decoded at. When the commanded csangle equals the live one,
+    the wired camera would have HELD it anyway (the (128, 0) manualCamera hold the atom's inputs
+    carry), so the prediction is replay-faithful; a snap that needs a DIFFERENT csangle records it
+    on the result (``csangle``) -- realizing it with a C-stick slew is the camera leg, the same
+    shape as the roll stage's ``target_cs``."""
+    r = run0.clone()
+    if getattr(r, 'camera', None) is not None:
+        r.camera = None
+    return r
+
+
 def snap_csangle(run0, *, step=512):
     """The turnaround's csangle window off THIS terminal state: the first csangle whose ESS frame
     snaps the facing (`reposition.turnaround`) while preserving the EBS. The herd junction sweeps
     the same window; a terminal with no window cannot run the atom (report, don't guess)."""
     from harness.tetrapush.reposition import turnaround
     for cs in range(0, 0x10000, int(step)):
-        c = run0.clone()
+        c = _clone_for_atom(run0)
         if (turnaround(c, cs) > _SNAP_MIN_TURN and c.link.state == 6
                 and c.link.speedF <= _SNAP_KEEP_SPEED):
             return cs
@@ -129,11 +143,15 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
       ``followed``      the follow shell tripped (dist > 230)
       ``run``, ``log``  the endpoint state + the exact inputs (extend a plan with them)
     """
-    r = run0.clone()
+    r = _clone_for_atom(run0)
     if csangle is None:
         csangle = snap_csangle(run0)
         if csangle is None:
-            return None
+            # The window exists for the ESS turnaround frame only; without one, the no-turnaround
+            # variants still run on the live csangle (the camera never needed to move).
+            if turnaround_first:
+                return None
+            csangle = int(run0.csangle)
     r.csangle = int(csangle)
     cs = int(r.csangle)
     down = hl.bearing_bam()
@@ -194,8 +212,10 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
             rec17_f = f + 1
         if r._follow_warned:
             break
-        if rec17_f is not None:
-            break                            # the handoff state: receding at the walk cap
+        if rec17_f is not None and freeze_run is not None:
+            # Handoff = receding at the cap AND separated: a deep terminal can recede at 17 with
+            # the centre still inside the 80 u bar, Tetra still taking push (see `fires`).
+            break
     dips = [rr['f'] for rr in rows
             if rr['disp'] < WALK_FLOOR and freeze_run is not None and rr['f'] >= freeze_run
             and (rec17_f is None or rr['f'] < rec17_f)]
@@ -203,8 +223,20 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
     tl = hl.lateral(r.tx, r.tz) - hl.lateral(t0[0], t0[1])
     return dict(rows=rows, run=r, log=log, freeze_f=freeze_run, reversed_f=reversed_f,
                 rec17_f=rec17_f, dips=dips, resid=math.hypot(ta, tl), resid_along=ta,
-                resid_lat=tl, l_ok=l_ok, followed=r._follow_warned,
+                resid_lat=tl, l_ok=l_ok, followed=r._follow_warned, csangle=cs,
                 d_e_end=rows[-1]['d_e'] if rows else None)
+
+
+def fires(res):
+    """Does one atom result satisfy rule 3 (the s65 bar)? The conditions in one place, so the
+    objective and the terminal consume the same acceptance: the L never acted with Tetra in the
+    cone and never locked (`l_ok`), the follow shell never tripped, the escape actually SEPARATES
+    (`freeze_f` -- herding complete = separation; a deep terminal can recede at the cap with the
+    centre still inside the 80 u bar and Tetra still taking push), the post-separation dips are
+    within Dereck's `DIP_BUDGET`, and the walk reaches the cap receding (`rec17_f`)."""
+    return bool(res is not None and res['l_ok'] and not res['followed']
+                and res['freeze_f'] is not None and len(res['dips']) <= DIP_BUDGET
+                and res['rec17_f'] is not None)
 
 
 def probe(run0, hl, *, max_frames=18):
@@ -219,15 +251,21 @@ def probe(run0, hl, *, max_frames=18):
     ex, ez = seeds.ENTRY_ROLL_POS
     b_entry = world_angle_s16(ex - run0.link.pos_x, ez - run0.link.pos_z)
     up_herd = (hl.bearing_bam() + 0x8000) & 0xFFFF
+    # The snap window depends only on the start state -- sweep it once for all knob variants.
+    cs = snap_csangle(run0)
     best = None
     for ta in (False, True):
         for side in (1, -1):
             for exit_b in (b_entry, up_herd):
+                if ta and cs is None:
+                    continue
                 r = escape_atom(run0, hl, turnaround_first=ta, rotate_side=side,
-                                exit_bearing=exit_b, max_frames=max_frames)
+                                exit_bearing=exit_b,
+                                csangle=cs if cs is not None else int(run0.csangle),
+                                max_frames=max_frames)
                 if r is None:
                     continue
-                key = (not r['l_ok'], r['followed'], len(r['dips']),
+                key = (not r['l_ok'], r['followed'], r['freeze_f'] is None, len(r['dips']),
                        r['rec17_f'] if r['rec17_f'] is not None else 99,
                        r['d_e_end'] if r['d_e_end'] is not None else 1e9)
                 r['knobs'] = dict(turnaround_first=ta, rotate_side=side, exit_bearing=exit_b)

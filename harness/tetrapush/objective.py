@@ -22,10 +22,14 @@ him to a FIXED clip entry (`full_herd.walk_to_entry` / `place_on_thread` / `dece
      of this plan may be spent positioning Link for the clip.
   2. **This is a TAS: frames are the objective.** Maximum acceptable timeloss versus an all-out
      push is `TIMELOSS_BUDGET` frames, `TIMELOSS_PREFERRED` preferred.
-  3. **The terminal keeps its speed.** At the placement frame Link must still be MOVING, so a
-     1-frame 180 turnaround (`reposition.turnaround`) carries him away from Tetra with speed to
-     spare, ready to set up the roll. This is what retires the near-rest arrival gate: the
-     deceleration `arrival_quality` demanded costs exactly the frames rule 2 refuses.
+  3. **The terminal keeps its speed, because the ESCAPE ATOM must fire from it** (session 65 --
+     this supersedes the s60 "1-frame 180" reading, which s64 falsified: the negation flips travel
+     AND the speed sign, so a bare 180 is the LAUNCH, not the escape). The real escape is Dereck's
+     away walk (`away_walk.escape_atom`: one L frame converts the EBS to positive, a rotate frame,
+     then a backwards slam reverses with no zero crossing), and the exact rule 3 is that it fires
+     -- `l_ok`, dips within `DIP_BUDGET`, receding at the walk cap (`escape_ready`). The conversion
+     MIRRORS the terminal EBS speed, which is why the near-rest arrival is retired: a rest terminal
+     has nothing to convert.
   4. **Neither actor touches a wall during the herd.** Wall collision is deliberately NOT modelled
      in the Courtyard `FreeRun` (it is expensive, and the herd has no business near a wall), so
      instead of building `WallCorrect` the search must stay in the region where its absence cannot
@@ -267,7 +271,8 @@ def thread_cost(frames, t_along, t_lat, thread, *, ready=True, lateral_rate=None
     frame beats `PUSH_CEILING`, so a node whose lateral this over-prices by a frame is still a node
     that might finish. It orders a beam; `_budget_cut` keeps cutting on the bound.
 
-    ``ready`` is rule 3 (`turnaround_ready`). A frame where Link is not still moving toward the 180
+    ``ready`` is rule 3's CHEAP half (`terminal_moving`; the exact bar is the escape atom,
+    `escape_ready`, probed on winners rather than per frame). A frame where Link is at rest
     cannot BE the placement frame, so at least one more frame has to follow it -- which is a floor on
     ``h``, not a penalty added to it: with three frames of herding still to do, being un-ready right
     now is genuinely free, and pretending otherwise would rank on a condition that has not come due."""
@@ -442,30 +447,49 @@ def in_regime(lx, lz, tx, tz, ly=None, ty=None):
 
 # --------------------------------------------------------------------------- rule 3: the terminal
 
-def turnaround_ready(speedF, facing, lx, lz, tx, tz):
-    """Dereck's terminal condition: at the placement frame Link must still be MOVING, so that a
-    1-frame 180 (`reposition.turnaround` -- a facing snap that PRESERVES speed) leaves him walking
-    away from Tetra rather than starting from rest.
+def terminal_moving(speedF):
+    """**The CHEAP per-frame half of rule 3**: is Link still MOVING at this frame?
 
-    `speedF` is signed against `shape_angle.y`: an EBS backslide carries a large NEGATIVE speedF
-    with the facing 0x8000 from travel, and is just as much "moving" as a positive walk -- so the
-    test is on the ground-velocity MAGNITUDE, and on which way that velocity points after the snap.
+    Deliberately this weak. The predicate that used to live here scored a 1-frame 180 snap as the
+    escape -- session 64 falsified it (the proc-7 negation flips travel 0x8000 AND negates speed,
+    so they CANCEL: it is the LAUNCH, not the escape; and it MIRRORS the entry speed, so a weak EBS
+    arms a weak positive run while still reading ready). The REAL rule 3 is that the s65 escape
+    atom fires from the terminal state (`escape_ready`), which is a rollout, not a scalar -- far
+    too expensive per beam candidate. So beams rank on this scalar (a resting Link can never fire
+    the atom: the conversion mirrors what the EBS brings), and the exact probe runs on winners
+    (`replay_and_score` / the solve).
 
-    Returns ``dict(speed, travel_bam, away, ready)``: the speed magnitude, the direction Link is
-    actually travelling, the component of that travel directly away from Tetra AFTER the 180, and
-    whether both conditions hold.
-    """
+    Returns ``dict(speed, ready)``; ``speed`` is the ground-velocity magnitude (an EBS backslide's
+    large NEGATIVE speedF is just as much moving as a forward walk)."""
     speed = abs(float(speedF))
-    # Travel = facing, or facing + 0x8000 when speedF is negative (the DIR_BACKWARD convention the
-    # ATN procs set up: `current.angle.y += 0x8000; mNormalSpeed *= -1`).
-    travel = (int(facing) + (0x8000 if speedF < 0 else 0)) & 0xFFFF
-    # A 180 turnaround snaps the facing across travel; the resulting motion is the reverse.
-    after = (travel + 0x8000) & 0xFFFF
-    ang = after / 65536.0 * 2.0 * math.pi
-    vx, vz = math.sin(ang) * speed, math.cos(ang) * speed
-    d = math.hypot(lx - tx, lz - tz)
-    away = (vx * (lx - tx) + vz * (lz - tz)) / d if d > 1e-9 else 0.0
-    return dict(speed=speed, travel_bam=travel, away=away, ready=speed > 0.0 and away > 0.0)
+    return dict(speed=speed, ready=speed > 0.0)
+
+
+def escape_ready(run, hl, **kw):
+    """**Rule 3, EXACT (session 65)**: does the escape atom fire from this terminal state?
+
+    Dereck's terminal condition is that the placement's last push frames END the herd -- the away
+    walk (`away_walk.escape_atom`: convert the EBS to positive with one L frame, rotate, slam
+    backwards) separates Link receding at the walk cap with at most `DIP_BUDGET` sub-17 frames.
+    This runs the atom's small knob sweep (`away_walk.probe`) on a CLONE and reads the acceptance
+    off the measurement (`away_walk.fires`), so it is the predicate itself, not a proxy of it.
+
+    Returns ``dict(ready, speed, l_ok, followed, dips, rec17_f, resid, resid_along, resid_lat,
+    atom)``; ``atom`` is the full probe result (knobs, rows, log -- extend a plan with its inputs),
+    or None when no variant even runs. ``resid`` is Tetra's displacement over the atom's conversion
+    frames -- the terminal targeting's deterministic undershoot, probed per state, never a
+    constant."""
+    from harness.tetrapush import away_walk as AW      # lazy: away_walk imports full_herd
+    res = AW.probe(run, hl, **kw)
+    out = dict(ready=AW.fires(res), speed=abs(float(run.link.speedF)), atom=res)
+    if res is None:
+        out.update(l_ok=None, followed=None, dips=None, rec17_f=None,
+                   resid=None, resid_along=None, resid_lat=None)
+    else:
+        out.update(l_ok=res['l_ok'], followed=res['followed'], dips=len(res['dips']),
+                   rec17_f=res['rec17_f'], resid=res['resid'],
+                   resid_along=res['resid_along'], resid_lat=res['resid_lat'])
+    return out
 
 
 # --------------------------------------------------------------------------- the whole score
@@ -517,10 +541,16 @@ def placement_thread(hl, placements=None):
                 max_chord_dev=dev, lat_at=lambda a: slope * a + intercept)
 
 
-def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMENT_BAND):
+def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMENT_BAND, run=None):
     """Score a plan against the whole objective. ``rows`` is a list of per-frame dicts carrying
     ``sim_link``/``sim_tetra``/``sim_facing``/``speedF`` (the `FreeRun.step(record=True)` shape) or
     the ``link``/``tetra`` shape `search.rollout` emits.
+
+    ``run`` (the endpoint `FreeRun`, when the caller has one -- `replay_and_score` always does)
+    upgrades rule 3 from the cheap scalar (`terminal_moving`) to the EXACT escape-atom probe
+    (`escape_ready`): the terminal verdict is then whether the away walk actually fires from the
+    plan's own endpoint, which is the s65 bar. Rows-only callers get the cheap half and should not
+    quote ``terminal_ok`` as final.
 
     Returns the figures Dereck's rules ask for, plus the verdict on each. Nothing here tunes or
     ranks -- it REPORTS, so a search can prune on the pieces and a session can state where a plan
@@ -550,9 +580,15 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
             left_regime = i + 1
 
     (lx, lz), (tx, tz), facing, speedF = _pos(rows[-1])
+    term = escape_ready(run, hl) if run is not None else terminal_moving(speedF or 0.0)
+    # The plan ends at the atom's SLAM (s66): when the exact rule 3 fires, placement, thread
+    # position and frame count are read POST-atom -- see the docstring and `full_herd._atom_place`.
+    atom_frames = 0
+    if term.get('atom') is not None and term['ready']:
+        tx, tz = term['atom']['run'].tx, term['atom']['run'].tz
+        atom_frames = term['atom']['freeze_f']
     near = min(rows_p, key=lambda p: math.hypot(p['x'] - tx, p['z'] - tz))
     pd = math.hypot(near['x'] - tx, near['z'] - tz)
-    term = turnaround_ready(speedF or 0.0, facing or 0, lx, lz, tx, tz)
 
     # Where the endpoint sits on the target SEGMENT (`placement_thread`): the lateral must be inside
     # its ~10 u window or NO along can place her, however far she is pushed.
@@ -565,7 +601,7 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
     t0 = env['cyl'][0]['tetra']['pos']
     budget = push_budget(rows, hl, origin=(t0[0], t0[-1]))
 
-    frames = len(rows)
+    frames = len(rows) + atom_frames        # the herd ends at the slam, not at the glide handoff
     timeloss = frames - floor['frames_int']
     complete = pd <= band
     return dict(
@@ -581,7 +617,7 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
         placeable=(th['lat_lo'] - lat_tol <= t_lat <= th['lat_hi'] + lat_tol),
         wall_margin=worst_margin, wall_margin_at=worst_at, wall_ok=worst_margin > 0.0,
         left_regime_at=left_regime, regime_ok=left_regime is None,
-        terminal=term, terminal_ok=term['ready'],
+        terminal=term, terminal_ok=term['ready'], atom_frames=atom_frames,
         push=budget['push'], sideways=budget['sideways'],
         push_saturation=budget['saturation'], sideways_frames=budget['sideways_frames'],
     )
@@ -604,7 +640,8 @@ def replay_and_score(env, log, **kw):
         warnings.simplefilter('ignore')
         for d in log:
             rows.append(run.step(d))
-    return score_plan(env, rows, **kw)
+        # rule 3 EXACT: the endpoint run is in hand, so the escape atom is probed for real
+        return score_plan(env, rows, run=run, **kw)
 
 
 def verdict(sc):
@@ -694,8 +731,16 @@ def _print_score(sc):
                                 else "LEFT at frame %d (unmodelled stt-4 follow)"
                                      % sc['left_regime_at']))
     t = sc['terminal']
-    print("  terminal    speed %.3f, away-after-180 %+.3f u/frame -> %s"
-          % (t['speed'], t['away'], "READY" if t['ready'] else "NOT READY"))
+    if 'l_ok' in t:                                    # the EXACT form (the atom was probed)
+        if t['atom'] is None:
+            print("  terminal    speed %.3f, NO escape-atom variant runs -> NOT READY" % t['speed'])
+        else:
+            print("  terminal    speed %.3f; escape atom l_ok=%s dips=%s rec17 f%s resid %.1f u -> %s"
+                  % (t['speed'], t['l_ok'], t['dips'], t['rec17_f'], t['resid'],
+                     "READY" if t['ready'] else "NOT READY"))
+    else:
+        print("  terminal    speed %.3f (moving -- the cheap half; the exact bar is the atom) -> %s"
+              % (t['speed'], "READY" if t['ready'] else "NOT READY"))
     print("  VERDICT     %s" % ("PASS" if verdict(sc) else "fail"))
 
 

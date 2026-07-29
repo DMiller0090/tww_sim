@@ -364,10 +364,10 @@ def test_the_frame_minimal_terminal_stops_at_the_first_placement_with_link_movin
     already inside it.
 
     Gated on the CLOSING synthetic arrival (`synthetic_hot_arrival` -- Link hot behind Tetra, a few
-    tens of u short of a coord), because that is the geometry rule 3 keys on: at a push frame Link is
-    travelling INTO Tetra, so the 180 sends him away. (A post-roll cycle-1 endpoint is already
-    receding, where the 180 would turn him back into her, so it correctly reads NOT ready -- that is
-    the predicate working, not a wrinkle in the terminal.) Synthetic, so no bit-confirm -- the same
+    tens of u short of a coord). Since session 65 the per-frame `_terminal_ready` is the cheap
+    scalar (MOVING -- `objective.terminal_moving`; the s64 measurement falsified the old 180-snap
+    form), and the exact rule 3 is the escape atom, probed on winners rather than per frame -- this
+    test pins the non-atom stop rule's shape. Synthetic, so no bit-confirm -- the same
     convention as the s49-s51 recipe gates; the band is widened because a sub-unit placement is the
     search problem, not the stop rule under test here.
 
@@ -394,6 +394,38 @@ def test_the_frame_minimal_terminal_stops_at_the_first_placement_with_link_movin
     nodes = F.cycle1_nodes(env, hl, box, beam=2)
     tt_p = F.terminal_targeting(nodes, hl, max_frames=4, beam=12, objective='placement')
     assert tt_p['best']['score'] == tt_p['best']['dist'] == tt_p['dist']
+
+
+def test_the_atom_wired_terminal_places_post_atom_at_the_slam(env, hl):
+    """**Session 66: the terminal is wired to the escape atom's residual.** The atom's conversion
+    frames keep pushing Tetra ~35-45 u down-corridor after the glide hands off, so in atom mode
+    (the ``'thread'`` objective's default) "placed" is a POST-atom fact read at the slam frame,
+    and the target the glide aims at is coord-minus-residual -- with the residual PROBED off the
+    terminal state (`objective.escape_ready` -> `_atom_place`), never a constant.
+
+    Gated the way the recipe says to use it: probe the bed's own residual first, then start Tetra
+    exactly that far short of the coord -- the atom must then land her ON it (band widened to the
+    synthetic convention; sub-unit placement is the search's problem, the mechanism is what is
+    pinned). Frames count to the SLAM (where the herd ends); the log carries the whole atom
+    through the receding-at-cap handoff for the entry leg."""
+    node0 = F.synthetic_hot_arrival(env, hl, 287, d_short=0.0, feet=64.0)
+    r0 = O.escape_ready(node0['run'], hl)
+    assert r0['ready'], "the atom must fire from the s65 bed"
+
+    node = F.synthetic_hot_arrival(env, hl, 287, d_short=r0['resid_along'], feet=64.0)
+    tt = F.terminal_targeting([node], hl, max_frames=2, beam=6, objective='thread', band=6.0)
+    p = tt['placed'] or tt['closest_atom']
+    assert p is not None and p.get('atom') is not None, "no atom placement was even probed"
+    assert p['dist'] <= 6.0, \
+        "starting the probed residual short must land Tetra on the coord post-atom (%.2f u)" % p['dist']
+    assert p['frames'] == p['pre_frames'] + p['atom']['freeze_f'], "frames must count to the SLAM"
+    assert len(p['log']) == p['pre_frames'] + len(p['atom']['log']), \
+        "the log must carry the whole atom through the handoff"
+    # rule 3 exact rode in with the placement: the atom that placed her is an accepted escape
+    from harness.tetrapush import away_walk as AW
+    assert AW.fires(p['atom'])
+    # and the pre-atom candidate is preserved for the acceptance replay / confirm
+    assert p['pre_run'] is not None and p['pre_frames'] == len(p['pre_log'])
 
 
 def test_a_dumped_beam_rebuilds_bit_exact_from_its_input_logs(env, hl, box, tmp_path):

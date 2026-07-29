@@ -1599,10 +1599,10 @@ def _terminal_alphabet(run, hl, *, n_dirs=24, mags=(0.08, 0.2, 0.35, 0.5, 0.7, 1
 
 
 def _terminal_ready(run):
-    """Rule 3 (`objective.turnaround_ready`) off a live run: is Link still MOVING at this frame, so
-    the 1-frame 180 carries him away from Tetra with speed in hand?"""
-    return O.turnaround_ready(run.link.speedF, run.link.facing,
-                              run.link.pos_x, run.link.pos_z, run.tx, run.tz)
+    """Rule 3's CHEAP half off a live run (`objective.terminal_moving`): is Link still MOVING at
+    this frame? The EXACT rule 3 is the escape atom (`objective.escape_ready` -- a rollout, run on
+    winners and on `terminal_targeting`'s placement candidates, never per beam frame)."""
+    return O.terminal_moving(run.link.speedF)
 
 
 def lateral_authority(run, hl, *, frames=6, n_dirs=24):
@@ -1782,8 +1782,15 @@ def glide_probe(run, frames, hl, placements, thread, *, max_frames=5, beam=4, n_
     return best
 
 
-def _terminal_score(run, hl, placements, objective, w_deficit, w_approach, frames=0, thread=None):
+def _terminal_score(run, hl, placements, objective, w_deficit, w_approach, frames=0, thread=None,
+                    resid=None):
     """The terminal beam's rank key.
+
+    ``resid`` (session 66, the atom wiring) shifts the ``'thread'`` rank by the escape atom's
+    probed residual ``(resid_along, resid_lat)``: the atom's conversion frames keep pushing Tetra
+    ~35-45 u down-corridor AFTER the glide hands off, so the glide must aim at coord-minus-residual
+    -- ranking the POST-atom landing point, not the pre-atom one. Probed per terminal state
+    (`_atom_place` updates the estimate as it measures), never a constant.
 
     ``'thread'`` (session 62, THE objective's rank) = `objective.thread_cost`: the plan length this
     trajectory implies with along and lateral counted at the rates the plow achieves on EACH, and
@@ -1807,15 +1814,51 @@ def _terminal_score(run, hl, placements, objective, w_deficit, w_approach, frame
     if objective == 'frame_minimal':
         return O.plan_bound(frames, pd), pd
     if objective == 'thread':
-        return O.thread_cost(frames, hl.along(run.tx, run.tz), hl.lateral(run.tx, run.tz),
-                             thread, ready=_terminal_ready(run)['ready']), pd
+        a, la = hl.along(run.tx, run.tz), hl.lateral(run.tx, run.tz)
+        if resid is not None:
+            a, la = a + resid[0], la + resid[1]
+        return O.thread_cost(frames, a, la, thread, ready=_terminal_ready(run)['ready']), pd
     deficit = max(0.0, CO_RADII_BAR - _centre_feet(run))
     return pd + w_deficit * deficit + w_approach * max(0.0, _approach_rate(run)), pd
 
 
+def _atom_place(cand, hl, placements, band):
+    """**Run the escape atom from one terminal candidate and read the placement where the plan
+    actually ENDS: at the slam (separation) frame, AFTER the conversion frames' push** (session 66,
+    wiring the s65 atom's residual into the terminal).
+
+    The atom's conversion frames keep pushing Tetra (they are placement frames -- `away_walk`), so
+    a candidate whose PRE-atom distance reads 0 is really ~35-45 u PAST the coord once the escape
+    runs. This is the exact form of that accounting: probe the atom (`away_walk.probe`, the small
+    knob sweep), require it to FIRE (rule 3 exact, `away_walk.fires`), and measure Tetra's distance
+    to the nearest genuine coord at the atom's endpoint -- she is frozen from the slam on, so the
+    endpoint distance IS the slam-frame distance. The residual is read off the probe per state,
+    never a constant.
+
+    Returns None when no variant fires; else a node-shaped dict: ``frames`` counts to the SLAM
+    (where the herd ends -- rule 2's currency), ``log`` carries the WHOLE atom (through the
+    receding-at-cap handoff, where the entry leg takes over, `handoff_frames`), ``dist`` is the
+    post-atom placement distance, ``placed_ok`` = inside ``band``, ``atom`` the probe result
+    (knobs, per-frame rows, the commanded ``csangle`` -- the camera leg realizes it later, like
+    the roll stage's target_cs)."""
+    from harness.tetrapush import away_walk as AW
+    res = AW.probe(cand['run'], hl)
+    if not AW.fires(res):
+        return None
+    r = res['run']
+    pd = _placement_dist(r, placements)
+    fr = cand['frames'] + res['freeze_f']
+    return dict(run=r, log=cand['log'] + res['log'], frames=fr, dist=pd,
+                score=O.plan_bound(fr, pd), atom=res, placed_ok=pd <= band,
+                handoff_frames=cand['frames'] + len(res['log']),
+                # the pre-atom candidate: the log the acceptance test replays (score_plan's exact
+                # rule 3 then re-fires the atom from ITS endpoint) and the state confirm_plan pins
+                pre_run=cand['run'], pre_log=cand['log'], pre_frames=cand['frames'])
+
+
 def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                        n_dirs=24, objective='placement', w_deficit=1.0, w_approach=2.0,
-                       band=None, verbose=False):
+                       band=None, atom=None, atom_probes=2, verbose=False):
     """**The TERMINAL cycle, ranked by PLACEMENT distance instead of u/frame** -- the endgame stage
     the chain hands off to once one more full roll would OVERSHOOT the cluster.
 
@@ -1852,6 +1895,18 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
     of score and can win back at most `PUSH_CEILING`/`PUSH_CEILING` = 1.0 of it, so ``best`` sits at
     the start of the glide by construction and says nothing about how close the glide came.
 
+    **The atom wiring (session 66, default in ``'thread'`` mode; ``atom=`` overrides):** the s65
+    escape atom's conversion frames keep pushing Tetra ~35-45 u down-corridor after the glide hands
+    off, so "on the coord" is a POST-atom fact. In atom mode the thread rank aims the glide at
+    coord-minus-residual (`_terminal_score(resid=)`, the residual probed off the node and refined
+    by every fire), the old pre-atom ``dist <= band`` placement is disabled, and each generation's
+    most-landable candidates (``atom_probes`` of them, by |pre-atom dist - residual|) run
+    `_atom_place`: the full probe, rule 3 EXACT (`away_walk.fires`), placement read at the slam
+    frame. ``placed``/``done`` nodes then carry the atom (its log through the handoff, knobs, the
+    commanded csangle) and their ``frames`` count to the SLAM -- where the herd actually ends.
+    ``closest_atom`` is the best post-atom placement probed anywhere (the atom-mode analogue of
+    ``closest``).
+
     ``closest_ready`` (session 63) is ``closest`` restricted to states satisfying rule 3, and it exists
     because ``closest`` is blind to that rule while the two measurably disagree: the same chain under
     two different cycle-3 keeps ends either **31.406 u** out with ``ready=False`` or **33.482 u** out at
@@ -1871,15 +1926,31 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
     walls = O.courtyard_walls()
     thread = O.placement_thread(hl, placements)
     stop_when_placed = objective in ('frame_minimal', 'thread')
+    # Atom mode (s66) defaults ON for the objective's own rank; the other ranks keep the
+    # pre-atom semantics their gates pin. See the docstring.
+    atom = (objective == 'thread') if atom is None else bool(atom)
     best = None
     placed = None                     # the EARLIEST frame that satisfies rules 1 + 3
     closest = None                    # the smallest placement distance at ANY frame (diagnostic)
     # ...and the same among rule-3-MET states, which `closest` is blind to -- see the docstring
     closest_ready = None
+    closest_atom = None               # atom mode: the best POST-atom placement probed anywhere
     per_node = []
     for node in nodes:
+        est = None                    # the probed atom residual (along, lat) -- the rank shift
+        if atom:
+            ap0 = _atom_place(dict(run=node['run'], log=node['log'], frames=node['frames']),
+                              hl, placements, band)
+            if ap0 is not None:
+                est = (ap0['atom']['resid_along'], ap0['atom']['resid_lat'])
+                closest_atom = ap0 if closest_atom is None or (
+                    (ap0['dist'], ap0['frames'])
+                    < (closest_atom['dist'], closest_atom['frames'])) else closest_atom
+                if ap0['placed_ok'] and (placed is None or (ap0['frames'], ap0['dist'])
+                                         < (placed['frames'], placed['dist'])):
+                    placed = dict(ap0, plan=node.get('plan', []))
         s0, d0 = _terminal_score(node['run'], hl, placements, objective, w_deficit, w_approach,
-                                 node['frames'], thread)
+                                 node['frames'], thread, resid=est)
         node_best = dict(run=node['run'], log=node['log'], frames=node['frames'], dist=d0,
                          score=s0, plan=node.get('plan', []))
         if best is None or s0 < best['score']:
@@ -1906,12 +1977,15 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                         seen.add(tag)
                         fr = nd['frames'] + 1
                         score, dist = _terminal_score(r, hl, placements, objective,
-                                                      w_deficit, w_approach, fr, thread)
+                                                      w_deficit, w_approach, fr, thread,
+                                                      resid=est)
                         cand = dict(run=r, log=nd['log'] + [d], frames=fr,
                                     dist=dist, score=score)
                         nxt.append(cand)
-                        if dist <= band and _terminal_ready(r)['ready']:
-                            done.append(cand)          # rules 1 + 3 both met, at THIS frame
+                        # Pre-atom placement (non-atom ranks only): in atom mode the escape would
+                        # push her ~35-45 u past the coord, so `_atom_place` below decides.
+                        if not atom and dist <= band and _terminal_ready(r)['ready']:
+                            done.append(cand)
                         if score < best['score']:
                             best = dict(cand, plan=node.get('plan', []))
                         if score < node_best['score']:
@@ -1922,6 +1996,21 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                                 closest_ready is None
                                 or (dist, fr) < (closest_ready['dist'], closest_ready['frames'])):
                             closest_ready = dict(cand, plan=node.get('plan', []))
+            if atom and nxt:
+                # Probe the most-landable candidates: nearest |pre-atom dist - probed residual|
+                # (nearest coord until one is measured); each fire refines the rank's estimate.
+                key = ((lambda c: abs(c['dist'] - math.hypot(est[0], est[1])))
+                       if est is not None else (lambda c: c['dist']))
+                for cand in sorted(nxt, key=key)[:int(atom_probes)]:
+                    ap = _atom_place(cand, hl, placements, band)
+                    if ap is None:
+                        continue
+                    est = (ap['atom']['resid_along'], ap['atom']['resid_lat'])
+                    if closest_atom is None or (ap['dist'], ap['frames']) < (
+                            closest_atom['dist'], closest_atom['frames']):
+                        closest_atom = dict(ap, plan=node.get('plan', []))
+                    if ap['placed_ok']:
+                        done.append(ap)              # rules 1 + 3-EXACT met, at the slam frame
             if done:
                 done.sort(key=lambda c: c['dist'])
                 cand = dict(done[0], plan=node.get('plan', []))
@@ -1941,7 +2030,8 @@ def terminal_targeting(nodes, hl, placements=None, *, max_frames=18, beam=64,
                      '' if placed is None else '   [PLACED at %d f, %.3f u]'
                      % (placed['frames'], placed['dist'])))
     return dict(best=best, dist=best['dist'] if best else None, per_node=per_node,
-                placed=placed, closest=closest, closest_ready=closest_ready, band=band)
+                placed=placed, closest=closest, closest_ready=closest_ready,
+                closest_atom=closest_atom, band=band)
 
 
 def cluster_distance(env, hl):
@@ -2258,21 +2348,37 @@ def _cmd_solve(env, hl, kw):
     tt = terminal_targeting(last, hl, placements, max_frames=int(kw.get('tframes', 12)),
                             beam=int(kw.get('tbeam', 48)),
                             objective=kw.get('terminal', 'thread'), verbose=True)
-    win = tt['placed'] or tt['closest']
+    win = tt['placed'] or tt.get('closest_atom') or tt['closest']
     print("\n(%.0f s)  terminal: %s" % (time.perf_counter() - t0,
-                                        "PLACED at frame %d, %.3f u from coord"
+                                        "PLACED at frame %d (the SLAM), %.3f u from coord"
                                         % (win['frames'], win['dist']) if tt['placed'] else
                                         "NOT placed -- closest %.3f u at frame %d"
                                         % (win['dist'], win['frames'])))
+    if tt['placed'] and win.get('atom') is not None:
+        a = win['atom']
+        print("            atom: knobs %s csangle %s resid %.1f u dips %d rec17 f%s "
+              "(handoff at plan frame %d)"
+              % (a.get('knobs'), a.get('csangle'), a['resid'], len(a['dips']), a['rec17_f'],
+                 win.get('handoff_frames', win['frames'])))
+    if not tt['placed'] and tt.get('closest_atom') is not None:
+        ca = tt['closest_atom']
+        print("            closest POST-ATOM placement (rule 3 exact): %.3f u at slam frame %d"
+              % (ca['dist'], ca['frames']))
     if not tt['placed'] and tt['closest_ready'] is not None:
         # `closest` is rule-3-blind, and the two disagree (session 63) -- print both frontiers
         cr = tt['closest_ready']
-        print("            closest with rule 3 MET (`ready`): %.3f u at frame %d%s"
+        print("            closest with rule 3-cheap MET (moving): %.3f u at frame %d%s"
               % (cr['dist'], cr['frames'],
                  '  (same state)' if cr['frames'] == win['frames']
                  and abs(cr['dist'] - win['dist']) < 1e-9 else ''))
-    c = confirm_plan(env, hl, win)
-    sc = O.replay_and_score(env, win['log'], hl=hl, placements=placements)
+    # An atom win confirms/scores on its PRE-atom log (the atom ran camera-detached); the
+    # acceptance replay's exact rule 3 re-fires the atom from that endpoint.
+    if win.get('pre_log') is not None:
+        c = confirm_plan(env, hl, dict(win, run=win['pre_run'], log=win['pre_log']))
+        sc = O.replay_and_score(env, win['pre_log'], hl=hl, placements=placements)
+    else:
+        c = confirm_plan(env, hl, win)
+        sc = O.replay_and_score(env, win['log'], hl=hl, placements=placements)
     print("  confirm (fresh replay of its own log): bit_exact=%s talk_safe=%s wall_ok=%s -> %s"
           % (c['bit_exact'], c['talk_safe'], c['wall_ok'], 'CONFIRMED' if c['ok'] else 'NOT'))
     print("\n  ACCEPTANCE TEST (`objective.score_plan`):")

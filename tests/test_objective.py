@@ -414,21 +414,42 @@ def test_in_regime_is_the_follow_engage_distance():
 
 # --------------------------------------------------------------------------- the terminal
 
-def test_turnaround_ready_accepts_a_moving_ebs_and_rejects_rest():
-    """Dereck's terminal: Link must still be MOVING at the placement so the 1-frame 180 carries him
-    away from Tetra. An EBS backslide has a large NEGATIVE speedF with the facing 0x8000 from
-    travel -- just as much "moving" as a forward walk -- so the test is on the ground-velocity
-    magnitude and on which way it points after the snap, never on the sign of `speedF`."""
-    # Link at the origin, Tetra 100 u in +z. Facing +z (0) while backsliding = travelling -z, so a
-    # 180 turns him to +z -- straight INTO her: not ready.
-    into = O.turnaround_ready(-25.7, 0x0000, 0.0, 0.0, 0.0, 100.0)
-    assert into['speed'] == pytest.approx(25.7) and into['away'] < 0.0 and not into['ready']
-    # Facing -z while backsliding = travelling +z (toward her); the 180 sends him away: ready.
-    away = O.turnaround_ready(-25.7, 0x8000, 0.0, 0.0, 0.0, 100.0)
-    assert away['away'] == pytest.approx(25.7, abs=1e-3) and away['ready']
-    # At rest nothing is ready, whatever the facing -- this is the near-rest arrival the s44-s51
-    # endgame was built around, and the rule that retires it.
-    assert not O.turnaround_ready(0.0, 0x8000, 0.0, 0.0, 0.0, 100.0)['ready']
+def test_terminal_moving_is_the_cheap_scalar_half_of_rule_3():
+    """Rule 3's per-frame form is deliberately just "moving" (session 65): the s64 measurement
+    falsified the old 180-snap predicate (the negation flips travel AND the speed sign so they
+    cancel, and it MIRRORS the entry speed), so the beams keep only the scalar a resting Link
+    fails -- the conversion has nothing to mirror from rest -- and the EXACT bar is the escape
+    atom (`escape_ready`), probed on winners."""
+    ebs = O.terminal_moving(-25.7)
+    assert ebs['speed'] == pytest.approx(25.7) and ebs['ready'], \
+        "an EBS backslide is just as much moving as a forward walk"
+    assert O.terminal_moving(26.0)['ready']
+    # At rest nothing is ready -- this is the near-rest arrival the s44-s51 endgame was built
+    # around, and the rule that retires it.
+    assert not O.terminal_moving(0.0)['ready']
+
+
+def test_escape_ready_is_the_atom_run_for_real_and_fires_off_the_hot_terminal(env):
+    """Rule 3 EXACT: `escape_ready` runs the s65 escape atom off the terminal state and reads the
+    acceptance off the measurement (`away_walk.fires`) -- l_ok, dips within budget, receding at
+    the walk cap -- plus the probed residual the terminal targeting undershoots by. Gated on the
+    same synthetic hot terminal the atom's own gates use."""
+    from harness.tetrapush import full_herd as FH
+    from harness.tetrapush import away_walk as AW
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    node = FH.synthetic_hot_arrival(env, hl, coord_idx=287, d_short=0.0, feet=64.0)
+    term = O.escape_ready(node['run'], hl)
+    assert term['ready'], "the atom fires from the hot terminal (the s65 measurement)"
+    assert term['l_ok'] and not term['followed']
+    assert term['dips'] <= AW.DIP_BUDGET and term['rec17_f'] is not None
+    # the residual is the probe's own measurement -- the terminal targeting's undershoot
+    assert term['resid'] == pytest.approx(term['atom']['resid'])
+    assert 25.0 < term['resid'] < 60.0 and abs(term['resid_lat']) < 10.0
+    # and the state the atom cannot fire from reads not-ready with the atom attached or absent
+    spent = FH.synthetic_frozen_arrival(env, hl, coord_idx=287, momentum='rest')
+    assert not O.escape_ready(spent['run'], hl)['ready'], \
+        "a near-rest terminal has no EBS to convert: the exact rule 3 rejects it"
 
 
 def test_the_recorded_human_window_already_satisfies_the_terminal_rule(env, walls):
