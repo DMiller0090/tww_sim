@@ -10,40 +10,50 @@ while _d and not os.path.exists(os.path.join(_d, 'pyproject.toml')):
 if _d not in sys.path:
     sys.path.insert(0, _d)
 # <<< repo bootstrap
-"""THE AWAY-WALK: the escape that ends the herd (session 65, Dereck's steer).
+"""THE AWAY-WALK: the escape that ends the herd (session 65, Dereck's steer + input recipe).
 
 Once the last push lands Tetra on her coord, Link has to REVERSE TRAVEL DIRECTION and head
 roughly toward the roll-from region (`seeds.ENTRY_ROLL_POS`, ~170 u up-herd of the coords);
 herding is COMPLETE when the actors separate (`centre_feet >= CO_RADII_BAR`, Tetra frozen).
-The placement planner accounts for this movement -- its first frames are the plan's last push
-frames -- and past separation the Link-only leg to the exact roll position is a SEPARATE search
-that borrows the existing 2D planners (`walk_to_entry` / `plan_land.reach_precise`).
+The placement planner accounts for this movement -- its frames up to the slam are the plan's
+LAST PUSH frames -- and past separation the Link-only leg to the exact roll position is a
+SEPARATE search that borrows the existing 2D planners (`walk_to_entry` / `plan_land.reach_precise`).
 
-THE ATOM (decomp-grounded, no A press -- Dereck's rule):
+THE ATOM IS THE HERD JUNCTION WITH THE ROLL REPLACED BY A BACKWARDS SLAM (Dereck's recipe,
+measured s65: "do the same inputs you do during the herd phase to convert to positive and then
+roll, but instead of rolling, slam backwards -- maybe one frame left or right beforehand"):
 
-  1. **The slam-turn** (1 frame): a full stick within +-0x800 of the anti-travel-field fires
-     `procMoveTurn(1)` (`checkNextMode` 4483: moving + >0x7800 + not a slammed genuine flip ->
-     MoveTurn): travel := the stick target, mNormalSpeed halves KEEPING SIGN (6623) -- so from the
-     terminal EBS (travel field up-herd, speed ~-25.7) the GROUND MOTION reverses UP-HERD at ~12.9
-     u/f in ONE frame, and the contact push stops the same frame (Tetra freezes at ~1 pipeline
-     push of residual, ~13.5 u -- not the 27-80 u a brake-through leaves).
-  2. **The L conversion** (2 frames): L + a stick >0x6000 from the new travel enters ATN_MOVE
-     (frame 1 = the proc init, no body work) and fires the `setSpeedAndAngleAtn` DIR_BACKWARD
-     negation (frame 2, d_a_player_main.cpp 2863): travel += 0x8000 (back up-herd), mNormalSpeed
-     positive -- the backslide is now a normal FORWARD run away from her.
-     **The L must never target Tetra** (Dereck, s65): it must act while she is OUTSIDE the +-90 deg
-     front cone, i.e. facing already away -- if the L locks her the facing was wrong, the proc-9
-     re-aim chases HER and the run stays ATN-capped at 12. The MoveTurn facing sweep rotates
-     toward the (down-line) slam stick, so the window is the 1-2 frames right after the slam.
-  3. **Release L, accelerate**: full stick toward the exit bearing; MOVE cap 17.
+  1. **The turnaround** (1 frame, no A -- ONLY when the terminal EBS still faces Tetra): ESS at
+     the snap csangle (`reposition.turnaround`) -- facing snaps across travel, speed PRESERVED
+     (-25.727), Tetra leaves the front cone. An EBS already faced away skips it (Dereck: "if the
+     L targets her, you were facing toward her during the EBS").
+  2. **The L conversion** (ONE L frame -- Dereck): L + full stick toward Tetra for one frame,
+     then the same stick WITHOUT L. The L frame routes into ATN_MOVE; the `setSpeedAndAngleAtn`
+     DIR_BACKWARD negation (d_a_player_main.cpp 2863) fires on the NEXT dispatch frame off the
+     still-held stick, with the L already released: **-25.7 -> +17.614 POSITIVE** (travel
+     down-herd, motion unchanged -- these frames keep pushing her: they are placement frames).
+     The L acts with her out of the cone (facing away after the snap) so it never targets her --
+     Dereck's rule; an L that locks means the facing was wrong.
+  3. **The rotate** (1 frame, the "one frame left or right"): full stick ~90 deg off, so the next
+     frame's want-angle step is < 0x6000 -- WITHOUT it the backwards stick re-fires the negation
+     ("fast + genuine stick flip") and the run flips back NEGATIVE and decays through zero
+     (measured: 8-9 dips).
+  4. **The backwards slam** (1 frame): full stick up-herd -> `procMoveTurn(1)` (4483: moving +
+     >0x7800 + NOT a genuine flip): travel := the stick, mNormalSpeed halves KEEPING SIGN -- and
+     the sign is now POSITIVE, so **+17.0 -> +8.5 along the REVERSED travel: motion reverses
+     up-herd with NO zero crossing**. Contact ends here (separation, Tetra frozen).
+  5. **Accelerate**: hold the exit stick; +10.2 -> +14.1 -> 17.0 (the walk cap) two frames later.
 
-THE MEASURED BAR (Dereck, s65): true per-frame ground displacement < `WALK_FLOOR` (17 u, the walk
-cap) for more than `DIP_BUDGET` (1) frame after separation = unoptimal; expected 0. **The model
-cannot reach 0 from a hot terminal**: every reversal primitive crosses the slow zone (MoveTurn
-halves; the negation mirrors ~0.68-0.9 of an already-halved speed; procSlip skids to ZERO before
-flipping (6658); walk accel is ~2.5 u/f^2; and a beam search over the full stick alphabet x L,
-depth 14, found NO receding >= 17 state within 4 post-separation dips). The measured floor is
-~5 sub-17 frames. If a live tech recipe beats this, the MODEL is missing a mechanic -- re-open.
+Measured on the synthetic hot terminal (already faced away, no snap frame): conversion +17.614
+at f3, slam +8.5 REVERSED at f5, walk cap at f8 -- **3 post-separation frames under 17** (the
+halving dip + two accel frames; Dereck confirmed the dip is inherent, 0 is not feasible),
+receding every frame from the slam, Tetra's residual over the conversion frames **34.8 u**
+down-corridor -- the terminal targeting undershoots by exactly that (deterministic per
+terminal; 44.7 u with the snap frame included). Two measured traps, do not re-pay: slamming
+FIRST from the negative EBS also reverses in one frame but decays through zero (~12 sub-17
+frames -- a negative run has no positive target to rebuild from; converting FIRST removes the
+crossing), and moving the stick to left/right on the NEGATION frame reads DIR_SIDE and never
+converts (the toward stick must be the acting want that frame -- hold it across the L release).
 
 Pure stdlib, no Dolphin. CLI: ``python -m harness.tetrapush.away_walk [probe|trace]``.
 """
@@ -54,14 +64,15 @@ from harness.tetrapush import search as S
 from harness.tetrapush import full_herd as FH
 from tww_sim.land.plan_land._primitives import stick_for_bearing, world_angle_s16
 
-#: Dereck's displacement bar (s65): below the walk cap for more than DIP_BUDGET frames after
-#: separation = unoptimal. Spec, not a measurement; the measured model floor is ~5 (docstring).
+#: Dereck's s65 bar: sub-17 frames after separation. The dip is inherent (Dereck: 0 infeasible);
+#: the recipe's measured best is 3 (the halving + two accel frames), pinned so worse ranks out.
 WALK_FLOOR = 17.0
-DIP_BUDGET = 1
+DIP_BUDGET = 3
 
-#: The slam stick must sit >0x7800 from the travel FIELD (the near-reversal gate, move.py:63);
-#: the window is +-0x800 around the exact anti-travel.
-SLAM_WINDOW = 0x800
+#: reposition.turnaround's snap-window criterion (the herd junction's own): the ESS frame must
+#: snap the facing >0x4000 with the EBS speed preserved and the proc still MOVE.
+_SNAP_MIN_TURN = 0x4000
+_SNAP_KEEP_SPEED = -24.5
 
 
 def _s16(v):
@@ -79,42 +90,68 @@ def _locked(run):
     return (atn is not None and atn.locked) or run.link.state == 9
 
 
-def escape_atom(run0, hl, *, slam_off=0, flip_bearing=None, l_frames=2, exit_bearing=None,
-                csangle=None, max_frames=20):
+def snap_csangle(run0, *, step=512):
+    """The turnaround's csangle window off THIS terminal state: the first csangle whose ESS frame
+    snaps the facing (`reposition.turnaround`) while preserving the EBS. The herd junction sweeps
+    the same window; a terminal with no window cannot run the atom (report, don't guess)."""
+    from harness.tetrapush.reposition import turnaround
+    for cs in range(0, 0x10000, int(step)):
+        c = run0.clone()
+        if (turnaround(c, cs) > _SNAP_MIN_TURN and c.link.state == 6
+                and c.link.speedF <= _SNAP_KEEP_SPEED):
+            return cs
+    return None
+
+
+def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0x4000,
+                flip_bearing=None, exit_bearing=None, csangle=None, max_frames=18):
     """Run ONE escape-atom variant from a terminal state (cloned; ``run0`` untouched).
 
-    ``slam_off`` offsets the slam stick from the exact anti-travel-field (must stay inside
-    `SLAM_WINDOW` to fire the near-reversal). ``flip_bearing`` is the L-conversion stick (default:
-    up-herd); ``exit_bearing`` the post-flip acceleration stick (default: the live entry bearing).
-    ``csangle`` overrides the run's C-stick camera angle for the whole atom (constant).
+    The input sequence is Dereck's recipe (module docstring): [optional turnaround] ->
+    L-conversion (ONE L frame + the stick held one more, so the toward stick is the acting want
+    on the negation frame -- the delay-1 bookkeeping of "L+up") -> rotate (one frame,
+    ``rotate_side`` * ``rotate_off`` off the flip bearing -- "left/right") -> backwards slam
+    ("slam down") -> hold the exit stick. ``turnaround_first`` prepends the ESS facing snap; a
+    terminal whose EBS still faces Tetra needs it or the L locks her (`l_ok` False ranks it
+    out). ``flip_bearing`` defaults to the herd's down-bearing (the junction's own toward-Tetra
+    stick); ``exit_bearing`` to the live entry bearing; ``csangle`` to the auto-detected snap
+    window (`snap_csangle`).
 
     Returns the measurement dict:
-      ``rows``          per-frame (f, proc, speedF, disp, head, cf, d_t, d_e, tres)
+      ``rows``          per-frame (f, proc, speedF, disp, head, cf, d_t, d_e, tres, rec)
       ``freeze_f``      first frame with `centre_feet` >= the bar that persists to the end
       ``reversed_f``    first frame with ground motion receding from Tetra
       ``rec17_f``       first frame receding at >= `WALK_FLOOR` (None if never)
       ``dips``          post-freeze frames below `WALK_FLOOR` before ``rec17_f`` (Dereck's bar)
-      ``resid``/``resid_along``/``resid_lat``  Tetra's displacement over the atom (herd coords)
+      ``resid``/``resid_along``/``resid_lat``  Tetra's displacement over the atom (herd coords) --
+                        the conversion frames keep pushing her, so this is the terminal's UNDERSHOOT
       ``l_ok``          True iff no L acted while Tetra was in the front cone AND no lock acquired
       ``followed``      the follow shell tripped (dist > 230)
       ``run``, ``log``  the endpoint state + the exact inputs (extend a plan with them)
     """
     r = run0.clone()
-    if csangle is not None:
-        r.csangle = int(csangle)
+    if csangle is None:
+        csangle = snap_csangle(run0)
+        if csangle is None:
+            return None
+    r.csangle = int(csangle)
     cs = int(r.csangle)
-    anti = (int(r.link.travel) + 0x8000 + int(slam_off)) & 0xFFFF
-    up_herd = (hl.bearing_bam() + 0x8000) & 0xFFFF
-    flip = up_herd if flip_bearing is None else (int(flip_bearing) & 0xFFFF)
+    down = hl.bearing_bam()
+    flip = down if flip_bearing is None else (int(flip_bearing) & 0xFFFF)
+    slam_bearing = (flip + 0x8000) & 0xFFFF
+    rot = (flip + (int(rotate_off) if int(rotate_side) >= 0 else -int(rotate_off))) & 0xFFFF
     if exit_bearing is None:
         ex, ez = seeds.ENTRY_ROLL_POS
         exit_bearing = world_angle_s16(ex - r.link.pos_x, ez - r.link.pos_z)
     exit_bearing = int(exit_bearing) & 0xFFFF
 
-    slam = _mk(*stick_for_bearing(anti, cs, msd=1.0))
-    flip_in = _mk(*stick_for_bearing(flip, cs, msd=1.0), l=1)
+    from harness.tetrapush.reposition import ESS_DOWN
+    fsx, fsy = stick_for_bearing(flip, cs, msd=1.0)
     exit_in = _mk(*stick_for_bearing(exit_bearing, cs, msd=1.0))
-    inputs = [slam] + [flip_in] * int(l_frames)
+    inputs = (([_mk(*ESS_DOWN)] if turnaround_first else [])     # the facing snap, when needed
+              + [_mk(fsx, fsy, l=1), _mk(fsx, fsy)]              # ONE L frame; negation next frame
+              + [_mk(*stick_for_bearing(rot, cs, msd=1.0))]      # defeat the genuine-flip gate
+              + [_mk(*stick_for_bearing(slam_bearing, cs, msd=1.0))])   # MoveTurn(1): +v halved, reversed
 
     ex, ez = seeds.ENTRY_ROLL_POS
     t0 = (r.tx, r.tz)
@@ -153,10 +190,12 @@ def escape_atom(run0, hl, *, slam_off=0, flip_bearing=None, l_frames=2, exit_bea
             freeze_run = None                # dipped back under the bar: not a freeze yet
         if reversed_f is None and rec > 0.0:
             reversed_f = f + 1
-        if rec17_f is None and rec >= WALK_FLOOR:
+        if rec17_f is None and rec > 0.0 and math.hypot(vx, vz) >= WALK_FLOOR:
             rec17_f = f + 1
         if r._follow_warned:
             break
+        if rec17_f is not None:
+            break                            # the handoff state: receding at the walk cap
     dips = [rr['f'] for rr in rows
             if rr['disp'] < WALK_FLOOR and freeze_run is not None and rr['f'] >= freeze_run
             and (rec17_f is None or rr['f'] < rec17_f)]
@@ -168,32 +207,32 @@ def escape_atom(run0, hl, *, slam_off=0, flip_bearing=None, l_frames=2, exit_bea
                 d_e_end=rows[-1]['d_e'] if rows else None)
 
 
-def probe(run0, hl, *, csangles=None, max_frames=20):
+def probe(run0, hl, *, max_frames=18):
     """Sweep the atom's knobs from a terminal state and return the best variant.
 
     Rank: L-cone compliance first (Dereck's rule -- a locking variant is wrong tech however fast),
-    then fewest post-freeze dips (the s65 bar), then earliest receding->=17, then entry progress.
-    Small by design (~40 variants); the atom is 3 inputs + a held exit stick, not a search space.
-    """
+    then fewest post-separation dips (the s65 bar), then earliest receding->=17, then entry
+    progress. Small by design (~16 variants); the atom is 4-5 inputs + a held exit stick, not a
+    search space. ``turnaround_first`` is swept rather than inferred: a terminal already faced
+    away wastes a frame (and ~10 u of extra push) on the snap, one still facing her NEEDS it --
+    `l_ok` ranks the wrong choice out."""
     ex, ez = seeds.ENTRY_ROLL_POS
     b_entry = world_angle_s16(ex - run0.link.pos_x, ez - run0.link.pos_z)
     up_herd = (hl.bearing_bam() + 0x8000) & 0xFFFF
-    if csangles is None:
-        csangles = (int(run0.csangle),)
     best = None
-    for cs in csangles:
-        for slam_off in (-0x400, 0, 0x400):
-            for flip in (up_herd, b_entry):
-                for lf in (1, 2):
-                    r = escape_atom(run0, hl, slam_off=slam_off, flip_bearing=flip,
-                                    l_frames=lf, csangle=cs, max_frames=max_frames)
-                    key = (not r['l_ok'], r['followed'], len(r['dips']),
-                           r['rec17_f'] if r['rec17_f'] is not None else 99,
-                           r['d_e_end'] if r['d_e_end'] is not None else 1e9)
-                    r['knobs'] = dict(csangle=cs, slam_off=slam_off, flip_bearing=flip,
-                                      l_frames=lf)
-                    if best is None or key < best[0]:
-                        best = (key, r)
+    for ta in (False, True):
+        for side in (1, -1):
+            for exit_b in (b_entry, up_herd):
+                r = escape_atom(run0, hl, turnaround_first=ta, rotate_side=side,
+                                exit_bearing=exit_b, max_frames=max_frames)
+                if r is None:
+                    continue
+                key = (not r['l_ok'], r['followed'], len(r['dips']),
+                       r['rec17_f'] if r['rec17_f'] is not None else 99,
+                       r['d_e_end'] if r['d_e_end'] is not None else 1e9)
+                r['knobs'] = dict(turnaround_first=ta, rotate_side=side, exit_bearing=exit_b)
+                if best is None or key < best[0]:
+                    best = (key, r)
     return best[1] if best else None
 
 
@@ -225,11 +264,11 @@ def main(argv):
     node = FH.synthetic_hot_arrival(env, hl, coord_idx=287, d_short=0.0, feet=64.0)
     run = node['run']
     if cmd == 'probe':
-        res = probe(run, hl, csangles=(16384, 24576, 32768))
+        res = probe(run, hl)
         print("=== the best escape atom off the synthetic hot terminal (coord 287) ===")
         _print_atom(res)
     elif cmd == 'trace':
-        res = escape_atom(run, hl, csangle=24576)
+        res = escape_atom(run, hl)
         _print_atom(res)
     else:
         print(__doc__)

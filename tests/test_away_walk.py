@@ -10,10 +10,10 @@ while _d and not os.path.exists(os.path.join(_d, 'pyproject.toml')):
 if _d not in sys.path:
     sys.path.insert(0, _d)
 # <<< repo bootstrap
-"""The away-walk escape atom (session 65): the herd's terminal reversal, gated on the
-synthetic hot terminal (`synthetic_hot_arrival`, coord 287). See `harness/tetrapush/away_walk.py`
-for the mechanics; these pin the measured behaviour so a model change that moves the escape
-names itself.
+"""The away-walk escape atom (session 65, Dereck's recipe): the herd junction's convert-to-positive
+with the roll replaced by a backwards slam. Gated on the synthetic hot terminal
+(`synthetic_hot_arrival`, coord 287); see `harness/tetrapush/away_walk.py` for the mechanics.
+These pin the measured behaviour so a model change that moves the escape names itself.
 """
 import warnings
 
@@ -38,41 +38,47 @@ def bed():
 @pytest.fixture(scope='module')
 def best(bed):
     run, hl = bed
-    return AW.probe(run, hl, csangles=(16384, 24576, 32768))
+    return AW.probe(run, hl)
 
 
-def test_the_slam_turn_reverses_motion_and_freezes_tetra_immediately(best):
-    """The escape's whole point: the slam-turn reverses Link's ground motion in one acted frame,
-    which stops the contact push the same frame -- Tetra's residual is ONE pipeline push
-    (~13.5 u), not the 27-80 u any brake-through escape leaves."""
-    assert best['reversed_f'] is not None and best['reversed_f'] <= 3
-    assert best['freeze_f'] == 1
-    assert best['resid'] < 15.0
-    # frozen means frozen: her displacement never grows after the freeze
+def test_the_conversion_goes_positive_with_one_l_frame_and_no_zero_crossing(best):
+    """Dereck's recipe: ONE delivered L frame (the stick held one more) fires the DIR_BACKWARD
+    negation -- the EBS converts -25.7 -> +17.6 POSITIVE -- and the backwards slam then halves a
+    POSITIVE run onto the reversed travel, so the speed never crosses zero."""
+    sp = [r['speedF'] for r in best['rows']]
+    flip_f = next(i for i, v in enumerate(sp) if v > 0)
+    assert sp[flip_f] == pytest.approx(17.614, abs=0.1)
+    assert sp[flip_f - 1] < -20.0, "the frame before the negation is still the hot EBS"
+    assert all(v > 0 for v in sp[flip_f:]), "no zero crossing after the conversion"
+    assert sum(1 for d in best['log'] if d['buttons'] & 0x40) == 1, "exactly ONE L frame"
+
+
+def test_the_slam_reverses_and_separates_on_the_same_frame(best):
+    """The backwards slam (`procMoveTurn(1)`) is both the reversal and the separation: ground
+    motion recedes from that frame on, Tetra is frozen from it, and her residual over the
+    conversion frames is ~35-50 u almost entirely ALONG the corridor -- the terminal targeting's
+    deterministic undershoot."""
+    assert best['reversed_f'] is not None and best['reversed_f'] <= 7
+    assert best['freeze_f'] == best['reversed_f']
+    assert 25.0 < best['resid'] < 60.0
+    assert abs(best['resid_lat']) < 10.0, "the residual should ride the corridor, not leave it"
     tres = [r['tres'] for r in best['rows']]
-    assert max(tres) == pytest.approx(tres[0], abs=1e-6)
+    assert max(tres) == pytest.approx(tres[best['freeze_f'] - 1], abs=1e-6), \
+        "frozen means frozen: no push after the slam"
 
 
 def test_the_escape_respects_dereck_s_rules(best):
-    """No A press anywhere (the atom never emits one), no L acting with Tetra in the front cone,
-    no lock acquired, and the follow shell (dist <= 230) never trips."""
+    """No A press anywhere, no L acting with Tetra in the front cone, no lock acquired, and the
+    follow shell (dist <= 230) never trips."""
     assert best['l_ok'] is True
     assert best['followed'] is False
     assert all(not (d['buttons'] & 0x100) for d in best['log'])
 
 
-def test_the_escape_delivers_link_into_the_entry_region(best):
-    """Herding complete -> the atom carries Link to the roll-from region
-    (`seeds.ENTRY_ROLL_POS`), where the Link-only 2D planners (`walk_to_entry` /
-    `plan_land.reach_precise`) take over. On the bed the closest approach is ~13 u."""
-    assert min(r['d_e'] for r in best['rows']) < 20.0
-
-
-def test_the_measured_dip_floor_is_pinned(best):
-    """Dereck's s65 bar: > `DIP_BUDGET` (1) post-separation frames under 17 u = unoptimal,
-    expected 0. THE MODEL CANNOT REACH 0 from the hot terminal (every reversal primitive
-    crosses the slow zone -- away_walk.py docstring). This pins the measured compliant floor
-    as a CEILING so a model regression names itself; if a change ever takes it to <=
-    `DIP_BUDGET`, the objective's terminal rule should be wired to the atom and this
-    expectation updated -- that is an improvement, not a failure of the model."""
-    assert len(best['dips']) <= 14
+def test_the_dip_count_is_the_known_best(best):
+    """Dereck's s65 bar, settled: the turnaround's dip is inherent (0 frames under 17 is not
+    feasible), and his recipe's measured best is THREE post-separation frames under the walk cap
+    (the MoveTurn halving + two accel frames), receding at the cap by ~f8-10. Pinned both ways:
+    more dips = a regression in the atom; fewer = a model change worth a session."""
+    assert len(best['dips']) == AW.DIP_BUDGET == 3
+    assert best['rec17_f'] is not None and best['rec17_f'] <= 10
