@@ -239,7 +239,7 @@ def fires(res):
                 and res['rec17_f'] is not None)
 
 
-def probe(run0, hl, *, max_frames=18):
+def probe(run0, hl, *, max_frames=18, thread=None):
     """Sweep the atom's knobs from a terminal state and return the best variant.
 
     Rank: L-cone compliance first (Dereck's rule -- a locking variant is wrong tech however fast),
@@ -247,7 +247,24 @@ def probe(run0, hl, *, max_frames=18):
     progress. Small by design (~16 variants); the atom is 4-5 inputs + a held exit stick, not a
     search space. ``turnaround_first`` is swept rather than inferred: a terminal already faced
     away wastes a frame (and ~10 u of extra push) on the snap, one still facing her NEEDS it --
-    `l_ok` ranks the wrong choice out."""
+    `l_ok` ranks the wrong choice out.
+
+    ``thread`` (session 71) ranks the COMPLIANT variants by where they leave TETRA
+    (`aim.landing_miss`) instead of by entry progress, and it is authority the search was throwing
+    away. Session 67 established that the atom's conversion frames are the LAST inputs with any
+    authority over her -- and then this rank spent that authority on ``d_e_end``, how far Link got
+    toward the entry roll position, which belongs to the SEPARATE entry search (s60). The variants
+    differ by much more than the tie-break suggested: ``rotate_side`` decides which way Link steps
+    before the slam, hence where he stands relative to her, hence the eject direction -- measured, the
+    residual's lateral tracks his offset from her at **-0.53 u per u** and its along collapses from
+    41.6 u aligned to 6-15 u at 30-47 u off. Swept over 8 real arrivals, ranking by the landing
+    improves **6 of 8** (median 2.70 u, max 10.08) and takes the best from 16.34 u off the thread to
+    **6.25** at 77 frames, with ``rotate_side=+1`` winning 6 of 8.
+
+    The acceptance is unchanged and comes FIRST: ``l_ok``, the follow shell, separation, Dereck's
+    ``DIP_BUDGET`` and receding-at-the-cap are all hard terms ahead of the landing, so this only
+    reorders variants that `fires` already accepts. Below the bar the order is the stock one, and
+    without ``thread`` the key is bit-identical to the session-65 rank."""
     ex, ez = seeds.ENTRY_ROLL_POS
     b_entry = world_angle_s16(ex - run0.link.pos_x, ez - run0.link.pos_z)
     up_herd = (hl.bearing_bam() + 0x8000) & 0xFFFF
@@ -268,6 +285,11 @@ def probe(run0, hl, *, max_frames=18):
                 key = (not r['l_ok'], r['followed'], r['freeze_f'] is None, len(r['dips']),
                        r['rec17_f'] if r['rec17_f'] is not None else 99,
                        r['d_e_end'] if r['d_e_end'] is not None else 1e9)
+                if thread is not None:
+                    from harness.tetrapush import aim as A
+                    # the acceptance stays ahead of the landing; only ACCEPTED variants reorder
+                    lm = A.landing_miss(run0, hl, thread, (r['resid_along'], r['resid_lat']))
+                    key = (not fires(r),) + (lm['miss'],) + key
                 r['knobs'] = dict(turnaround_first=ta, rotate_side=side, exit_bearing=exit_b)
                 if best is None or key < best[0]:
                     best = (key, r)

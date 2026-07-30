@@ -1345,3 +1345,136 @@ def test_junction_authority_is_real_and_cannot_be_armed(env, hl, box):
         "table and the steer-then-arm probe should be re-run" % a['armed']
     off = F.junction_authority(n, hl, box=None)
     assert off['armed'] == 0, "still zero armed with the pursuit box removed -- the box is not the blocker"
+
+
+def test_the_endpoint_probe_reports_where_the_escape_would_land_and_that_beats_the_corridor(env, hl,
+                                                                                           box):
+    """**The axis that SUBSUMES ``off`` and ``arrive`` instead of joining them** (session 71).
+
+    Session 70 left the last cycle's endpoint keep with two separate shares -- ``square_keep`` by
+    `roll_probe`'s ``off`` and ``arrive_keep`` by ``arrive`` -- so they pick different endpoints and
+    neither asks for both, and ``off`` is measurably scoring the wrong thing anyway: it rides
+    `aim.handoff_corridor`, a line through ONE point, while the target is a segment whose lateral falls
+    0.215 u per u of along (`tests/test_aim.py`). ``land`` computes the landing point the escape would
+    reach and measures it against the segment -- exact given the residual, and free, since the sweep
+    already fires every aim.
+
+    Gated as purely additive (asking cannot change rollability, the rate, ``off`` or ``arrive``), as
+    the MINIMUM over the surviving rolls, and as identical to `aim.thread_miss` of the roll it names
+    (one implementation, so the keep cannot disagree with the verdict by arithmetic).
+
+    And gated for WHERE it bites, which is the same shape ``arrive_keep`` has: from a cycle-1-range
+    exit every roll lands SHORT of the thread's near end, the near end clamps the escape's landing, and
+    the two keys then order the endpoints IDENTICALLY -- so this is inert mid-chain by construction, not
+    by luck. It diverges only past the target, where the corridor's one-point line no longer knows what
+    lateral the escape needs: on the real session-70/71 arrivals ``off`` prefers the one that arrives
+    (35.73 u against 3.08) while the landing prefers the one that is square, and the exact escape agreed
+    with the landing (57.69 u off the thread against 18.08)."""
+    from harness.tetrapush import aim as A
+    rows = seeds.load_placements()[0]
+    th = O.placement_thread(hl, rows)
+    cor = A.handoff_corridor(env, hl, th, rows=rows)
+    tgt, resid = cor['target'][0], cor['resid']
+
+    dtm = seeds.dtm_input_at(env)
+    base = seeds.make_freerun(env)
+    base.pre_seed_input(dtm(0))
+    for k in range(1, 21):
+        base.step(dtm(k))
+    node = dict(run=base, log=[dtm(k) for k in range(21)], frames=20)
+    ends = F._dedup_endpoints(F.junction_beam(node, hl, box, max_frames=8, beam=16, ess_step=2,
+                                              aim_step=32, keep=10 ** 6, corridor=cor))
+    assert ends
+
+    pairs = []
+    for e in ends[:60]:
+        blind = F.roll_probe(e, hl, corridor=cor, target_along=tgt)
+        aware = F.roll_probe(e, hl, corridor=cor, target_along=tgt, thread=th, resid=resid)
+        assert (blind is None) == (aware is None)
+        if blind is None:
+            continue
+        assert blind['land'] is None and blind['land_frames'] is None    # not asked, not reported
+        for f in ('rate', 'off', 'off_rate', 'along', 'n', 'arrive', 'over'):
+            assert blind[f] == aware[f], f                               # purely additive
+        # the landing it names is the landing the verdict would compute from that same roll
+        rolls = []
+        F.roll_probe(e, hl, corridor=cor, target_along=tgt, thread=th, resid=resid, collect=rolls)
+        assert len(rolls) == aware['n']                                  # one row per surviving roll
+        assert aware['land'] == min(r['land'] for r in rolls)             # the min over the fan
+        best = min(rolls, key=lambda r: r['land'])
+        assert aware['land'] == A.thread_miss(best['along'] + resid[0], best['lat'] + resid[1],
+                                             th)['miss']
+        assert aware['land_off'] == best['off'] and aware['land_over'] == best['over']
+        pairs.append((aware['off'], aware['land']))
+    assert len(pairs) > 3, "too few rollable endpoints off the human's own exit to compare orders"
+    # mid-chain the two agree, because every landing is short of the near end and the near end clamps
+    assert [p[1] for p in sorted(pairs, key=lambda p: p[0])] \
+        == sorted(p[1] for p in pairs), "the mid-chain inertness this keep is documented to have"
+    assert min(p[1] for p in pairs) > 100.0                      # cycle-1 range: ~300 u short
+
+    # ...and past the target they INVERT -- four measured rolls off one real cycle-2 exit, at
+    # junction frames 7 / 8 / 10 / 12 (arrivals +9.2 / +18.8 / +44.4 / +57.4 past the target)
+    def keys(along, lat):
+        return (cor['offset'](along, lat),
+                A.thread_miss(along + resid[0], lat + resid[1], th)['miss'])
+
+    rolls = [keys(903.09, -2.51), keys(912.70, 5.60), keys(938.29, -1.50), keys(951.29, 1.10)]
+    by_off = sorted(rolls, key=lambda t: t[0])
+    by_land = sorted(rolls, key=lambda t: t[1])
+    assert by_off == by_land[::-1], "the measured inversion this keep exists for"
+    # and what that costs: `off` ranks LAST the roll that lands best AND takes the fewest junction
+    # frames -- the corridor's lateral ask grows wrong with the overshoot, so it rewards going further
+    assert by_off[-1] is rolls[0] and by_land[0] is rolls[0]
+    assert rolls[0][1] < min(t[1] for t in rolls[1:]) - 2.0 * O.PLACEMENT_BAND
+
+
+def test_the_probe_fan_is_recentred_on_tetra_because_that_is_where_survivors_live(env, hl, box):
+    """**The screen was 3x coarser than the stage it screens for, over a fan 6x wider than any roll can
+    survive in** (session 71) -- the coverage bug one level down from the session-70 pool.
+
+    Death in this sweep is ~95-99% ``followed``: Link leaves `FOLLOW_ENGAGE_DIST`, which a ~223 u roll
+    does the instant it stops plowing her. So survival is a narrow cone about the bearing to TETRA, and
+    measured over the whole armed set of a real cycle-2 exit the 33 surviving rolls span **18.5 deg** of
+    the 112.5 deg fan herd-relative and **13.4 deg** Tetra-relative. Spending the budget uniformly over
+    the wide fan therefore buys nothing and costs resolution: at the default ``step=24`` the probe finds
+    **2** rollable endpoints in the 416-endpoint band the plan needs where ``step=8`` finds **20**, and
+    it calls the next band DEAD where ``step=8`` finds 2 -- including that band's best landing.
+
+    Gated on the three things that make the narrowing safe rather than a tuned window: it is derived
+    from `pursuit_box` (the recorded regime, which `human_in_box` already gates), the wide fan's own
+    survivors all sit INSIDE the narrow window (so nothing is being cut off, which is the property that
+    matters), and it is self-checking -- ``fan_edge`` reports the furthest surviving aim so a binding
+    window shows up instead of being assumed away.
+
+    Note what is deliberately NOT claimed: at a fixed ``step`` the narrow fan is a different SUB-LATTICE
+    of the reachable set, not a superset, so it can find more survivors in one band and fewer in another
+    (measured: 14 against 2 at jf 7, 10 against 20 at jf 6). The strict win is resolution -- at
+    ``step=1`` over the narrow window jf 7 yields 66 rollable of 420 against the shipped screen's 0."""
+    from harness.tetrapush import aim as A
+    rows = seeds.load_placements()[0]
+    cor = A.handoff_corridor(env, hl, O.placement_thread(hl, rows), rows=rows)
+    dtm = seeds.dtm_input_at(env)
+    base = seeds.make_freerun(env)
+    base.pre_seed_input(dtm(0))
+    for k in range(1, 21):
+        base.step(dtm(k))
+    node = dict(run=base, log=[dtm(k) for k in range(21)], frames=20)
+    ends = F._dedup_endpoints(F.junction_beam(node, hl, box, max_frames=8, beam=16, ess_step=2,
+                                              aim_step=32, keep=10 ** 6, corridor=cor))[:40]
+    narrow = int(box['max_delta'])
+    assert narrow < 0x2800                     # the regime is narrower than the fan it replaces
+
+    wide_ok, cont_ok, edge = [], [], 0
+    for i, e in enumerate(ends):
+        w = F.roll_probe(e, hl, step=8, corridor=cor)
+        c = F.roll_probe(e, hl, step=8, corridor=cor, fan_center='tetra', half_window=narrow)
+        if w is not None:
+            wide_ok.append(i)
+            edge = max(edge, w['fan_edge'])
+        if c is not None:
+            cont_ok.append(i)
+            # the window is not binding: every survivor is well inside the half-window it was given
+            assert c['fan_edge'] < 0.75 * c['fan_half']
+    assert wide_ok and cont_ok, "no endpoint off the human's own exit rolls at all"
+    # the window does not cut off anything the wide fan found: every wide survivor's aim is inside it
+    assert edge < narrow

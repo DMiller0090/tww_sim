@@ -307,3 +307,47 @@ def test_the_handoff_corridor_is_a_different_ask_than_the_coord_corridor(env, hl
     s66 = math.degrees(A.aim_window(881.6, 21.19, thread)['width'])
     assert s66 < diffs[1]
     assert on > 8.0 and on > 10.0 * s66
+
+
+def test_the_corridor_is_a_ONE_POINT_line_and_thread_miss_is_what_the_escape_needs(env, hl, thread):
+    """**Why the endpoint keep could not buy squareness at an arrival that was not on target**
+    (session 71), and the axis that replaces it.
+
+    `handoff_corridor` is a line from the origin through ONE point -- the thread's near end minus the
+    escape's residual -- so `full_herd.roll_probe`'s ``off``, the quantity ``square_keep`` ranks on,
+    is the distance from that line. The TARGET, though, is a segment whose lateral falls 0.215 u per u
+    of along, **78x** the corridor's own slope, so the two agree only where the arrival is exactly on
+    target. Past it the corridor's lateral ask is wrong at the thread's slope, and a roll is a ~223 u
+    atom that cannot stop short, so every arrival the last cycle chooses between is past it: the
+    session-70 survivors sat at ``over`` +18.8 (the squarest one measured) and +55.6, where the
+    corridor is wrong by 4.11 u and 10.18 u against a `objective.PLACEMENT_BAND` of 1.0.
+
+    Short of the target the two DO agree, because the near end clamps the escape's landing -- which is
+    why this never showed up while the chain was undershooting.
+
+    `thread_miss` is the correction and it is not a combination of anything: it computes the landing
+    point and measures it against the segment, exact given the residual. Gated against `landing_miss`
+    (one implementation, so a keep and the verdict it predicts cannot disagree by arithmetic)."""
+    cor = A.handoff_corridor(env, hl, thread, rows=seeds.load_placements()[0])
+    ra, rl = cor['resid']
+    lo, hi = thread['along_lo'], thread['along_hi']
+    th_slope = (thread['lat_at'](hi) - thread['lat_at'](lo)) / (hi - lo)
+    assert abs(th_slope) > 50.0 * abs(cor['slope'])
+
+    def needs(along):        # the lateral an arrival HERE must have for the escape to land on line
+        return thread['lat_at'](min(hi, max(lo, along + ra))) - rl
+
+    # on target the two agree; short of it they still agree (the near end clamps); past it they do not
+    assert abs(cor['lat_at'](cor['target'][0]) - needs(cor['target'][0])) < 1e-9
+    assert abs(cor['lat_at'](860.0) - needs(860.0)) < 0.2
+    over18 = abs(cor['lat_at'](912.7) - needs(912.7))
+    over55 = abs(cor['lat_at'](949.5) - needs(949.5))
+    assert over18 > 4.0 * O.PLACEMENT_BAND and over55 > 2.0 * over18
+
+    # ...and the correction: `thread_miss` IS `landing_miss`, so the keep rides the verdict's own line
+    nd = F.synthetic_hot_arrival(env, hl, min(seeds.load_placements()[0],
+                                              key=lambda p: hl.along(p['x'], p['z']))['idx'])
+    run = nd['run']
+    lm = A.landing_miss(run, hl, thread, cor['resid'])
+    tm = A.thread_miss(hl.along(run.tx, run.tz) + ra, hl.lateral(run.tx, run.tz) + rl, thread)
+    assert lm['miss'] == tm['miss'] and lm['seg_s'] == tm['seg_s']

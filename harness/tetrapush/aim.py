@@ -288,6 +288,18 @@ def centre_lat_needed(run, hl, thread):
 
 # --------------------------------------------------------------------------- the handoff spec
 
+def thread_miss(along, lat, thread):
+    """How far a POINT in herd coordinates is from the target thread SEGMENT (not from a line):
+    ``dict(miss, seg_s)``. `landing_miss` is this applied to a run plus an escape residual, and
+    `full_herd.roll_probe`'s ``land`` axis applies it to a delivered roll -- one implementation, so a
+    keep and the verdict it predicts cannot disagree by arithmetic."""
+    (p, q) = _thread_ends(thread)
+    dx, dz = q[0] - p[0], q[1] - p[1]
+    c = dx * dx + dz * dz
+    s = 0.0 if c < 1e-18 else min(1.0, max(0.0, ((along - p[0]) * dx + (lat - p[1]) * dz) / c))
+    return dict(miss=math.hypot(along - (p[0] + s * dx), lat - (p[1] + s * dz)), seg_s=s)
+
+
 def landing_miss(run, hl, thread, resid):
     """**The EXACT half**: where a MEASURED escape residual leaves her, against the thread.
 
@@ -297,12 +309,8 @@ def landing_miss(run, hl, thread, resid):
     `aim_miss` is a cheap predictor OF. Returns ``dict(miss, along, lat, seg_s)``."""
     ta, tl = hl.along(run.tx, run.tz), hl.lateral(run.tx, run.tz)
     la, ll = ta + resid[0], tl + resid[1]
-    (p, q) = _thread_ends(thread)
-    dx, dz = q[0] - p[0], q[1] - p[1]
-    c = dx * dx + dz * dz
-    s = 0.0 if c < 1e-18 else min(1.0, max(0.0, ((la - p[0]) * dx + (ll - p[1]) * dz) / c))
-    return dict(miss=math.hypot(la - (p[0] + s * dx), ll - (p[1] + s * dz)),
-                along=la, lat=ll, seg_s=s)
+    tm = thread_miss(la, ll, thread)
+    return dict(miss=tm['miss'], along=la, lat=ll, seg_s=tm['seg_s'])
 
 
 def handoff_target(thread, resid, *, seg_s=0.0):

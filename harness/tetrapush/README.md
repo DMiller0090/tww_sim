@@ -1653,7 +1653,86 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
-      - [~] **THE OVERSHOOT WAS THE PROBE POOL, WHICH IS A FLATNESS PREFIX AND NOT THE GENERATION
+      - [~] **THE SQUARE ARRIVING ENDPOINT EXISTS -- THE SCREEN'S AIM RESOLUTION COULD NOT SEE IT
+            (session 71). In the ARRIVING band the endpoint probe finds 2 rollable endpoints of 420 at
+            its shipped resolution and 66 at full resolution, and the best of those delivers Tetra to
+            lateral +0.26 with Link 1.2 u off her lateral -- a predicted escape landing of 0.53 u where
+            the s70 plan's was 36.4 and its exact escape 57.69.** Session 70 handed over "buy the
+            squareness at the new arrival: probe the jf-6 band wider and report ``off`` beside
+            ``arrive``, and if a square arriving endpoint exists the keep is a COMBINED key". It does
+            exist, the keep did need fixing, and neither was the binding constraint: the SCREEN was.
+            - **THE WIDE CENSUS FIRST (the handoff's step 1, done at 20x its size).** Every armed
+              endpoint of two real cycle-2 exits, all eight junction-frame bands, `roll_probe`'s joint
+              (|over|, ``off``) frontier per band via the new ``collect`` sink -- 9022 endpoints, 98
+              surviving rolls, ~50 min. The arriving band (jf 6) holds **2** rollable rolls in 416
+              endpoints and neither is square (``off`` 47.7 / 35.7); jf 7 reads **0 of 420**, i.e. DEAD;
+              and one band later jf 8 holds 23 rolls of which one delivers ``off`` **3.08** at ``over``
+              +18.8. So on that evidence the squareness lives one band PAST the arrival and the keep
+              would have to trade ~1.4 frames of overshoot for ~32 u of squareness.
+            - **BUT THE SCREEN IS 3x COARSER THAN THE STAGE IT SCREENS FOR, OVER A FAN 6x WIDER THAN ANY
+              ROLL CAN SURVIVE IN.** `roll_probe` swept +-0x2800 (112.5 deg) about the HERD bearing at
+              ``step=24`` (~27 aims) while `roll_candidates`, the stage it feeds, uses ``step=8``. Death
+              is 95-99% ``followed`` -- Link past `FOLLOW_ENGAGE_DIST`, which a ~223 u roll does the
+              instant it stops plowing her -- so survival is a narrow cone about the bearing to TETRA,
+              and measured over the whole armed set the 33 survivors occupy **18.5 deg** of that 112.5
+              herd-relative and **13.4 deg** Tetra-relative. The budget was being spent where nothing
+              can live. Re-centred on the per-endpoint bearing to her and narrowed to `pursuit_box`'s
+              measured ``max_delta`` (**+-21.35 deg**, the recorded regime -- containment holds, the
+              human's own two rolls sit at +0.76 and +0.63 deg and the widest survivor at 7.65), ~31
+              aims at ``step=8`` cost what ~27 at ``step=24`` cost. Wired
+              `roll_probe(fan_center=)` / `extend_cycle(probe_step=, probe_contact=)`, self-checking via
+              ``fan_edge``/``fan_half`` so a binding window reports itself instead of being assumed away.
+            - **AND THE ARRIVING BAND WAS NEVER DEAD.** jf 7, 420 endpoints: **0** rollable at the
+              shipped screen, **2** at ``step=8`` over the wide fan, **14** at ``step=8`` over the narrow
+              one, **66** at ``step=1`` over the narrow one (69 surviving rolls). Its frontier is smooth
+              at full resolution -- (|over|, ``off``, Tetra lat, Link-Tetra lat): (6.8, 1.1, +3.5, -0.1),
+              (9.1, 0.3, +2.2, -12.2) -- and its best predicted landing is **0.53 u** at ``over`` +7.8,
+              ``off`` 2.24, Tetra lateral **+0.26**, Link **1.2 u** off her lateral. That is the
+              squareness the human has, in the band that arrives, at ~71 frames. 1013 s for the one band,
+              so full resolution is a two-stage screen's job (coarse to find the live bands, fine inside
+              them), not a new default.
+            - **THE KEEP DID NEED FIXING, AND THE CORRIDOR IS WHY: IT IS A LINE THROUGH ONE POINT.**
+              ``square_keep`` ranks `roll_probe`'s ``off``, the distance from `aim.handoff_corridor` --
+              which runs from the origin through the SINGLE handoff target. The real target is a segment
+              whose lateral falls **0.215 u per u of along, 78x the corridor's own slope**, so the two
+              agree only where the arrival is exactly on target. Short of it they still agree (the near
+              end clamps the landing, which is why this never showed while the chain undershot); past it
+              the corridor's lateral ask is wrong by **1.33 u at along 900, 4.11 at 912.7, 10.18 at
+              949.5** against a `objective.PLACEMENT_BAND` of **1.0** -- and a roll cannot stop short, so
+              every arrival the last cycle chooses between is past it. On four measured rolls at jf
+              7/8/10/12 ``off`` ranks them in EXACTLY the reverse order of where the escape lands, and
+              puts LAST (5.01) the roll that lands best (2.93) and takes the fewest junction frames.
+              Fix: `aim.thread_miss` + `roll_probe(thread=, resid=)`'s ``land`` axis (the landing point
+              measured against the segment, exact given the residual, free -- the sweep already fires
+              every aim) as a keep share, `extend_cycle(land_keep=)`. It SUBSUMES ``off`` and ``arrive``
+              rather than joining them.
+            - **AND THE ESCAPE ATOM'S OWN VARIANT CHOICE WAS PLACEMENT AUTHORITY SPENT ON THE OTHER
+              SEARCH.** `away_walk.probe` ranks its ~8 variants by rule-3 compliance and then by
+              ``d_e_end``, how far Link got toward `seeds.ENTRY_ROLL_POS` -- the SEPARATE entry search
+              (s60). But s67's own finding is that the atom's conversion frames are the LAST inputs with
+              authority over Tetra, so its knobs are part of the placement. Measured over the sweep, the
+              residual's lateral tracks Link's lateral offset from her at **-0.53 u per u (r -0.926)**
+              and its along collapses from **41.60 u** aligned to **6.29-15.33** at 30-47 u off -- so the
+              corridor's one measured residual is the ALIGNED case only, and ``rotate_side`` (which way
+              he steps before the slam) moves the landing a long way. Ranking the COMPLIANT variants by
+              the landing improves **6 of 8** real arrivals (median **2.70 u**, max **10.08**) and takes
+              the sample's best from `probe`'s 16.34 u off the thread to **6.25** (7.15 u from a genuine
+              coord) at 77 frames, with ``rotate_side=+1`` winning 6 of 8. Wired
+              `away_walk.probe(thread=)` / `escape_probe(atom_landing=)`, default ON; the acceptance
+              (``l_ok``, the follow shell, separation, ``DIP_BUDGET``, receding at the cap) stays a hard
+              term ahead of it, and without ``thread`` the key is bit-identical to the s65 rank.
+            - **THE CHEAP-KEY CALIBRATION, against the real atom over 35 firing picks** (the s70 method):
+              ``land`` **r +0.834**, ``off`` +0.783, |``over``| **-0.423**, |Link-Tetra lat| +0.326. So
+              ``land`` is the best cheap key and the sign on the arrival is NEGATIVE -- more overshoot
+              landed better, because within this sample the corridor's bias grew with it. All of them are
+              weak enough that the true landing has to be probed, which is what `escape_keep` is for. (A
+              12-row contact-fan sample read |Link-Tetra lat| at +0.878 and ``land`` at +0.524; that
+              sample was 8 duplicate rows of one arrival. Dedupe before correlating.)
+            - Do NOT re-pay: "rank the arriving band by ``off``" as a gate width (the corridor is the
+              wrong line past the target, so a width on it cannot help), an aim key for the tcs cut
+              (s70), or the assumption that a band reading 0 rollable is dead -- at this stage that is a
+              statement about the screen.
+      - [x] **THE OVERSHOOT WAS THE PROBE POOL, WHICH IS A FLATNESS PREFIX AND NOT THE GENERATION
             PREFIX IT SAID IT WAS (session 70): cycle 3's arrival went along 947.4 (+53.5 PAST the
             handoff target) -> 886.81 (7.1 SHORT), frames 75 -> 70, `plan_bound` 77.27 -> 75.03, the
             escape landing frame 78-80 -> 71.** Session 69 handed over two steps -- an AIM-aware key for
@@ -1728,6 +1807,9 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               (worse than stock, and worst as the exit's own aim), `landing_key` / ``arrive_keep`` /
               `rank_key(resid=)` WITHOUT the pool fix (byte-identical cycle 3), or the coarse probe at
               the 9.6 s budget (false positives).
+              **Session 71 found the next layer of the same bug: the pool decides WHICH endpoints get
+              probed, and the probe's own AIM RESOLUTION decides whether it can see them. See the box
+              above.**
       - [x] **THE AWAY-WALK, WORKED OUT AND SHIPPED AS AN ATOM (session 65): it is THE HERD
             JUNCTION WITH THE ROLL REPLACED BY A BACKWARDS SLAM -- convert to positive first, so
             the reversal never crosses zero.** Dereck steered live throughout: (1) the placement

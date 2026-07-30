@@ -236,10 +236,12 @@ def junction_alphabet(run, hl, *, ess_step=4, aim_step=64):
 
 
 def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_window=0x2800,
-               dead=None, corridor=None, target_along=None):
-    """**Is this junction endpoint ROLLABLE at all, how STRAIGHT can its roll be, and where does it
-    ARRIVE?** -- a coarse aim sweep, returning ``dict(rate, off, off_rate, along, n, arrive, over)``
-    for the surviving rolls, or None if none survive.
+               dead=None, corridor=None, target_along=None, thread=None, resid=None,
+               fan_center=None, collect=None):
+    """**Is this junction endpoint ROLLABLE at all, how STRAIGHT can its roll be, where does it
+    ARRIVE, and where would the ESCAPE land from it?** -- an aim sweep, returning
+    ``dict(rate, off, off_rate, along, n, arrive, over, land, land_frames, land_off, land_over,
+    fan_edge, fan_half)`` for the surviving rolls, or None if none survive.
 
     This is the endpoint keep's real criterion, because FLATNESS DOES NOT PREDICT IT. Measured over
     three cycle-1 nodes (400 endpoints probed each): 32 / 43 / 71 were rollable, and on the first
@@ -268,6 +270,52 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     the smallest ``|delivered along - target_along|`` any surviving roll reaches (``over`` its signed
     value, + = past the target). ``along`` is the straightest roll's own delivered along.
 
+    ``thread``/``resid`` (session 71) give the axis that SUBSUMES those two and corrects them:
+    ``land`` = the smallest `aim.thread_miss` any surviving roll's ESCAPE would reach (the delivered
+    Tetra plus the measured residual, against the target segment), with ``land_frames`` the
+    `objective.thread_frames` at that roll and ``land_off``/``land_over`` its own squareness and
+    arrival, so what the trade cost is legible.
+
+    It is not a convenience combination of the other two. ``off`` rides
+    `aim.handoff_corridor`, which is a line from the origin through ONE point (the thread's near end
+    minus the residual), while the target is a SEGMENT whose lateral falls 0.215 u per u of along --
+    78x the corridor's own slope. So the corridor's lateral ask is right only where the arrival is
+    exactly on target: measured against what the escape actually needs, it is off by **1.33 u at
+    along 900, 4.11 u at 912.7 and 10.18 u at 949.5**, against a `objective.PLACEMENT_BAND` of 1.0.
+    Every arrival the last cycle chooses between is past the target (the roll is a ~223 u atom that
+    cannot stop short), so ``off`` was scoring exactly the arrivals it cannot score. ``land`` computes
+    the landing point and measures it against the segment, so it is exact given the residual -- the
+    same shift `aim.handoff_rows` made on the RANK side in session 70, here on the KEEP side.
+
+    ``fan_center`` (session 71) is WHERE the sweep points, and it is the difference between a screen
+    that answers and one that does not. The default fan is +-0x2800 (112.5 deg wide) about the HERD
+    bearing thinned by ``step``, and 95-99% of every aim in it dies ``followed`` -- Link past
+    `FOLLOW_ENGAGE_DIST`, which a ~223 u roll does the instant it stops plowing her. Measured over the
+    whole armed set of a real cycle-2 exit (33 surviving rolls of ~83k aims), the survivors occupy
+    **18.5 deg** of that 112.5 herd-relative and **13.4 deg** relative to the bearing to TETRA, so the
+    sweep spends ~85% of its rollouts where nothing can live. ``fan_center='tetra'`` re-centres it on
+    the per-endpoint bearing to her -- the causal frame, since surviving IS keeping contact.
+
+    That buys RESOLUTION at the same cost, and resolution is the thing the screen was short of: at the
+    default ``step=24`` it is 3x coarser than `roll_candidates`, the stage it screens FOR, and on the
+    band the plan needs (jf 6, 416 endpoints) it finds **2** rollable where ``step=8`` finds **20**,
+    while it calls the jf-7 band DEAD where ``step=8`` finds 2 -- including that band's best predicted
+    landing. Narrowed to `pursuit_box`'s measured ``max_delta`` (+-21.35 deg, the recorded regime, not
+    a fitted number) the fan holds ~31 aims at ``step=8`` against ~27 at ``step=24`` over the wide one.
+    Containment holds by measurement (`[[search-space-contains-human]]`): the human's own two rolls sit
+    at +0.76 and +0.63 deg from the bearing to Tetra, and the widest survivor anywhere in the sweep at
+    7.65 deg. The narrowing is also SELF-CHECKING rather than trusted
+    (`[[oneshot-no-manual-tweaking]]`): ``fan_edge``/``fan_half`` report the furthest SURVIVING aim
+    from the centre against the window it was given, so a caller or a gate can see whether the window
+    is binding instead of assuming it is not.
+
+    ``collect`` (session 71) is the sink for the JOINT distribution, because the three axes above are
+    aggregated INDEPENDENTLY over the fan and a keep cannot read a pair off them: the roll that
+    delivers ``off`` and the roll that delivers ``arrive`` are in general different aims, so
+    "square AND arriving" is not expressible in the return value. Every surviving roll appends
+    ``dict(along, lat, off, over, rate, link_lat, aim, want, jf)`` -- what a combined key has to be
+    calibrated on (`junction_beam`'s ``collect`` has the same shape and the same reason).
+
     ``dead`` accumulates WHY each aim died. A stalled cycle is the recurring failure mode here, and
     "no aim rolled" is not a diagnosis -- talk-unsafe, never-rolled, weak (+5 not +26), off-line and
     wall are four different problems with four different fixes."""
@@ -275,7 +323,14 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     dead = {} if dead is None else dead
     cor = O.push_corridor(hl) if corridor is None else corridor
     best = None
-    for (_want, aim) in T.roll_facing_fan(endpoint['run'], hl.bearing_bam(), half_window, step):
+    if fan_center is None:
+        center = hl.bearing_bam()
+    elif fan_center == 'tetra':
+        center = _bearing((endpoint['run'].link.pos_x, endpoint['run'].link.pos_z),
+                          (endpoint['run'].tx, endpoint['run'].tz))
+    else:
+        center = int(fan_center)
+    for (_want, aim) in T.roll_facing_fan(endpoint['run'], center, half_window, step):
         rr = endpoint['run'].clone()
         seg = T.roll_segment(rr, aim, target_cs=None, l_window=l_window)
         why = ('talk' if seg['talk_unsafe'] else
@@ -292,18 +347,36 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
             dead[why] = dead.get(why, 0) + 1
             continue
         al = hl.along(rr.tx, rr.tz)
-        off = cor['offset'](al, hl.lateral(rr.tx, rr.tz))
+        lat = hl.lateral(rr.tx, rr.tz)
+        off = cor['offset'](al, lat)
         over = None if target_along is None else al - float(target_along)
+        land = lframes = None
+        if thread is not None and resid is not None:
+            from harness.tetrapush import aim as A      # deferred: `aim` reads `objective` back
+            la, ll = al + resid[0], lat + resid[1]
+            land = A.thread_miss(la, ll, thread)['miss']
+            lframes = O.thread_frames(la, ll, thread)
+        if collect is not None:
+            collect.append(dict(along=al, lat=lat, off=off, over=over, rate=m['per_frame'],
+                                link_lat=m['lat'], aim=aim, want=_want, jf=endpoint['jf'],
+                                land=land, land_frames=lframes))
+        edge = abs(_s16(_want - center))
         if best is None:
             best = dict(rate=m['per_frame'], off=off, off_rate=m['per_frame'], along=al, n=1,
-                        arrive=None if over is None else abs(over), over=over)
+                        arrive=None if over is None else abs(over), over=over,
+                        land=land, land_frames=lframes, land_off=off, land_over=over,
+                        fan_edge=edge, fan_half=int(half_window))
             continue
         best['n'] += 1
+        best['fan_edge'] = max(best['fan_edge'], edge)
         best['rate'] = max(best['rate'], m['per_frame'])
         if off < best['off']:
             best['off'], best['off_rate'], best['along'] = off, m['per_frame'], al
         if over is not None and abs(over) < best['arrive']:
             best['arrive'], best['over'] = abs(over), over
+        if land is not None and land < best['land']:
+            best['land'], best['land_frames'] = land, lframes
+            best['land_off'], best['land_over'] = off, over
     return best
 
 
@@ -961,11 +1034,12 @@ def _probe_pool(ends, cap, sq_key=None, tag=None, spread=True, jf_spread=False):
 
 def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=16,
                  max_frames=12, beam=8, aim_keep=3, half_window=0x2800, step=8,
-                 probe_cap=250, rank='bound', budget=None, placements=None,
+                 probe_cap=250, probe_step=24, rank='bound', budget=None, placements=None,
                  require_quality=True, glide_keep=False, escape_keep=False, corridor_keep=True,
                  align_keep=True, per_state=4, aim_share=True, square_keep=True,
                  square_pool=False, corridor=None, arrive_keep=False, target_along=None,
-                 resid=None, tcs_landing=False, tcs_square=False, verbose=False):
+                 resid=None, tcs_landing=False, tcs_square=False, land_keep=False,
+                 probe_contact=False, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1032,6 +1106,22 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     ``jf_spread``), without which it has nothing to choose from: the pool is a FLATNESS prefix, so the
     250 probed of 4622 were all jf 8/10 and every arrival in them was ~53 u past the target.
 
+    ``land_keep`` (session 71) is the endpoint keep's own version of that shift, and it is the axis
+    that SUBSUMES ``square_keep`` and ``arrive_keep`` rather than a third share beside them: a share of
+    ``jn_keep`` by the smallest escape LANDING any probed roll would reach (`roll_probe`'s ``land``,
+    exact given ``resid``). The two it replaces are separately blind -- ``off`` rides a corridor line
+    through ONE point, so past the target along its lateral ask is wrong by 4.11 u at +18.8 and 10.18 u
+    at +55.6 against a 1.0 u `objective.PLACEMENT_BAND`, and every arrival a last cycle chooses between
+    is past the target. Requires ``resid``; inert without it.
+
+    ``probe_step`` / ``probe_contact`` (session 71) are the SCREEN's resolution and where it points, and
+    they are one fix in two knobs (kept separable so the measurement can tell them apart). The screen
+    ran 3x coarser than `roll_candidates`, the stage it screens for, over a fan 6x wider than any
+    surviving roll occupies -- so on the band the plan needs it found 2 rollable endpoints of 416 and
+    called the next band dead. ``probe_contact`` re-centres the fan on the bearing to Tetra and narrows
+    it to `pursuit_box`'s measured ``max_delta``, which is what makes ``probe_step=8`` cost what
+    ``probe_step=24`` cost before. `roll_probe`'s ``fan_center`` holds the measurement.
+
     ``tcs_landing`` / ``tcs_square`` (session 70) are the CAMERA-target cut's two calibrated keys, one
     per kind of cycle: `landing_key` on the LAST one (its exit is the handoff, so rank it by where the
     escape lands, not by a next junction it does not have) and `square_probe_key` mid-chain (a keep
@@ -1050,8 +1140,14 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     # the line the keeps ride: to the nearest coord by default, `aim.handoff_corridor` from the chain
     cor_j = O.push_corridor(hl, rows_j) if corridor is None else corridor
     sq_key, _ = _armable_square(hl, cor_j)
+    th_j = O.placement_thread(hl, rows_j)
+    # the ENDPOINT keep's landing axis (s71): the target is a SEGMENT, not the corridor's one point
+    th_land = th_j if (land_keep and resid is not None) else None
+    # the SCREEN's fan (s71): re-centred on the bearing to Tetra and narrowed to the recorded regime,
+    # which is where every surviving roll measurably lives -- see `roll_probe`'s ``fan_center``
+    pkw = (dict(fan_center='tetra', half_window=int(box['max_delta'])) if probe_contact else {})
     # the CAMERA-target cut's key: the landing on the last cycle, the cheap probe mid-chain (s70)
-    tcs_key = (landing_key(hl, O.placement_thread(hl, rows_j), resid) if tcs_landing else None)
+    tcs_key = (landing_key(hl, th_j, resid) if tcs_landing else None)
     tcs_probe = square_probe_key(hl, box, cor_j) if tcs_square else None
     jdead = {}
     for node in nodes:
@@ -1067,8 +1163,9 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             uniq = _probe_pool(uniq, probe_cap, sq_key if square_pool else None,
                                jf_spread=arrive_keep)
         rdead = {}
-        scored = [(p, e) for p, e in ((roll_probe(e, hl, dead=rdead, corridor=cor_j,
-                                                 target_along=target_along), e)
+        scored = [(p, e) for p, e in ((roll_probe(e, hl, step=probe_step, dead=rdead,
+                                                 corridor=cor_j, target_along=target_along,
+                                                 thread=th_land, resid=resid, **pkw), e)
                                       for e in uniq) if p is not None]
         scored.sort(key=lambda t: -t[0]['rate'])
         orders = [[e for _p, e in scored]] if scored else []
@@ -1081,6 +1178,11 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             # past it, which is the same probe's third axis (session 70 -- see `roll_probe`)
             orders.append([e for _p, e in sorted(scored, key=lambda t: (t[0]['arrive'] is None,
                                                                        t[0]['arrive'] or 0.0))])
+        if th_land is not None and scored:
+            # ...and a share by where the ESCAPE would land, which is the two axes above measured
+            # against the real target segment instead of against a one-point line (session 71)
+            orders.append([e for _p, e in sorted(scored, key=lambda t: (t[0]['land'] is None,
+                                                                       t[0]['land'] or 0.0))])
         if len(orders) > 1:
             kept = _mixed_beam(orders, int(jn_keep),
                                ident=lambda e: (_physics_tag(e['run']), e['log'][-1]['stickX'],
@@ -1091,6 +1193,12 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
         jdead['unrollable'] = jdead.get('unrollable', 0) + (len(uniq) - len(scored))
         for k, v in rdead.items():                     # WHY the aims died, not just how many
             jdead['aim_' + k] = jdead.get('aim_' + k, 0) + v
+        if verbose and scored:
+            # is the SCREEN's window binding? (`roll_probe`'s ``fan_edge`` -- never assume it is not)
+            ed = max(p['fan_edge'] for p, _e in scored)
+            print("    (%d of %d endpoints roll; furthest surviving aim %.2f deg of the %.2f deg "
+                  "half-window)" % (len(scored), len(uniq), ed * _BAM_DEG,
+                                    scored[0][0]['fan_half'] * _BAM_DEG))
         for j in kept:
             for cand in roll_candidates(j, hl, box, aim_keep=aim_keep, half_window=half_window,
                                         step=step, key=key, require_quality=require_quality,
@@ -2330,7 +2438,7 @@ def glide_probe(run, frames, hl, placements, thread, *, max_frames=5, beam=4, n_
     return best
 
 
-def escape_probe(run, frames, hl, placements, thread):
+def escape_probe(run, frames, hl, placements, thread, atom_landing=True):
     """**The LAST cycle's endpoint keep, one stage further out than `glide_probe`: what its ESCAPE
     lands, not what its glide reaches** (session 67).
 
@@ -2347,11 +2455,18 @@ def escape_probe(run, frames, hl, placements, thread):
     that landing costs. ~2-5 s per endpoint (16 atom variants), so it re-ranks the final survivor
     list, never an aim fan.
 
+    ``atom_landing`` (session 71, default ON) makes the atom sweep pick its variant by where it leaves
+    HER rather than by entry progress (`away_walk.probe`'s ``thread``) -- the same argument one level in:
+    if the atom's frames are the last with authority over Tetra, the atom's own knobs are part of the
+    placement, and ranking them by how far Link got toward the entry roll spends that authority on the
+    separate search. Measured over 8 real arrivals it improves 6, median 2.70 u and max 10.08 u of
+    landing, taking this stage's best from 16.34 u off the thread to 6.25 at 77 frames.
+
     Returns ``dict(fires, miss, pd, frames, bound, resid, freeze_f, spec)``; a non-firing endpoint
     reads ``fires=False`` with an infinite bound so it sorts last (it cannot end a plan: rule 3)."""
     from harness.tetrapush import away_walk as AW
     from harness.tetrapush import aim as A
-    res = AW.probe(run, hl)
+    res = AW.probe(run, hl, thread=(thread if atom_landing else None))
     if res is None or not AW.fires(res):
         return dict(fires=False, miss=None, pd=None, frames=frames, bound=float('inf'),
                     resid=None, freeze_f=None if res is None else res['freeze_f'], spec=None)
