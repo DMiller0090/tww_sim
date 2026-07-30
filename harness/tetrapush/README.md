@@ -1728,10 +1728,39 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               weak enough that the true landing has to be probed, which is what `escape_keep` is for. (A
               12-row contact-fan sample read |Link-Tetra lat| at +0.878 and ``land`` at +0.524; that
               sample was 8 duplicate rows of one arrival. Dedupe before correlating.)
+            - **AND THE EXACT ESCAPE OFF THOSE ROLLS MOVES THE PLACEMENT FRONTIER 15.70 -> 4.90 u, WITH
+              THE ARRIVAL INSIDE THE PREFERRED FRAME BUDGET.** The real atom (landing-ranked) on the 15
+              best full-resolution rolls: **18 of 18 fire**, the best lands **4.90 u** off the thread and
+              **4.902 u from a genuine coord** from a **71-frame** arrival at `plan_bound` **73.76** --
+              inside `objective.frame_floor`'s PREFERRED 74, let alone the 75 budget -- and the best coord
+              distance in the set is **3.124 u** (row 3: ``over`` +9.2, ``off`` 5.00, Link 2.9 u off her
+              lateral, escape bound 77.89). Against the s67/s70 frontier of 15.70 u at 78-80 frames that
+              is 5x closer at 7-9 fewer arrival frames. What is still open is the ESCAPE's own bound
+              (76-77 frames + the landing's remaining `objective.thread_frames` = 77.50) and the
+              `aim.handoff_spec` verdict, which needs the landing inside `objective.PLACEMENT_BAND` (1.0)
+              and reads False on all 18.
+            - **THE PREDICTION REMAINS OPTIMISTIC AND NO CHEAP KEY DOMINATES ACROSS SAMPLES.** pred 0.53
+              -> true 12.55, pred 7.64 -> true 4.90: the ordering is only ~0.73 correlated, and the two
+              samples disagree about which cheap key is best (35-pick census: ``land`` +0.834, |Link-Tetra
+              lat| +0.326; 18-pick full-resolution: |Link-Tetra lat| **+0.827**, ``land`` +0.728). So
+              ``land`` is the right axis to KEEP on -- it is the only one measured against the real target
+              -- but the landing itself has to be probed, which is what `escape_keep` is for.
+            - **END TO END THE AFFORDABLE WIRING IS NOT YET A WIN, WHICH IS THE OPEN ITEM.** Cycle 3 off
+              the same dumped s69 cycle-2 beam with the narrow fan + ``probe_step=8`` + ``land_keep`` at
+              the SAME 250-of-4622 pool: 12 roll survivors -> 3 after the beam, all identical (along
+              936.64, lat -24.49, ``off`` 27.08, ``over`` +42.8), escape landing **21.46 u at 77 f**
+              (`plan_bound` 76.39, escape bound 81.41), 1116 s. That beats s70's in-budget arrival
+              (57.69 u at 71 f) and LOSES to s70's best-landing survivor (15.70 u at 80 f) -- and the
+              beam collapsed because at a fixed ``step`` the narrow fan is a different SUB-LATTICE of the
+              reachable set rather than a superset: it found 10 and 4 rollable endpoints on two of the six
+              nodes and none on the rest at that cap (s70's run had 21 survivors). The strict win is
+              RESOLUTION, which at 1013 s a band cannot be paid uniformly -- hence the two-stage screen.
+              The session's value is the census and the atom rank, not this run.
             - Do NOT re-pay: "rank the arriving band by ``off``" as a gate width (the corridor is the
               wrong line past the target, so a width on it cannot help), an aim key for the tcs cut
-              (s70), or the assumption that a band reading 0 rollable is dead -- at this stage that is a
-              statement about the screen.
+              (s70), the narrow fan at a fixed step treated as a superset of the wide one (measured: jf 6
+              gives 20 rollable wide against 10 narrow), or the assumption that a band reading 0 rollable
+              is dead -- at this stage that is a statement about the screen.
       - [x] **THE OVERSHOOT WAS THE PROBE POOL, WHICH IS A FLATNESS PREFIX AND NOT THE GENERATION
             PREFIX IT SAID IT WAS (session 70): cycle 3's arrival went along 947.4 (+53.5 PAST the
             handoff target) -> 886.81 (7.1 SHORT), frames 75 -> 70, `plan_bound` 77.27 -> 75.03, the
