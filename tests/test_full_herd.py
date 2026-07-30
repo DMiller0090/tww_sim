@@ -236,6 +236,190 @@ def test_the_exit_probes_pool_is_the_uncapped_mix_not_the_carry_pool():
     assert F._probe_pool(ends, 250, None, spread=False) == ends[:250]
 
 
+def test_the_endpoint_probe_reports_the_arrival_its_rolls_deliver(env, hl, box):
+    """**The OVERSHOOT as the endpoint probe's third axis** (session 70). A cycle's roll is a ~205 u
+    atom that cannot stop short, so WHERE a plan finishes is decided when its last endpoint is chosen
+    -- and nothing ranked that: the s69 cycle-3 stage kept endpoints landing Tetra at along 947 against
+    a `aim.handoff_target` of 894, ~4 frames of push spent going past and then paid back in lateral,
+    which is that run's whole 78-80 against a 75-frame budget.
+
+    `roll_probe` already fires the entire aim fan, so the along its rolls DELIVER costs nothing to
+    report. Gated as PURELY ADDITIVE (asking for the arrival cannot change rollability, the rate or the
+    delivered offset -- a keep must never perturb the rank it shares) plus the two identities that make
+    ``arrive`` usable as a keep: it is the |signed overshoot| of the same roll, and it is the MINIMUM
+    over the surviving rolls, so it is never worse than the straightest roll's own arrival.
+
+    The last assertion pins WHERE the keep applies, which is why `chain_herd` wires it on the last
+    cycle only: from a cycle-2-range endpoint every surviving roll UNDERSHOOTS the handoff target by
+    ~300 u, so there "arrive" and "get as far as possible" are the same ask and the keep is inert. It
+    can only bite where a roll can go past."""
+    from harness.tetrapush import aim as A
+    rows = seeds.load_placements()[0]
+    cor = A.handoff_corridor(env, hl, O.placement_thread(hl, rows), rows=rows)
+    tgt = cor['target'][0]
+
+    dtm = seeds.dtm_input_at(env)
+    base = seeds.make_freerun(env)
+    base.pre_seed_input(dtm(0))
+    for k in range(1, 21):
+        base.step(dtm(k))
+    node = dict(run=base, log=[dtm(k) for k in range(21)], frames=20)
+    ends = F._dedup_endpoints(F.junction_beam(node, hl, box, max_frames=8, beam=16, ess_step=2,
+                                              aim_step=32, keep=10 ** 6, corridor=cor))
+    assert ends
+
+    got = 0
+    for e in ends[:60]:
+        blind = F.roll_probe(e, hl, corridor=cor)
+        aware = F.roll_probe(e, hl, corridor=cor, target_along=tgt)
+        assert (blind is None) == (aware is None)
+        if blind is None:
+            continue
+        got += 1
+        assert blind['arrive'] is None and blind['over'] is None      # not asked, not reported
+        for f in ('rate', 'off', 'off_rate', 'along', 'n'):           # purely additive
+            assert blind[f] == aware[f], f
+        assert abs(aware['arrive'] - abs(aware['over'])) < 1e-12
+        assert aware['arrive'] <= abs(aware['along'] - tgt) + 1e-12   # the min over the fan
+        assert aware['over'] < 0.0                    # cycle-2 range: every roll falls short
+    assert got, "no endpoint off the human's own cycle-1 exit was rollable at all"
+
+
+def test_the_probe_pool_is_a_flatness_prefix_and_the_band_share_is_what_covers_the_arrival(env, hl,
+                                                                                          box):
+    """**The false assumption that starved the arrival keep** (session 70). `_probe_pool`'s note said
+    `extend_cycle` probes the first ``cap`` "in COLLECTION order (generation order), i.e. the earliest
+    junction frames". It does not: with ``keep`` unbounded `junction_beam` RETURNS its endpoints sorted
+    by ``(|Link - Tetra lateral|, jf)``, so the prefix is a FLATNESS prefix.
+
+    That is why the session-70 arrival keep came out byte-identical to the stage without it. Off a real
+    cycle-2 exit the beam returns 4622 armed endpoints spread over jf 5..12 and the 250 probed were
+    **entirely jf 8 and jf 10** -- and the junction frame IS the arrival, because the roll's length is
+    fixed (~223 u) while the junction pushes ~11-12 u/frame: jf 6 lands Tetra at along 887 against a
+    `aim.handoff_target` of 894, jf 12 at 947. So the keep had two arrivals to choose between, both
+    ~53 u past the target, and a band-spread pool finds a rollable jf-6 endpoint delivering 886.81.
+
+    Gated on the two halves that make it a bug rather than a preference: the returned order really is
+    non-decreasing in |lat| (so any prefix of it is a flatness sample), and the band share really does
+    cover strictly more junction frames at the same pool size -- while still filling the pool, since a
+    coverage fix that shrank it would trade one blind spot for another."""
+    rows = seeds.load_placements()[0]
+    cor = O.push_corridor(hl, rows)
+    dtm = seeds.dtm_input_at(env)
+    base = seeds.make_freerun(env)
+    base.pre_seed_input(dtm(0))
+    for k in range(1, 21):
+        base.step(dtm(k))
+    node = dict(run=base, log=[dtm(k) for k in range(21)], frames=20)
+    ends = F._dedup_endpoints(F.junction_beam(node, hl, box, max_frames=8, beam=16, ess_step=2,
+                                              aim_step=32, keep=10 ** 6, corridor=cor))
+    assert len({e['jf'] for e in ends}) > 1, "this exit's endpoints are all at one junction frame"
+
+    lat = [abs(e['m']['lat']) for e in ends]
+    assert all(lat[i] <= lat[i + 1] + 1e-12 for i in range(len(lat) - 1)), \
+        "junction_beam's return is no longer the flatness order this prefix was blind to"
+
+    cap = max(8, len(ends) // 8)                    # small enough that the prefix cannot cover both
+    prefix = F._probe_pool(ends, cap)
+    banded = F._probe_pool(ends, cap, jf_spread=True)
+    assert prefix == ends[:cap]                     # the default really is that prefix
+    assert len(banded) == cap                       # ...and the fix does not shrink the pool
+    assert len({e['jf'] for e in banded}) > len({e['jf'] for e in prefix})
+    # the band share must not inherit the squareness pool's per-state cap (that returns one pending
+    # variant per physics state, which is a different and much smaller pool)
+    assert len(F._probe_pool(ends, cap, jf_spread=True, spread=True)) == cap
+
+
+def test_the_last_cycles_camera_cut_prices_the_escape_the_thread_rank_pays_for(env, hl):
+    """**The last cycle's `target_cs` cut was ranked by a question it does not have** (session 70).
+
+    `junction_quality` asks whether the NEXT junction can continue from a roll's exit. The last cycle
+    has no next junction -- `extend_cycle` already turns the GATE off (``require_quality=False``) and
+    the s43-s69 stage then left the ORDER ranked by it anyway. Its exit IS the handoff state, so what
+    it is worth is where the escape lands from it (`landing_key`).
+
+    The contrast is gated on real arrivals at four along offsets from the same coord, because the
+    stock last-cycle rank is measurably PAID for overshooting: `objective.thread_frames` charges
+    nothing for along anywhere inside the thread's 47.6 u, so `rank_key('thread')` scores an arrival
+    sitting ON the coord -- 44 u past the state the escape needs -- as its BEST (0.00 frames) and one
+    at the handoff target as 3.36 worse. `landing_key` reverses that, and `aim.landing_miss` says which
+    of the two is right: the escape from the coord-position overshoots the thread by ~14.5 u, from the
+    handoff-target one by ~5.5."""
+    from harness.tetrapush import aim as A
+    rows = seeds.load_placements()[0]
+    th = O.placement_thread(hl, rows)
+    cor = A.handoff_corridor(env, hl, th, rows=rows)
+    resid = cor['resid']
+    assert resid is not None
+    near = min(rows, key=lambda p: hl.along(p['x'], p['z']))
+    nodes = {d: F.synthetic_hot_arrival(env, hl, near['idx'], d_short=d, feet=56.0)
+             for d in (0.0, resid[0])}
+    lk = F.landing_key(hl, th, resid)
+    stock = F.rank_key('thread', rows, hl)
+    shifted = F.rank_key('thread', rows, hl, resid=resid)
+
+    def rk(key, nd):
+        return key(nd['run'], nd['frames'], T.metrics(nd['run'], hl, nd['frames']))
+
+    at_coord, at_handoff = nodes[0.0], nodes[resid[0]]
+    # the stock rank PAYS for the overshoot; the escape-aware key and the shifted rank do not
+    assert rk(stock, at_coord) < rk(stock, at_handoff) - 0.5
+    assert lk(at_coord) > lk(at_handoff)
+    assert rk(shifted, at_coord) > rk(shifted, at_handoff)
+    # ...and the exact landing says which ranking is right
+    miss = {d: A.landing_miss(nd['run'], hl, th, resid)['miss'] for d, nd in nodes.items()}
+    assert miss[0.0] > 2.0 * miss[resid[0]]
+    # without a residual the key degrades to the exit's own position, i.e. the stock thread cost
+    plain = F.landing_key(hl, th, None)
+    assert plain(at_coord) < plain(at_handoff)
+
+
+@pytest.mark.slow
+def test_a_cheap_aim_key_ranks_the_dead_exits_first_and_the_cheap_probe_does_not(env, hl, box):
+    """**The session-70 calibration, which overturned the plan it was measuring.** Session 69 left
+    `roll_candidates`' ``tcs_keep`` ranked by `junction_quality` (frames in the pursuit box) at every
+    cycle and handed over "give that glide an AIM-aware key -- report the corridor aim it reaches
+    instead of only frames-in-box". Cycle 1's grid is fully probed, so the proxy could be calibrated
+    against the truth before being wired, and the answer is that an aim key is not merely no better,
+    it is the WORST of the candidates: over the 25-exit grid, a keep of 3 by the stock key delivers
+    14.67 u of corridor offset, by the glide's aim 116.93, and by the exit's own aim NOTHING AT ALL.
+
+    The reason is structural, and it is what this gates: the exits with the SMALLEST aim error are the
+    ones whose junction arms nothing. Eighteen of the 25 sit at |aim| 1.26-2.05 deg and not one of them
+    can roll; every exit that delivers anything measures |aim| >= 3.0. So the cheapest scalar that
+    looks like squareness ranks the dead ones first.
+
+    What IS affordable is the same PROBE at a coarser budget (`CHEAP_PROBE`, ~2.7 s against ~21 s).
+    Coarseness costs recall, not precision: it declines most exits, and where it answers it agrees with
+    the full probe -- gated here as bit-equality on the exit it picks, which is also the exit the FULL
+    probe picks and one the stock quality order ranks fifth."""
+    from harness.tetrapush import aim as A
+    rows = seeds.load_placements()[0]
+    cor = O.push_corridor(hl, rows)
+    cheap = F.square_probe_key(hl, box, cor)
+
+    grid = F.cycle1_nodes(env, hl, box, placements=rows, square_keep=False, tcs_keep=10 ** 6,
+                          beam=10 ** 6)
+    aims = [(abs(A.corridor_aim_error(n['run'], hl, cor)), n) for n in grid
+            if A.corridor_aim_error(n['run'], hl, cor) is not None]
+    assert len(aims) > 10
+    aims.sort(key=lambda t: t[0])
+    # the smallest-aim exits arm NOTHING -- an aim-ranked keep of 3 would deliver nothing at all
+    for _v, n in aims[:3]:
+        assert cheap(n) is None
+
+    # the cheap probe over the stock order: where it answers, that answer is real
+    scored = [(cheap(n), n) for n in grid[:12]]
+    live = [(v, n) for v, n in scored if v is not None]
+    assert live, "the cheap probe scored none of the stock order's first 12 exits"
+    best_v, best_n = min(live, key=lambda t: t[0])
+    full = F.junction_square_probe(best_n, hl, box, cor)
+    assert full is not None and abs(full['off'] - best_v) < 1e-9      # coarse == full where it fires
+    # ...and it is NOT what the stock quality order puts first, so the keep adds something
+    assert F._state_tag(best_n['run']) != F._state_tag(grid[0]['run'])
+    assert abs(A.corridor_aim_error(best_n['run'], hl, cor)) > aims[0][0]
+
+
 @pytest.mark.slow
 def test_the_cycle_1_squareness_keep_takes_the_exit_the_quality_rank_cuts(env, hl, box):
     """**The session-69 result: cycle 1 chooses ONE roll's CAMERA, and the rank it was choosing with

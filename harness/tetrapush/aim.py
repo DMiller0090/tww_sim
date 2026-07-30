@@ -318,6 +318,35 @@ def handoff_target(thread, resid, *, seg_s=0.0):
     return (tp[0] - resid[0], tp[1] - resid[1])
 
 
+def handoff_rows(rows, hl, resid):
+    """**The placement rows as the HERD's target rather than the ESCAPE's** (session 70): every coord
+    translated up-herd by the measured residual ``resid`` = ``(along, lat)``, in WORLD coordinates so
+    the result drops into any ``placements=`` parameter unchanged (`full_herd.rank_key`,
+    `objective.placement_thread`, `objective.push_corridor`, `full_herd._placement_dist`).
+
+    `handoff_target` is this for ONE point on the thread; this is the whole set, which is what a rank
+    needs -- `objective.plan_bound` measures a distance to the NEAREST coord and
+    `objective.thread_frames` minimises over WHERE on the thread she stops, so both want the target
+    set moved, not a single point substituted.
+
+    Why a rank needs it at all (the session-69 measurement it answers): the thread has 47.6 u of along
+    slack, so an endpoint anywhere inside along 937.5..984.1 pays ZERO along cost -- and the s69
+    cycle-3 endpoints sat at 947, i.e. 53 u past the state the herd had to deliver, entirely free to
+    the rank and worth ~4 frames of the run's 78-80 against a 75-frame budget. Shifted, the same
+    segment is 893.9..940.5 and 947 is past its far end.
+
+    A pure translation, so the thread built from these rows keeps its slope, length and off-axis angle
+    (`objective.placement_thread`) -- gated in `tests/test_aim.py`."""
+    dx = resid[0] * hl.dx + resid[1] * hl.px
+    dz = resid[0] * hl.dz + resid[1] * hl.pz
+    out = []
+    for p in rows:
+        q = dict(p)
+        q['x'], q['z'] = p['x'] - dx, p['z'] - dz
+        out.append(q)
+    return out
+
+
 def handoff_corridor(env, hl, thread, *, rows=None, feet=56.0, resid=None, seg_s=0.0):
     """**The line the CHAIN must ride, which is NOT the line to the coord** (session 69) -- the same
     shape as `objective.push_corridor` (``target``/``slope``/``lat_at``/``offset``) so it drops into

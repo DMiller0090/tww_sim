@@ -223,6 +223,46 @@ def test_handoff_target_is_the_coord_minus_the_escape(env, hl, thread):
     assert sp['aim_ok'] == (lm['miss'] <= sp['band'])
 
 
+def test_handoff_rows_are_the_targets_the_herd_must_deliver_and_price_the_overshoot(env, hl, thread):
+    """**The rank-side twin of `handoff_corridor`** (session 70): the whole placement set translated
+    up-herd by the escape's measured residual, so a rank measures the distance to the state the HERD
+    must deliver instead of to the coord the ESCAPE lands on.
+
+    Two things are gated. That it is an exact TRANSLATION -- the thread rebuilt from the shifted rows
+    keeps its slope, length, off-axis angle and chord deviation, its along ends move by exactly
+    ``resid_along`` and its laterals by exactly ``resid_lat``, and its near end IS `handoff_target`
+    (the two must agree or a plan would be ranked against one target and scored against another).
+
+    And WHY a rank needs it: the thread is 47.6 u of along slack, so `objective.thread_frames` charges
+    NOTHING for along anywhere inside it -- the session-69 cycle-3 endpoints sat at along 947, 53 u past
+    the handoff target, and the real thread priced that as CHEAPER than arriving on target (2.34 frames
+    against 3.35). It is not cheaper: it is ~4 frames of push spent going somewhere the plan then has to
+    come back from, and it is the whole of that run's 78-80 frames against a 75-frame budget. Against
+    the shifted thread the same two states price 0.54 and 0.00."""
+    resid = (43.65, 5.47)                       # the measured atom (`handoff_corridor`, s69)
+    rows = seeds.load_placements()[0]
+    sh = O.placement_thread(hl, A.handoff_rows(rows, hl, resid))
+    # an exact translation in herd coordinates, shape untouched
+    assert abs((thread['along_lo'] - sh['along_lo']) - resid[0]) < 1e-9
+    assert abs((thread['along_hi'] - sh['along_hi']) - resid[0]) < 1e-9
+    assert abs((thread['lat_at'](thread['along_lo']) - sh['lat_at'](sh['along_lo'])) - resid[1]) < 1e-9
+    for f in ('slope', 'length', 'deg_off_axis', 'max_chord_dev'):
+        assert abs(thread[f] - sh[f]) < 1e-9, f
+    # ...and it agrees with the single-point form, which the chain's keeps ride
+    tgt = A.handoff_target(thread, resid)
+    assert abs(tgt[0] - sh['along_lo']) < 1e-9
+    assert abs(tgt[1] - sh['lat_at'](sh['along_lo'])) < 1e-9
+
+    # the pricing: on the shifted line, arriving ON target is free and the s69 overshoot is not --
+    # while the real thread has it the other way round
+    def price(along, th):
+        return O.thread_frames(along, sh['lat_at'](min(along, sh['along_hi'])), th)
+
+    on, past = price(tgt[0], sh), price(947.4, sh)
+    assert on < 1e-9 and past > 0.3
+    assert price(947.4, thread) < price(tgt[0], thread) - 0.5      # the inversion it removes
+
+
 def test_the_handoff_corridor_is_a_different_ask_than_the_coord_corridor(env, hl, thread):
     """**The mid-chain bias the chain was carrying** (session 69): every keep that reads a corridor was
     reading the line to the nearest COORD, but the state the chain has to deliver is that coord minus

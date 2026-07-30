@@ -236,10 +236,10 @@ def junction_alphabet(run, hl, *, ess_step=4, aim_step=64):
 
 
 def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_window=0x2800,
-               dead=None, corridor=None):
-    """**Is this junction endpoint ROLLABLE at all, and how STRAIGHT can its roll be?** -- a coarse
-    aim sweep, returning ``dict(rate, off, off_rate, n)`` for the surviving rolls, or None if none
-    survive.
+               dead=None, corridor=None, target_along=None):
+    """**Is this junction endpoint ROLLABLE at all, how STRAIGHT can its roll be, and where does it
+    ARRIVE?** -- a coarse aim sweep, returning ``dict(rate, off, off_rate, along, n, arrive, over)``
+    for the surviving rolls, or None if none survive.
 
     This is the endpoint keep's real criterion, because FLATNESS DOES NOT PREDICT IT. Measured over
     three cycle-1 nodes (400 endpoints probed each): 32 / 43 / 71 were rollable, and on the first
@@ -256,6 +256,17 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     of the best surviving roll's endpoint, `objective.push_corridor`) costs nothing to report -- and
     unlike the entry aim it cannot lie. ``off_rate`` is the straightest roll's own down-herd rate, so a
     caller can see what the straightness costs in frames.
+
+    ``target_along`` (session 70) is the SAME lesson applied to the third axis, ARRIVAL. A cycle's roll
+    is a ~205 u atom that cannot stop short, so where a plan ENDS is decided by which endpoint it rolls
+    from -- and nothing here ranked that: the s69 cycle-3 stage kept endpoints whose rolls landed Tetra
+    at along **947** against a `aim.handoff_target` of **894**, 53 u past it, which is ~4 frames spent
+    twice (bought going past, then paid back in lateral) and the whole of that run's 78-80 vs 75-frame
+    overrun. The junction is the adjustable part (~13 u/frame of pursuit against the roll's fixed
+    length), so the arrival is a property of the ENDPOINT -- exactly the shape ``off`` has. The sweep
+    already fires every aim, so the along its rolls DELIVER costs nothing to report, and ``arrive`` is
+    the smallest ``|delivered along - target_along|`` any surviving roll reaches (``over`` its signed
+    value, + = past the target). ``along`` is the straightest roll's own delivered along.
 
     ``dead`` accumulates WHY each aim died. A stalled cycle is the recurring failure mode here, and
     "no aim rolled" is not a diagnosis -- talk-unsafe, never-rolled, weak (+5 not +26), off-line and
@@ -280,14 +291,19 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
         if why is not None:
             dead[why] = dead.get(why, 0) + 1
             continue
-        off = cor['offset'](hl.along(rr.tx, rr.tz), hl.lateral(rr.tx, rr.tz))
+        al = hl.along(rr.tx, rr.tz)
+        off = cor['offset'](al, hl.lateral(rr.tx, rr.tz))
+        over = None if target_along is None else al - float(target_along)
         if best is None:
-            best = dict(rate=m['per_frame'], off=off, off_rate=m['per_frame'], n=1)
+            best = dict(rate=m['per_frame'], off=off, off_rate=m['per_frame'], along=al, n=1,
+                        arrive=None if over is None else abs(over), over=over)
             continue
         best['n'] += 1
         best['rate'] = max(best['rate'], m['per_frame'])
         if off < best['off']:
-            best['off'], best['off_rate'] = off, m['per_frame']
+            best['off'], best['off_rate'], best['along'] = off, m['per_frame'], al
+        if over is not None and abs(over) < best['arrive']:
+            best['arrive'], best['over'] = abs(over), over
     return best
 
 
@@ -572,9 +588,86 @@ def junction_square_probe(node, hl, box, corridor, *, max_frames=8, beam=16, ess
                 n_ends=len(uniq), n_pool=len(pool), n_roll=n_roll)
 
 
+#: **The CALIBRATED cheap `junction_square_probe` budget** (session 70): 1/8 the full probe's cost
+#: (~2.7 s against ~21 s) and, measured, a detector with no false positives -- see `square_probe_key`.
+CHEAP_PROBE = dict(max_frames=5, beam=8, ess_step=3, aim_step=48, cap=12, step=48, per_state=2)
+
+
+def square_probe_key(hl, box, corridor, budget=None):
+    """**The cheap `junction_square_probe` as a mid-chain tcs KEEP** (session 70) -- the calibrated
+    answer to "what should `roll_candidates`' ``tcs_keep`` rank on at cycles >= 2", and it is a probe
+    rather than a proxy because every proxy was measured WORSE than the stock key.
+
+    Session 69 left the tcs cut ranked by `junction_quality` (frames in the pursuit box) at every
+    cycle, which is blind to the aim: on cycle 1's 25-exit grid it keeps 141.83 / 27.81 / 14.67 u of
+    deliverable corridor offset where the grid holds 11.20. The handoff's proposal was to make that
+    glide report the AIM it reaches instead. Measured on the same grid -- 25 exits, every one fully
+    probed, so the calibration is exact -- an aim key is not merely no better, it is WORSE:
+
+        key                                keep 3 delivers      the best exit's rank
+        (-inbox, |lat|)   [stock]                  14.67 u                        5
+        (-inbox, glide |aim|)                     116.93 u                        7
+        (-inbox, glide |aim| + cone)              116.93 u                        4
+        (-inbox, exit |aim|)                         NONE                        19
+        exit |aim| alone                             NONE                        19
+        the CHEAP probe (~2.7 s)                   11.20 u                        1
+        the FULL probe (~21 s)                     11.20 u                        1
+
+    The reason is structural and it is the s68 lesson again: the exits with the SMALLEST aim error are
+    the ones whose junction arms NOTHING (|aim| 1.26-2.05 deg, zero rollable endpoints), so an aim key
+    ranks the dead ones first. Squareness that a roll can actually deliver is not visible in any
+    cheap scalar; it has to be rolled for.
+
+    What IS affordable is the same probe at a coarser budget (`CHEAP_PROBE`). Coarseness costs RECALL,
+    not precision: on the grid it scores only 2 of the 6 armable exits, but both are real and they are
+    the full probe's **#1 and #3** -- and it returns None (never a wrong number) on the rest, including
+    every exit the full probe also calls unrollable. So it belongs in a MIXED keep with the stock
+    quality order (`_mixed_beam`), never as the whole rank: where it answers, take it; where it does
+    not, the stage is exactly what it was.
+
+    Returns a callable ``node -> off or None`` for `roll_candidates`' ``tcs_probe``."""
+    kw = dict(CHEAP_PROBE if budget is None else budget)
+
+    def key(node):
+        p = junction_square_probe(node, hl, box, corridor, **kw)
+        return None if p is None else p['off']
+
+    return key
+
+
+def landing_key(hl, thread, resid=None, escape_frames=4):
+    """**The LAST cycle's tcs key: where the ESCAPE would land her from this exit** (session 70).
+
+    `junction_quality` asks whether the NEXT junction can continue from a roll's exit -- and the last
+    cycle has no next junction, so on the final cycle the stock tcs cut ranks the camera targets by a
+    quantity that has no bearing on anything (`extend_cycle` already turns the gate off with
+    ``require_quality=False``; the ORDER was left ranked by it anyway). The last cycle's exit IS the
+    handoff state: what it is worth is what the escape lands from it.
+
+    So rank it by `objective.thread_frames` of `aim.landing_miss`'s landing point -- the exit's position
+    plus the escape's MEASURED residual, priced in the frames that landing still costs. Exact given the
+    residual, free to compute (no rollout), and the same prediction `escape_probe` then confirms with
+    the real atom on the survivors: the cheap-predictor / exact-confirm shape the rest of this search
+    uses. Without a residual it degrades to the exit's own position, which is `rank_key`'s ``'thread'``.
+
+    Returns a callable ``node -> frames`` for `roll_candidates`' ``tcs_key``."""
+    from harness.tetrapush import aim as A          # deferred: `aim` reads `objective` back
+
+    def key(node):
+        run = node['run']
+        a, l = hl.along(run.tx, run.tz), hl.lateral(run.tx, run.tz)
+        if resid is not None:
+            lm = A.landing_miss(run, hl, thread, resid)
+            a, l = lm['along'], lm['lat']
+        return node['frames'] + int(escape_frames) + O.thread_frames(a, l, thread)
+
+    return key
+
+
 def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4, 7), (5, 8)),
                     aim_keep=3, min_roll=20.0, tcs_keep=3, target_css=None,
-                    fan_center=None, require_quality=True, key=None, mixed_aims=True):
+                    fan_center=None, require_quality=True, key=None, mixed_aims=True,
+                    tcs_key=None, tcs_probe=None, corridor=None):
     """The cycle's ROLL stage from a junction endpoint, factored by the separability above.
 
     R1: sweep the reachable aim fan (camera frozen) x the L windows, prune talk-unsafe / weak /
@@ -595,6 +688,15 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
     R2: re-run each kept aim over the DERIVED `target_cs` grid and keep the ``tcs_keep`` camera
     targets whose endpoint the NEXT junction can actually continue from, ranked by
     `junction_quality` -- a tcs that strands the plan is worthless however fast the roll was.
+
+    ``tcs_key`` / ``tcs_probe`` (session 70) are what that cut ranks on when `junction_quality` is not
+    the right question, and each is measured rather than assumed:
+      * ``tcs_key`` REPLACES the order (a callable ``node -> sortable``). The LAST cycle wants
+        `landing_key`, because its exit is the handoff and there is no next junction to strand.
+      * ``tcs_probe`` ADDS a keep share (a callable ``node -> off or None``), for mid-chain cycles where
+        continuability IS the question but the aim also has to survive: `square_probe_key`, the cheap
+        `junction_square_probe`. Its calibration -- and the measurement that every CHEAP AIM KEY IS
+        WORSE THAN THE STOCK ONE -- is in that docstring.
 
     Returns the surviving post-roll nodes (each ``dict(run, log, frames, m, knobs, quality)``)."""
     out = []
@@ -618,7 +720,9 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
     r1.sort(key=lambda t: t['k'])
     # the mixed aim keep, and where it does and does not fire: see the docstring
     if mixed_aims and len(r1) > int(aim_keep):
-        cor = O.push_corridor(hl)
+        # the line this keep rides: the caller's (`aim.handoff_corridor`), else the coord one -- s69
+        # wired the handoff line into every mid-chain aim keep and this one was still reading direct
+        cor = O.push_corridor(hl) if corridor is None else corridor
         r1 = _mixed_beam([r1,
                           sorted(r1, key=lambda t: abs(t['m']['lat'])),          # push squareness
                           sorted(r1, key=lambda t: cor['offset'](t['along'], t['lat']))],
@@ -646,16 +750,27 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                                               roll_speedF=seg['roll_speedF'], jframes=node['jf'],
                                               junction=node['jv']['kind'],
                                               phases=node['jv']['phases']))))
-        # unscored (quality None) only occurs on a terminal roll -- rank those by `key`
-        graded.sort(key=lambda t: t[0] if t[0] is not None
-                    else (0, key(t[1]['run'], t[1]['frames'], t[1]['m'])))
-        out.extend(n for _q, n in graded[:int(tcs_keep)])
+        if tcs_key is not None:
+            graded.sort(key=lambda t: tcs_key(t[1]))
+        else:
+            # unscored (quality None) only occurs on a terminal roll -- rank those by `key`
+            graded.sort(key=lambda t: t[0] if t[0] is not None
+                        else (0, key(t[1]['run'], t[1]['frames'], t[1]['m'])))
+        if tcs_probe is not None and len(graded) > int(tcs_keep):
+            # a share by what the exit's junction can still DELIVER -- a keep, so the order above is
+            # untouched and the probe can only ADD (`square_probe_key`)
+            probed = sorted(((tcs_probe(n), n) for _q, n in graded),
+                            key=lambda t: (t[0] is None, t[0] or 0.0))
+            out.extend(_mixed_beam([[n for _q, n in graded], [n for _v, n in probed]],
+                                   int(tcs_keep), ident=lambda n: _state_tag(n['run'])))
+        else:
+            out.extend(n for _q, n in graded[:int(tcs_keep)])
     return out
 
 
 # --------------------------------------------------------------------------- the N-cycle chain
 
-def rank_key(rank='bound', placements=None, hl=None):
+def rank_key(rank='bound', placements=None, hl=None, resid=None):
     """**The beam's ordering, ASCENDING every way** (lower is better) -- built here so every stage
     ranks the same way and the choice is a measured one rather than a habit.
 
@@ -670,10 +785,25 @@ def rank_key(rank='bound', placements=None, hl=None):
 
     ``'rate'`` is the s43 herd rate (`-u/frame`), kept selectable so the difference is measurable
     instead of asserted -- it was the rank that produced the 868 u / 69 f chain whose 28 u lateral
-    offset the endgame then could not pay for."""
+    offset the endgame then could not pay for.
+
+    ``resid`` (session 70) ranks against the state the HERD must deliver rather than against the coord
+    the ESCAPE lands on: the placement rows translated up-herd by the escape's measured residual
+    (`aim.handoff_rows`). It is the rank-side twin of `aim.handoff_corridor` and of
+    ``arrive_keep``/`roll_probe`'s ``arrive``, and it matters most under ``'thread'``, whose 47.6 u of
+    along slack otherwise SWALLOWS an overshoot whole -- the s69 cycle-3 endpoints landed at along 947,
+    inside the real thread's 937.5..984.1 and therefore free, while against the shifted thread
+    (893.9..940.5) they are past its far end and priced. Never passed to the admissible ``budget``
+    CUT, which keeps ranking on the coord (`extend_cycle`): the shifted target is the more pessimistic
+    of the two, and a prune must stay optimistic."""
     if rank == 'rate':
         return lambda run, frames, m: -m['per_frame']
     rows = placements if placements is not None else seeds.load_placements()[0]
+    if resid is not None:
+        from harness.tetrapush import aim as A      # deferred: `aim` reads `objective` back
+        if hl is None:
+            raise ValueError("resid shifts the rows in HERD coordinates -- it needs the HerdLine")
+        rows = A.handoff_rows(rows, hl, resid)
     if rank == 'bound':
         return lambda run, frames, m: O.plan_bound(frames, _placement_dist(run, rows))
     if rank != 'thread':
@@ -760,14 +890,28 @@ def _state_tag(run):
             round(run.link.speedF, 2), round(run.tx, 1), round(run.tz, 1), int(run.csangle) >> 5)
 
 
-def _probe_pool(ends, cap, sq_key=None, tag=None, spread=True):
+def _probe_pool(ends, cap, sq_key=None, tag=None, spread=True, jf_spread=False):
     """**Which endpoints get roll-probed when there are more than ``cap`` of them.**
 
-    `extend_cycle` takes the first ``cap`` in COLLECTION order (generation order), i.e. the earliest
-    junction frames. That IS a coverage limit and session 68 measured exactly what it hides: off
-    cycle-1 node 1 the fixed frontier returns 4158 armed endpoints of which **932 are within 5 deg** of
-    the push corridor, and every one of them is past index 250 (the 250 probed are all -15.5..-15.8;
-    the square ones sit at junction frame 10+).
+    `extend_cycle` takes the first ``cap`` of `junction_beam`'s return, and session 70 measured that
+    this is a FLATNESS prefix and not the generation prefix the session-68 note here claimed: with
+    ``keep`` unbounded the beam returns its endpoints sorted by ``(|Link - Tetra lateral|, jf)``, so
+    the 250 probed off a real cycle-2 exit were **entirely jf 8 and jf 10** out of 4622 spread over
+    jf 5..12. ``jf_spread`` is the fix -- a share of the pool that walks the junction-frame bands
+    round-robin, so every band gets probed rather than whichever one happens to be flattest.
+
+    It matters because the junction frame IS the arrival: the roll's length is fixed (~223 u off that
+    exit) while the junction pushes ~11-12 u/frame, so off that node jf 6 lands Tetra at along 887 and
+    jf 12 at 947 against a `aim.handoff_target` of 894. The flattest-250 pool contained no endpoint
+    whose roll could arrive on target, so ``arrive_keep`` had exactly two arrivals to choose between
+    (947.40 / 949.50, both ~53 u past) and came out byte-identical to the stage without it -- while a
+    band-spread pool finds a rollable jf-6 endpoint delivering **886.81, i.e. 7.07 u from the target**.
+    Flatness not predicting rollability is `roll_probe`'s own founding measurement; this is the same
+    lesson applied to WHICH endpoints get probed at all.
+
+    Session 68's own measurement of the cap stands: off cycle-1 node 1 the fixed frontier returns 4158
+    armed endpoints of which **932 are within 5 deg** of the push corridor, and every one of them is
+    past index 250 (the 250 probed are all -15.5..-15.8; the square ones sit at junction frame 10+).
 
     And it measured that closing that gap COSTS MORE THAN IT BUYS, which is why ``sq_key`` is opt-in.
     Spending a share of the pool on squareness -- with or without spreading it over the distinct
@@ -791,10 +935,23 @@ def _probe_pool(ends, cap, sq_key=None, tag=None, spread=True):
     single pools are worse than the mix in one direction or the other (prefix-only
     ``1.34 / none / 27.02``, squarest-only ``none / 141.83 / 14.67``)."""
     ends = list(ends)
-    if len(ends) <= int(cap) or sq_key is None:
+    if len(ends) <= int(cap) or (sq_key is None and not jf_spread):
         return ends[:int(cap)]
-    orders = [ends, sorted(ends, key=sq_key)]
-    if not spread:
+    orders = [ends]
+    if sq_key is not None:
+        orders.append(sorted(ends, key=sq_key))
+    if jf_spread:
+        # the junction-frame bands, round-robin: the i-th of every jf before the (i+1)-th of any
+        seen = {}
+        rank = {}
+        for e in ends:
+            jf = e['jf']
+            rank[id(e)] = seen.get(jf, 0)
+            seen[jf] = rank[id(e)] + 1
+        orders.append(sorted(ends, key=lambda e: (rank[id(e)], e['jf'])))
+    if not spread or sq_key is None:
+        # the per-state cap belongs to the SQUARENESS share (s68's measurement); band coverage on its
+        # own must not inherit it -- it would hand back one pending variant per state (session 70)
         return _mixed_beam(orders, int(cap), ident=id)
     tag = (lambda e: _physics_tag(e['run'])) if tag is None else tag
     nstates = len({tag(e) for e in ends})
@@ -807,7 +964,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  probe_cap=250, rank='bound', budget=None, placements=None,
                  require_quality=True, glide_keep=False, escape_keep=False, corridor_keep=True,
                  align_keep=True, per_state=4, aim_share=True, square_keep=True,
-                 square_pool=False, corridor=None, verbose=False):
+                 square_pool=False, corridor=None, arrive_keep=False, target_along=None,
+                 resid=None, tcs_landing=False, tcs_square=False, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -864,16 +1022,37 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     The survivors are probed with the real atom and ranked by `aim.landing_miss`, with a share of the
     beam kept by that miss. It costs ~2-5 s per survivor and takes precedence over ``glide_keep``.
 
+    ``arrive_keep`` / ``target_along`` (session 70) are the OVERSHOOT, the third axis of the same
+    endpoint probe (`roll_probe`'s ``arrive``). The s69 cycle-3 stage kept endpoints landing at along
+    947 against a `aim.handoff_target` of 894 and came out at 78-80 frames against a 75 budget; a roll
+    is a ~205 u atom that cannot stop short, so the junction length is what decides arrival and the
+    keep is where it belongs. ``resid`` (the escape's measured residual) points ``rank`` at the state
+    the herd must DELIVER instead of at the coord itself (`rank_key`) -- the same shift, in the rank.
+    ``arrive_keep`` also spreads the PROBE POOL over the junction-frame bands (`_probe_pool`'s
+    ``jf_spread``), without which it has nothing to choose from: the pool is a FLATNESS prefix, so the
+    250 probed of 4622 were all jf 8/10 and every arrival in them was ~53 u past the target.
+
+    ``tcs_landing`` / ``tcs_square`` (session 70) are the CAMERA-target cut's two calibrated keys, one
+    per kind of cycle: `landing_key` on the LAST one (its exit is the handoff, so rank it by where the
+    escape lands, not by a next junction it does not have) and `square_probe_key` mid-chain (a keep
+    share by what the exit's junction can still deliver). The second costs ~2.7 s per surviving
+    (aim, tcs) pair, so it is opt-in; the first is free. See `square_probe_key` for the calibration,
+    including the measurement that every CHEAP AIM key is worse than the stock one.
+
     Every node carries its FULL delivered input log, so any survivor is replayable end-to-end on a
     fresh `FreeRun` (`confirm_plan`)."""
     out = []
-    key = rank_key(rank, placements, hl)
-    # the RANK may be the (inadmissible) thread cost; the hard budget CUT never is -- see `rank_key`
-    cut = key if rank == 'bound' else rank_key('bound', placements)
     rows_j = placements if placements is not None else seeds.load_placements()[0]
+    key = rank_key(rank, rows_j, hl, resid=resid)
+    # the RANK may be the (inadmissible) thread cost, or shifted to the handoff by ``resid``; the hard
+    # budget CUT is neither -- it stays the admissible coord-distance bound (see `rank_key`)
+    cut = key if (rank == 'bound' and resid is None) else rank_key('bound', rows_j)
     # the line the keeps ride: to the nearest coord by default, `aim.handoff_corridor` from the chain
     cor_j = O.push_corridor(hl, rows_j) if corridor is None else corridor
     sq_key, _ = _armable_square(hl, cor_j)
+    # the CAMERA-target cut's key: the landing on the last cycle, the cheap probe mid-chain (s70)
+    tcs_key = (landing_key(hl, O.placement_thread(hl, rows_j), resid) if tcs_landing else None)
+    tcs_probe = square_probe_key(hl, box, cor_j) if tcs_square else None
     jdead = {}
     for node in nodes:
         ends = junction_beam(node, hl, box, max_frames=max_frames, beam=jn_beam,
@@ -885,17 +1064,25 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             if verbose:
                 print("    (probing %d of %d unique endpoints -- capped)"
                       % (probe_cap, len(uniq)))
-            uniq = _probe_pool(uniq, probe_cap, sq_key if square_pool else None)
+            uniq = _probe_pool(uniq, probe_cap, sq_key if square_pool else None,
+                               jf_spread=arrive_keep)
         rdead = {}
-        scored = [(p, e) for p, e in ((roll_probe(e, hl, dead=rdead, corridor=cor_j), e)
+        scored = [(p, e) for p, e in ((roll_probe(e, hl, dead=rdead, corridor=cor_j,
+                                                 target_along=target_along), e)
                                       for e in uniq) if p is not None]
         scored.sort(key=lambda t: -t[0]['rate'])
+        orders = [[e for _p, e in scored]] if scored else []
         if square_keep and scored:
             # rollability stays the rank, a share goes to the straightness the roll DELIVERS
             # (`roll_probe`'s ``off``, never the endpoint's own aim -- see the docstring)
-            kept = _mixed_beam([[e for _p, e in scored],
-                                [e for _p, e in sorted(scored, key=lambda t: t[0]['off'])]],
-                               int(jn_keep),
+            orders.append([e for _p, e in sorted(scored, key=lambda t: t[0]['off'])])
+        if arrive_keep and scored and target_along is not None:
+            # ...and a share to the endpoints whose roll ARRIVES at the handoff target rather than
+            # past it, which is the same probe's third axis (session 70 -- see `roll_probe`)
+            orders.append([e for _p, e in sorted(scored, key=lambda t: (t[0]['arrive'] is None,
+                                                                       t[0]['arrive'] or 0.0))])
+        if len(orders) > 1:
+            kept = _mixed_beam(orders, int(jn_keep),
                                ident=lambda e: (_physics_tag(e['run']), e['log'][-1]['stickX'],
                                                 e['log'][-1]['stickY'],
                                                 bool(e['log'][-1]['triggerL'])))
@@ -906,7 +1093,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             jdead['aim_' + k] = jdead.get('aim_' + k, 0) + v
         for j in kept:
             for cand in roll_candidates(j, hl, box, aim_keep=aim_keep, half_window=half_window,
-                                        step=step, key=key, require_quality=require_quality):
+                                        step=step, key=key, require_quality=require_quality,
+                                        tcs_key=tcs_key, tcs_probe=tcs_probe, corridor=cor_j):
                 cand['plan'] = list(node.get('plan', [])) + [cand['knobs']]
                 out.append(cand)
     out = _budget_cut(out, cut, budget, 'roll survivors', verbose)
@@ -1022,7 +1210,7 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
                     jv=dict(kind='prologue', phases=[]))
         cands = roll_candidates(node, hl, box, half_window=half_window, step=step,
                                 l_windows=l_windows, aim_keep=aim_keep, fan_center=center,
-                                tcs_keep=tcs_keep, key=key)
+                                tcs_keep=tcs_keep, key=key, corridor=cor)
         for c in cands:
             c['knobs']['nflip'] = nflip
             c['plan'] = [c['knobs']]
@@ -1060,7 +1248,8 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                c1_step=4, jn_beam=24, ess_step=1, nodes=None, box=None,
                rank='bound', last_rank='thread', budget=None, placements=None,
                corridor_keep=True, last_escape=True, per_state=4, aim_share=True,
-               square_keep=True, c1_square=True, handoff=True, corridor=None, verbose=False):
+               square_keep=True, c1_square=True, handoff=True, corridor=None,
+               last_arrive=True, last_landing=True, mid_square=False, verbose=False):
     """**The full-herd chain**: cycle 1 from state 2 (`cycle1_nodes`), then ``ncycles - 1``
     applications of `extend_cycle`, every cycle sweeping its OWN derived `target_cs` grid.
 
@@ -1095,7 +1284,23 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
     rather than at `objective.push_corridor`: the state the chain must DELIVER is the coord minus the
     escape's measured ~44 u residual, and the two lines ask for aims ~0.56 deg apart at cycle-2 range
     -- the full width of the `aim.aim_window` the plan has to hit at the end. Pass ``corridor`` to
-    supply a line directly (a dumped one, or a different ``feet`` depth).
+    supply a line directly (a dumped one, or a different ``feet`` depth). It also carries the measured
+    residual into every cycle's RANK (`rank_key`'s ``resid``), so a beam is ordered by its distance to
+    the state the herd must DELIVER rather than to the coord the escape lands on.
+
+    ``last_arrive`` (session 70, default ON) prices the OVERSHOOT where it is decided: the last cycle's
+    endpoint keep takes a share by what its roll ARRIVES at (`roll_probe`'s ``arrive``, against the
+    corridor's own target). A roll is a ~205 u atom that cannot stop short, so the plan's finish is
+    chosen when the endpoint is -- and the s69 run ended 53 u past the handoff target at 78-80 frames
+    against a 75 budget with nothing shorter in the set.
+
+    ``last_landing`` (session 70, default ON) fixes the CAMERA cut on the same cycle: its exit is the
+    handoff, so rank the `target_cs` grid by where the escape would land from it (`landing_key`) instead
+    of by whether a next junction -- which does not exist -- could continue. Free.
+    ``mid_square`` (default OFF) is its mid-chain counterpart, the cheap `junction_square_probe` as a
+    keep share (`square_probe_key`); it costs ~2.7 s per surviving (aim, tcs) pair, i.e. ~15 min a
+    cycle, so a solve opts in. Its docstring holds the calibration, including the finding that every
+    CHEAP AIM key -- the shape this was expected to take -- is measurably WORSE than the stock one.
 
     Returns ``dict(beams, best, bar, box, corridor)`` -- the per-cycle beams (so a stalled cycle is
     diagnosable), the best final node, the human's 2-roll rate, the pursuit box and the line in force."""
@@ -1138,6 +1343,17 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                              escape_keep=(c == int(ncycles) and last_escape),
                              corridor_keep=corridor_keep, per_state=per_state,
                              aim_share=aim_share, square_keep=square_keep, corridor=corridor,
+                             # the LAST cycle is the one that has to ARRIVE (`roll_probe`'s
+                             # ``arrive``): its roll cannot stop short, so overshoot is priced here
+                             arrive_keep=(c == int(ncycles) and last_arrive),
+                             target_along=(corridor['target'][0]
+                                           if (last_arrive and c == int(ncycles)
+                                               and corridor is not None) else None),
+                             resid=(corridor.get('resid') if corridor is not None else None),
+                             # the camera cut: the landing on the last cycle (free), the cheap
+                             # squareness probe mid-chain (opt-in, ~2.7 s per surviving pair)
+                             tcs_landing=(c == int(ncycles) and last_landing),
+                             tcs_square=(c < int(ncycles) and mid_square),
                              verbose=verbose)
         beams.append(nodes)
         if verbose and nodes:

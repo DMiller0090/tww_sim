@@ -253,6 +253,9 @@ deliberately unported.
 | `full_herd.escape_probe` | **The LAST cycle's endpoint keep, one stage out from `glide_probe`** (session 67): rank an endpoint by what its real ESCAPE lands (`away_walk.probe` -> `aim.landing_miss` + the frames to the slam), because the terminal GLIDE was measured to have no authority over Tetra at all -- the whole `_terminal_alphabet` moves her identically for four frames (`aim`), which is why six terminal rank configurations came out byte-identical across s61-s63. Wired as `extend_cycle(escape_keep=True)` (a rank AND a keep share) and `chain_herd(last_escape=True)`, superseding `glide_keep` on the last cycle; ~2-5 s per survivor. Result on the s66 cycle-2 beam (461 s, no chain): 21 survivors, **18 fire, best lands 45.62 u off the thread**, and the keep is INERT (byte-identical 8 nodes) -- the right metric, proving the cycle-3 stage cannot reach the handoff. |
 | `full_herd.junction_square_probe` / `cycle1_nodes(square_keep=)` | **THE CYCLE-1 EXIT'S KEEP -- what squareness its junction can still DELIVER** (session 69), the stage s68 pointed at with "squareness is a property of the cycle EXIT". Run the exit's junction at a coarse budget and report the smallest `objective.push_corridor` offset any surviving roll delivers (`roll_probe`'s ``off``; never the endpoint's own entry aim -- s68 measured that swings 5-8 deg/frame at jf 10-12). ~15-25 s per exit; cycle 1 has ~21 unique ones, so it costs 308 s ONCE per solve. It exists because the cycle-1 candidate set is **one roll aim swept over the 25-value `derived_target_css` grid** -- measured: of the whole fan x 3 l_windows exactly 3 (aim, window) pairs survive and all three are the same aim, and every candidate scores `plan_bound` **71.90**, so the frame rank cannot separate them at all. Only 6 of the 25 arm anything, and their deliverable squareness spans **11.20 .. 141.83 u**; the old ``tcs_keep=3`` cut by `junction_quality` (frames in the box) and kept 141.83 / 27.81 / 14.67, with the best at quality rank 5. **The POOL is what makes the probe honest** (`_probe_pool(spread=False)`): on three real exits prefix-only reads `1.34 / none / 27.02`, squarest-only `none / 141.83 / 14.67`, the uncapped mix `1.34 / 141.83 / 14.67` (12 rollable where each single pool found 9), and s68's state-CAPPED pool `none / 141.83 / 25.89` -- it calls an exit that reaches 1.34 u unrollable, so that cap is the one thing not to reuse here. Result on cycle 2, same config and 75-frame budget: corridor offset **37.00 -> 8.97 u**, Tetra lat **-32.10 -> -3.65**, Link's lateral off her **+11.14 -> -0.69**, `plan_bound` 72.81 -> **72.69**, roll survivors **18 -> 71** (964 s vs 516). Gated `tests/test_full_herd.py` (+2: the pool as pure selection, and a slow contrast that the squarest exit is one the old cut drops and the keep keeps). |
 | `aim.handoff_corridor` | **The line the CHAIN must ride, which is not the line to the coord** (session 69) -- `objective.push_corridor`'s shape (``target``/``slope``/``lat_at``/``offset``) aimed at `handoff_target` instead, so every keep that reads a corridor rides the state the chain must DELIVER. The residual is measured, never assumed: probe the real escape atom on an on-line mid-depth arrival at the thread's near end (feet 56 -> resid **43.65 along / +5.47 lat** -> target along **893.89** lat **+2.47**, reproducing s67's solved-backwards "along ~894, lat ~+2.5"), and report ``ok=False`` rather than guess if the atom does not fire. The two lines ask an on-line Tetra for aims **0.46 deg apart at the cycle-1 exit, 0.68 at cycle-2 range, 1.19 by along 700** -- it GROWS as the plan closes. Depth is a knob inside the noise (feet 52..64 moves the ask 0.04 deg, 1/17th of what ignoring the escape costs). Wired `chain_herd(handoff=True)` -> `cycle1_nodes`/`extend_cycle(corridor=)`. **Measured INERT at cycle 2** (identical 8 survivors; the frontier's dead counts and the cycle-1 probe values do move -- best exit 11.20 -> 7.93 u), kept ON because it is the correct target and the bias grows. Gated `tests/test_aim.py`, which also pins WHY it matters: the razor is a property of where the handoff sits, not of the thread -- from the s66 handoff (along 881.6 lat +21.19) the 47.6 u segment is nearly end-on and the window is **0.53 deg**, from the handoff target it subtends **10.04**. |
+| `full_herd.square_probe_key` / `CHEAP_PROBE` | **The tcs cut's mid-chain keep, and the CALIBRATION that overturned the plan it came from** (session 70). Session 69 handed over "give `junction_quality`'s glide an AIM-aware key" for cycles >= 2. Cycle 1's 25-exit grid is fully probed, so the proxy was calibrated against the truth BEFORE being wired -- and an aim key is not merely no better, it is the worst of the candidates. Keep of 3, what it DELIVERS in corridor offset: stock `(-inbox, |lat|)` **14.67 u** (best at rank 5), `(-inbox, glide |aim|)` **116.93** (rank 7), `(-inbox, glide |aim|+cone)` **116.93** (rank 4), `(-inbox, exit |aim|)` and exit-aim-alone **NOTHING** (rank 19), the CHEAP probe **11.20** (rank **1**), the full probe 11.20. The reason is structural: **18 of the 25 exits sit at |aim| 1.26-2.05 deg and not one of them can roll at all** -- every exit that delivers anything measures |aim| >= 3.0 -- so the cheapest scalar that looks like squareness ranks the dead exits first. What IS affordable is the same `junction_square_probe` at a coarser budget (`CHEAP_PROBE`: max_frames 5, beam 8, ess_step 3, aim_step 48, cap 12, step 48, per_state 2 -- **~2.7 s against ~21 s**), because coarseness costs RECALL, not precision: it scores only 2 of the 6 armable exits, but both are real, they are the full probe's **#1 and #3**, and on the one it ranks best its value is **bit-identical** to the full probe's (11.200566297610363). It declined every exit the full probe also calls dead. (The 9.6 s budget does NOT have that property -- it reported 59.97 and 100.74 on two exits the full probe calls unrollable, which is why the cheap budget is the small one.) Wired as a KEEP share (`roll_candidates(tcs_probe=)`, `extend_cycle(tcs_square=)`, `chain_herd(mid_square=)`, default OFF at ~2.7 s per surviving (aim, tcs) pair). Gated `tests/test_full_herd.py` (slow). |
+| `full_herd.landing_key` | **The LAST cycle's tcs cut, which was ranked by a question that cycle does not have** (session 70). `junction_quality` asks whether the NEXT junction can continue from a roll's exit; the last cycle has none -- `extend_cycle` already turns the GATE off (``require_quality=False``) and s43-s69 left the ORDER ranked by it anyway. Its exit IS the handoff state, so rank it by where the escape lands from it: `objective.thread_frames` of `aim.landing_miss` (the exit plus the MEASURED residual), free to compute and the same prediction `escape_probe` then confirms with the real atom on the survivors. The contrast is measured on real arrivals: `rank_key('thread')` scores an arrival sitting ON the coord -- 44 u past the state the escape needs -- as its **BEST (0.00 frames)** and one at the handoff target **3.36 worse**, because the thread's 47.6 u of along slack charges nothing for along inside it; `landing_key` reverses that, and the exact landing says which is right (the escape from the coord position overshoots the thread by **14.54 u**, from the handoff target one by **5.47**). Wired `chain_herd(last_landing=True)`, default ON. Gated `tests/test_full_herd.py`. |
+| `full_herd.roll_probe(target_along=)` / `aim.handoff_rows` | **THE OVERSHOOT, priced in the keep and in the rank** (session 70). A cycle's roll is a ~205 u atom that cannot stop short, so where a plan FINISHES is decided when its last endpoint is chosen -- and nothing ranked that: s69's cycle-3 endpoints landed Tetra at along **947** against a `aim.handoff_target` of **894**, ~4 frames of push spent going past and then paid back in lateral, which is that run's whole **78-80 against a 75-frame budget**. `roll_probe` already fires the entire aim fan, so the along its rolls DELIVER costs nothing to report: ``arrive`` = the smallest |delivered along - target| any surviving roll reaches, ``over`` its signed value, purely additive (rate/off/n unchanged). A share of `extend_cycle`'s endpoint keep goes to it (``arrive_keep``, `chain_herd(last_arrive=)` default ON, LAST cycle only -- measured, from a cycle-2-range endpoint every surviving roll undershoots by ~300 u, so there the keep is inert by construction). `aim.handoff_rows` is the rank-side twin: the whole placement set translated up-herd by the measured residual, an exact translation (slope/length/off-axis/chord-dev identical, near end == `handoff_target` to the last digit) that drops into any ``placements=``, so `rank_key(resid=)` prices arrival at the handoff -- against the shifted thread the s69 overshoot costs 0.54 frames where the real thread paid it 1.0 for going past. NEVER passed to the admissible budget CUT. Gated `tests/test_aim.py` + `tests/test_full_herd.py`. |
 | `beam_io.py` | **The CHEAP-ITERATION path** (session 61): dump a search beam to JSON and rebuild it BIT-EXACT. A node's identity IS its delivered input log (`confirm_plan`'s own convention), so a beam round-trips through plain JSON with no simulator state to serialise, and `rebuild_beam` (~0.3 ms per logged frame) hands back live nodes `extend_cycle`/`terminal_targeting`/`confirm_plan` accept. Use it instead of re-running the ~475 s stages that produced a beam -- session 61 burned ~25 minutes of search on a one-expression bug for want of this. Gated `tests/test_full_herd.py::test_a_dumped_beam_rebuilds_bit_exact_from_its_input_logs` (fingerprint equality + the rebuilt node confirming). |
 | `feasibility.py` | **The COARSE-FEASIBILITY report** (session 28): from the bit-exact 2-cycle window, answers "can a few push cycles herd Tetra the full ~960 u to the genuine-coord cluster, in-regime?" -- directional (herd bearing vs target bearing), per-cycle reach, and the plow-regime bound. VERDICT: CONFIRMED (0.2 deg direction match, ~3 cycles, dist 40-85 u < engage 230). All numbers recomputed live. CLI `python -m harness.tetrapush.feasibility`. |
 | `_notes/tetrapush-camoracle_probe.py` | (gitignored) Session-18 land-camera ORACLE probe: run A re-captured with the FULL dCamera_c block (0x520 B, incl. mEventFlags/mCurStyle/mCurType), player status words, attention lockstate, both actors' `attention_info.position`, and the pad main-stick angle. Baked to `fixtures/courtyard_cam_oracle.json` (the `test_land_cam.py` gate). |
@@ -1648,6 +1651,83 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               it subtends **10.04**. Non-monotone in the offset, so this is two measured points and not
               a trend -- but it reframes the endgame: riding the right line is not bias correction, it
               is what opens the window from a razor to a door.
+              **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
+              PROBE POOL. See the box below.**
+      - [~] **THE OVERSHOOT WAS THE PROBE POOL, WHICH IS A FLATNESS PREFIX AND NOT THE GENERATION
+            PREFIX IT SAID IT WAS (session 70): cycle 3's arrival went along 947.4 (+53.5 PAST the
+            handoff target) -> 886.81 (7.1 SHORT), frames 75 -> 70, `plan_bound` 77.27 -> 75.03, the
+            escape landing frame 78-80 -> 71.** Session 69 handed over two steps -- an AIM-aware key for
+            the tcs cut at cycles >= 2, and "price the OVERSHOOT". Both were built; both were measured
+            INERT; the measurement of WHY named a coverage bug one stage down that was worth 9 frames.
+            - **THE CALIBRATION KILLED THE AIM KEY BEFORE IT WAS WIRED, AND THE GRID SAYS WHY.** Cycle
+              1's 25-exit grid is fully probed (s69), so a proxy can be scored against the truth for
+              free. Keep of 3, what it DELIVERS in corridor offset: stock `(-inbox, |lat|)` **14.67 u**
+              (best at rank 5), `(-inbox, glide |aim|)` **116.93** (rank 7), `(-inbox, glide |aim| +
+              cone)` **116.93** (rank 4), `(-inbox, exit |aim|)` and exit-aim-alone **NOTHING** (rank
+              19), the CHEAP probe **11.20** (rank **1**), the full probe 11.20. So the proposed key is
+              not merely no better than the one it replaces, it is the worst of the candidates -- and
+              structurally, not by luck: **18 of the 25 exits sit at |aim| 1.26-2.05 deg and not one of
+              them can roll at all**, while every exit that delivers anything measures |aim| >= 3.0. The
+              cheapest scalar that looks like squareness ranks the DEAD exits first.
+            - **WHAT IS AFFORDABLE IS THE SAME PROBE, COARSER** (`full_herd.CHEAP_PROBE` /
+              `square_probe_key`, ~2.7 s against ~21 s): coarseness costs RECALL, not precision. It
+              scores only 2 of the 6 armable exits, but both are real, they are the full probe's #1 and
+              #3, and on the one it ranks best its value is **bit-identical** to the full probe's
+              (11.200566297610363). It declined every exit the full probe also calls dead. The 9.6 s
+              budget does NOT have that property (it reported 59.97 and 100.74 on two exits the full
+              probe calls unrollable), which is why the cheap budget is the small one. Wired as a KEEP
+              share, opt-in (`chain_herd(mid_square=)`, ~2.7 s per surviving (aim, tcs) pair).
+            - **AND THE LAST CYCLE'S CAMERA CUT WAS RANKED BY A QUESTION IT DOES NOT HAVE**
+              (`landing_key`, free, default ON). `junction_quality` asks whether the NEXT junction can
+              continue; the last cycle has none. Its exit IS the handoff, so rank it by where the escape
+              lands from it. Measured on real arrivals, the stock rank is PAID for overshooting:
+              `rank_key('thread')` scores an arrival sitting ON the coord -- 44 u past the state the
+              escape needs -- as its BEST (0.00 frames) and one at the handoff target **3.36 worse**,
+              because the thread's 47.6 u of along slack charges nothing for along inside it. The exact
+              landing says which is right: **14.54 u** off the thread from the coord position, **5.47**
+              from the handoff-target one.
+            - **THE OVERSHOOT PRICED IN THE KEEP AND IN THE RANK -- AND ALL THREE INERT.**
+              `roll_probe(target_along=)` reports the arrival its rolls DELIVER (``arrive``/``over``,
+              purely additive), a share of the endpoint keep goes to it (``arrive_keep``), and
+              `aim.handoff_rows` shifts the whole target set up-herd by the measured residual so
+              `rank_key(resid=)` prices arriving at the handoff (never the admissible budget CUT). Run
+              on the dumped s69 cycle-2 beam, all three together returned a **byte-identical** cycle 3
+              -- same 18 survivors, same 15.70 u frontier, same 78-80 frames.
+            - **BECAUSE THE POOL HELD EXACTLY TWO ARRIVALS.** The whole surviving set was along 947.40
+              or 949.50, so a keep by arrival had nothing to choose between. `_probe_pool`'s own note
+              said `extend_cycle` probes the first ``cap`` "in COLLECTION order (generation order), i.e.
+              the earliest junction frames" -- it does not: with ``keep`` unbounded `junction_beam`
+              RETURNS its endpoints sorted by ``(|Link - Tetra lateral|, jf)``, so the prefix is a
+              FLATNESS sample. Off cycle-2 node 0 the beam arms **4622** endpoints spread over jf 5..12
+              and the 250 probed were **entirely jf 8 and jf 10**.
+            - **AND THE JUNCTION FRAME IS THE ARRIVAL.** The roll's length is fixed (~223 u off that
+              exit) while the junction pushes 11-12 u/frame, so from Tetra at along 579.19 the bands land
+              at jf 6 -> **887**, jf 8 -> 895, jf 10 -> 921, jf 12 -> **947**. Probing 25 per band: the
+              earliest rollable endpoint is at **jf 6 and its roll delivers 886.81, i.e. 7.07 u from the
+              target** where the flattest-250 pool's best was 53.5 u past it. The dominant death across
+              every band is the MODEL boundary, not physics -- `followed` (Tetra past
+              `FOLLOW_ENGAGE_DIST`) kills 660-676 of ~675 aims per band, with wall/offline in single
+              digits.
+            - **THE FIX IS A BAND SHARE IN THE POOL** (`_probe_pool(jf_spread=)`, on whenever
+              ``arrive_keep`` is): walk the junction-frame bands round-robin so every band is probed
+              rather than whichever one happens to be flattest, at the same pool size. It must NOT
+              inherit the squareness pool's per-state cap (that hands back one pending variant per
+              physics state). Flatness not predicting rollability is `roll_probe`'s own founding
+              measurement; this is the same lesson applied to WHICH endpoints get probed at all.
+            - **CYCLE 3 ON THE FIXED POOL, off the identical dumped beam and config**: 21 roll survivors
+              (18), 8 kept, **all 21 fire**; the new best sits at along **886.81** (``over`` **-7.1**
+              against +53.5), **70 frames** against 75, `plan_bound` **75.03** against 77.27, and its
+              escape lands at frame **71** against 78-80. 780 s.
+            - **SO THE FRAMES ARE BOUGHT AND THE DEFICIT MOVED BACK TO SQUARENESS AT THE NEW ARRIVAL.**
+              That endpoint's corridor offset is **35.73 u** with Link **55.3 u** off Tetra's lateral, so
+              its escape lands **57.69 u** off the thread against the 947-arrival's 15.70. The frame
+              position is now at the budget (bound 75.03, escape at 71 f) and the whole remaining gap is
+              lateral -- which is what s68/s69's machinery is for, now pointed at the ARRIVING band
+              instead of at the whole endpoint set.
+            - Do NOT re-pay (all measured inert this session): an AIM key for the tcs cut at any cycle
+              (worse than stock, and worst as the exit's own aim), `landing_key` / ``arrive_keep`` /
+              `rank_key(resid=)` WITHOUT the pool fix (byte-identical cycle 3), or the coarse probe at
+              the 9.6 s budget (false positives).
       - [x] **THE AWAY-WALK, WORKED OUT AND SHIPPED AS AN ATOM (session 65): it is THE HERD
             JUNCTION WITH THE ROLL REPLACED BY A BACKWARDS SLAM -- convert to positive first, so
             the reversal never crosses zero.** Dereck steered live throughout: (1) the placement
