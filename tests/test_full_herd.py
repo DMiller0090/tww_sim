@@ -208,6 +208,84 @@ def test_the_probe_pool_is_a_prefix_by_default_and_a_keep_when_asked():
     assert F._probe_pool(ends[:100], 250, lambda e: e['sq'], tag=lambda e: e['st']) == ends[:100]
 
 
+def test_the_exit_probes_pool_is_the_uncapped_mix_not_the_carry_pool():
+    """**The two pools are different jobs, and the session-69 one must NOT inherit the s68 cap.**
+
+    `_probe_pool`'s default spreads its slots over physics states because it is choosing endpoints to
+    CARRY, and a state-spread carry pool was measured to stall the chain. `junction_square_probe` is
+    choosing nothing -- it is SCORING an exit -- and there the cap is what lies: on three real exits the
+    uncapped mix read ``1.34 / 141.83 / 14.67`` where the capped one read ``none / 141.83 / 25.89``,
+    reporting an exit as unrollable that reaches 1.34 u.
+
+    Gated as pure selection (no simulator), the level both behaviours live at: ``spread=False`` keeps
+    the early share AND the squarest without capping per state, and the default still caps."""
+    ends = [dict(run=None, sq=90.0 - i * 0.02, st=i // 100) for i in range(4000)]
+    mix = F._probe_pool(ends, 250, lambda e: e['sq'], tag=lambda e: e['st'], spread=False)
+    assert len(mix) == 250
+    assert ends[0] in mix and ends[-1] in mix                  # both ends of both orders
+    assert min(e['sq'] for e in mix) == min(e['sq'] for e in ends)
+    # uncapped: the prefix share is a RUN of consecutive early endpoints, not one per state
+    per_state = {}
+    for e in mix:
+        per_state[e['st']] = per_state.get(e['st'], 0) + 1
+    assert max(per_state.values()) > 50
+    capped = F._probe_pool(ends, 250, lambda e: e['sq'], tag=lambda e: e['st'])
+    assert max(sum(1 for e in capped if e['st'] == s) for s in {e['st'] for e in capped}) < 20
+    # under the cap, and with no key, both are the identity prefix
+    assert F._probe_pool(ends[:100], 250, lambda e: e['sq'], spread=False) == ends[:100]
+    assert F._probe_pool(ends, 250, None, spread=False) == ends[:250]
+
+
+@pytest.mark.slow
+def test_the_cycle_1_squareness_keep_takes_the_exit_the_quality_rank_cuts(env, hl, box):
+    """**The session-69 result: cycle 1 chooses ONE roll's CAMERA, and the rank it was choosing with
+    is anti-correlated with the thing that matters.**
+
+    Measured, the whole cycle-1 candidate set is a single roll aim swept over the 25-value
+    `derived_target_css` grid -- every candidate scores `plan_bound` 71.90, so the frame rank cannot
+    separate them at all -- and the old ``tcs_keep=3`` cut them by `junction_quality`, which counts
+    frames in the pursuit box. What actually differs between them is the squareness their junction can
+    still deliver (`junction_square_probe`), and it ranges over two orders of magnitude: the
+    quality-best exit reaches **141.83 u** off the corridor while the best available reaches **11.20**
+    at quality rank 5.
+
+    Asserted as a CONTRAST plus the two structural facts behind it (bound-tied, camera-distinct), and
+    on the exit IDENTITY rather than on literal offsets: the squarest exit of those probed is one the
+    default (cheap) stage drops and the keep keeps. A literal would pin a search budget; the identity
+    pins the finding.
+
+    The keep is opt-in because it costs ~308 s over 21 exits, so this gate also pins the two call
+    shapes: the bare defaults are the cheap s43-s68 stage (what every other test wants), and
+    ``square_keep=True`` + an uncut ``tcs_keep`` is what `chain_herd`'s ``c1_square`` asks for."""
+    rows = seeds.load_placements()[0]
+    cor = O.push_corridor(hl, rows)
+    probe_n = 8
+
+    wide = F.cycle1_nodes(env, hl, box, placements=rows, square_keep=False, tcs_keep=10 ** 6,
+                          beam=10 ** 6)
+    assert len(wide) > probe_n, "the cycle-1 candidate set is not wider than the beam"
+    bounds = [O.plan_bound(n['frames'], F._placement_dist(n['run'], rows)) for n in wide]
+    assert max(bounds) - min(bounds) < 0.5      # bound-tied: the frame rank cannot choose
+    assert len({int(n['run'].csangle) for n in wide}) > 4    # ...and they differ in the camera
+
+    probes = [(F.junction_square_probe(n, hl, box, cor), n) for n in wide[:probe_n]]
+    got = [(p, n) for p, n in probes if p is not None]
+    assert got, "no cycle-1 exit could deliver a roll at all"
+    best_p, best_n = min(got, key=lambda t: t[0]['off'])
+    top_p = probes[0][0]                        # what `junction_quality` ranked first
+    assert top_p is None or top_p['off'] > 2.0 * best_p['off'], (
+        "the quality rank's own pick is already the squarest -- the keep would be inert")
+
+    old = F.cycle1_nodes(env, hl, box, placements=rows, beam=8)          # the cheap default stage
+    new = F.cycle1_nodes(env, hl, box, placements=rows, square_keep=True, tcs_keep=10 ** 6,
+                         sq_cap=probe_n, beam=4)                         # what `chain_herd` asks for
+    tag = F._state_tag(best_n['run'])
+    assert tag not in {F._state_tag(n['run']) for n in old}, \
+        "the old cut already kept the squarest exit"
+    assert tag in {F._state_tag(n['run']) for n in new}, "the keep did not keep the squarest exit"
+    assert any(n.get('square') is not None for n in new)     # and it carries its measurement
+
+
 @pytest.mark.slow
 def test_the_frontier_fix_squares_an_exit_the_stock_frontier_cannot(env, hl, box):
     """**The session-68 fix, gated against the frontier it replaces, on a state minted from state 2**

@@ -53,6 +53,10 @@ This module is that geometry, derived and exact:
   * `handoff_spec` -- the three numbers a cycle-3 endpoint has to satisfy for the escape to place
     her, in one call: the aim inside the window, the range matched to the reserve, and the frames
     left against the bar.
+  * `handoff_corridor` -- that target as a `objective.push_corridor`-shaped LINE, so the mid-chain
+    keeps ride the state the chain must deliver rather than the coord itself. The two differ by
+    0.46 deg of asked-for aim at the cycle-1 exit and 0.68 deg at cycle-2 range -- more than the
+    whole window, and growing as the plan closes.
 
 **AND THE TERMINAL IS NOT A SEARCH SPACE -- IT IS A CONSEQUENCE.** Measured off the s66 cycle-3
 endpoint: sweep the WHOLE terminal alphabet (290 sticks x L, `full_herd._terminal_alphabet`) and
@@ -312,6 +316,50 @@ def handoff_target(thread, resid, *, seg_s=0.0):
     s = min(1.0, max(0.0, float(seg_s)))
     tp = (p[0] + s * (q[0] - p[0]), p[1] + s * (q[1] - p[1]))
     return (tp[0] - resid[0], tp[1] - resid[1])
+
+
+def handoff_corridor(env, hl, thread, *, rows=None, feet=56.0, resid=None, seg_s=0.0):
+    """**The line the CHAIN must ride, which is NOT the line to the coord** (session 69) -- the same
+    shape as `objective.push_corridor` (``target``/``slope``/``lat_at``/``offset``) so it drops into
+    every keep that reads one, but aimed at `handoff_target` instead of at the nearest genuine coord.
+
+    Why it is a different line at all: the escape spends ~44 u of placement AFTER the herd hands over
+    (`landing_miss`), so a chain that rides the corridor to the COORD aims past the state it has to
+    deliver -- and the error is of the same order as the whole `aim_window` (**0.53-0.62 deg**).
+    Measured from Tetra's start, the two lines' slopes are ``+0.008472`` (coord, target along 937.5
+    lat +7.94) and ``+0.002764`` (handoff, along 893.9 lat +2.47), and the aim they ask for from an
+    on-line Tetra differs by **0.46 deg at the cycle-1 exit (along 276), 0.68 deg at cycle-2 range
+    (along 500) and 1.19 deg by along 700**. It GROWS as the plan closes, which is the wrong way
+    round for a bias to be left in.
+
+    The residual is MEASURED, not assumed (`[[no-overtuned-constants]]`): probe the real escape atom
+    (`away_walk.probe`) on an on-line mid-depth arrival at the thread's near end. Its depth barely
+    matters and its distance from the coord does -- over ``feet`` 52..64 the residual runs 45.96..40.04
+    u, moving the target along 891.9..897.8 and the asked-for aim by **0.04 deg**, i.e. 1/14th of the
+    window, while dropping the correction entirely costs 0.68 at the same range. So ``feet`` is a knob
+    inside the noise and the default is the shallow end of the measured handoff band (feet ~52-56,
+    `handoff_spec`) -- the depth a grazing arrival actually reaches.
+
+    Returns the corridor dict plus ``resid``/``feet``; ``ok`` is False (and the fields fall back to
+    `push_corridor`'s) if the probe atom does not fire, so a caller never silently rides a guess."""
+    from harness.tetrapush import objective as O
+    from harness.tetrapush import full_herd as FH
+    from harness.tetrapush import away_walk as AW
+    from harness.tetrapush import seeds
+    rows = seeds.load_placements()[0] if rows is None else rows
+    if resid is None:
+        near = min(rows, key=lambda p: hl.along(p['x'], p['z']))
+        nd = FH.synthetic_hot_arrival(env, hl, near['idx'], d_short=0.0, feet=float(feet))
+        res = AW.probe(nd['run'], hl)
+        if res is None or not AW.fires(res):
+            cor = dict(O.push_corridor(hl, rows))
+            cor.update(resid=None, feet=float(feet), ok=False)
+            return cor
+        resid = (res['resid_along'], res['resid_lat'])
+    ta, tl = handoff_target(thread, resid, seg_s=seg_s)
+    slope = tl / ta
+    return dict(target=(ta, tl), slope=slope, lat_at=lambda a: slope * a,
+                offset=lambda a, l: abs(l - slope * a), resid=resid, feet=float(feet), ok=True)
 
 
 def handoff_spec(run, hl, thread, frames, *, band=None, budget=None, escape_frames=4, resid=None):

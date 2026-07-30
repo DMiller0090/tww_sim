@@ -515,6 +515,63 @@ def junction_quality(run, hl, box, *, frames=6, sticks=None):
     return best
 
 
+def junction_square_probe(node, hl, box, corridor, *, max_frames=8, beam=16, ess_step=2,
+                          aim_step=32, cap=60, step=24, per_state=4):
+    """**How SQUARE a roll this exit's junction can still deliver** -- the exit-level counterpart of
+    `roll_probe`, and the keep the cycle-1 stage was missing (session 69).
+
+    Session 68 ended at "squareness is a property of the cycle EXIT, and that is one stage further
+    up". Measured, it is, and by two orders of magnitude on exits the frame bound cannot tell apart:
+    every cycle-1 exit scores `plan_bound` **71.90-71.97**, the five the old ``tcs_keep=3`` stage kept
+    deliver corridor offsets of **141.83 / 27.81 / 14.67 / none / none**, the best on the whole camera
+    grid delivers **11.20**, and the HUMAN's own exit -- the same roll one camera target away, Tetra
+    bit-identical and his facing within 4 BAM -- delivers **1.34**. Nothing upstream of a probe sees
+    that: the exits are bound-tied, so the cut that picks among them is `roll_candidates`'
+    ``tcs_keep``, ranked by `junction_quality` (frames in the box), which is blind to the aim.
+
+    So run the junction for real, at a coarse budget, and report the smallest corridor offset any
+    surviving roll through it DELIVERS -- `roll_probe`'s ``off``, never an endpoint's own entry aim
+    (session 68: at jf 10-12 the aim swings 5-8 deg per frame and a +1.12 deg endpoint fired a roll
+    landing 37.6 u off). ~15-25 s per exit against cycle 1's 21 unique ones -- **308 s**, which is a
+    keep the stage can afford once per solve but not one every caller should pay (`cycle1_nodes`).
+
+    **THE POOL IS THE MEASUREMENT THAT MAKES IT HONEST** (`_probe_pool`, ``spread=False``). Which
+    endpoints get probed decides the answer, and both single pools lie in opposite directions -- on
+    three real exits, prefix-only reads ``1.34 / none / 27.02`` and squarest-only reads
+    ``none / 141.83 / 14.67``. The mix of both, **uncapped by physics state**, is >= each of them
+    everywhere and finds strictly more rollable endpoints than either (12 against 9 on one exit). The
+    per-state cap `_probe_pool` applies by default is the one thing that must NOT be reused here: it
+    reproduces the s68 stall (one pending each of mostly-uncontinuable states -- ``none`` where the
+    uncapped mix reads 1.34).
+
+    Returns ``dict(off, rate, jf, aim, n_ends, n_pool, n_roll)``, or None when no roll survives (an
+    exit that cannot roll at all is not an exit -- it ranks last, it does not rank infinitely square).
+    ``max_frames``/``beam``/``cap``/``step`` are budget knobs, deliberately coarser than the real
+    stage's: this ranks exits against each other, and `extend_cycle` re-searches the winner in full."""
+    got = []
+    junction_beam(node, hl, box, max_frames=max_frames, beam=beam, ess_step=ess_step,
+                  aim_step=aim_step, keep=1, collect=got, per_state=per_state, aim_share=True,
+                  corridor=corridor)
+    uniq = _dedup_endpoints(got)
+    sq_key, _ = _armable_square(hl, corridor)
+    pool = _probe_pool(uniq, int(cap), sq_key, spread=False)
+    best, n_roll = None, 0
+    for e in pool:
+        p = roll_probe(e, hl, step=step, corridor=corridor)
+        if p is None:
+            continue
+        n_roll += 1
+        if best is None or p['off'] < best[0]['off']:
+            best = (p, e)
+    if best is None:
+        return None
+    p, e = best
+    from harness.tetrapush import aim as A          # deferred: `aim` reads `objective` back
+    return dict(off=p['off'], rate=p['off_rate'], jf=e['jf'], n=p['n'],
+                aim=A.corridor_aim_error(e['run'], hl, corridor),
+                n_ends=len(uniq), n_pool=len(pool), n_roll=n_roll)
+
+
 def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4, 7), (5, 8)),
                     aim_keep=3, min_roll=20.0, tcs_keep=3, target_css=None,
                     fan_center=None, require_quality=True, key=None, mixed_aims=True):
@@ -703,7 +760,7 @@ def _state_tag(run):
             round(run.link.speedF, 2), round(run.tx, 1), round(run.tz, 1), int(run.csangle) >> 5)
 
 
-def _probe_pool(ends, cap, sq_key=None, tag=None):
+def _probe_pool(ends, cap, sq_key=None, tag=None, spread=True):
     """**Which endpoints get roll-probed when there are more than ``cap`` of them.**
 
     `extend_cycle` takes the first ``cap`` in COLLECTION order (generation order), i.e. the earliest
@@ -724,13 +781,24 @@ def _probe_pool(ends, cap, sq_key=None, tag=None):
 
     So the prefix stays the default and the square share is a knob (`extend_cycle`'s ``square_pool``).
     The conclusion the numbers point at is not a better cut here: squareness that survives to a
-    continuable roll is a property of the cycle EXIT, and that is one stage further up."""
+    continuable roll is a property of the cycle EXIT, and that is one stage further up.
+
+    ``spread=False`` is that one stage up (`junction_square_probe`, session 69): the same prefix +
+    squareness mix with NO per-state cap. Where this function's job is to pick endpoints to CARRY, the
+    probe's job is to score an exit, and there the cap is what lies -- measured on three real exits,
+    the uncapped mix reads ``1.34 / 141.83 / 14.67`` where the capped one reads
+    ``none / 141.83 / 25.89``, and it finds strictly more rollable endpoints (12 against 9). Both
+    single pools are worse than the mix in one direction or the other (prefix-only
+    ``1.34 / none / 27.02``, squarest-only ``none / 141.83 / 14.67``)."""
     ends = list(ends)
     if len(ends) <= int(cap) or sq_key is None:
         return ends[:int(cap)]
+    orders = [ends, sorted(ends, key=sq_key)]
+    if not spread:
+        return _mixed_beam(orders, int(cap), ident=id)
     tag = (lambda e: _physics_tag(e['run'])) if tag is None else tag
     nstates = len({tag(e) for e in ends})
-    return _mixed_beam([ends, sorted(ends, key=sq_key)], int(cap), ident=id,
+    return _mixed_beam(orders, int(cap), ident=id,
                        group=tag, per_group=max(1, int(cap) // max(1, nstates)))
 
 
@@ -739,7 +807,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  probe_cap=250, rank='bound', budget=None, placements=None,
                  require_quality=True, glide_keep=False, escape_keep=False, corridor_keep=True,
                  align_keep=True, per_state=4, aim_share=True, square_keep=True,
-                 square_pool=False, verbose=False):
+                 square_pool=False, corridor=None, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -803,7 +871,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     # the RANK may be the (inadmissible) thread cost; the hard budget CUT never is -- see `rank_key`
     cut = key if rank == 'bound' else rank_key('bound', placements)
     rows_j = placements if placements is not None else seeds.load_placements()[0]
-    cor_j = O.push_corridor(hl, rows_j)
+    # the line the keeps ride: to the nearest coord by default, `aim.handoff_corridor` from the chain
+    cor_j = O.push_corridor(hl, rows_j) if corridor is None else corridor
     sq_key, _ = _armable_square(hl, cor_j)
     jdead = {}
     for node in nodes:
@@ -899,17 +968,44 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
 
 def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x2000, step=4,
                  l_windows=((5, 8), (4, 7), (6, 9)), aim_keep=4, beam=8,
-                 tcs_keep=3, rank='bound', budget=None, placements=None, verbose=False):
+                 tcs_keep=3, rank='bound', budget=None, placements=None,
+                 square_keep=False, sq_cap=24, corridor=None, verbose=False):
     """Cycle 1 from state 2, FACTORED like every later cycle (`roll_candidates`) rather than as the
     s42 full aim x tcs cross product -- same search space, ~20x fewer rollouts (159 s -> 10 s for
-    the identical 13.147 u/f best), and the `target_cs` values are ranked by `junction_quality`
-    instead of by a roll rate they provably cannot affect.
+    the identical 13.147 u/f best).
 
     At state 2 Tetra is ~122 deg BEHIND Link (out of the +-90 cone), so the L-held flip prologue
-    re-targets straight into the proc-7 flip -- no turnaround is needed to start."""
+    re-targets straight into the proc-7 flip -- no turnaround is needed to start.
+
+    **WHAT THIS STAGE ACTUALLY HAS TO CHOOSE, MEASURED (session 69): ONE ROLL AND ITS CAMERA.** The
+    aim fan does not branch here -- of the whole ``half_window`` fan x three ``l_windows``, exactly
+    **three** (aim, window) pairs survive the roll prunes and all three are the SAME aim (want 35324);
+    the l-window decides only which frame the exit lands on (f20 / f21 / f22), and of those f20's whole
+    tcs family fails `junction_quality`. So the entire cycle-1 candidate set is one roll swept over the
+    25-value `derived_target_css` grid, and every one of them scores `plan_bound` **71.90** -- the rank
+    cannot separate them at all.
+
+    What separates them is the SQUARENESS their junction can still deliver, and it varies by two orders
+    of magnitude across that bound-tied grid (`junction_square_probe`: 1.34 to 141.83 u, some none). The
+    ``tcs_keep=3`` cut ranks them by `junction_quality`, which measures frames-in-the-box and is blind
+    to the aim -- and it keeps the three worst-but-one (141.83 / 27.81 / 14.67, where the best is 11.20
+    at quality rank 5).
+
+    ``square_keep=True`` is the fix and it is **opt-in, because it costs 308 s**: enumerate the WHOLE
+    surviving grid (pass ``tcs_keep`` large) and spend the keep on the probe -- a `_mixed_beam` share by
+    the smallest corridor offset the exit's junction delivers, at most ``sq_cap`` exits probed. A SOLVE
+    wants it (`chain_herd`'s ``c1_square``, default ON, where it is worth cycle 2's whole straightness:
+    corridor offset 37.0 -> 8.97 u); a caller that just needs a cycle-1 node to build something else on
+    does not, which is why the defaults here stay the cheap s43-s68 stage.
+
+    A keep and never a rank, as always: whatever the frame bound likes best is still kept. And the
+    probe never promotes an exit that cannot roll -- `junction_square_probe` returns None there, which
+    sorts last rather than infinitely square."""
     dtm = seeds.dtm_input_at(env)
     key = rank_key(rank, placements, hl)
     cut = key if rank == 'bound' else rank_key('bound', placements)
+    rows_c = placements if placements is not None else seeds.load_placements()[0]
+    cor = O.push_corridor(hl, rows_c) if corridor is None else corridor
     out = []
     for nflip in nflips:
         base = seeds.make_freerun(env)
@@ -938,23 +1034,33 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
     # the rank first, then continuability -- a faster cycle that strands the plan is worth less than
     # a marginally slower one the next junction can pick up (the s42 entry-state lesson).
     out.sort(key=lambda n: (key(n['run'], n['frames'], n['m']), n.get('quality')))
-    seen, beamed = set(), []
+    seen, uniq = set(), []
     for n in out:
         t = _state_tag(n['run'])
         if t in seen:
             continue
         seen.add(t)
-        beamed.append(n)
-        if len(beamed) >= int(beam):
-            break
-    return beamed
+        uniq.append(n)
+    if not square_keep or len(uniq) <= int(beam):
+        return uniq[:int(beam)]
+    # the squareness keep: probe what each exit's junction can still deliver (see the docstring)
+    for n in uniq[:int(sq_cap)]:
+        n['square'] = junction_square_probe(n, hl, box, cor)
+    if verbose:
+        got = [n for n in uniq[:int(sq_cap)] if n.get('square')]
+        print("  square-probed %d of %d cycle-1 exits: %d roll, best off %s"
+              % (min(len(uniq), int(sq_cap)), len(uniq), len(got),
+                 '%.2f' % min(n['square']['off'] for n in got) if got else 'none'))
+    sq = sorted(uniq, key=lambda n: (n.get('square') is None,
+                                     (n.get('square') or {}).get('off', 0.0)))
+    return _mixed_beam([uniq, sq], int(beam), ident=lambda n: _state_tag(n['run']))
 
 
 def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                c1_step=4, jn_beam=24, ess_step=1, nodes=None, box=None,
                rank='bound', last_rank='thread', budget=None, placements=None,
                corridor_keep=True, last_escape=True, per_state=4, aim_share=True,
-               square_keep=True, verbose=False):
+               square_keep=True, c1_square=True, handoff=True, corridor=None, verbose=False):
     """**The full-herd chain**: cycle 1 from state 2 (`cycle1_nodes`), then ``ncycles - 1``
     applications of `extend_cycle`, every cycle sweeping its OWN derived `target_cs` grid.
 
@@ -978,15 +1084,41 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
     glide was measured to have no authority over Tetra at all (`aim`). Set it False to reproduce the
     s62-s66 keep.
 
-    Returns ``dict(beams, best, bar, box)`` -- the per-cycle beams (so a stalled cycle is
-    diagnosable), the best final node, the human's 2-roll rate, and the pursuit box in force."""
+    ``c1_square`` (session 69, default ON) makes cycle 1 keep by what each exit's junction can still
+    DELIVER (`cycle1_nodes`' ``square_keep``, ~308 s once). Cycle 1's candidates are bound-TIED, so the
+    frame rank cannot choose between them at all and the old `junction_quality` cut was anti-correlated
+    with squareness; turning this on took cycle 2 from **37.00 to 8.97 u** off the push corridor, Tetra's
+    lateral from -32.10 to -3.65 and Link's lateral offset from her from +11.14 to -0.69, at a `plan_bound`
+    of 72.69 against 72.81.
+
+    ``handoff`` (session 69, default ON) points every mid-chain aim keep at `aim.handoff_corridor`
+    rather than at `objective.push_corridor`: the state the chain must DELIVER is the coord minus the
+    escape's measured ~44 u residual, and the two lines ask for aims ~0.56 deg apart at cycle-2 range
+    -- the full width of the `aim.aim_window` the plan has to hit at the end. Pass ``corridor`` to
+    supply a line directly (a dumped one, or a different ``feet`` depth).
+
+    Returns ``dict(beams, best, bar, box, corridor)`` -- the per-cycle beams (so a stalled cycle is
+    diagnosable), the best final node, the human's 2-roll rate, the pursuit box and the line in force."""
     import time
     t0 = time.perf_counter()
     box = pursuit_box(env, hl) if box is None else box
     rows = placements if placements is not None else seeds.load_placements()[0]
+    if corridor is None and handoff:
+        from harness.tetrapush import aim as A       # deferred: `aim` reads `objective` back
+        corridor = A.handoff_corridor(env, hl, O.placement_thread(hl, rows), rows=rows)
+        if verbose:
+            print("  corridor: %s target along %.1f lat %+.2f (escape residual %s)"
+                  % ('handoff' if corridor['ok'] else 'COORD (the escape probe did not fire)',
+                     corridor['target'][0], corridor['target'][1],
+                     'none' if corridor['resid'] is None
+                     else '%.1f u' % math.hypot(*corridor['resid'])))
     if nodes is None:
+        # the cycle-1 exits are bound-TIED, so the camera target decides cycle 2's squareness: the
+        # keep costs ~308 s and is worth corridor offset 37.0 -> 8.97 u (`cycle1_nodes`)
         nodes = cycle1_nodes(env, hl, box, step=c1_step, beam=c1_beam, aim_keep=aim_keep + 1,
-                             rank=rank, budget=budget, placements=rows, verbose=verbose)
+                             rank=rank, budget=budget, placements=rows, corridor=corridor,
+                             square_keep=c1_square, tcs_keep=(10 ** 6 if c1_square else 3),
+                             verbose=verbose)
     beams = [nodes]
     if verbose and nodes:
         print("  cycle 1: %d nodes, best %.3f u/f, bound %.1f f (%.1f s)"
@@ -1005,7 +1137,8 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                              glide_keep=(c == int(ncycles) and not last_escape),
                              escape_keep=(c == int(ncycles) and last_escape),
                              corridor_keep=corridor_keep, per_state=per_state,
-                             aim_share=aim_share, square_keep=square_keep, verbose=verbose)
+                             aim_share=aim_share, square_keep=square_keep, corridor=corridor,
+                             verbose=verbose)
         beams.append(nodes)
         if verbose and nodes:
             n = nodes[0]
@@ -1017,7 +1150,7 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                      time.perf_counter() - t1))
         if not nodes:
             break
-    return dict(beams=beams, best=(nodes[0] if nodes else None), box=box,
+    return dict(beams=beams, best=(nodes[0] if nodes else None), box=box, corridor=corridor,
                 bar=T.human_baseline(env, hl)['per_frame'])
 
 

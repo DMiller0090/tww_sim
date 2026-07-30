@@ -221,3 +221,49 @@ def test_handoff_target_is_the_coord_minus_the_escape(env, hl, thread):
     sp = A.handoff_spec(node['run'], hl, thread, 69, resid=resid)
     assert sp['exact'] and sp['landing_miss'] == lm['miss']
     assert sp['aim_ok'] == (lm['miss'] <= sp['band'])
+
+
+def test_the_handoff_corridor_is_a_different_ask_than_the_coord_corridor(env, hl, thread):
+    """**The mid-chain bias the chain was carrying** (session 69): every keep that reads a corridor was
+    reading the line to the nearest COORD, but the state the chain has to deliver is that coord minus
+    the escape's residual, so the two lines ask for different aims -- and the difference is of the
+    same order as the whole `aim_window` the plan must hit at the end.
+
+    Gated as the comparison that makes it worth correcting, in the units the window is measured in
+    (degrees of asked-for aim from an on-line Tetra), plus the two properties that keep it honest: the
+    residual is MEASURED (the corridor reports the atom's own numbers, and reports ``ok=False`` rather
+    than guessing if the atom does not fire), and the ``feet`` depth is a knob inside the noise --
+    moving it across the whole measured handoff band changes the ask by a small fraction of what
+    ignoring the escape does.
+
+    The last pair of assertions is what riding the right line BUYS, and it reframes the razor: the
+    0.53 deg window belongs to WHERE the s66 handoff sat (along 881.6, lat +21.19 -- short AND
+    off-line, so the 47.6 u segment is seen nearly end-on and the 0.68 deg bias alone overshoots it),
+    while from the handoff target itself the segment subtends ~10 deg. `aim_window`'s width is a
+    subtended angle and NOT monotone in the lateral offset (10.04 deg on line, 3.25 at +10, 3.18 at
+    +20, 8.37 at +30), so these are two measured points and a trend would be wrong to assert."""
+    cor = A.handoff_corridor(env, hl, thread, feet=56.0)
+    pc = O.push_corridor(hl)
+    assert cor['ok'] and cor['resid'] is not None
+    # the target is the coord pulled back by the escape, and the line still starts at Tetra's start
+    assert cor['target'][0] < pc['target'][0] - 20.0
+    assert abs(cor['lat_at'](0.0)) < 1e-12 and abs(pc['lat_at'](0.0)) < 1e-12
+    assert cor['offset'](cor['target'][0], cor['target'][1]) < 1e-9
+
+    def ask(c, along):                       # the aim an on-line Tetra is being told to point at
+        return math.degrees(math.atan2(c['target'][1], c['target'][0] - along))
+
+    # the divergence, at the cycle-1 exit and at cycle-2 range (measured 0.46 / 0.68 deg), and it
+    # GROWS as the plan closes -- the wrong way round for a bias to be left in
+    diffs = [abs(ask(pc, a) - ask(cor, a)) for a in (275.8, 500.0, 700.0)]
+    assert min(diffs) > 0.4
+    assert diffs[0] < diffs[1] < diffs[2]
+    # ...while the depth inside the handoff band is immaterial next to that
+    shallow = A.handoff_corridor(env, hl, thread, feet=52.0)
+    assert abs(ask(shallow, 500.0) - ask(cor, 500.0)) < 0.1 * diffs[1]
+    # what riding the right line BUYS: the razor belongs to WHERE the handoff sits, not to the thread
+    # (two measured points, not a trend -- the width is non-monotone in the offset; see the docstring)
+    on = math.degrees(A.aim_window(*cor['target'], thread=thread)['width'])
+    s66 = math.degrees(A.aim_window(881.6, 21.19, thread)['width'])
+    assert s66 < diffs[1]
+    assert on > 8.0 and on > 10.0 * s66

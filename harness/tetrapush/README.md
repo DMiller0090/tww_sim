@@ -251,6 +251,8 @@ deliberately unported.
 | `full_herd.glide_probe` / `lateral_authority` | **The LAST cycle's keep and the measurement behind it** (session 62). `lateral_authority` holds each terminal-alphabet stick for 6 frames and reads the SPREAD of Tetra laterals reached -- the plow's sideways authority, **2.92-2.96 u/f** across contact depths on the synthetic bed (CLI `full_herd lat`, ~20 s) and 3.5-5.9 on the real cycle-3 endpoints, against `PUSH_CEILING` 13.0 for the along axis; that ~4.5x is what `objective.LATERAL_RATE` encodes. GOTCHA: `synthetic_hot_arrival`'s `d_short`/`lat_off` translate BOTH actors rigidly, so no relative measurement moves with them -- sweep `feet`. `glide_probe` is `roll_probe`'s counterpart one stage later: the last cycle keeps endpoints for a TERMINAL, so measure the terminal -- run a short narrow glide (5 frames, beam 4, ~1 s) and rank the endpoint by the best `frames + thread_frames` it reaches. Wired as `extend_cycle(glide_keep=True)`, which `chain_herd` sets on the last cycle only. It DOES discriminate (the s62 cycle-3 survivors span 74.24..87.14, and it demotes the endpoint `thread_cost` likes best) but was **INERT on the s62 beam** -- the top 8 after dedup are unchanged. Gated `tests/test_full_herd.py` (the measurement, the disagreement on two synthetic arrivals, and the wiring). |
 | `aim.py` | **THE HANDOFF AIM -- where the last push frames POINT** (session 67), and the module that inverted s63-s66's "lateral deficit" reading. `push_step` = the plow as an **exact one-frame oracle**: ``f32(Tetra + (CO_RADII_BAR - centre_feet)/2 * unit(Tetra - exec_centre))`` is `FreeRun.step`'s next Tetra bit-for-bit on every contact frame (the pipeline acts 2 frames late, so the frame's push is already decided by the state) and exactly 0 at the bar -- so Tetra's side of a placement is analytic and an aim is an exact quantity, not a proxy. `eject_unit` = that ray in herd coords; **`aim_window`** = the directions from a Tetra position that reach the target thread, which is a RAZOR (**0.53-0.62 deg** at the s66 handoff range) because the thread lies 12.2 deg off the herd axis and the approach comes in 13-14 deg off it, i.e. she arrives nearly END-ON; `aim_miss` = how far the current aim misses the 47.6 u SEGMENT, in u, comparable to `objective.PLACEMENT_BAND` (the s66 endpoints: 12.28 / 11.89 / 47.72 u, 10-46 deg steep); `centre_lat_needed` = the same statement as Link's job (his exec centre must sit 9.15 / 10.86 / 40.96 u lower in lateral); `push_reserve` = ``CO_RADII_BAR - centre_feet``, the ejection already stored in the overlap; `landing_miss`/`handoff_target` = the EXACT half and its inverse (where a MEASURED escape residual leaves her, and the handoff a given residual demands -- the chain's target is the coord MINUS the escape's ~44 u: along ~894, lateral ~+2.5); `handoff_spec` = the three numbers in one call. **`corridor_aim_error`** is the same measurement MID-CHAIN, and it is what decides straightness: the push law integrates, so the direction a roll carries Tetra is the mean of its aims (s66 plan, three rolls: mean aim +2.55 / -6.42 / +16.56 deg vs travel +2.98 / -6.36 / +18.13, ~205 u each), the entry aim predicts it to a few degrees, and the human enters his two recorded rolls at +1.22 / -0.70 deg and finishes 44 frames in **0.71 u** off the corridor. The lateral that steers the push is the exec CENTRE's, not the feet's (s66 roll-2 entry: feet +2.22 u off her lateral, aim -10.84 deg). Gated `tests/test_aim.py` (6): the 0-ULP oracle, the razor window, the aim<->centre-lateral inversion, **the terminal alphabet's 2-frame inertness**, the roll-aim law on the HUMAN's own rolls, and the handoff-target round trip. CLI `python -m harness.tetrapush.aim {spec\|beam}`. |
 | `full_herd.escape_probe` | **The LAST cycle's endpoint keep, one stage out from `glide_probe`** (session 67): rank an endpoint by what its real ESCAPE lands (`away_walk.probe` -> `aim.landing_miss` + the frames to the slam), because the terminal GLIDE was measured to have no authority over Tetra at all -- the whole `_terminal_alphabet` moves her identically for four frames (`aim`), which is why six terminal rank configurations came out byte-identical across s61-s63. Wired as `extend_cycle(escape_keep=True)` (a rank AND a keep share) and `chain_herd(last_escape=True)`, superseding `glide_keep` on the last cycle; ~2-5 s per survivor. Result on the s66 cycle-2 beam (461 s, no chain): 21 survivors, **18 fire, best lands 45.62 u off the thread**, and the keep is INERT (byte-identical 8 nodes) -- the right metric, proving the cycle-3 stage cannot reach the handoff. |
+| `full_herd.junction_square_probe` / `cycle1_nodes(square_keep=)` | **THE CYCLE-1 EXIT'S KEEP -- what squareness its junction can still DELIVER** (session 69), the stage s68 pointed at with "squareness is a property of the cycle EXIT". Run the exit's junction at a coarse budget and report the smallest `objective.push_corridor` offset any surviving roll delivers (`roll_probe`'s ``off``; never the endpoint's own entry aim -- s68 measured that swings 5-8 deg/frame at jf 10-12). ~15-25 s per exit; cycle 1 has ~21 unique ones, so it costs 308 s ONCE per solve. It exists because the cycle-1 candidate set is **one roll aim swept over the 25-value `derived_target_css` grid** -- measured: of the whole fan x 3 l_windows exactly 3 (aim, window) pairs survive and all three are the same aim, and every candidate scores `plan_bound` **71.90**, so the frame rank cannot separate them at all. Only 6 of the 25 arm anything, and their deliverable squareness spans **11.20 .. 141.83 u**; the old ``tcs_keep=3`` cut by `junction_quality` (frames in the box) and kept 141.83 / 27.81 / 14.67, with the best at quality rank 5. **The POOL is what makes the probe honest** (`_probe_pool(spread=False)`): on three real exits prefix-only reads `1.34 / none / 27.02`, squarest-only `none / 141.83 / 14.67`, the uncapped mix `1.34 / 141.83 / 14.67` (12 rollable where each single pool found 9), and s68's state-CAPPED pool `none / 141.83 / 25.89` -- it calls an exit that reaches 1.34 u unrollable, so that cap is the one thing not to reuse here. Result on cycle 2, same config and 75-frame budget: corridor offset **37.00 -> 8.97 u**, Tetra lat **-32.10 -> -3.65**, Link's lateral off her **+11.14 -> -0.69**, `plan_bound` 72.81 -> **72.69**, roll survivors **18 -> 71** (964 s vs 516). Gated `tests/test_full_herd.py` (+2: the pool as pure selection, and a slow contrast that the squarest exit is one the old cut drops and the keep keeps). |
+| `aim.handoff_corridor` | **The line the CHAIN must ride, which is not the line to the coord** (session 69) -- `objective.push_corridor`'s shape (``target``/``slope``/``lat_at``/``offset``) aimed at `handoff_target` instead, so every keep that reads a corridor rides the state the chain must DELIVER. The residual is measured, never assumed: probe the real escape atom on an on-line mid-depth arrival at the thread's near end (feet 56 -> resid **43.65 along / +5.47 lat** -> target along **893.89** lat **+2.47**, reproducing s67's solved-backwards "along ~894, lat ~+2.5"), and report ``ok=False`` rather than guess if the atom does not fire. The two lines ask an on-line Tetra for aims **0.46 deg apart at the cycle-1 exit, 0.68 at cycle-2 range, 1.19 by along 700** -- it GROWS as the plan closes. Depth is a knob inside the noise (feet 52..64 moves the ask 0.04 deg, 1/17th of what ignoring the escape costs). Wired `chain_herd(handoff=True)` -> `cycle1_nodes`/`extend_cycle(corridor=)`. **Measured INERT at cycle 2** (identical 8 survivors; the frontier's dead counts and the cycle-1 probe values do move -- best exit 11.20 -> 7.93 u), kept ON because it is the correct target and the bias grows. Gated `tests/test_aim.py`, which also pins WHY it matters: the razor is a property of where the handoff sits, not of the thread -- from the s66 handoff (along 881.6 lat +21.19) the 47.6 u segment is nearly end-on and the window is **0.53 deg**, from the handoff target it subtends **10.04**. |
 | `beam_io.py` | **The CHEAP-ITERATION path** (session 61): dump a search beam to JSON and rebuild it BIT-EXACT. A node's identity IS its delivered input log (`confirm_plan`'s own convention), so a beam round-trips through plain JSON with no simulator state to serialise, and `rebuild_beam` (~0.3 ms per logged frame) hands back live nodes `extend_cycle`/`terminal_targeting`/`confirm_plan` accept. Use it instead of re-running the ~475 s stages that produced a beam -- session 61 burned ~25 minutes of search on a one-expression bug for want of this. Gated `tests/test_full_herd.py::test_a_dumped_beam_rebuilds_bit_exact_from_its_input_logs` (fingerprint equality + the rebuilt node confirming). |
 | `feasibility.py` | **The COARSE-FEASIBILITY report** (session 28): from the bit-exact 2-cycle window, answers "can a few push cycles herd Tetra the full ~960 u to the genuine-coord cluster, in-regime?" -- directional (herd bearing vs target bearing), per-cycle reach, and the plow-regime bound. VERDICT: CONFIRMED (0.2 deg direction match, ~3 cycles, dist 40-85 u < engage 230). All numbers recomputed live. CLI `python -m harness.tetrapush.feasibility`. |
 | `_notes/tetrapush-camoracle_probe.py` | (gitignored) Session-18 land-camera ORACLE probe: run A re-captured with the FULL dCamera_c block (0x520 B, incl. mEventFlags/mCurStyle/mCurType), player status words, attention lockstate, both actors' `attention_info.position`, and the pad main-stick angle. Baked to `fixtures/courtyard_cam_oracle.json` (the `test_land_cam.py` gate). |
@@ -1565,6 +1567,87 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               push" (98.5% saturated), the lateral-magnitude framing (s67, the sign is the other way),
               a wider junction frontier (s68: 4x wider moves nodes 0/3 not at all), or a squareness
               share in the probe pool (s68, measured: it stalls the chain).
+              **Session 69 bought the squareness where s68 said it lived -- at the cycle-1 EXIT -- and
+              cycle 2's corridor offset went 37.0 -> 8.97 u. See the box below.**
+      - [~] **THE SQUARENESS IS BOUGHT AT THE CYCLE-1 EXIT, AND WHAT CYCLE 1 IS CHOOSING IS A CAMERA
+            TARGET (session 69): cycle 2's corridor offset 37.0 -> 8.97 u, Tetra's lateral -32.1 ->
+            -3.65, Link's lateral off her +11.1 -> -0.69.** Session 68 handed over "buy the squareness
+            at the cycle-1 exit, because that is where it lives". It is, and the stage was choosing
+            with a rank that is ANTI-CORRELATED with it.
+            - **THE WHOLE CYCLE-1 CANDIDATE SET IS ONE ROLL AND ITS CAMERA, AND EVERY MEMBER IS
+              BOUND-TIED.** Instrumented at the R1/R2 stages: of the entire `half_window` aim fan x
+              three ``l_windows``, exactly **3** (aim, window) pairs survive the roll prunes and all
+              three are the SAME aim (want 35324) -- the l-window only decides which frame the exit
+              lands on (f20 / f21 / f22), and f20's whole tcs family fails `junction_quality`. So the
+              set is one roll swept over the 25-value `derived_target_css` grid, of which only **6**
+              arm anything at all, and every candidate scores `plan_bound` **71.90**: the frame rank
+              cannot separate them, so whatever else the cut ranks on IS the decision.
+            - **AND WHAT IT RANKED ON WAS ANTI-CORRELATED.** The deliverable squareness of those six
+              spans **11.20 .. 141.83 u** (`junction_square_probe` -- the smallest corridor offset a
+              real roll through the exit's junction DELIVERS). ``tcs_keep=3`` cut them by
+              `junction_quality`, which counts frames in the pursuit box, and its top three are
+              **141.83 / 27.81 / 14.67** -- the worst-but-one first. The best sits at quality rank 5.
+            - **THE FIX: enumerate the grid, keep by the probe** -- `cycle1_nodes(square_keep=True,
+              tcs_keep=<no cut>)`, a `_mixed_beam` share at the beam cut by the probe's ``off``. 27
+              survivors -> 21 unique -> all probed in **308 s**, once per solve. It takes tcs 38788
+              (11.20 u) and 38020 (14.51), the two the old cut dropped. **Opt-in, via
+              `chain_herd(c1_square=True)`** (default ON): 15 other tests call `cycle1_nodes` only to
+              get a node to build on, and making the probe their default cost the suite ~77 minutes.
+              A solve wants it; "give me a cycle-1 node" does not.
+            - **THE POOL IS WHAT MAKES THE PROBE HONEST, AND THE s68 STATE CAP MUST NOT BE REUSED
+              HERE.** Same three exits, four pools: prefix-only **1.34 / none / 27.02**, squarest-only
+              **none / 141.83 / 14.67**, the UNCAPPED mix **1.34 / 141.83 / 14.67** (and 12 rollable
+              endpoints where each single pool found 9), s68's state-capped `_probe_pool`
+              **none / 141.83 / 25.89**. The cap calls an exit that reaches 1.34 u unrollable. The
+              distinction is the job: `_probe_pool`'s default is choosing endpoints to CARRY (where the
+              spread is right, s68), ``spread=False`` is SCORING an exit. Gated as pure selection.
+            - **CYCLE 2, off the identical cycle-2 config and 75-frame budget** (the stock run
+              reproduces s68 exactly -- 37.00 u, lat -32.10, bound 72.81, 8 survivors -- so the
+              contrast is clean): corridor offset **37.00 -> 8.97 u**, Tetra's lateral **-32.10 ->
+              -3.65**, Link's lateral offset from her **+11.14 -> -0.69** (he now stands on her
+              lateral, which is the squareness the human has), `plan_bound` **72.81 -> 72.69**, roll
+              survivors **18 -> 71**, 8 kept either way. 964 s against 516 (the beam is wider). The
+              human's own cycle 2 sits 0.71 u off, so a 52x gap is now 12x.
+            - **CONTAINMENT HOLDS, AND THE REMAINING 8x IS THE CAMERA LEG'S REACHABILITY
+              (`[[search-space-contains-human]]`).** At f21 the human's Tetra is bit-identical to the
+              search's exits and his facing is within **4 BAM**; the difference is the camera (his
+              csangle **38776** against the grid's reachable 38675 / 39085) and ~1 u of Link lateral.
+              His exit's junction delivers **1.34 u** where the best grid member delivers 11.20. The
+              gap is not the keep: `two_roll.roll_segment` holds ONE ``target_cs`` for the whole roll,
+              and the ACHIEVED exit csangle quantizes coarsely and non-monotonically (tcs 38404 -> cs
+              38159 while tcs 38276 -> cs 38624; tcs 39172..39684 all -> 39428), so 38776 is simply not
+              in the reachable set at this roll length.
+            - **`aim.handoff_corridor`: correct, derived, and measured INERT at cycle 2.** Every keep
+              read the line to the nearest COORD, but the state the chain must deliver is that coord
+              minus the escape's residual. Measured, not assumed: probe the real atom on an on-line
+              mid-depth arrival at the thread's near end -> resid **43.65 along / +5.47 lat** at feet
+              56 -> target along **893.89** lat **+2.47**, reproducing s67's solved-backwards
+              "along ~894, lat ~+2.5". The two lines ask an on-line Tetra for aims **0.46 deg apart at
+              the cycle-1 exit, 0.68 at cycle-2 range, 1.19 by along 700** -- growing as the plan
+              closes. Re-running cycle 2 on it returns the IDENTICAL 8 survivors (the frontier's dead
+              counts and the cycle-1 probe values DO move -- best exit 11.20 -> 7.93 u), so it is inert
+              at this range; `chain_herd(handoff=True)` keeps it ON because it is the right target and
+              the bias grows. Depth is a knob inside the noise: feet 52..64 moves the ask **0.04 deg**.
+            - **CYCLE 3 OFF IT: THE PLACEMENT FRONTIER 45.62 -> 15.70 u, AND THE BINDING CONSTRAINT IS
+              NOW FRAMES.** Run off the dumped cycle-2 beam (774 s, `escape_keep`): 18 roll survivors,
+              **all 18 fire the escape**, and the best lands **15.70 u** off the thread against s67's
+              45.62 u frontier -- but at **78-80 frames** against the 75 budget (`plan_bound` 77.27), so
+              at the real budget the cut empties (0 survivors). Where the frames go is legible and it is
+              NOT the squareness: the cycle-3 endpoints sit at along **947.4 / 949.5**, i.e. **53 u PAST**
+              the handoff target at 893.9, with Tetra's lateral back out at **-26.0 / -29.6** and Link
+              **45 u** off her lateral. One FRONT_ROLL is ~205 u and cannot stop short, so a cycle 2 that
+              ends at along 628 overshoots.
+            - **WHICH NAMES THE SAME BLIND CUT ONE CYCLE UP.** `roll_candidates`' ``tcs_keep`` is ranked
+              by `junction_quality` at EVERY cycle, not just cycle 1 -- so cycle 3's camera target is
+              chosen by frames-in-the-box exactly as cycle 1's was, and cycle 3's roll is now the
+              unsquare one (corridor offset **8.97 -> 28.62 u** across it). The cycle-1 fix is the
+              template; cycle 2's exit is where it goes next.
+            - **AND THE RAZOR IS A PROPERTY OF WHERE THE HANDOFF SITS, NOT OF THE THREAD** (gated):
+              from the s66 handoff (along 881.6, lat +21.19 -- short AND off-line) the 47.6 u segment is
+              nearly end-on and `aim.aim_window` is **0.53 deg**, while from the handoff target itself
+              it subtends **10.04**. Non-monotone in the offset, so this is two measured points and not
+              a trend -- but it reframes the endgame: riding the right line is not bias correction, it
+              is what opens the window from a razor to a door.
       - [x] **THE AWAY-WALK, WORKED OUT AND SHIPPED AS AN ATOM (session 65): it is THE HERD
             JUNCTION WITH THE ROLL REPLACED BY A BACKWARDS SLAM -- convert to positive first, so
             the reversal never crosses zero.** Dereck steered live throughout: (1) the placement
