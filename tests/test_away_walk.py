@@ -33,11 +33,51 @@ _BED_CS = 'snap'
 
 
 @pytest.fixture(scope='module')
-def bed():
-    env = seeds.load_env()
-    hl = HerdLine.from_env(env)
+def env():
+    return seeds.load_env()
+
+
+@pytest.fixture(scope='module')
+def hl(env):
+    return HerdLine.from_env(env)
+
+
+@pytest.fixture(scope='module')
+def bed(env, hl):
     node = FH.synthetic_hot_arrival(env, hl, coord_idx=287, d_short=0.0, feet=64.0)
     return node['run'], hl
+
+
+@pytest.fixture(scope='module')
+def arrivals_s75(env):
+    """The two REAL arrivals of `fixtures/courtyard_arrivals_s75.json`, replayed from their delivered
+    input logs -- the synthetic bed can express neither case. Rebuilding either from the junction pool
+    costs ~130 s; a log replays in milliseconds (`beam_io`: a state's identity IS its log) and each is
+    asserted bit-exact against the state the fixture records, so these are those arrivals and not near
+    ones.
+
+      ``deep``    node 0 jf 10, centre_feet 49.32 -- no snap window at its live csangle, and its only
+                  firing escape is the turnaround.
+      ``shallow`` node 5 jf  4, centre_feet 55.50 -- ``freeze_f`` 2 is its modal separation."""
+    import json
+    import os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'fixtures', 'courtyard_arrivals_s75.json')
+    with open(path) as fh:
+        rec = json.load(fh)
+    out = {}
+    for key, a in rec['arrivals'].items():
+        run = seeds.make_freerun(env)
+        run.pre_seed_input(seeds.dtm_input_at(env)(0))
+        for d in a['log']:
+            run.step(d)
+        st = a['arrival']
+        assert (run.link.pos_x, run.link.pos_z) == tuple(st['link'])   # 0-ULP, or it is not the state
+        assert (run.tx, run.tz) == tuple(st['tetra'])
+        assert int(run.csangle) == st['csangle'] and int(run.link.facing) == st['facing']
+        assert run.link.speedF == st['speedF'] and len(a['log']) == a['frames']
+        out[key] = dict(run=run, rec=a)
+    return out
 
 
 @pytest.fixture(scope='module')
@@ -392,3 +432,105 @@ def test_the_escapes_own_frames_are_worth_less_than_a_ceiling_frame_and_one_is_d
     pd0 = FH._placement_dist(run, rows)
     pd1 = FH._placement_dist(best['run'], rows)
     assert pd0 - pd1 <= prof['total'] + 1e-6
+
+
+def test_a_non_snapping_camera_does_not_veto_the_turnaround(env, hl, arrivals_s75):
+    """**A SUFFICIENT CONDITION WAS BEING USED AS A NECESSARY ONE, and it threw away firing escapes**
+    (session 75, settling the item session 74 measured and deliberately did not claim).
+
+    `probe` used to skip every ``turnaround_first`` variant whose csangle had no `snaps_at` window --
+    "no window, so the snap cannot fire". But what the ESS frame must earn is ``l_ok``, not a snap: on
+    this arrival it turns **0x1425 = 28.3 deg**, well under `_SNAP_MIN_TURN`, and Tetra is STILL inside
+    the front cone immediately after it, yet the escape fires -- the cone is cleared a frame later, by
+    the frame the L acts on. Over the 10 closest arrivals of the s74 jf-9/jf-10 probe the guard turned
+    a firing escape into a non-firing one on **7**, this one among them: ``fires`` False at pd 8.147
+    with the guard, True at pd **7.738630168506453** without it, both at ``cs_bill`` 0.
+
+    The bed the rest of this module uses cannot gate it (56 turnaround variants run at its live
+    csangle and none fires -- no roll ever paid its camera bill), so the case is banked the way this
+    work banks every state: as its delivered input log, which replays bit-exact in milliseconds
+    (`beam_io`). The gate is INDEPENDENCE -- `probe`'s result must not move when `snaps_at` is forced
+    either way -- so any re-introduction of the guard, in any form, fails here rather than silently
+    shrinking the sweep."""
+    run = arrivals_s75['deep']['run']
+    rec = arrivals_s75['deep']['rec']
+    kw = dict(flip_step=0x400, rotate_offs=AW.ROTATE_OFFS, rank='frames', csangle='live')
+
+    # the premise: this arrival's own camera has NO snap window, which is the case at issue
+    assert AW.snaps_at(run, int(run.csangle)) is False
+    assert rec['arrival']['snaps_at_live'] is False
+
+    res = AW.probe(run.clone(), hl, **kw)
+    assert AW.fires(res), "the firing escape the guard used to discard"
+    assert res['knobs']['turnaround_first'] is True
+    assert res['cs_bill'] == 0, "replay-faithful: nothing commanded the camera"
+    exp = rec['probe']
+    assert res['freeze_f'] == exp['freeze_f']
+    rows = seeds.load_placements()[0]
+    assert FH._placement_dist(res['run'], rows) == exp['placement_dist']    # 0-ULP, not a tolerance
+
+    # ...and the ESS frame did NOT snap: `l_ok` is earned a frame later, at the frame the L acts
+    from harness.tetrapush.reposition import turnaround
+    probe_c = AW._clone_for_atom(run)
+    assert turnaround(probe_c, int(run.csangle)) < AW._SNAP_MIN_TURN
+
+    # the gate proper: the pick is independent of the predicate the guard was built on
+    real = AW.snaps_at
+    try:
+        for forced in (True, False):
+            AW.snaps_at = lambda _r, _cs, _v=forced: _v
+            same = AW.probe(run.clone(), hl, **kw)
+            assert same['knobs'] == res['knobs'], "the sweep still consults the snap window"
+            assert FH._placement_dist(same['run'], rows) == exp['placement_dist']
+    finally:
+        AW.snaps_at = real
+
+
+def test_which_freeze_f_can_fire_is_a_property_of_the_arrival_not_of_the_recipe(hl, arrivals_s75):
+    """**THE LEDGER'S ``freeze_f`` ROW IS PER-ARRIVAL, AND READING IT OFF ONE NODE CLOSED A REAL FRAME
+    RUNG** (session 75).
+
+    Session 74 built the 74-frame ledger by sweeping 85192 firing variants and reported "there is no
+    ``freeze_f`` 2 anywhere in the population", which retires the 72-frame arrival: 72 + 2 = 74 needs a
+    separation this escape supposedly cannot do. That population is node 0's arrivals only. On the
+    ``shallow`` arrival ``freeze_f`` 2 is not merely present, it is the **MODAL** separation -- 384 of
+    the 672 firing variants -- and its escape reaches **74 total frames** with `fires` True. (What it
+    does not reach is the placement: pd 57.3, which is the arrival's problem and the real reason 74 is
+    still open.)
+
+    The mechanism is depth, and it is why the row cannot be a constant. ``freeze_f`` is the first frame
+    whose `full_herd._centre_feet` clears `CO_RADII_BAR` and stays clear, so an arrival that ends
+    SHALLOW needs fewer frames to get out: the shallow arrival sits at **55.50** against the deep one's
+    **49.32**, 6.2 u nearer the 80 u bar, and separates in 2 where the deep one's whole grid never
+    separates before 4. So the ledger's ``recovery(freeze_f)`` must be measured on the arrival being
+    scored, not inherited -- and a rung dismissed on another node's population is not dismissed.
+
+    Gated as the contrast, on two banked real arrivals, because a single bed can only ever reproduce
+    one side of it."""
+    deep, shallow = arrivals_s75['deep'], arrivals_s75['shallow']
+
+    # the depth ordering that drives it, and the bar it is measured against
+    assert deep['rec']['arrival']['centre_feet'] < shallow['rec']['arrival']['centre_feet']
+    assert shallow['rec']['arrival']['centre_feet'] < FH.CO_RADII_BAR
+    for a in (deep, shallow):
+        assert FH._centre_feet(a['run']) == a['rec']['arrival']['centre_feet']   # 0-ULP
+
+    # the contrast itself: the same recipe, two arrivals, two different separation sets
+    d_frz = {int(k) for k in deep['rec']['firing_freeze_f']}
+    s_frz = {int(k) for k in shallow['rec']['firing_freeze_f']}
+    assert 2 not in d_frz and min(d_frz) == 4
+    assert 2 in s_frz, "the 72-frame rung's separation"
+    assert max(shallow['rec']['firing_freeze_f'].items(),
+               key=lambda kv: kv[1])[0] == '2', "...and on this arrival it is the MODAL one"
+
+    # so the 74-frame rung IS reachable in FRAMES from a 71-f arrival, and fails on placement alone
+    p = shallow['rec']['probe']
+    assert p['fires'] and shallow['rec']['frames'] + p['freeze_f'] == p['total'] == 74
+    assert p['placement_dist'] > 10.0, "if this ever lands in the band the frontier has moved"
+
+    # and what the escape may be CREDITED with is still bounded by its own plow, per freeze_f
+    for key, rec in (('deep', deep['rec']), ('shallow', shallow['rec'])):
+        for frz, m in rec['per_freeze_f'].items():
+            assert m['recovery'] <= m['plow'] + 1e-6, \
+                "%s freeze_f %s recovers %.3f u by pushing %.3f" % (key, frz, m['recovery'],
+                                                                    m['plow'])

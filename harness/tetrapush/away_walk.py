@@ -31,6 +31,11 @@ roll, but instead of rolling, slam backwards -- maybe one frame left or right be
      camera holds whatever the arrival brings, and slewing 15-38 deg here would cost 6-15 frames
      against a 2-frame budget. The channel that pays is the last roll's ``target_cs``, idle for its
      whole duration and worth -46.6..+40.7 deg (`full_herd.ESCAPE_TCS_SPAN`).
+     **The snap is the cleanest way for this frame to do its job, not the only one** (session 75):
+     what the frame must achieve is that the L does not act with Tetra in the cone, and on the banked
+     ``deep`` arrival the ESS turns only 0x1425 = 28.3 deg -- under `_SNAP_MIN_TURN`, with Tetra still
+     in the cone right after it -- yet the escape fires, the cone being cleared a frame later by the
+     frame the L acts on. So `probe` sweeps the turnaround unconditionally and lets `fires` judge it.
   2. **The L conversion** (ONE L frame -- Dereck): L + full stick toward Tetra for one frame,
      then the same stick WITHOUT L. The L frame routes into ATN_MOVE; the `setSpeedAndAngleAtn`
      DIR_BACKWARD negation (d_a_player_main.cpp 2863) fires on the NEXT dispatch frame off the
@@ -438,7 +443,28 @@ def probe(run0, hl, *, max_frames=18, thread=None, flip_step=None, rotate_offs=N
       * ``'snap'`` -- command `snap_csangle` (the nearest window member). The old behaviour, kept for
         research and for a caller that has separately shown the roll can deliver it. Every result
         carries ``cs_bill``, so a billed variant can never be mistaken for a faithful one.
-      * an int -- that csangle exactly."""
+      * an int -- that csangle exactly.
+
+    ``turnaround_first`` is swept UNCONDITIONALLY, and until session 75 it was not: a variant was
+    skipped whenever `snaps_at` reported no window at the csangle, on the reading "no window -> the
+    snap cannot fire". That is a SUFFICIENT condition used as a NECESSARY one -- the same shape of
+    error session 73 found in the snap scan order -- and it discards real escapes. What the ESS frame
+    has to earn is ``l_ok``, i.e. the L must not act with Tetra in the front cone, and the snap is only
+    one way to earn it: on the banked ``deep`` arrival (`fixtures/courtyard_arrivals_s75.json`, a real
+    74-frame jf-10 arrival) the ESS turns **0x1425 = 28.3 deg**, well under `_SNAP_MIN_TURN`, and Tetra is
+    STILL in the cone immediately after it -- yet the variant fires, because the cone is cleared a
+    frame later, by the frame the L acts on. Over the 10 closest arrivals of the session-74 jf-9/jf-10
+    probe the guard turned a FIRING escape (``freeze_f`` 4, pd **7.739**, ``cs_bill`` 0) into a
+    non-firing one (pd 8.147) on **7** of them and changed nothing on the other 3.
+
+    `fires` is the acceptance and always was; the guard only decided which variants got to be judged by
+    it. Removing it buys no FRAMES on the population that motivated it (78 against the shipped 75) and
+    is inert on the synthetic bed (56 turnaround variants run at its live csangle, 0 fire); what it buys
+    is that a keep no longer prunes on a condition the physics does not require. It costs at most 2x the
+    variant count, and only where the camera has no window (where the window exists nothing changes).
+    Gate:
+    `tests/test_away_walk.py::test_a_non_snapping_camera_does_not_veto_the_turnaround`, which pins the
+    result as INDEPENDENT of `snaps_at` -- re-introducing any form of the guard fails it."""
     ex, ez = seeds.ENTRY_ROLL_POS
     b_entry = world_angle_s16(ex - run0.link.pos_x, ez - run0.link.pos_z)
     up_herd = (hl.bearing_bam() + 0x8000) & 0xFFFF
@@ -449,7 +475,6 @@ def probe(run0, hl, *, max_frames=18, thread=None, flip_step=None, rotate_offs=N
         cs = snap_csangle(run0)
     else:
         cs = int(csangle)
-    can_snap = cs is not None and snaps_at(run0, cs)
     flips = [None] if flip_step is None else flip_arc(hl, step=int(flip_step))
     rots = ROTATE_OFFS[1:2] if rotate_offs is None else tuple(rotate_offs)
     best = None
@@ -458,8 +483,6 @@ def probe(run0, hl, *, max_frames=18, thread=None, flip_step=None, rotate_offs=N
             for ta in (False, True):
                 for side in (1, -1):
                     for exit_b in (b_entry, up_herd):
-                        if ta and not can_snap:
-                            continue          # no window at this csangle: the snap cannot fire
                         r = escape_atom(run0, hl, turnaround_first=ta, rotate_side=side,
                                         rotate_off=ro, flip_bearing=flip, exit_bearing=exit_b,
                                         csangle=cs if cs is not None else int(run0.csangle),
