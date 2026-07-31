@@ -1655,10 +1655,91 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
-      - [~] **THE OTHER SEVEN CYCLE-2 NODES ARE MEASURED AND NONE OF THEM ARRIVES: NODE 0/1 IS THE ONLY
+      - [~] **THE JUNCTION BEAM IS NOT THE BINDING STAGE: 9.8x THE ENDPOINTS BUYS 0.00 u OF ARRIVAL
+            REACH. AND THE LEDGER THAT CALLED THE ROUTES SHORT IS NOT BAND-PORTABLE -- MEASURED ON THE
+            jf-7 BAND'S OWN ARRIVALS ITS ALLOWANCE IS 34.76-37.05, NOT 23.94, WHICH ADMITS THE BAND.
+            WHAT ACTUALLY REFUSES 74 FRAMES IS THE ESCAPE'S PUSH **DIRECTION** (21.08 u of a 33.76 u
+            PLOW POINTS AT THE THREAD) AND THE CAMERA BILL (0 of 672 VARIANTS FIRE) (session 76).**
+            Session 75 handed over "widen the JUNCTION beam, not the node -- it is the stage this
+            session measured to be the binding one, and it has never been widened", with one number to
+            decide it: does node 0's jf-7 floor drop below 23.94 at ``beam`` 64/128? It was run at full
+            aim resolution over the whole pool, at BOTH live rungs, and the answer is no -- but the
+            reason the rung is short turns out not to be the one the ledger said.
+            - **THE WIDENING, MEASURED AT BOTH RUNGS** (`junction_beam` at ``beam`` 24 / 64 / 128,
+              node 0; endpoints dumped as delivered input logs so a shard rebuilds one in ~15 ms
+              instead of re-running a 128-wide beam per worker, the ~130 s x 10 s75 paid):
+
+                  band        pool 24 -> 128   new probed   rolls   pd floor        along ceiling
+                  jf 7 (71 f)    420 -> 4110      3690      1081   34.977 -> 34.162  908.68 -> 908.68
+                  jf 8 (72 f)    632 -> 2204      2204       444   23.495 -> 23.495  920.22 -> 920.70
+
+              4400 s + 1300 s over 10 workers. So **9.8x the endpoints moves the jf-7 pd floor 0.82 u
+              and its arrival REACH 0.00 u**, and at jf 8 the widened pool's own best (24.499) does not
+              even reach the narrow beam's floor. Route A needs 23.94, route D 16.08. The endpoint
+              stage is saturated; this is not where the frames are.
+            - **AND ``beam`` IS NOT MONOTONE IN WIDTH, which is worth knowing before the next widening**
+              -- `_mixed_beam`'s ``per_group`` cap is shared ACROSS its orders, so giving order 1 more
+              slots can starve order 2 of a group budget it used to get. Measured: at jf 7 the beam-128
+              pool CONTAINS all 420 of beam 24's, at jf 8 the two are **DISJOINT** (632 and 2204, 0
+              shared physics tags). So a wider beam is a different sample, not a superset, and the
+              honest floor is the UNION across widths (which is what the table above reports).
+            - **THE LATERAL-INDEPENDENT LEDGER, now encoded as `objective.along_floor`.** ``pd_pre`` is
+              JOINT, so a short floor cannot say whether a band ran out of DISTANCE or only of aim. The
+              coords start at along **937.53** and along/lateral is orthonormal, so
+              ``pd_pre >= 937.53 - along`` whatever the lateral -- a band's along CEILING (a max over
+              the same rolls the sweep already fires) tests the rung on its own. Ceilings 896.60 /
+              908.68 / 920.70 / 932.66 at 70 / 71 / 72 / 73-frame arrivals, i.e. best-possible pd
+              40.94 / 28.85 / 16.83 / 4.88 with a PERFECT lateral -- so each band's floor is carrying
+              6-12 u of pure lateral error, and s71-s75 each paid ~2700 s of aim sweep to learn a
+              verdict this inequality gives off a number the sweep already prints.
+            - **THE CEILINGS ARE A HERD RATE, WHICH IS WHY THE BEAM CANNOT MOVE THEM.** Divide the node
+              and the beam out: measured from Tetra's state-2 along, every band sits at **98.24-98.53%
+              of `PUSH_CEILING`** (12.771-12.809 u/f of 13.0) -- the recorded human's own 98.2%. 74
+              total frames needs **98.55%** (``freeze_f`` 2, 72 herd frames, 12.812 u/f); 75 frames
+              needs 97.20-97.99%, which every band CLEARS, which is why the shipped plan exists. So the
+              whole 74-frame question is **0.24 percentage points**, 2.23 u of along (1.23 after the
+              `PLACEMENT_BAND` credit). **Not a physical bound**: `PUSH_CEILING` is asymptotic and a
+              23-frame cycle has sustained 13.36 u/f = 102.8% (knowledge/mechanics/actor-push.md), so
+              this is a SEARCH deficit.
+            - **AND THE DEFICIT HAS AN ADDRESS: THE JUNCTION'S 8 FRAMES.** `objective.push_budget` on
+              the real best 72-frame arrival (endpoint 471, aim (171,192), pd 23.495) splits it with
+              nothing to fit -- state-2 prefix 45 f at **99.56%** magnitude, junction 8 f at
+              **93.51%**, roll 19 f at **99.55%**, total sideways only **10.27 u** over 72 frames
+              (prefix 3.22, junction 2.27, roll 4.78). The junction loses **6.75 u of push**; route D is
+              short **6.17 u of along**. Per frame the push is EXACTLY
+              ``(CO_RADII_BAR - _centre_feet) / 2`` -- verified on every frame of that arrival, rolls
+              included (cf 45.9 -> 17.036 u, cf 59.6 -> 10.188 u), the s46 freeze law running the whole
+              window -- so the sustained rate is set by the MEAN contact depth, and the junction's mean
+              ``_centre_feet`` is **55.4** against the roll's 54.1.
+            - **THE CORRECTION, and it re-opens route A's arithmetic: s75's ledger allowances are
+              PER-ARRIVAL and were borrowed across bands.** The allowance is ``plow(freeze_f) +
+              PLACEMENT_BAND``, and the plow bound is a property of the arrival for the same reason
+              ``freeze_f`` is (s75): at ``freeze_f`` 3 it reads **20.31 u** on node 5's arrival, **33.76
+              -36.05 u** across the widened jf-7 band's own closest arrivals, and **48.57 u** on node 0
+              jf 10's. Screening jf 7 with the borrowed 22.94 REFUSES it (needs along 913.59, ceiling
+              908.68); screening it with its own 33.76 ADMITS it (needs 902.5). Session 75 lost the
+              72-frame rung to exactly this mistake one level down.
+            - **SO WHAT REFUSES 74 FRAMES NOW IS THE ESCAPE'S DIRECTION AND ITS CAMERA BILL, NOT THE
+              ARRIVAL'S PLACEMENT.** On the widened jf-7 band's closest arrival (``pd_pre`` 34.162, cf
+              48.13) the escape's 3 frames plow **33.76 u** -- enough for a 34.76 allowance against a
+              34.162 floor -- but only **21.08 u** of it is directed at the thread (short 12.08 of the
+              33.16 the rung needs), and **0 of 672 variants FIRE** at the arrival's own csangle. The
+              bill is not separable from the arrival (`away_walk.snap_bill`: the post-roll EBS travel
+              chases csangle, so paying it MOVES the arrival, s42), so it is a term in the roll's
+              ``target_cs`` -- unmeasured on this band, and the reason these arrivals have no frame
+              answer yet rather than a bad one.
+            - **Gates** (+2): `tests/test_objective.py::test_the_along_floor_bounds_the_placement_
+              distance_whatever_the_lateral` (the inequality, on the two banked real arrivals plus the
+              coord set, and tight straight up-herd of the near end) and
+              `test_the_along_floor_s_ALLOWANCE_is_per_arrival_and_must_not_be_borrowed` (the banked
+              pair's plow spread at a shared ``freeze_f``, and the screen's verdict flipping on it).
+      - [x] **THE OTHER SEVEN CYCLE-2 NODES ARE MEASURED AND NONE OF THEM ARRIVES: NODE 0/1 IS THE ONLY
             USABLE EXIT IN THE BEAM. THE LEDGER ROW THAT RETIRED THE 72-FRAME RUNG WAS A ONE-NODE
             ARTIFACT, AND WITH THE FOURTH ROUTE RESTORED AND PROBED THE 74-FRAME LEDGER IS COMPLETE:
-            EVERY ROUTE IS SHORT, THE BEST BY 7.41 u (session 75).**
+            EVERY ROUTE IS SHORT, THE BEST BY 7.41 u (session 75).
+            Session 76 ran its handoff's step 1 at both live rungs and the widening buys 0.00 u of
+            arrival reach -- and it found this ledger's allowances are not band-portable, which re-opens
+            route A's arithmetic. See the box above.**
             Session 74 handed over "fix the ARRIVAL's lateral one cycle upstream": node 0, which
             s71-s74 all built on, has the WORST Tetra exit lateral of the eight (-25.608 against node
             2's -3.654), and the other nodes' extra 3-4 frames were read as BUYING that lateral. Run

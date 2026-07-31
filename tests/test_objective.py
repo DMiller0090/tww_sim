@@ -31,6 +31,31 @@ def walls():
     return O.courtyard_walls()
 
 
+def _arrivals(env):
+    """The two REAL arrivals of `fixtures/courtyard_arrivals_s75.json`, replayed from their delivered
+    input logs (`beam_io`: a state's identity IS its log, and a replay is bit-exact) and asserted
+    against the state the fixture records, so these are those arrivals and not near ones.
+
+    Cached because both gates below want them and a replay is ~30 ms."""
+    if not _ARRIVALS:
+        with open(os.path.join(_FX, 'courtyard_arrivals_s75.json')) as fh:
+            rec = json.load(fh)
+        for key, a in rec['arrivals'].items():
+            run = seeds.make_freerun(env)
+            run.pre_seed_input(seeds.dtm_input_at(env)(0))
+            for d in a['log']:
+                run.step(d)
+            st = a['arrival']
+            assert (run.link.pos_x, run.link.pos_z) == tuple(st['link'])   # 0-ULP or not the state
+            assert (run.tx, run.tz) == tuple(st['tetra'])
+            assert run.link.speedF == st['speedF'] and len(a['log']) == a['frames']
+            _ARRIVALS[key] = dict(run=run, rec=a)
+    return _ARRIVALS
+
+
+_ARRIVALS = {}
+
+
 # --------------------------------------------------------------------------- the bar
 
 def test_the_frame_floor_is_the_nearest_coord_over_the_measured_split_law_ceiling(env):
@@ -347,6 +372,86 @@ def test_the_target_is_a_segment_across_the_herd_axis_not_a_cluster(env):
     assert not (th['lat_lo'] <= 36.0 <= th['lat_hi'])
     span = [th['lat_at'](a) for a in (th['along_lo'], th['along_hi'])]
     assert max(span) < 36.0 - 20.0, "a +36 u lateral must be far outside the placeable window"
+
+
+def test_the_along_floor_bounds_the_placement_distance_whatever_the_lateral(env):
+    """**The cheapest true test an arrival band can be put to** (session 76): ``along``/``lateral`` is
+    an orthonormal frame and the coords start at `placement_thread`'s ``along_lo``, so an arrival short
+    of that end is at least its along deficit from EVERY coord, whatever its lateral.
+
+    Worth gating because ``pd_pre`` is JOINT -- a band's floor is a min over its rolls, so a short
+    floor never says whether the band ran out of DISTANCE or only of aim -- while this does, off the
+    band's along CEILING, a number the same sweep already prints. Sessions 71-75 each paid ~2700 s of
+    full-resolution aim sweep to learn a rung was short.
+
+    Pinned as the inequality itself, on the two banked REAL arrivals plus the coord set, so a future
+    refactor of `HerdLine`/`placement_thread` that broke the frame (making the "bound" cut off real
+    survivors) fails here."""
+    from harness.tetrapush.reposition import HerdLine
+    from harness.tetrapush import full_herd as FH
+    hl = HerdLine.from_env(env)
+    rows = seeds.load_placements()[0]
+    th = O.placement_thread(hl, rows)
+
+    # the bound holds on real states, and it is a BOUND (never above the true distance)
+    for a in _arrivals(env).values():
+        run = a['run']
+        f = O.along_floor(hl.along(run.tx, run.tz), th)
+        assert f['pd_floor'] <= FH._placement_dist(run, rows) + 1e-9, \
+            "the along floor cut off a real arrival -- it is not a bound"
+
+    # and it is TIGHT where it must be: straight up-herd of the near end, the floor IS the distance
+    near = min(((hl.along(p['x'], p['z']), hl.lateral(p['x'], p['z'])) for p in rows),
+               key=lambda p: p[0])
+    for back in (1.0, 12.5, 40.0):
+        f = O.along_floor(near[0] - back, th)
+        true = min(math.hypot(near[0] - back - hl.along(p['x'], p['z']),
+                              near[1] - hl.lateral(p['x'], p['z'])) for p in rows)
+        assert f['pd_floor'] == pytest.approx(back, abs=1e-9)
+        assert true == pytest.approx(back, abs=1e-9), "the near end is no longer the nearest coord"
+
+    # past the near end there is nothing left to bound: the lateral takes over (`thread_frames`)
+    assert O.along_floor(th['along_hi'], th)['pd_floor'] == 0.0
+
+
+def test_the_along_floor_s_ALLOWANCE_is_per_arrival_and_must_not_be_borrowed(env):
+    """**The half of `along_floor` that a session can get wrong** (session 76, and session 75 already
+    lost a frame rung to the same mistake one level down).
+
+    The screen needs what the escape RECOVERS, and that is a property of the ARRIVAL, not of the
+    recipe: ``freeze_f`` is set by the arrival's own `full_herd._centre_feet` (s75) and the escape's
+    cumulative plow scales with the frames that buys. The two banked arrivals show the spread at the
+    SAME separation -- and it is large enough to flip the verdict on a whole band.
+
+    Measured this session: screening node 0's jf-7 band (along ceiling 908.68) with s75's borrowed
+    frz-3 allowance of 22.94 REFUSES it, while its own arrivals' 33.76-36.05 ADMITS it. The band is
+    still short -- only 21.08 u of that 33.76 u plow points at the thread -- but it is short for a
+    different reason than the ledger said, and a screen that refuses it on a borrowed number would
+    have hidden that. So: pass a recovery measured on the arrival being screened."""
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(env)
+    th = O.placement_thread(hl, seeds.load_placements()[0])
+    arr = _arrivals(env)
+    deep, shallow = arr['deep']['rec'], arr['shallow']['rec']
+
+    # the same freeze_f, two arrivals, plow bounds an order apart in what they allow
+    shared = ({int(k) for k in deep['per_freeze_f']} & {int(k) for k in shallow['per_freeze_f']})
+    assert shared, "the banked pair no longer shares a separation frame -- re-bank the contrast"
+    spread = max(abs(deep['per_freeze_f'][str(f)]['plow'] - shallow['per_freeze_f'][str(f)]['plow'])
+                 for f in shared)
+    assert spread > 10.0, \
+        "the per-arrival plow spread collapsed; if it is really portable, say so and simplify"
+
+    # and the screen's verdict flips on it, at one fixed along (node 0's measured jf-7 ceiling)
+    ceiling = 908.68
+    assert O.along_floor(ceiling, th, recovery=22.94)['ok'] is False       # s75's borrowed row
+    assert O.along_floor(ceiling, th, recovery=33.76)['ok'] is True        # the band's own bound
+    # the screen is exactly the inequality it claims to be, at the boundary
+    f = O.along_floor(ceiling, th, recovery=None)
+    edge = f['pd_floor'] - O.PLACEMENT_BAND
+    assert O.along_floor(ceiling, th, recovery=edge)['ok'] is True
+    assert O.along_floor(ceiling, th, recovery=edge - 1e-9)['ok'] is False
+    assert O.along_floor(ceiling, th, recovery=edge)['needs_along'] == pytest.approx(ceiling, abs=1e-9)
 
 
 def test_score_plan_reports_where_the_endpoint_sits_on_the_thread(env, walls, node1_rows):

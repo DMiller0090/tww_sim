@@ -541,6 +541,54 @@ def placement_thread(hl, placements=None):
                 max_chord_dev=dev, lat_at=lambda a: slope * a + intercept)
 
 
+def along_floor(t_along, thread, *, recovery=None, band=PLACEMENT_BAND):
+    """**The cheapest true test a whole ARRIVAL BAND can be put to** -- what `placement_dist` cannot be
+    less than, given only the along Tetra reached (session 76).
+
+    ``along``/``lateral`` is an orthonormal frame and the coords START at ``thread['along_lo']``, so any
+    arrival short of that end is at least its along deficit away from every one of them:
+
+        ``placement_dist >= along_lo - t_along``     whatever the lateral is
+
+    That is worth having because ``pd_pre`` is JOINT and a band's floor is a MIN over its rolls, so a
+    short floor never says whether the band ran out of DISTANCE or only of aim -- while this does, from
+    the band's along CEILING (a max, over the same rolls, that costs nothing extra to record). Sessions
+    71-75 each paid ~2700 s of full-resolution aim sweep to learn that a rung was short; every one of
+    those bands is rejected by this inequality off a number the sweep already prints.
+
+    Pass ``recovery`` -- what the escape recovers from the arrival, `PLACEMENT_BAND`-credited -- to get
+    the screen rather than the floor: ``ok`` False means NO aim in the band can finish the plan, and
+    ``needs_along`` is the along that would be required.
+
+    **``recovery`` MUST be measured on the arrival being screened, never borrowed from another band**
+    (session 76, the hard-won half of this). It is a property of the arrival, because ``freeze_f`` is
+    set by the arrival's own `full_herd._centre_feet` (s75) and the escape's plow scales with the
+    frames that buys: at ``freeze_f`` 3 the cumulative plow reads **20.31 u** on node 5's arrival,
+    **33.76-36.05 u** across the widened jf-7 band's own arrivals and **48.57 u** on node 0 jf 10's.
+    Screening the jf-7 band with s75's borrowed 22.94 refuses it (requires along 913.59, ceiling
+    908.68); screening it with its OWN 33.76 admits it (requires 902.5). Session 75 lost a rung to
+    exactly this mistake one level down, in the ``freeze_f`` row itself.
+
+    Measured, node 0's cycle-2 exit, full aim resolution at ``beam`` 24 (the session-76 ledger): along
+    ceilings 896.60 / 908.68 / 920.22 / 932.66 at 70 / 71 / 72 / 73-frame arrivals. Widening
+    `full_herd.junction_beam` 24 -> 128 (420 -> 4110 endpoints at jf 7, 3690 probed at full aim
+    resolution) moved the jf-7 ceiling by **0.00 u** and its pd floor by 0.82 u, so the ceiling is a
+    RATE and not a sampling artifact: every band sits at 98.24-98.53% of `PUSH_CEILING` sustained from
+    Tetra's state-2 along, against the human's 98.2%.
+
+    A NECESSARY condition, never a sufficient one: the lateral still has to be inside
+    `placement_thread`'s ~10 u window at that along, the escape's plow has to POINT at the thread (at
+    jf 7 only 21.08 u of a 33.76 u plow does), and it has to FIRE -- which is what the sweep is for.
+
+    Returns ``dict(pd_floor, needs_along, allow, ok)`` (``allow``/``ok`` None without ``recovery``)."""
+    floor = max(0.0, thread['along_lo'] - float(t_along))
+    if recovery is None:
+        return dict(pd_floor=floor, needs_along=None, allow=None, ok=None)
+    allow = float(recovery) + float(band)
+    return dict(pd_floor=floor, needs_along=thread['along_lo'] - allow, allow=allow,
+                ok=floor <= allow)
+
+
 def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMENT_BAND, run=None,
                atom_kw=None):
     """Score a plan against the whole objective. ``rows`` is a list of per-frame dicts carrying

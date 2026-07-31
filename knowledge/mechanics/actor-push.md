@@ -15,7 +15,8 @@ game's `mCyl` centre during a FRONT_ROLL (2026-07-06). The seam-clip pipeline is
 model-derived thrust (`LandState.enter_cut`; reproduces the live (−1727,−990) clip endpoint bit-for-bit),
 and the roll-stab was live-reproduced at the corner - aim/wall-hold/bonk confirmed (2026-07-06, below).
 The per-frame vs sustained push magnitude ([How FAR](#how-far-the-push-can-move-an-actor-per-frame---the-split-law-is-a-steady-state))
-is measured off the recorded courtyard herd (2026-07-28).
+is measured off the recorded courtyard herd (2026-07-28), and the per-frame depth law behind it is
+verified frame by frame over a whole 72-frame herd (2026-07-31).
 **Source:** decomp `dCcS::SetPosCorrect` / `dCcS::GetRank` / `rank_tbl` (`d_cc_s.cpp:138/153/180`),
 `cM3d_Cross_CylCyl` (`c_m3d.cpp:1553`), `cCcD_Stts::PlusCcMove` (`c_cc_d.cpp`), `daPy_lk_c::posMove`
 + `daPy_lk_c::setCollision` (`d_a_player_main.cpp:9748`) + player/Tetra weights (`:11233`,
@@ -217,6 +218,17 @@ So: use 13.0 u/frame for a sustained rate or a distance estimate, never as a per
 as a hard floor on a plan's length (a ~25-frame window can beat it by ~0.3-0.6 u/frame). A search cycle
 that exceeds it is not a physics bug. Gated by
 [`tests/test_objective.py`](../../tests/test_objective.py)`::test_the_push_ceiling_is_a_sustained_rate_not_a_per_frame_law`.
+
+**What a single frame IS bounded by, exactly:** the ejection is the overlap depth halved, so with the
+pushed actor at rest the frame's push equals `(R_link + R_actor - centre_distance) / 2` - for the
+courtyard pair `(80 - centre_feet) / 2`, measured to the ANIMATED centre. Verified frame by frame over
+a whole 72-frame herd (2026-07-31): `centre_feet` 45.9 → 17.036 u, 59.6 → 10.188 u, every frame, rolls
+included. So the SUSTAINED rate is set by the MEAN centre distance and 13.0 is its fixed point - each
+frame the pusher advances by his step and both actors eject, leaving `centre_next ≈ R_sum - advance`,
+which at the roll cap 26 settles at 54 and hence 13.0 u/frame. A window beats it exactly when the pose
+swing carries the animated centre in faster than the foot term does, and loses to it when contact goes
+shallow: measured on a courtyard arrival, the rolls sustain 99.6% of the ceiling at mean `centre_feet`
+54.1 while the junction frames manage 93.5% at 55.4.
 
 ## Frame-lag caveat for setups
 
