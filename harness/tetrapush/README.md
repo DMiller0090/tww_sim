@@ -1655,9 +1655,111 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
-      - [~] **THE FINER CAMERA GRID IS MEASURED AND CLOSED -- 2.4x THE SNAPPING POPULATION BUYS
+      - [~] **THE OTHER SEVEN CYCLE-2 NODES ARE MEASURED AND NONE OF THEM ARRIVES: NODE 0/1 IS THE ONLY
+            USABLE EXIT IN THE BEAM. THE LEDGER ROW THAT RETIRED THE 72-FRAME RUNG WAS A ONE-NODE
+            ARTIFACT, AND WITH THE FOURTH ROUTE RESTORED AND PROBED THE 74-FRAME LEDGER IS COMPLETE:
+            EVERY ROUTE IS SHORT, THE BEST BY 7.41 u (session 75).**
+            Session 74 handed over "fix the ARRIVAL's lateral one cycle upstream": node 0, which
+            s71-s74 all built on, has the WORST Tetra exit lateral of the eight (-25.608 against node
+            2's -3.654), and the other nodes' extra 3-4 frames were read as BUYING that lateral. Run
+            across the whole beam at full resolution, they do not -- and the reason inverts the
+            diagnosis rather than refining it.
+            - **THE CENSUS FIRST, BECAUSE THE ARITHMETIC DECIDES WHICH BANDS EXIST** (122 s, 8 nodes in
+              parallel). An arrival costs ``node frames + jf + the roll's own 19``, so a longer prefix
+              only pays if its junction ARMS sooner. The `junction_beam` pool by ``jf``: node 0/1
+              **45 f** jf 5-12 · node 2 **49 f** EMPTY · node 3 **48 f** jf 4-8 · node 4 **48 f** EMPTY
+              · node 5 **48 f** jf 4-5 · node 6 **47 f** jf 5-12 · node 7 **47 f** jf 4-12.
+            - **TWO OF THE FOUR BETTER-LATERAL NODES CANNOT JUNCTION AT ALL, for two different reasons,
+              and neither is the beam keep** ("the pool is empty" is not a diagnosis, and a keep that
+              hides survivors is this work's most-repeated failure mode). **Node 2** -- the best lateral
+              in the beam -- dies in 5 s, every branch of its frontier leaving the pursuit box
+              (``outbox`` 4384), and **widened to ``beam`` 64 it is still EMPTY** with the same counter
+              growing (17536): it is the box, not the cut. **Node 4** runs all 12 generations with all
+              64384 candidates ``unarmed`` -- at cone deficit 15838, dead behind her (his lateral -4.72
+              against her -4.89), 12 frames of ESS never clear the +-90 deg cone, so the proc-7 flip
+              never fires. At ``beam`` 64 node 4 does yield 70 endpoints, **all at jf 11** (a 78-frame
+              arrival), so the width is real and buys nothing at the rung.
+            - **AND WHERE THEY DO JUNCTION, A SHORT JUNCTION DOES NOT SURVIVE A ROLL.** Full aim
+              resolution over the WHOLE pool (s74's lesson: a decimated ``step`` reads a live band as
+              DEAD), 3144 endpoints x ~325 aims, 3117 s over 10 workers:
+
+                  band          arrival   endpoints  rolls   along          lateral        min pd  needs
+                  node 7 jf 4     70 f       208       0        -              -              -    35.54
+                  node 3 jf 4     71 f       832       0        -              -              -    23.94
+                  node 5 jf 4     71 f       848       7      894.9         -56.17         76.98   23.94
+                  node 6 jf 5     71 f       416       0        -              -              -    23.94
+                  node 7 jf 5     71 f       840      16   897.3..904.3  -57.32..-36.47    59.95   23.94
+
+              against node 0's own floors of **52.97** (70 f) and **34.98** (71 f). ``followed`` is
+              95%+ of every death -- the roll leaves her behind. **So routes A and B are closed on
+              every node in the beam that can reach them, and node 0 is still the best of them.**
+            - **THE INVERSION, stated as what was measured: node 0/1 is the ONLY node in the beam whose
+              junction produces a usable arrival at any rung inside the frame budget.** Its bands roll
+              healthily at every ``jf`` probed (131 / 69 / 154 / 83 / 232 surviving rolls at jf
+              6/7/8/9/10, s71-s75); every other node yields 0-16 rolls at the 70-72-frame rungs, and
+              the ones that do survive land Tetra at lateral -36..-57. So the arrival is a property of
+              WHICH cycle-2 exit the junction runs from, and the exit with the best Tetra lateral is not
+              the one that can use it -- s74's "nodes 2-5 hand over 20 u better lateral and their extra
+              3-4 frames BUY it" is falsified in both halves: they do not hand it over usably, and the
+              frames are spent before the junction starts.
+            - **AND THE OBVIOUS MECHANISM IS NOT THE MECHANISM -- a measured negative, so it is not
+              re-derived.** The exit POSTURE scalars do not separate the productive node from the rest:
+              `_cone_deficit` is **14672-15994 BAM (80.6-87.9 deg)** across ALL EIGHT nodes -- node 0
+              sits at 15896, mid-range -- and the Link-minus-Tetra lateral gap runs -2.97..+5.62 with
+              node 0 at +5.62 but the dead nodes 6/7 at +4.32/+4.44. So "the good laterals come with
+              Link parked behind her in the talk cone" is a plausible story that the numbers refuse.
+              What makes node 0's exit rollable is still unidentified, and it is the question the next
+              widening answers rather than assumes.
+            - **THE LEDGER'S ``freeze_f`` 2 ROW WAS A ONE-NODE ARTIFACT, AND CORRECTING IT OPENS A
+              FOURTH ROUTE.** s74 read "there is no ``freeze_f`` 2 anywhere in the population" off node
+              0's 85192 variants and retired the 72-frame rung with it. On node 5's arrival freeze_f 2
+              is the **MODAL** separation -- **384 firing variants of 672** -- and its escape reaches
+              **74 total frames** with `fires` True (pd 57.3: the arrival fails, not the escape). The
+              mechanism is DEPTH, which is why the row cannot be a constant: ``freeze_f`` is the first
+              frame clearing `CO_RADII_BAR`, so an arrival ending SHALLOW (`_centre_feet` **55.50**)
+              leaves in 2 where a DEEP one (**49.32**) never leaves before 4. **Route D = 72-f arrival +
+              ``freeze_f`` 2**, priced the same way as the others: recovery **14.86 u** against a plow
+              bound of **15.08**, i.e. ``pd_pre <= 15.86`` measured / **16.08** bound -- the tightest of
+              the four, because the escape's frame 2 is the dead one. Gated
+              (`test_which_freeze_f_can_fire_is_a_property_of_the_arrival_not_of_the_recipe`) on two
+              banked real arrivals, since one bed can only ever show one side of it.
+            - **AND ROUTE D'S OWN RUNG WAS PROBED, ALL FOUR 72-FRAME BANDS** (2434 endpoints, 2693 s):
+
+                  band          endpoints  rolls   along          lateral        min pd  best landing
+                  node 0 jf 8      632      154  899.8..920.2  -52.06..+26.60    23.49       0.47
+                  node 3 jf 5      832        0       -              -             -          -
+                  node 6 jf 6      630        0       -              -             -          -
+                  node 7 jf 6      524       45  911.3..916.9  -52.26..-35.81    51.01      33.76
+
+              **min pd_pre 23.49** against route D's 16.08 -- short by **7.41 u**, the CLOSEST any route
+              has come (A 11.04, B 17.43, C 13.67), and again it is node 0 that gets there. Its closest
+              arrivals sit at lateral **+0.40 / +1.13 / +2.50** -- laterally ON the thread, the miss
+              purely along -- and the band's best PREDICTED landing is **0.47 u**.
+            - **SO THE 74-FRAME LEDGER IS COMPLETE FOR THE FIRST TIME, AND EVERY ROUTE IS SHORT:**
+              70 f **52.97** vs 35.54 (short 17.43) · 71 f **34.98** vs 23.94 (**11.04**) · 72 f
+              **23.49** vs 16.08 (**7.41**) · 73 f **14.43** vs 0.76 (13.67). The deficit falls with the
+              rung until route C's cliff, where a 1-frame escape recovers nothing.
+            - **AND ROUTE D HAS A SECOND CONDITION THAT PULLS AGAINST THE FIRST.** A firing ``freeze_f``
+              2 needs a SHALLOW arrival, and shallow arrivals are the ones that have not pushed her:
+              over the 11 arrivals measured this session `_centre_feet` and ``pd_pre`` correlate
+              **+0.723**, slope **+3.14 u of miss per u of depth**, and exactly **1 of 11** has a firing
+              freeze_f 2 -- the one at ``pd_pre`` **76.98**. Node 0 jf 8's own arrivals sit at
+              `_centre_feet` 47.0-49.5 and separate at 3/5/6, never 2. So route D would have to move
+              ~7.4 u of placement AND ~6 u of depth in OPPOSITE directions along that slope, which is
+              the same shape as the dead push frame: not a knob, the recipe's geometry. (n=11 across
+              mixed bands, so a measured trend and not a law -- but the mechanism is plain, since
+              shallow IS less overlap and less overlap IS less push.)
+            - **s74's OPEN ITEM IS SETTLED AND THE GUARD IS GONE.** `away_walk.probe`'s ``can_snap``
+              WAS over-strict -- a sufficient condition used as a necessary one -- and over the 10
+              closest s74 arrivals it turned a FIRING escape (pd **7.739**, ``cs_bill`` 0) into a
+              non-firing one (pd 8.147) on **7** of them. See the `away_walk.py` docstrings; gated as
+              INDEPENDENCE from `snaps_at`. Suite green at **727**.
+      - [x] **THE FINER CAMERA GRID IS MEASURED AND CLOSED -- 2.4x THE SNAPPING POPULATION BUYS
             0.000 u -- BECAUSE THE 2-FRAME TIMELOSS IS THE ESCAPE'S OWN DEAD PUSH FRAME. 74 FRAMES IS
-            AN ARRIVAL QUESTION AND HAS EXACTLY THREE ROUTES, EACH PRICED (session 74).**
+            AN ARRIVAL QUESTION AND HAS EXACTLY THREE ROUTES, EACH PRICED (session 74).
+            Session 75 ran its handoff's step 1 across the whole cycle-2 beam and FALSIFIED it -- the
+            better-lateral nodes cannot junction in the frames they have left -- and corrected its
+            ``freeze_f`` 2 row, which adds a fourth route. See the box above.**
             Session 73 handed over "widen the snapping population, not the grid", with the finer
             `ESCAPE_TCS_STEP` as step 1. It was run, and it is a clean negative: **512 is the right
             step, not a compromise.** Then the frames were priced instead of searched for, and that is
