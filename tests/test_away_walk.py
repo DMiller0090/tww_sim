@@ -340,3 +340,55 @@ def test_the_camera_bill_is_the_snap_windows_near_edge_and_the_atom_never_pays_i
     assert not AW.snaps_at(run, live)
     assert not AW.fires(AW.probe(run, hl, csangle='live', flip_step=0x1000,
                                  rotate_offs=AW.ROTATE_OFFS))
+
+
+def test_the_escapes_own_frames_are_worth_less_than_a_ceiling_frame_and_one_is_dead(bed, best):
+    """**WHERE THE FRONTIER'S 2-FRAME TIMELOSS ACTUALLY GOES, and why no search axis has moved it**
+    (session 74).
+
+    The frontier has read 75 frames against a floor of 73 since session 71, and s72 (the atom's flip
+    and rotate knobs), s73 (the camera's snap window) and s74 (a 2.4x finer camera grid) each widened a
+    different axis and left it there. `away_walk.push_profile` prices the escape's frames in the
+    currency the floor is built from -- `objective.PUSH_CEILING`, the sustained plow rate -- and the
+    answer is structural: the escape's frames simply are not worth a ceiling frame.
+
+    Measured on the shipped 75-frame plan (`fixtures/courtyard_plan_s73.json`), the LAST ROLL pushes
+    Tetra 12.911 u/frame over all 19 of its frames -- **99.3%** of the ceiling, i.e. the herd loses
+    nothing -- while the escape's 4 frames to separation push **9.177 u/frame, 70.6%**, costing 1.18
+    frames on their own. The mechanism is one frame: the proc-7 NEGATION frame plows **0.000 u**,
+    because the flip has Link receding while the conversion has not yet fired. It is the recipe's shape
+    (`away_walk`'s module docstring), not a knob -- so what a plan's frame rung costs is decided by its
+    ARRIVAL, and the escape can only be charged for what it pushes.
+
+    Gated on the bed as the three properties a search may rely on: ``tstep`` is her own per-frame
+    displacement (not a `tres` difference, which under-reads a turning plow), the negation frame is the
+    dead one, and the recovery a search may credit the escape with is BOUNDED by that push -- which is
+    what makes the rung ledger admissible rather than optimistic."""
+    run, hl = bed
+    rows, _ = seeds.load_placements()
+    prof = AW.push_profile(best)
+
+    # (1) the window priced is the one the frame count is charged for: up to separation
+    assert prof['frames'] == best['freeze_f'] == len(prof['plow'])
+    assert AW.push_profile(best, upto=2)['frames'] == 2
+    # ``tstep`` is a PATH, so it can only exceed the straight-line residual `tres` reports
+    assert sum(r['tstep'] for r in best['rows']) >= best['rows'][-1]['tres'] - 1e-9
+    assert prof['total'] == pytest.approx(sum(prof['plow']))
+
+    # (2) the negation frame plows NOTHING, and it is inside the charged window
+    assert prof['dead'] == [2], "the dead push frame is the proc-7 negation frame"
+    assert best['rows'][1]['proc'] == 7 and best['rows'][1]['speedF'] < 0.0
+    assert best['rows'][0]['tstep'] > 10.0, "...and frame 1 is the biggest push of the whole plan"
+
+    # (3) so the escape's frames are worth well under a ceiling frame, and that IS the timeloss
+    assert 0.0 < prof['saturation'] < 0.85
+    assert prof['rate'] < prof['ceiling']
+    assert prof['frames_lost'] > 0.5
+    assert prof['frames_lost'] == pytest.approx(
+        prof['frames'] * (prof['ceiling'] - prof['rate']) / prof['ceiling'])
+
+    # (4) the bound that makes the rung ledger admissible: moving her by `total` can close at most
+    # `total` of her distance to a FIXED coord, whatever the flip/rotate/camera do
+    pd0 = FH._placement_dist(run, rows)
+    pd1 = FH._placement_dist(best['run'], rows)
+    assert pd0 - pd1 <= prof['total'] + 1e-6

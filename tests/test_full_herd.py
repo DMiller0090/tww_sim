@@ -98,6 +98,40 @@ def test_target_cs_only_moves_the_camera_inside_a_roll(env):
     assert r['ok']
 
 
+def test_the_escape_camera_step_is_measured_right_and_a_finer_one_is_a_null_result(env):
+    """**A 2.4x finer camera grid buys 0.000 u, and `escape_tcs_step_note` is why the sweep is not
+    re-run** (session 74).
+
+    `ESCAPE_TCS_STEP` looks like a resolution compromise: the snapping ``target_cs`` values are 1-2
+    members wide AT 512 BAM, so a finer step looks like free recall. It was measured -- step 128 grows
+    the snapping population 2.4x (63 -> 83 of 112 arrivals, 84 -> 199 pairs, 33927 -> 85192 firing atom
+    variants) and leaves the frontier at pd 0.432 at 75 frames with a bit-identical best-by-bound,
+    because ``target_cs`` is EXIT-ONLY for Tetra (the test above) so a finer grid buys more camera states
+    for the SAME arrivals.
+
+    Gated as the properties that make it a decision rather than a preference: the finer grid would
+    strictly CONTAIN the shipped one (so the null result is not a sampling artifact -- everything 512
+    finds, 128 finds too), the note describes the constant actually shipped, and it records more search
+    for no frontier. The failure mode this catches is the constant being changed without re-measuring."""
+    note = F.escape_tcs_step_note()
+    assert note['step'] == F.ESCAPE_TCS_STEP
+
+    # the finer grid strictly contains the shipped one: same span, and the step divides it
+    assert F.ESCAPE_TCS_STEP % note['finer'] == 0 and note['finer'] < F.ESCAPE_TCS_STEP
+    run = seeds.make_freerun(env)
+    shipped = set(F.derived_target_css(run, span=F.ESCAPE_TCS_SPAN, step=F.ESCAPE_TCS_STEP))
+    finer = set(F.derived_target_css(run, span=F.ESCAPE_TCS_SPAN, step=note['finer']))
+    assert shipped < finer, "a finer step must be a superset, else the null result proves nothing"
+
+    # ...and what it bought: strictly more search, and no frontier
+    assert note['arrivals'][1] > note['arrivals'][0] <= note['arrivals_total']
+    assert note['pairs'][1] > note['pairs'][0] and note['variants'][1] > note['variants'][0]
+    assert note['pd_at_75'][1] == note['pd_at_75'][0]
+    assert note['bound'][1] == note['bound'][0]
+    # the cause, recorded: the camera cannot move the arrival at all
+    assert note['arrival_spread'] == 0.0
+
+
 def test_pursuit_box_contains_the_human_every_frame(env, hl, box):
     """CONTAINMENT for the regime gate: the box is measured off the recorded window, so the human
     must sit inside it on every frame. A margin that inverted (or a sign slip in `lead_hi`) would

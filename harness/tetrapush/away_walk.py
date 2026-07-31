@@ -200,7 +200,10 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
     it live. The result records ``cs_bill`` (BAM off live; 0 = faithful).
 
     Returns the measurement dict:
-      ``rows``          per-frame (f, proc, speedF, disp, head, cf, d_t, d_e, tres, rec)
+      ``rows``          per-frame (f, proc, speedF, disp, head, cf, d_t, d_e, tres, tstep, rec)
+                        -- ``tstep`` is Tetra's own displacement THAT frame, the escape's push in the
+                        objective's currency (`push_profile`); ``tres`` is her distance from the start,
+                        which is NOT its running sum once the plow direction turns
       ``freeze_f``      first frame with `centre_feet` >= the bar that persists to the end
       ``reversed_f``    first frame with ground motion receding from Tetra
       ``rec17_f``       first frame receding at >= `WALK_FLOOR` (None if never)
@@ -235,6 +238,7 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
 
     ex, ez = seeds.ENTRY_ROLL_POS
     t0 = (r.tx, r.tz)
+    tprev = t0
     prev = (r.link.pos_x, r.link.pos_z)
     rows, log = [], []
     l_ok = True
@@ -259,10 +263,12 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
         dx, dz = r.link.pos_x - r.tx, r.link.pos_z - r.tz
         dd = math.hypot(dx, dz)
         rec = 0.0 if dd < 1e-9 else (vx * dx + vz * dz) / dd
+        tstep = math.hypot(r.tx - tprev[0], r.tz - tprev[1])
+        tprev = (r.tx, r.tz)
         rows.append(dict(f=f + 1, proc=r.link.state, speedF=r.link.speedF, disp=disp,
                          head=head, cf=cf, d_t=dd,
                          d_e=math.hypot(r.link.pos_x - ex, r.link.pos_z - ez),
-                         tres=math.hypot(r.tx - t0[0], r.tz - t0[1]), rec=rec))
+                         tres=math.hypot(r.tx - t0[0], r.tz - t0[1]), tstep=tstep, rec=rec))
         if cf >= FH.CO_RADII_BAR:
             if freeze_run is None:
                 freeze_run = f + 1
@@ -288,6 +294,49 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
                 resid_lat=tl, l_ok=l_ok, followed=r._follow_warned, csangle=cs,
                 cs_bill=_s16(cs - int(run0.csangle)),
                 d_e_end=rows[-1]['d_e'] if rows else None)
+
+
+def push_profile(res, *, upto=None):
+    """**WHAT THE ESCAPE'S FRAMES ARE WORTH, in the objective's own push currency** (session 74) --
+    and the answer to where the frontier's 2-frame timeloss actually goes.
+
+    The frontier has read 75 frames (floor 73) since session 71, and s72/s73/s74 each widened a
+    different search axis without moving it. This says why, by pricing the atom's frames against
+    `objective.PUSH_CEILING` -- the sustained plow rate the frame floor itself assumes. Measured on
+    the shipped 75-frame plan (`fixtures/courtyard_plan_s73.json`):
+
+      * the LAST ROLL pushes Tetra **12.911 u/frame over all 19 of its frames -- 99.3% of the
+        ceiling**. The herd is not where the frames are lost.
+      * the ESCAPE's 4 frames to separation push **9.177 u/frame, 70.6%**, because its frame 2 -- the
+        proc-7 negation frame, where the flip has Link receding and the conversion has not yet fired
+        -- plows **0.000 u**, and its frame 4 (the slam) plows 7.7 u on a HALVED mNormalSpeed.
+      * so the escape costs **1.18 frames** of the 2-frame timeloss on its own, and that is the
+        recipe's shape (module docstring), not a knob: no camera target, aim, flip or rotate can buy
+        a dead plow frame back.
+
+    The consequence for a search is the useful part. What the escape RECOVERS of the placement is
+    capped by what it pushes -- measured over 85192 firing variants, at most 22.94 u at ``freeze_f``
+    3, 34.54 at 4 and **-0.24 at 1** -- so the frame rung a plan can reach is fixed by its ARRIVAL:
+    ``total = arrival_frames + freeze_f`` needs ``pd_pre <= recovery(freeze_f) + PLACEMENT_BAND``.
+    74 frames therefore has exactly three routes, and all three are arrival quality, not escape
+    tuning (`README.md`'s session-74 box has the ledger).
+
+    ``upto`` defaults to ``freeze_f`` (the separation frame -- the plan's own end), so the rate is the
+    one the frame count is charged for; pass an int to price a different window.
+
+    Returns ``dict(plow, frames, total, rate, ceiling, saturation, dead, frames_lost)``."""
+    from harness.tetrapush import objective as O
+    rows = res['rows']
+    n = int(res['freeze_f'] or len(rows)) if upto is None else int(upto)
+    n = max(0, min(n, len(rows)))
+    plow = [rr['tstep'] for rr in rows[:n]]
+    total = sum(plow)
+    rate = (total / n) if n else 0.0
+    return dict(plow=plow, frames=n, total=total, rate=rate, ceiling=O.PUSH_CEILING,
+                saturation=(rate / O.PUSH_CEILING) if O.PUSH_CEILING else 0.0,
+                dead=[rows[i]['f'] for i in range(n) if plow[i] <= 1e-9],
+                frames_lost=(n * (O.PUSH_CEILING - rate) / O.PUSH_CEILING
+                             if O.PUSH_CEILING else 0.0))
 
 
 def fires(res):
@@ -453,12 +502,17 @@ def _print_atom(res):
              res['rec17_f'], res['dips']))
     print("tetra residual %.3f u (along %+.3f lat %+.3f); entry gap at end %.1f u"
           % (res['resid'], res['resid_along'], res['resid_lat'], res['d_e_end']))
-    print("  f proc  speedF    disp   head     cf    d_t    d_e   tres    rec")
+    print("  f proc  speedF    disp   head     cf    d_t    d_e   tres  tstep    rec")
     for rr in res['rows']:
-        print("  %2d %3d %8.3f %7.3f %6s %6.1f %6.1f %6.1f %6.2f %+7.2f"
+        print("  %2d %3d %8.3f %7.3f %6s %6.1f %6.1f %6.1f %6.2f %6.2f %+7.2f"
               % (rr['f'], rr['proc'], rr['speedF'], rr['disp'],
                  rr['head'] if rr['head'] is not None else '-', rr['cf'], rr['d_t'],
-                 rr['d_e'], rr['tres'], rr['rec']))
+                 rr['d_e'], rr['tres'], rr['tstep'], rr['rec']))
+    p = push_profile(res)
+    print("push over the %d frames to separation: %.3f u/frame = %.1f%% of the %.1f ceiling "
+          "(dead frames %s) -> %.2f frames of timeloss from the escape alone"
+          % (p['frames'], p['rate'], 100.0 * p['saturation'], p['ceiling'], p['dead'],
+             p['frames_lost']))
 
 
 def main(argv):

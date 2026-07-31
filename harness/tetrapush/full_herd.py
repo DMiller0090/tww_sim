@@ -100,9 +100,35 @@ TCS_SPAN = 1536
 TCS_STEP = 128
 
 # The LAST cycle's grid: one roll's MEASURED slew reach (-46.6..+40.7 deg over 112 arrivals), at the
-# 512 step its snapping targets are 1-2 members wide in. Why it differs: `camera_probe_key`.
+# 512 step its snapping targets are 1-2 members wide in. Why it differs: `camera_probe_key`. 512 is
+# MEASURED-right, not a compromise -- 128 buys 2.4x the population and 0.000 u (`escape_tcs_step_note`).
 ESCAPE_TCS_SPAN = 0x2800
 ESCAPE_TCS_STEP = 512
+
+
+def escape_tcs_step_note():
+    """**Why `ESCAPE_TCS_STEP` stays 512, and the reason not to re-run this sweep finer** (session 74).
+
+    The snapping ``target_cs`` values are 1-2 members wide AT 512 BAM, so a finer step looks like free
+    recall. Measured: a step of 128 grows the snapping population **2.4x** -- 63 -> 83 of 112 arrivals,
+    84 -> **199** (arrival, tcs) pairs, 33927 -> **85192** firing atom variants, with 20 arrivals whose
+    window is NARROWER than 512 BAM (all at -13.4..-21.1 deg) -- and it moves the frontier by
+    **0.000 u**: pd **0.432** at 75 frames either way, `objective.verdict` True, best-by-bound
+    **bit-identical** (75.12, jf 7 end 285, ``freeze_f`` 4, `aim.handoff_spec` True). Only 74 f moves at
+    all, 24.680 -> 23.919, against a `objective.PLACEMENT_BAND` of 1.0, and `objective.replay_and_score`
+    on the new winner returns the SAME plan `fixtures/courtyard_plan_s73.json` already holds.
+
+    The cause is structural rather than a resolution accident: ``target_cs`` is EXIT-ONLY for Tetra
+    (`target_cs_is_exit_only`), so over 161 targets x 112 arrivals her arrival along/lateral spread is
+    **0.00 u**. A finer grid buys more camera states for the SAME arrivals, and what a plan can land at a
+    given frame count is capped by the ARRIVAL (`away_walk.push_profile`'s ledger). More camera is not
+    more placement.
+
+    Returns the measurement as data, so a caller or gate can assert on it instead of on prose."""
+    return dict(step=ESCAPE_TCS_STEP, finer=128, arrivals=(63, 83), arrivals_total=112,
+                pairs=(84, 199), variants=(33927, 85192), narrow_window_arrivals=20,
+                pd_at_75=(0.432, 0.432), pd_at_74=(24.680, 23.919), bound=(75.12, 75.12),
+                arrival_spread=0.0)
 
 
 def frame_in_model(run, walls=None):
