@@ -387,7 +387,9 @@ def handoff_corridor(env, hl, thread, *, rows=None, feet=56.0, resid=None, seg_s
     if resid is None:
         near = min(rows, key=lambda p: hl.along(p['x'], p['z']))
         nd = FH.synthetic_hot_arrival(env, hl, near['idx'], d_short=0.0, feet=float(feet))
-        res = AW.probe(nd['run'], hl)
+        # ``'snap'``: the bed is SYNTHETIC, so no roll paid its camera bill and the turnaround needs
+        # the window granted (s73, `away_walk.snap_bill`). What is measured is the conversion push.
+        res = AW.probe(nd['run'], hl, csangle='snap')
         if res is None or not AW.fires(res):
             cor = dict(O.push_corridor(hl, rows))
             cor.update(resid=None, feet=float(feet), ok=False)

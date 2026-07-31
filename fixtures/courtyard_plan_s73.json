@@ -1,0 +1,609 @@
+{
+ "what": "The first plan to pass objective.verdict: state 2 -> Tetra on a genuine coord, every rule met.",
+ "session": 73,
+ "source": {
+  "beam": "_generated/s69_cycle2_handoff.json cycle 2 node 0 (beam_io.rebuild_beam)",
+  "junction": "full_herd.junction_beam(max_frames=12, beam=24, ess_step=1, aim_step=16, keep=inf, per_state=4, aim_share=True, corridor=aim.handoff_corridor) -> _dedup_endpoints, banded by jf",
+  "arrival": {
+   "jf": 7,
+   "endpoint_index": 285
+  },
+  "roll": "two_roll.roll_segment(aim, target_cs=entry_csangle + tcs_off, l_window=(4, 7))",
+  "tcs_off": -5632,
+  "arrival_csangle": 34181
+ },
+ "atom_kw": {
+  "flip_step": 1024,
+  "rotate_offs": [
+   12288,
+   16384,
+   20480,
+   24576
+  ],
+  "rank": "frames",
+  "csangle": "live"
+ },
+ "scored": {
+  "frames": 75,
+  "timeloss": 2,
+  "placement_dist": 0.432087283096482,
+  "complete": true,
+  "terminal_ok": true,
+  "wall_ok": true,
+  "regime_ok": true,
+  "within_budget": true,
+  "verdict": true,
+  "atom_cs_bill": 0
+ },
+ "note": "The log ENDS AT THE ARRIVAL: objective.score_plan probes the escape atom itself, so appending the atom's own frames double-counts and re-probes from a separated state.",
+ "log": [
+  {
+   "stickX": 193,
+   "stickY": 243,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 165,
+   "stickY": 196,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 90,
+   "stickY": 252,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 150,
+   "stickY": 203,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 108,
+   "stickY": 205,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 172,
+   "stickY": 191,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  }
+ ]
+}

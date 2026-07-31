@@ -438,7 +438,9 @@ def test_escape_ready_is_the_atom_run_for_real_and_fires_off_the_hot_terminal(en
     from harness.tetrapush import away_walk as AW
     from harness.tetrapush.reposition import HerdLine
     hl = HerdLine.from_env(env)
-    node = FH.synthetic_hot_arrival(env, hl, coord_idx=287, d_short=0.0, feet=64.0)
+    # ``snap_camera``: the bed carries the camera the last roll pays for (s73) -- at its inherited
+    # csangle the atom's L locks in every variant, because no roll ever steered the camera for it
+    node = FH.synthetic_hot_arrival(env, hl, coord_idx=287, d_short=0.0, feet=64.0, snap_camera=True)
     term = O.escape_ready(node['run'], hl)
     assert term['ready'], "the atom fires from the hot terminal (the s65 measurement)"
     assert term['l_ok'] and not term['followed']
@@ -521,3 +523,52 @@ def test_the_locked_plan_leaves_the_regime_before_the_first_open_console_sample(
     assert (first_out, first_wall) == (83, 84), \
         "the two scope breaks moved (regime %d, wall %d) -- re-derive before trusting" % (
             first_out, first_wall)
+
+
+def test_the_shipped_plan_passes_the_whole_objective_from_its_input_log_alone(env):
+    """**MILESTONE 2, as a regression gate: the first plan that passes `objective.verdict`**
+    (session 73).
+
+    `fixtures/courtyard_plan_s73.json` is a complete state-2 input log -- a 3-cycle herd whose last
+    roll steers the camera into the escape's own snap window -- replayed here on a fresh self-contained
+    `FreeRun` and scored by the acceptance test itself. Every one of Dereck's four rules: Tetra lands
+    **0.4321 u** from genuine coord 274 (inside `PLACEMENT_BAND`), in **75 frames** against a floor of
+    73 (timeloss +2, inside `TIMELOSS_BUDGET`), with the escape atom firing for real (rule 3 exact),
+    both actors clear of the walls and inside the plow regime.
+
+    Two things it pins beyond the verdict. The log ENDS AT THE ARRIVAL, because `score_plan` probes
+    the atom itself -- appending the atom's own frames double-counts and re-probes from a separated
+    state (s72 read pd 21.5 u that way on a plan whose real score is sub-unit). And the atom's
+    ``cs_bill`` is **0**: the csangle it runs at is the one the plan's own last roll delivered, not a
+    commanded one, which is what makes the score a REPLAY rather than a claim (s65-s72 scored every
+    atom at a camera state 91-114 deg off live -- see `away_walk.snap_bill`).
+
+    ``atom_kw`` is the fixture's own, because a plan built on a swept atom must be scored against the
+    escape it plans (`score_plan`'s docstring): with the default single-flip atom the same log reads
+    77 frames and pd 4.48, which is a different escape, not a worse plan."""
+    import json
+    import os
+    from harness.tetrapush import full_herd as FH
+    from harness.tetrapush.reposition import HerdLine
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'fixtures', 'courtyard_plan_s73.json')
+    with open(path) as fh:
+        rec = json.load(fh)
+    hl = HerdLine.from_env(env)
+    rows = seeds.load_placements()[0]
+    kw = dict(rec['atom_kw'])
+    kw['rotate_offs'] = tuple(kw['rotate_offs'])
+    kw['thread'] = O.placement_thread(hl, rows)
+    sc = O.replay_and_score(env, rec['log'], hl=hl, placements=rows, atom_kw=kw)
+
+    assert O.verdict(sc) is True
+    assert sc['complete'] and sc['placement_dist'] <= O.PLACEMENT_BAND
+    assert sc['frames'] == rec['scored']['frames']
+    assert sc['timeloss'] == rec['scored']['timeloss'] <= O.TIMELOSS_BUDGET
+    assert sc['placement_dist'] == pytest.approx(rec['scored']['placement_dist'], abs=1e-9)
+    assert sc['terminal_ok'] and sc['wall_ok'] and sc['regime_ok'] and sc['within_budget']
+    # the escape runs at the camera the plan itself delivered: nothing commanded, nothing unpaid
+    assert sc['terminal']['atom']['cs_bill'] == 0
+    assert FH.CO_RADII_BAR - FH._centre_feet(sc['terminal']['atom']['run']) <= 0.0
+    # and the herd ends at the SLAM: the scored frame count is the log plus the atom's own separation
+    assert sc['frames'] == len(rec['log']) + sc['atom_frames']

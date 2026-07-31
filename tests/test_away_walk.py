@@ -27,6 +27,11 @@ from harness.tetrapush.reposition import HerdLine
 warnings.simplefilter('ignore')
 
 
+#: The bed is SYNTHETIC: no roll paid its camera bill, so its own csangle fires NOTHING and the window
+#: is handed over explicitly. The measurement is in `test_the_camera_bill_is_the_snap_windows_near_edge`.
+_BED_CS = 'snap'
+
+
 @pytest.fixture(scope='module')
 def bed():
     env = seeds.load_env()
@@ -38,7 +43,7 @@ def bed():
 @pytest.fixture(scope='module')
 def best(bed):
     run, hl = bed
-    return AW.probe(run, hl)
+    return AW.probe(run, hl, csangle=_BED_CS)
 
 
 def test_the_conversion_goes_positive_with_one_l_frame_and_no_zero_crossing(best):
@@ -108,8 +113,8 @@ def test_the_atom_can_be_ranked_by_where_it_leaves_tetra_without_moving_the_acce
     run, hl = bed
     thread = O.placement_thread(hl, seeds.load_placements()[0])
 
-    stock = AW.probe(run, hl)
-    ranked = AW.probe(run, hl, thread=thread)
+    stock = AW.probe(run, hl, csangle=_BED_CS)
+    ranked = AW.probe(run, hl, thread=thread, csangle=_BED_CS)
     assert stock is not None and ranked is not None
     assert AW.fires(stock) and AW.fires(ranked)          # the bar is met either way
 
@@ -206,13 +211,15 @@ def test_sweeping_the_flip_and_rotate_knobs_can_only_improve_the_landing(bed):
     def miss(res):
         return A.landing_miss(run, hl, thread, (res['resid_along'], res['resid_lat']))['miss']
 
-    stock = AW.probe(run, hl, thread=thread)
-    swept = AW.probe(run, hl, thread=thread, flip_step=0x800, rotate_offs=AW.ROTATE_OFFS)
+    stock = AW.probe(run, hl, thread=thread, csangle=_BED_CS)
+    swept = AW.probe(run, hl, thread=thread, flip_step=0x800, rotate_offs=AW.ROTATE_OFFS,
+                     csangle=_BED_CS)
     assert stock is not None and swept is not None
     assert AW.fires(stock) and AW.fires(swept)
     assert miss(swept) <= miss(stock) + 1e-12
     # the default is IN the swept set, so an unswept-equivalent call reproduces the stock pick
-    only_default = AW.probe(run, hl, thread=thread, flip_step=None, rotate_offs=(0x4000,))
+    only_default = AW.probe(run, hl, thread=thread, flip_step=None, rotate_offs=(0x4000,),
+                            csangle=_BED_CS)
     assert miss(only_default) == miss(stock)
     # ...and the knobs genuinely move Tetra: the sweep reaches residuals the 8 variants cannot
     arc = AW.flip_arc(hl, step=0x800)
@@ -253,8 +260,8 @@ def test_the_frames_rank_prices_the_landing_against_what_the_separation_costs(be
         return A.landing_miss(run, hl, thread, (res['resid_along'], res['resid_lat']))['miss']
 
     kw = dict(flip_step=0x800, rotate_offs=AW.ROTATE_OFFS)
-    by_miss = AW.probe(run, hl, thread=thread, **kw)
-    by_frames = AW.probe(run, hl, thread=thread, rank='frames', **kw)
+    by_miss = AW.probe(run, hl, thread=thread, csangle=_BED_CS, **kw)
+    by_frames = AW.probe(run, hl, thread=thread, rank='frames', csangle=_BED_CS, **kw)
     assert by_miss is not None and by_frames is not None
     assert AW.fires(by_frames)
     assert cost(by_frames) <= cost(by_miss) + 1e-12
@@ -281,3 +288,55 @@ def test_the_frames_rank_prices_the_landing_against_what_the_separation_costs(be
     assert abs(cost(by_frames) - min(cost(r) for r in ok)) < 1e-9
     # ...and the default rank is untouched: it is still the best compliant LANDING (session 71)
     assert abs(miss(by_miss) - min(miss(r) for r in ok)) < 1e-12
+
+
+def test_the_camera_bill_is_the_snap_windows_near_edge_and_the_atom_never_pays_it(bed):
+    """**The snap window is ~80 deg wide, the scan returned its FAR edge, and that value is the csangle
+    every atom result from session 65 to 72 was computed at** (session 73).
+
+    `snap_csangle` used to walk ``range(0, 0x10000)`` and return the first member. Measured over 112 real
+    arrivals the window holds 28-30 members on the 512 grid -- **78.8-81.6 deg** -- so which member the
+    scan returns is not cosmetic: the first-in-absolute-order sat **91.3-113.8 deg** off the live csangle
+    on every one of them, where the NEAREST member is **15.3-37.8 deg** (median 21.0). The atom cannot
+    slew either distance (its C-stick is neutral and ~470 BAM/frame makes 15-38 deg cost 6-15 frames
+    against `objective.TIMELOSS_BUDGET` 2), so the bill belongs to the last roll's ``target_cs``
+    (`full_herd.camera_probe_key`) -- and only the near edge is inside that roll's -46.6..+40.7 deg reach.
+
+    Gated as the three properties that make the atom's numbers replayable: the window is wide (so the
+    scan order matters), ``near`` is never further than the legacy order, and the DEFAULT atom commands
+    the arrival's own live csangle -- bill 0 -- so a billed variant can only arise from an explicit ask
+    and always says so."""
+    run, hl = bed
+    live = int(run.csangle)
+
+    def off(cs):
+        return abs(AW._s16(cs - live))
+
+    # the window is WIDE, which is why the scan order decides the bill
+    hits = [cs for cs in range(0, 0x10000, 512) if AW.snaps_at(run, cs)]
+    assert len(hits) > 8, "a one-member window would make the scan order irrelevant"
+    near, far = AW.snap_csangle(run), AW.snap_csangle(run, near=False)
+    assert near in hits and far in hits
+    assert off(near) == min(off(cs) for cs in hits)     # `near` IS the nearest member
+    assert off(near) < off(far)                         # ...and the legacy order was not
+
+    # the bill: this synthetic bed owes one (no roll paid it), and it is the near edge's distance
+    bill = AW.snap_bill(run)
+    assert bill['free'] is False and bill['csangle'] == near
+    assert bill['bam'] == AW._s16(near - live)
+    assert bill['deg'] == pytest.approx(off(near) * AW._BAM_DEG)
+
+    # the DEFAULT is replay-faithful: the camera holds what the arrival brought, so nothing is owed
+    faithful = AW.escape_atom(run, hl)
+    assert faithful['csangle'] == live and faithful['cs_bill'] == 0
+    # ...and an explicitly billed variant self-reports, so it can never pass as faithful
+    billed = AW.escape_atom(run, hl, csangle=near)
+    assert billed['cs_bill'] == bill['bam'] != 0
+    assert AW.probe(run, hl, csangle='live')['cs_bill'] == 0
+    assert AW.probe(run, hl, csangle='snap')['cs_bill'] == bill['bam']
+
+    # and the bed itself is the reason a synthetic terminal cannot gate the faithful path: at its own
+    # live csangle the L locks in every variant, because no roll ever steered the camera for it
+    assert not AW.snaps_at(run, live)
+    assert not AW.fires(AW.probe(run, hl, csangle='live', flip_step=0x1000,
+                                 rotate_offs=AW.ROTATE_OFFS))

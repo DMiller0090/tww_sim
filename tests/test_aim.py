@@ -204,7 +204,9 @@ def test_handoff_target_is_the_coord_minus_the_escape(env, hl, thread):
     `handoff_target` and the landing lands on the thread; aim it at the coord itself and it does
     not."""
     from harness.tetrapush import away_walk as AW
-    node = F.synthetic_hot_arrival(env, hl, 287, d_short=30.0, feet=56.0)
+    # ``snap_camera``: a relocated bed has no roll to have paid the escape's camera bill (s73), so the
+    # bed fabricates the camera a real arrival brings -- else nothing fires and there is no residual
+    node = F.synthetic_hot_arrival(env, hl, 287, d_short=30.0, feet=56.0, snap_camera=True)
     res = AW.probe(node['run'], hl)
     assert res is not None and AW.fires(res)
     resid = (res['resid_along'], res['resid_lat'])

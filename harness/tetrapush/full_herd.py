@@ -99,6 +99,11 @@ CO_RADII_BAR = LINK_CO_R + TETRA_CO_R
 TCS_SPAN = 1536
 TCS_STEP = 128
 
+# The LAST cycle's grid: one roll's MEASURED slew reach (-46.6..+40.7 deg over 112 arrivals), at the
+# 512 step its snapping targets are 1-2 members wide in. Why it differs: `camera_probe_key`.
+ESCAPE_TCS_SPAN = 0x2800
+ESCAPE_TCS_STEP = 512
+
 
 def frame_in_model(run, walls=None):
     """**Both MODEL-BOUNDARY prunes, in one place** (`objective` rules 4 and 4b, session 60).
@@ -737,10 +742,50 @@ def landing_key(hl, thread, resid=None, escape_frames=4):
     return key
 
 
+def camera_probe_key():
+    """**The LAST cycle's camera cut had no term for the escape's own CAMERA requirement, and that
+    requirement is what every atom number in this work was quietly assuming** (session 73).
+
+    The atom's turnaround needs the csangle inside its snap window, and its own C-stick is neutral, so
+    it cannot slew there (`away_walk.snap_bill`: 15-38 deg at ~470 BAM/frame is 6-15 frames against
+    `objective.TIMELOSS_BUDGET` 2). The one channel that can pay is the LAST ROLL's ``target_cs``, idle
+    for the roll's whole duration -- and until this key existed nothing in the search asked it to. The
+    atom instead COMMANDED the window (`away_walk.escape_atom`'s old default), 91-114 deg off the live
+    csangle, so from session 65 to 72 the frontier was conditional on a camera leg no roll could deliver.
+
+    So this reports what the arrival still OWES: 0 when its own live csangle already snaps (nothing to
+    pay -- the roll delivered it), else the BAM to the nearest window member, None when the terminal has
+    no window at all. Measured over 112 real arrivals against the widened grid (`ESCAPE_TCS_SPAN`), 63
+    reach a bill of 0 inside their own roll's slew, and the frontier at those is REPLAY-FAITHFUL and
+    strictly better than the commanded one it replaces: **75 frames, pd 0.432 u, `objective.verdict`
+    True**, against s72's commanded-csangle 1.644 u at the same 75.
+
+    Wired as a `roll_candidates` ``tcs_probe`` -- a KEEP share, never an order or a filter -- and that is
+    calibrated, not stylistic. Swept over 16 arrivals x 41 camera targets (656 cells), **274 fire** at
+    the live csangle and only **12 snap**; all 12 of those fire (snap ⇒ fires, no exceptions) but **262
+    firing cells do not snap**, because a camera steer also moves the arrival's own EBS facing, so a
+    non-snapping target can put Tetra out of the front cone by itself -- measured, the 75-frame winner
+    fires with ``turnaround_first=False``. As a filter the bill would therefore throw away 96% of the
+    firing states. As a KEEP OF 3 it is the best cheap term measured: it retains a BEST-bound firing cell
+    for **13 of the 14** arrivals that have one, at median **0.00** and max 2.44 frames of bound loss,
+    where a keep of 3 by the front-cone margin retains one for 7 (widest-first) or 3 (narrowest-first)
+    and loses 7 / 11 arrivals outright. The cone cannot screen this at all: the frontier cell's own
+    margin is **5.2 deg**, below the DEAD cells' median of 11.1. Costs one frame per candidate.
+
+    Returns a callable ``node -> bam or None`` for `roll_candidates`' ``tcs_probe``."""
+    from harness.tetrapush import away_walk as AW    # deferred: `away_walk` imports this module
+
+    def probe(node):
+        b = AW.snap_bill(node['run'])
+        return None if b['bam'] is None else abs(int(b['bam']))
+
+    return probe
+
+
 def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4, 7), (5, 8)),
                     aim_keep=3, min_roll=20.0, tcs_keep=3, target_css=None,
                     fan_center=None, require_quality=True, key=None, mixed_aims=True,
-                    tcs_key=None, tcs_probe=None, corridor=None):
+                    tcs_key=None, tcs_probe=None, corridor=None, tcs_span=None, tcs_step=None):
     """The cycle's ROLL stage from a junction endpoint, factored by the separability above.
 
     R1: sweep the reachable aim fan (camera frozen) x the L windows, prune talk-unsafe / weak /
@@ -770,6 +815,12 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
         continuability IS the question but the aim also has to survive: `square_probe_key`, the cheap
         `junction_square_probe`. Its calibration -- and the measurement that every CHEAP AIM KEY IS
         WORSE THAN THE STOCK ONE -- is in that docstring.
+
+    ``tcs_span`` / ``tcs_step`` (session 73) widen the grid `derived_target_css` builds, which the LAST
+    cycle needs and the shipped `TCS_SPAN` cannot supply: the escape atom's turnaround wants the camera
+    inside its snap window, 15-38 deg off the arrival's own csangle, and +-1536 BAM is +-8.4. The
+    values for that cycle are `ESCAPE_TCS_SPAN` / `ESCAPE_TCS_STEP`, the roll's own measured slew reach
+    (see those constants); mid-chain the defaults are unchanged.
 
     Returns the surviving post-roll nodes (each ``dict(run, log, frames, m, knobs, quality)``)."""
     out = []
@@ -802,7 +853,10 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                          int(aim_keep), ident=lambda t: (t['want'], tuple(t['lw'])))
     for t in r1[:int(aim_keep)]:
         want, aim, lw = t['want'], t['aim'], t['lw']
-        css = derived_target_css(node['run']) if target_css is None else target_css
+        css = (derived_target_css(node['run'],
+                                  span=TCS_SPAN if tcs_span is None else int(tcs_span),
+                                  step=TCS_STEP if tcs_step is None else int(tcs_step))
+               if target_css is None else target_css)
         graded = []
         for tcs in css:
             rr = node['run'].clone()
@@ -1040,7 +1094,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  square_pool=False, corridor=None, arrive_keep=False, target_along=None,
                  resid=None, tcs_landing=False, tcs_square=False, land_keep=False,
                  probe_contact=False, probe_half=None, escape_flip=None, escape_rots=None,
-                 escape_rank=None, verbose=False):
+                 escape_rank=None, tcs_escape=False, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1156,6 +1210,16 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     (aim, tcs) pair, so it is opt-in; the first is free. See `square_probe_key` for the calibration,
     including the measurement that every CHEAP AIM key is worse than the stock one.
 
+    ``tcs_escape`` (session 73) is the LAST cycle's camera cut re-aimed at the customer it never had:
+    the escape atom's snap window. It widens the grid from `TCS_SPAN` (+-8.4 deg, the mid-chain
+    junction's razor travel band) to `ESCAPE_TCS_SPAN` (the roll's own -46.6..+40.7 deg slew reach) and
+    keeps a share by `camera_probe_key` -- what the arrival still OWES the atom. Without it the atom
+    COMMANDED a csangle 91-114 deg off live and every landing since s65 was conditional on a leg no roll
+    could pay; with it, 63 of 112 measured arrivals owe nothing, and the frontier there is both
+    replay-faithful and better: **75 frames, pd 0.432 u, `objective.verdict` True** where the commanded
+    frontier read 1.644 u at the same 75. Free (one frame per candidate), LAST cycle only -- mid-chain
+    the widened band strands the next junction (s42).
+
     Every node carries its FULL delivered input log, so any survivor is replayable end-to-end on a
     fresh `FreeRun` (`confirm_plan`)."""
     out = []
@@ -1180,6 +1244,10 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     # the CAMERA-target cut's key: the landing on the last cycle, the cheap probe mid-chain (s70)
     tcs_key = (landing_key(hl, th_j, resid) if tcs_landing else None)
     tcs_probe = square_probe_key(hl, box, cor_j) if tcs_square else None
+    if tcs_escape:
+        # the LAST cycle's camera has a second customer the cut never priced: the escape's own snap
+        # window (s73). Widened grid + a share by what the arrival owes -- `camera_probe_key`.
+        tcs_probe = camera_probe_key()
     jdead = {}
     for node in nodes:
         ends = junction_beam(node, hl, box, max_frames=max_frames, beam=jn_beam,
@@ -1233,7 +1301,9 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
         for j in kept:
             for cand in roll_candidates(j, hl, box, aim_keep=aim_keep, half_window=half_window,
                                         step=step, key=key, require_quality=require_quality,
-                                        tcs_key=tcs_key, tcs_probe=tcs_probe, corridor=cor_j):
+                                        tcs_key=tcs_key, tcs_probe=tcs_probe, corridor=cor_j,
+                                        tcs_span=ESCAPE_TCS_SPAN if tcs_escape else None,
+                                        tcs_step=ESCAPE_TCS_STEP if tcs_escape else None):
                 cand['plan'] = list(node.get('plan', [])) + [cand['knobs']]
                 out.append(cand)
     out = _budget_cut(out, cut, budget, 'roll survivors', verbose)
@@ -1392,7 +1462,7 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                square_keep=True, c1_square=True, handoff=True, corridor=None,
                last_arrive=True, last_landing=True, mid_square=False, land_keep=False,
                probe_step=24, probe_contact=False, probe_half=None, escape_flip=None,
-               escape_rots=None, escape_rank=None, verbose=False):
+               escape_rots=None, escape_rank=None, last_camera=True, verbose=False):
     """**The full-herd chain**: cycle 1 from state 2 (`cycle1_nodes`), then ``ncycles - 1``
     applications of `extend_cycle`, every cycle sweeping its OWN derived `target_cs` grid.
 
@@ -1454,6 +1524,14 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
     ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) sweep the escape atom's
     ``flip_bearing`` and ``rotate_off`` on the last cycle's keep and rank it in frames.
 
+    ``last_camera`` (session 73, default ON) is what makes any of those numbers describe a REPLAYABLE
+    plan. The escape atom needs the camera inside its turnaround's snap window and cannot slew there
+    itself, so until now it simply COMMANDED the csangle -- 91-114 deg off the arrival's own -- and every
+    landing from s65 to s72 was conditional on a camera leg no roll could pay. This turns the last
+    cycle's camera cut into the payer: `ESCAPE_TCS_SPAN` (the roll's own measured slew reach) instead of
+    the mid-chain `TCS_SPAN`, plus `camera_probe_key` as a keep share. Free, and the frontier it reaches
+    is BETTER than the commanded one: **75 frames, pd 0.432 u, `objective.verdict` True**.
+
     Returns ``dict(beams, best, bar, box, corridor)`` -- the per-cycle beams (so a stalled cycle is
     diagnosable), the best final node, the human's 2-roll rate, the pursuit box and the line in force."""
     import time
@@ -1506,6 +1584,9 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                              # squareness probe mid-chain (opt-in, ~2.7 s per surviving pair)
                              tcs_landing=(c == int(ncycles) and last_landing),
                              tcs_square=(c < int(ncycles) and mid_square),
+                             # ...and on the LAST cycle the camera's OTHER customer: the escape's snap
+                             # window, which nothing paid for before s73 (`camera_probe_key`)
+                             tcs_escape=(c == int(ncycles) and last_camera),
                              # the SCREEN (s71-s72) and the ESCAPE's atom knobs (s72), both opt-in
                              land_keep=land_keep, probe_step=probe_step,
                              probe_contact=probe_contact, probe_half=probe_half,
@@ -2195,7 +2276,8 @@ def homing_place(placed, hl, placements=None, coord_idx=None, *, brake_msd=0.06,
                 coord_idx=coord_idx)
 
 
-def synthetic_hot_arrival(env, hl, coord_idx=241, *, d_short=40.0, feet=64.0, lat_off=0.0):
+def synthetic_hot_arrival(env, hl, coord_idx=241, *, d_short=40.0, feet=64.0, lat_off=0.0,
+                          snap_camera=False):
     """**A SYNTHETIC below-the-bar HOT pre-placement, the state the grazing chain terminal produces**
     (session 50): Link in the hot post-untarget EBS, ``feet`` u BEHIND Tetra along the herd line, with
     Tetra ``d_short`` u UP-herd (short) of genuine coord ``coord_idx`` -- the deep-contact, closing
@@ -2210,6 +2292,14 @@ def synthetic_hot_arrival(env, hl, coord_idx=241, *, d_short=40.0, feet=64.0, la
     `decel_place` must correct (approach from the HIGH-lateral side so the plow pulls Tetra onto the
     thread). Relocation only (position does not feed anim/momentum), so it is self-consistent but NOT
     reachable by a state-2 input log -- it gates the decel recipe's physics/regime, not a bit-confirm.
+
+    ``snap_camera`` (session 73) fabricates the one thing this bed was silently missing: the CAMERA a
+    real arrival brings. The escape atom's turnaround needs the csangle inside its snap window and the
+    last roll's ``target_cs`` is what delivers it (`camera_probe_key`); a relocated bed has no roll, so
+    its inherited csangle sits ~25 deg outside the window and NOTHING fires there -- measured, 0 of 2048
+    swept variants. With it True the bed carries the paid camera (`away_walk.snap_csangle`) and the atom
+    runs at bill 0, which is what an escape test wants. Default False so every existing walk/place bed
+    is byte-unchanged (those recipes never run the atom).
     Returns a ``placed`` node (``dict(run, log=[], frames=0))``."""
     from harness.tetrapush.reposition import seed_to_untarget
     import tww_sim.core.fp as fp
@@ -2224,6 +2314,13 @@ def synthetic_hot_arrival(env, hl, coord_idx=241, *, d_short=40.0, feet=64.0, la
     cx = _computed_center(run.link, init_frame=False)
     run.pend_link, run.pend_tetra = cc_push_pair(cx, (run.tx, run.tz))
     run._follow_warned = False
+    if snap_camera:
+        # the camera a real arrival's last roll would have delivered -- see the docstring
+        from harness.tetrapush import away_walk as AW
+        cs = AW.snap_csangle(run)
+        if cs is not None:
+            run.camera = None
+            run.csangle = int(cs)
     return dict(run=run, log=[], frames=0, plan=[])
 
 
@@ -2597,8 +2694,9 @@ def _atom_place(cand, hl, placements, band):
     (where the herd ends -- rule 2's currency), ``log`` carries the WHOLE atom (through the
     receding-at-cap handoff, where the entry leg takes over, `handoff_frames`), ``dist`` is the
     post-atom placement distance, ``placed_ok`` = inside ``band``, ``atom`` the probe result
-    (knobs, per-frame rows, the commanded ``csangle`` -- the camera leg realizes it later, like
-    the roll stage's target_cs)."""
+    (knobs, per-frame rows, and the ``csangle`` it ran at with its ``cs_bill`` -- 0 since session 73,
+    when the atom stopped commanding the camera and the last roll's ``target_cs`` started paying for
+    it, `camera_probe_key`)."""
     from harness.tetrapush import away_walk as AW
     res = AW.probe(cand['run'], hl)
     if not AW.fires(res):

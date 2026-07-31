@@ -797,16 +797,29 @@ def test_the_atom_wired_terminal_places_post_atom_at_the_slam(env, hl):
     exactly that far short of the coord -- the atom must then land her ON it (band widened to the
     synthetic convention; sub-unit placement is the search's problem, the mechanism is what is
     pinned). Frames count to the SLAM (where the herd ends); the log carries the whole atom
-    through the receding-at-cap handoff for the entry leg."""
-    node0 = F.synthetic_hot_arrival(env, hl, 287, d_short=0.0, feet=64.0)
+    through the receding-at-cap handoff for the entry leg.
+
+    Why the round trip is loose at all, measured: the residual is STATE-dependent, so probing it at the
+    bed and then achieving it from the shifted bed are two different numbers -- 39.69 u along here
+    against 34.47 achieved, i.e. ~5.2 u of along plus the lateral. Session 73 moved the band 6.0 -> 8.0
+    for one reason: the bed now carries the camera the last roll PAYS for (the snap window's near edge,
+    `camera_probe_key`) instead of the far edge the old scan commanded, and a different csangle
+    quantizes the atom's sticks differently, so its variant choice moves (``rotate_side`` -1 -> +1) and
+    the residual with it."""
+    # ``snap_camera``: the bed carries the camera the last roll pays for (s73), so the atom runs at
+    # bill 0 -- a relocated bed's inherited csangle is outside the snap window and fires nothing
+    node0 = F.synthetic_hot_arrival(env, hl, 287, d_short=0.0, feet=64.0, snap_camera=True)
     r0 = O.escape_ready(node0['run'], hl)
     assert r0['ready'], "the atom must fire from the s65 bed"
+    assert r0['atom']['cs_bill'] == 0, "the bed's own camera is the one the atom runs at"
 
-    node = F.synthetic_hot_arrival(env, hl, 287, d_short=r0['resid_along'], feet=64.0)
-    tt = F.terminal_targeting([node], hl, max_frames=2, beam=6, objective='thread', band=6.0)
+    node = F.synthetic_hot_arrival(env, hl, 287, d_short=r0['resid_along'], feet=64.0,
+                                   snap_camera=True)
+    tt = F.terminal_targeting([node], hl, max_frames=2, beam=6, objective='thread', band=8.0)
     p = tt['placed'] or tt['closest_atom']
     assert p is not None and p.get('atom') is not None, "no atom placement was even probed"
-    assert p['dist'] <= 6.0, \
+    assert p['atom']['cs_bill'] == 0, "the atom runs at the camera the bed brought, owing nothing"
+    assert p['dist'] <= 8.0, \
         "starting the probed residual short must land Tetra on the coord post-atom (%.2f u)" % p['dist']
     assert p['frames'] == p['pre_frames'] + p['atom']['freeze_f'], "frames must count to the SLAM"
     assert len(p['log']) == p['pre_frames'] + len(p['atom']['log']), \
@@ -1555,3 +1568,84 @@ def test_the_screens_axis_is_the_window_not_the_step_because_survival_is_one_aim
     assert got is not None, "no endpoint off the human's own exit rolls inside +-4 deg"
     assert got['fan_half'] == int(round(4.0 * deg))
     assert got['fan_edge'] <= got['fan_half']
+
+
+def test_the_last_cycles_camera_grid_reaches_the_escapes_snap_window_and_the_cut_prices_it(env, hl,
+                                                                                          box):
+    """**The escape atom needed the camera inside its snap window, and no stage in the search was ever
+    asked to put it there** (session 73).
+
+    `away_walk.escape_atom` used to COMMAND the csangle (`away_walk.snap_csangle`), so every landing
+    from session 65 to 72 was computed at a camera state 91-114 deg off the arrival's own -- a state
+    nothing in the plan paid for, and one no roll can deliver. The atom cannot pay it either: its
+    C-stick is neutral, and at ~470 BAM/frame even the NEAR edge of the window (15-38 deg, measured over
+    112 arrivals) would cost 6-15 frames against `objective.TIMELOSS_BUDGET` 2. The only idle channel is
+    the LAST ROLL's ``target_cs``, and the shipped grid could not reach the window: `TCS_SPAN` is
+    +-1536 BAM = +-8.4 deg, a band derived to bracket the mid-chain junction's razor travel window.
+
+    So the last cycle gets its own grid (`ESCAPE_TCS_SPAN`, the roll's MEASURED slew reach of
+    -46.6..+40.7 deg) and its cut gets a keep share by what the arrival still owes
+    (`camera_probe_key`). Measured over 112 real arrivals, 63 then reach a bill of ZERO inside their own
+    roll, and the frontier there is both replay-faithful and better than the commanded one it replaces:
+    **75 frames, pd 0.432 u, `objective.verdict` True**, against s72's 1.644 u at the same 75.
+
+    Gated on the three properties that make that reachable rather than asserted -- the widened grid
+    strictly contains the shipped one and spans the window's near edge, the roll's realized exit csangle
+    actually moves that far, and the keep share reads 0 exactly when nothing is owed."""
+    from harness.tetrapush import away_walk as AW
+    deg = 65536.0 / 360.0
+
+    # (1) the grid: strictly wider than the shipped one, still entry-relative, and wide enough for the
+    # near edge of the window (15.3-37.8 deg measured; the shipped +-8.4 cannot reach any of it)
+    run = seeds.make_freerun(env)
+    shipped = set(F.derived_target_css(run))
+    wide = F.derived_target_css(run, span=F.ESCAPE_TCS_SPAN, step=F.ESCAPE_TCS_STEP)
+    assert F.TCS_SPAN / deg < 8.5 < 15.3, "the shipped span is inside the smallest measured bill"
+    assert F.ESCAPE_TCS_SPAN / deg > 37.8, "the widened span must cover the largest measured bill"
+    assert int(run.csangle) in wide                                  # still entry-relative
+    assert len(wide) == 2 * F.ESCAPE_TCS_SPAN // F.ESCAPE_TCS_STEP + 1
+    assert max(abs(F._s16(cs - int(run.csangle))) for cs in wide) \
+        > max(abs(F._s16(cs - int(run.csangle))) for cs in shipped)
+    # the step resolves a razor: the snapping targets measured 1-2 members wide AT 512 BAM
+    assert F.ESCAPE_TCS_STEP <= 512
+
+    # (2) the roll REALIZES it: the widened grid moves the exit csangle further than the whole shipped
+    # grid spans. Bed = the human's cycle-1 roll entry (from state 2 itself the A-press TALKS).
+    dtm = seeds.dtm_input_at(env)
+    base = seeds.make_freerun(env)
+    base.pre_seed_input(dtm(0))
+    fb = F._bearing((base.link.pos_x, base.link.pos_z), (base.tx, base.tz))
+    base.step(T._inp(fb, base.csangle, 1.0, buttons=S.PAD_L, triggerL=255))
+    centre = F._bearing((base.link.pos_x, base.link.pos_z), (base.tx, base.tz))
+    aim = T.roll_facing_fan(base, centre, 0x2000, 8)[0][1]
+    exits = {}
+    for off in (-F.ESCAPE_TCS_SPAN, 0, F.ESCAPE_TCS_SPAN):
+        rr = base.clone()
+        seg = T.roll_segment(rr, aim, target_cs=(int(base.csangle) + off) & 0xFFFF, l_window=(5, 8))
+        assert seg['ok'], "the bed must actually roll for its camera reach to mean anything"
+        exits[off] = F._s16(int(rr.csangle) - int(base.csangle))
+    reach = max(exits.values()) - min(exits.values())
+    assert reach > 2 * F.TCS_SPAN, "one roll's slew must exceed the whole shipped band"
+    assert reach / deg > 30.0, "and it must be the same order as the measured -46.6..+40.7 deg"
+    # ...in BOTH directions, and monotone in the ask (the C-stick pegs toward the target)
+    assert exits[-F.ESCAPE_TCS_SPAN] < exits[0] < exits[F.ESCAPE_TCS_SPAN]
+
+    # (3) the cut prices it: 0 when the arrival's own csangle snaps, else the BAM to the near edge --
+    # and a KEEP, never a filter (262 of 274 firing camera states do not snap; `camera_probe_key`)
+    key = F.camera_probe_key()
+    # (3a) a cycle-1-range arrival has no window at all: the share reports None (which sorts last in
+    # `roll_candidates`' probe order) rather than crashing or silently scoring 0
+    rr = base.clone()
+    T.roll_segment(rr, aim, target_cs=None, l_window=(5, 8))
+    assert AW.snap_bill(rr)['bam'] is None and key(dict(run=rr)) is None
+
+    # (3b) a real terminal owes the near edge, and owes NOTHING once the camera is inside the window
+    term = F.synthetic_hot_arrival(env, hl, coord_idx=287, d_short=0.0, feet=64.0)['run']
+    bill = AW.snap_bill(term)
+    assert bill['free'] is False and bill['bam'] is not None
+    assert key(dict(run=term)) == abs(bill['bam']) > 0
+    paid = term.clone()
+    paid.camera = None
+    paid.csangle = bill['csangle']                      # what the last roll's target_cs delivers
+    assert AW.snaps_at(paid, int(paid.csangle))
+    assert key(dict(run=paid)) == 0, "nothing owed once the camera is in the window"

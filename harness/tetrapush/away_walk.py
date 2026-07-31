@@ -26,7 +26,11 @@ roll, but instead of rolling, slam backwards -- maybe one frame left or right be
   1. **The turnaround** (1 frame, no A -- ONLY when the terminal EBS still faces Tetra): ESS at
      the snap csangle (`reposition.turnaround`) -- facing snaps across travel, speed PRESERVED
      (-25.727), Tetra leaves the front cone. An EBS already faced away skips it (Dereck: "if the
-     L targets her, you were facing toward her during the EBS").
+     L targets her, you were facing toward her during the EBS"). **The snap csangle is a bill the
+     PREVIOUS ROLL pays** (`snap_bill`, session 73): the atom's own C-stick is neutral, so the
+     camera holds whatever the arrival brings, and slewing 15-38 deg here would cost 6-15 frames
+     against a 2-frame budget. The channel that pays is the last roll's ``target_cs``, idle for its
+     whole duration and worth -46.6..+40.7 deg (`full_herd.ESCAPE_TCS_SPAN`).
   2. **The L conversion** (ONE L frame -- Dereck): L + full stick toward Tetra for one frame,
      then the same stick WITHOUT L. The L frame routes into ATN_MOVE; the `setSpeedAndAngleAtn`
      DIR_BACKWARD negation (d_a_player_main.cpp 2863) fires on the NEXT dispatch frame off the
@@ -74,6 +78,8 @@ DIP_BUDGET = 3
 _SNAP_MIN_TURN = 0x4000
 _SNAP_KEEP_SPEED = -24.5
 
+_BAM_DEG = 360.0 / 65536.0
+
 #: The conversion's DIR_BACKWARD cone, 90 deg wide about 180 (`reference/constants.md`'s 0x6000 row).
 #: NOT a bound on the flip bearing -- see `flip_arc`.
 DIR_BACKWARD_CONE = 0x8000 - 0x6000
@@ -104,28 +110,70 @@ def _locked(run):
 def _clone_for_atom(run0):
     """Clone for the atom, in the planner's commanded-csangle convention: a WIRED camera is
     detached (`seed_to_untarget` does the same for the reposition search) so `r.csangle = ...`
-    commands the value the sticks are decoded at. When the commanded csangle equals the live one,
-    the wired camera would have HELD it anyway (the (128, 0) manualCamera hold the atom's inputs
-    carry), so the prediction is replay-faithful; a snap that needs a DIFFERENT csangle records it
-    on the result (``csangle``) -- realizing it with a C-stick slew is the camera leg, the same
-    shape as the roll stage's ``target_cs``."""
+    commands the value the sticks are decoded at. The atom's own inputs carry a NEUTRAL C-stick,
+    which FREEZES csangle (`steered_reposition.camera_authority`), so commanding the LIVE value is
+    exactly what the wired camera would do -- that is the replay-faithful convention and it is now
+    `escape_atom`'s default. Commanding a DIFFERENT value is a claim on the camera that only the
+    last roll's C-stick can pay (`snap_bill`); the atom itself has no frames to spare for it."""
     r = run0.clone()
     if getattr(r, 'camera', None) is not None:
         r.camera = None
     return r
 
 
-def snap_csangle(run0, *, step=512):
-    """The turnaround's csangle window off THIS terminal state: the first csangle whose ESS frame
-    snaps the facing (`reposition.turnaround`) while preserving the EBS. The herd junction sweeps
-    the same window; a terminal with no window cannot run the atom (report, don't guess)."""
+def snaps_at(run0, csangle):
+    """Does the ESS turnaround frame snap this terminal's facing at ``csangle``? One frame, no atom
+    -- the cheap half of `snap_bill` and the predicate `snap_csangle` scans with."""
     from harness.tetrapush.reposition import turnaround
-    for cs in range(0, 0x10000, int(step)):
-        c = _clone_for_atom(run0)
-        if (turnaround(c, cs) > _SNAP_MIN_TURN and c.link.state == 6
-                and c.link.speedF <= _SNAP_KEEP_SPEED):
+    c = _clone_for_atom(run0)
+    return bool(turnaround(c, int(csangle)) > _SNAP_MIN_TURN and c.link.state == 6
+                and c.link.speedF <= _SNAP_KEEP_SPEED)
+
+
+def snap_csangle(run0, *, step=512, near=True):
+    """The turnaround's csangle window off THIS terminal state: a csangle whose ESS frame snaps the
+    facing (`reposition.turnaround`) while preserving the EBS. A terminal with no window cannot run
+    the snap (report, don't guess).
+
+    ``near`` (session 73, the default, and the correction of a real bill) returns the window member
+    NEAREST the live csangle instead of the first in absolute scan order. The window is WIDE --
+    measured over 112 real arrivals it holds 28-30 members on the 512 grid, i.e. **78.8-81.6 deg** --
+    so which member a scan returns is not cosmetic. Scanning ``range(0, 0x10000)`` returned its FAR
+    edge on every arrival, **91.3-113.8 deg** off the live csangle, and that value is the csangle
+    every atom result from session 65 to 72 was computed at: a camera state no single roll's ~47 deg
+    of C-stick slew can deliver, so the whole frontier was conditional on a leg nothing paid for. The
+    NEAREST member is **15.3-37.8 deg** (median 21.0) -- inside one roll's slew, which is what makes
+    the bill payable at all (`full_herd.ESCAPE_TCS_SPAN`). Pass ``near=False`` for the legacy order."""
+    live = int(run0.csangle)
+    grid = list(range(0, 0x10000, int(step)))
+    if near:
+        grid.sort(key=lambda cs: abs(_s16(cs - live)))
+    for cs in grid:
+        if snaps_at(run0, cs):
             return cs
     return None
+
+
+def snap_bill(run0, *, step=512):
+    """**What the CAMERA owes for this terminal's turnaround, and who pays it** (session 73).
+
+    The snap needs a csangle in the window; the atom cannot slew there itself (its C-stick is neutral
+    -- see `_clone_for_atom` -- and at ~460-530 BAM/frame the 15-38 deg bill would cost 6-15 frames
+    against `objective.TIMELOSS_BUDGET` 2). The only channel that CAN pay is the last roll's C-stick,
+    which is idle for its whole duration and slews -46.6..+40.7 deg (measured over 112 arrivals). So
+    this reports the bill in the currency that stage spends: ``free`` when the arrival's own live
+    csangle already snaps -- nothing to pay -- else ``bam``/``deg`` off it.
+
+    NOTE the bill is not separable from the arrival: the post-roll EBS travel chases csangle, so
+    steering the camera to satisfy it MOVES the arrival (s42). It is a term in the roll's ``target_cs``
+    cut (`full_herd.roll_candidates`), never a credit an atom result may assume."""
+    live = int(run0.csangle)
+    if snaps_at(run0, live):
+        return dict(csangle=live, bam=0, deg=0.0, free=True)
+    cs = snap_csangle(run0, step=step)
+    if cs is None:
+        return dict(csangle=None, bam=None, deg=None, free=False)
+    return dict(csangle=cs, bam=_s16(cs - live), deg=abs(_s16(cs - live)) * _BAM_DEG, free=False)
 
 
 def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0x4000,
@@ -139,8 +187,17 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
     ("slam down") -> hold the exit stick. ``turnaround_first`` prepends the ESS facing snap; a
     terminal whose EBS still faces Tetra needs it or the L locks her (`l_ok` False ranks it
     out). ``flip_bearing`` defaults to the herd's down-bearing (the junction's own toward-Tetra
-    stick); ``exit_bearing`` to the live entry bearing; ``csangle`` to the auto-detected snap
-    window (`snap_csangle`).
+    stick); ``exit_bearing`` to the live entry bearing.
+
+    ``csangle`` defaults to the terminal's own LIVE csangle -- the REPLAY-FAITHFUL convention
+    (session 73, and a change of default). It used to default to `snap_csangle`, which COMMANDED the
+    camera into the turnaround's window for every variant, including the ``turnaround_first=False``
+    ones that never snap. On real arrivals that value sat 91-114 deg off live, so from session 65 to
+    72 every atom number described a camera state nothing in the plan paid for. The atom cannot pay
+    it -- its C-stick is neutral and slewing would cost 6-15 frames against a 2-frame budget
+    (`snap_bill`) -- so the value it may assume is the one the arrival arrives WITH. A caller that
+    wants the window buys it upstream, in the last roll's ``target_cs``, and the arrival then carries
+    it live. The result records ``cs_bill`` (BAM off live; 0 = faithful).
 
     Returns the measurement dict:
       ``rows``          per-frame (f, proc, speedF, disp, head, cf, d_t, d_e, tres, rec)
@@ -156,13 +213,7 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
     """
     r = _clone_for_atom(run0)
     if csangle is None:
-        csangle = snap_csangle(run0)
-        if csangle is None:
-            # The window exists for the ESS turnaround frame only; without one, the no-turnaround
-            # variants still run on the live csangle (the camera never needed to move).
-            if turnaround_first:
-                return None
-            csangle = int(run0.csangle)
+        csangle = int(run0.csangle)          # replay-faithful: the camera holds what it arrived at
     r.csangle = int(csangle)
     cs = int(r.csangle)
     down = hl.bearing_bam()
@@ -235,6 +286,7 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
     return dict(rows=rows, run=r, log=log, freeze_f=freeze_run, reversed_f=reversed_f,
                 rec17_f=rec17_f, dips=dips, resid=math.hypot(ta, tl), resid_along=ta,
                 resid_lat=tl, l_ok=l_ok, followed=r._follow_warned, csangle=cs,
+                cs_bill=_s16(cs - int(run0.csangle)),
                 d_e_end=rows[-1]['d_e'] if rows else None)
 
 
@@ -274,7 +326,8 @@ def flip_arc(hl, *, step=0x400, half=FLIP_SPAN, center=None):
     return sorted(out, key=lambda b: abs(_s16(b - down)))
 
 
-def probe(run0, hl, *, max_frames=18, thread=None, flip_step=None, rotate_offs=None, rank='miss'):
+def probe(run0, hl, *, max_frames=18, thread=None, flip_step=None, rotate_offs=None, rank='miss',
+          csangle='live'):
     """Sweep the atom's knobs from a terminal state and return the best variant.
 
     Rank: L-cone compliance first (Dereck's rule -- a locking variant is wrong tech however fast),
@@ -322,12 +375,32 @@ def probe(run0, hl, *, max_frames=18, thread=None, flip_step=None, rotate_offs=N
     ``freeze_f + objective.thread_frames(landing)``, i.e. `full_herd.escape_probe`'s ``bound`` minus
     the arrival frames, which are constant across variants -- with the miss kept as the tie-break.
     Measured on the same four arrivals it is worth 2.4 frames of bound (77.50 -> 75.13) where the
-    miss rank reads 83.06. Default ``'miss'`` so the s71 key is bit-identical."""
+    miss rank reads 83.06. Default ``'miss'`` so the s71 key is bit-identical.
+
+    ``csangle`` (session 73) is the camera convention every variant is run at, and its default is now
+    the honest one:
+      * ``'live'`` (default) -- the arrival's own csangle. The atom's C-stick is neutral so the camera
+        holds it, and the prediction is what a plain replay delivers. This is a CHANGE: s65-s72 ran
+        every variant at `snap_csangle`, 91-114 deg off live on real arrivals, a camera state nothing
+        in the plan paid for (`snap_bill`). What buys the window is the last roll's ``target_cs``
+        (`full_herd.ESCAPE_TCS_SPAN`), and measured over 112 arrivals 63 of them reach a snapping
+        camera state inside their own roll's slew -- at which point the window IS live and this mode
+        sees it.
+      * ``'snap'`` -- command `snap_csangle` (the nearest window member). The old behaviour, kept for
+        research and for a caller that has separately shown the roll can deliver it. Every result
+        carries ``cs_bill``, so a billed variant can never be mistaken for a faithful one.
+      * an int -- that csangle exactly."""
     ex, ez = seeds.ENTRY_ROLL_POS
     b_entry = world_angle_s16(ex - run0.link.pos_x, ez - run0.link.pos_z)
     up_herd = (hl.bearing_bam() + 0x8000) & 0xFFFF
-    # The snap window depends only on the start state -- sweep it once for all knob variants.
-    cs = snap_csangle(run0)
+    # The camera convention is a property of the START state, so resolve it once for all variants.
+    if csangle == 'live':
+        cs = int(run0.csangle)
+    elif csangle == 'snap':
+        cs = snap_csangle(run0)
+    else:
+        cs = int(csangle)
+    can_snap = cs is not None and snaps_at(run0, cs)
     flips = [None] if flip_step is None else flip_arc(hl, step=int(flip_step))
     rots = ROTATE_OFFS[1:2] if rotate_offs is None else tuple(rotate_offs)
     best = None
@@ -336,8 +409,8 @@ def probe(run0, hl, *, max_frames=18, thread=None, flip_step=None, rotate_offs=N
             for ta in (False, True):
                 for side in (1, -1):
                     for exit_b in (b_entry, up_herd):
-                        if ta and cs is None:
-                            continue
+                        if ta and not can_snap:
+                            continue          # no window at this csangle: the snap cannot fire
                         r = escape_atom(run0, hl, turnaround_first=ta, rotate_side=side,
                                         rotate_off=ro, flip_bearing=flip, exit_bearing=exit_b,
                                         csangle=cs if cs is not None else int(run0.csangle),
@@ -373,6 +446,8 @@ def probe(run0, hl, *, max_frames=18, thread=None, flip_step=None, rotate_offs=N
 def _print_atom(res):
     k = res.get('knobs', {})
     print("knobs %s" % k)
+    print("csangle %d (bill %+d BAM = %.1f deg off live -- 0 is replay-faithful)"
+          % (res['csangle'], res['cs_bill'], abs(res['cs_bill']) * _BAM_DEG))
     print("l_ok %s  followed %s  freeze f%s  reversed f%s  receding>=17 f%s  dips %s"
           % (res['l_ok'], res['followed'], res['freeze_f'], res['reversed_f'],
              res['rec17_f'], res['dips']))
@@ -396,11 +471,21 @@ def main(argv):
     node = FH.synthetic_hot_arrival(env, hl, coord_idx=287, d_short=0.0, feet=64.0)
     run = node['run']
     if cmd == 'probe':
-        res = probe(run, hl)
-        print("=== the best escape atom off the synthetic hot terminal (coord 287) ===")
-        _print_atom(res)
+        bill = snap_bill(run)
+        print("=== the escape atom off the synthetic hot terminal (coord 287) ===")
+        print("camera bill: %s\n" % bill)
+        for mode in ('live', 'snap'):
+            res = probe(run, hl, csangle=mode)
+            print("--- csangle=%r -> %s" % (mode, "FIRES" if fires(res) else "does NOT fire"))
+            if res is not None:
+                _print_atom(res)
+            print("")
+        print("The bed's own live csangle is %.1f deg outside the snap window, so nothing fires\n"
+              "there: a synthetic terminal has no roll to have paid the bill (session 73). On a real\n"
+              "arrival the last roll's target_cs buys the window -- 63 of 112 measured arrivals can."
+              % (bill['deg'] or 0.0))
     elif cmd == 'trace':
-        res = escape_atom(run, hl)
+        res = escape_atom(run, hl, csangle=snap_csangle(run))
         _print_atom(res)
     else:
         print(__doc__)
