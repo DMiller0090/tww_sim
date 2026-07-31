@@ -1694,7 +1694,7 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               `fixtures/courtyard_plan_s73.json` with its provenance and the ``atom_kw`` it must be scored
               with, and `tests/test_objective.py::
               test_the_shipped_plan_passes_the_whole_objective_from_its_input_log_alone` replays it on a
-              fresh `FreeRun` every run (~21 s) and asserts the whole verdict plus ``cs_bill == 0`.
+              fresh `FreeRun` every run (~21 s) and asserts the whole verdict plus ``cs_bill == 0``.
             - **THE SNAP IS SUFFICIENT, NOT NECESSARY -- SO THE CAMERA TERM IS A KEEP, NEVER A FILTER.**
               Swept over 16 arrivals x 41 camera targets (656 cells): **274 fire** at the live csangle and
               only **12 snap**; all 12 fire, but **262 firing cells do not snap**, because a camera steer
@@ -1704,11 +1704,20 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               arrivals at median **0.00** frames of loss, where the front-cone margin retains one for 7
               (widest-first) or 3 (narrowest-first). The cone cannot screen it: the frontier cell's own
               margin is **5.2 deg**, below the DEAD cells' median of 11.1.
-            - **WHAT IS STILL UNSWEPT, AND IT IS THE WHOLE REST OF THE GRID.** The widened grid spans
-              **4592** (arrival, target_cs) cells and every one arrives at 70 or 71 frames, i.e. every one
-              is frame-eligible for a 73-75 total. The 84 swept are **1.8%** of it. ~42% of cells fire, so
-              on the order of 1900 firing cells have never seen the fine flip sweep -- and the 74-frame
-              (`TIMELOSS_PREFERRED`) and 73-frame (floor) rows are where the remaining margin is.
+            - **AND THE REST OF THE GRID IS NOT WHERE THE LANDINGS ARE -- THE SNAP TEST IS.** The widened
+              grid spans **4592** cells and the 84 snapping pairs are 1.8% of it, so the obvious next move
+              was to sweep the rest. Measured first, on a uniform **224-cell (4.9%)** stratified sample at
+              the same full flip resolution: **67 fire (30%)** and the frame-capped frontier is **75 f ->
+              pd 18.50 u**, 74 -> 23.16, 73 -> 37.24, best bound **75.56**, with `aim.handoff_spec` True
+              exactly **once** -- against the snapping pairs' **0.432 u at 75** with spec True. The two
+              samples agree on it: the dense 16-arrival census's own best cell by bound is its SNAPPING
+              one (75.12), and its 262 non-snapping firing cells never beat it. So FIRING is common
+              (30-42% of cells) and LANDING is not, and the snap test -- which looks like a 4.4%-recall
+              filter on firing -- is the thing that selects landers. The mechanism is unexplained; the
+              measurement is what the next search should ride. The productive widening is therefore of the
+              SNAPPING population, not of the grid: a finer ``ESCAPE_TCS_STEP`` (the snapping targets are
+              1-2 members wide AT 512, so 256/128 should multiply the set), the arrivals of the other
+              junction-frame bands, and the other cycle-2 beam nodes.
             - **A SYNTHETIC TERMINAL CANNOT GATE THE FAITHFUL PATH** (the trap this created): a bed minted
               by relocation (`synthetic_hot_arrival`) has no roll to have paid its bill, so its inherited
               csangle sits ~25 deg outside the window and **0 of 2048** swept variants fire there. Beds that

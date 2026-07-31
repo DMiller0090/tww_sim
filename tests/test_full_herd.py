@@ -1649,3 +1649,19 @@ def test_the_last_cycles_camera_grid_reaches_the_escapes_snap_window_and_the_cut
     paid.csangle = bill['csangle']                      # what the last roll's target_cs delivers
     assert AW.snaps_at(paid, int(paid.csangle))
     assert key(dict(run=paid)) == 0, "nothing owed once the camera is in the window"
+
+    # (4) the wiring, spied like the other chain flags: `chain_herd(last_camera=)` must reach ONLY the
+    # last cycle (mid-chain the widened band strands the next junction, s42), and reach the roll stage
+    seen = []
+    real = F.extend_cycle
+    fake = [dict(run=None, log=[], frames=0, m=dict(per_frame=0.0), plan=[])]
+    try:
+        F.extend_cycle = lambda nodes, hl_, box_, **kw: (seen.append(kw['tcs_escape']), fake)[1]
+        F.chain_herd(env, hl, ncycles=4, nodes=fake, box={}, verbose=False)
+    finally:
+        F.extend_cycle = real
+    assert seen == [False, False, True], "only the LAST cycle pays the camera bill (got %s)" % (seen,)
+    import inspect
+    assert 'tcs_escape' in inspect.signature(F.extend_cycle).parameters
+    src = inspect.getsource(F.extend_cycle)
+    assert 'camera_probe_key()' in src and 'ESCAPE_TCS_SPAN if tcs_escape' in src
