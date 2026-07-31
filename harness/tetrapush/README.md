@@ -1757,10 +1757,34 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               15 / 33 / 15 / 11 / 0 / 8 / 1 / 0, so they are clustered, not uniform). So a decimated
               ``step`` does not merely lose the tail here, it reads the band as empty -- exactly what
               s71/s72 measured ("survival is ONE alphabet member wide; a ``[::step]`` decimation is a
-              strict subset"), and the reason route C cannot be settled from a screen. The
-              full-resolution jf-9/jf-10 probe (`s74_bandc.py`, 325 aims per endpoint over 1576
-              endpoints, ~5.5 s/endpoint under 8-way contention) is the honest instrument and was still
-              running at session end; its envelope is the next session's first read.
+              strict subset"), and the reason route C cannot be settled from a screen.
+            - **ROUTE C IS CLOSED, AND CLOSING IT PROVED `aim.handoff_target` RIGHT.** The
+              full-resolution whole-pool probe (325 aims per endpoint over the 420 + 1156 pools, 996 s):
+              **jf 9** (73-f arrivals -- route C's own band) yields **83 rolls** reaching along
+              **912.6..932.7**, lateral -47.6..+23.5, **min pd 14.43**, and **0 in the coord box** -- the
+              along tops out **4.1 u short** of the 936.8 route C needs and the placement is short by
+              **13.67 u**, so route C is unreachable at the band that would pay for it. **jf 10** (74-f
+              arrivals) DOES enter the box -- **232 rolls, 16 of them inside it, min pd 2.59 u**, the
+              first arrivals this work has ever measured ON a coord -- but at 74 arrival frames even a
+              1-frame escape only ties the shipped 75.
+            - **AND AT AN ON-COORD ARRIVAL THE ESCAPE IS DAMAGE, NOT RECOVERY** -- which is the positive
+              confirmation of the ~44 u handoff offset. Firing the real atom on the 10 closest arrivals:
+              pd_pre **2.59 -> pd_post 20.07**, 4.22 -> 22.87, 5.30 -> 17.55, and the best of them ends
+              **7.74-8.15 u** out. The escape's ~35 u of push has to go somewhere, so an arrival already
+              on the thread gets shoved off it. Aiming the herd AT the coord is the wrong target, exactly
+              as `aim.handoff_target` says.
+            - **THE THREE CLOSEST IN-BOX ARRIVALS HAVE NO VALID ESCAPE AT ALL**: at pd 2.59 / 4.22 / 5.30
+              **all 176** swept atom variants read ``l_ok`` False -- Tetra is inside the front cone and
+              the L targets her. **OPEN, and deliberately not claimed:** at the pd-5.59 arrival **135**
+              variants DO satisfy `away_walk.fires` at ``cs_bill`` **0** (replay-faithful), but every one
+              is ``turnaround_first=True``, which `away_walk.probe` REFUSES because that arrival's live
+              csangle has no snap window (bill 40.6 deg) -- so `probe` returns ``fires`` False. Whether
+              that ``can_snap`` guard is over-strict is unsettled: the ESS frame there turns only
+              **0x1425 (28.3 deg)**, below the 0x4000 snap threshold, and Tetra is STILL in the cone
+              immediately after it, so the ``l_ok`` is earned a frame later at the frame the L actually
+              acts -- not by the snap. It buys nothing here (best 7.74 u at 78 f against the shipped
+              0.432 at 75), but it is the same SHAPE of error s73 found in the snap scan order: a
+              sufficient condition used as a necessary one. Worth one measurement before it is trusted.
             - **GATED, not narrated**: `away_walk.push_profile` + a per-frame ``tstep`` on
               `escape_atom`'s rows (Tetra's own displacement that frame -- NOT a ``tres`` difference,
               which under-reads a turning plow), and `tests/test_away_walk.py::
