@@ -143,3 +143,141 @@ def test_the_atom_can_be_ranked_by_where_it_leaves_tetra_without_moving_the_acce
     # ...and there is something to rank at all: the variants' lateral residuals genuinely differ,
     # which is `rotate_side` moving where Link stands and so which way the push ejects her
     assert max(r['resid_lat'] for r in seen) - min(r['resid_lat'] for r in seen) > 1.0
+
+
+def test_the_flip_sweeps_span_is_a_budget_and_the_conversion_cone_is_not_a_bound(bed):
+    """**The flip bearing has no static admissible arc, and session 72 measured the cost of assuming
+    one.**
+
+    The L conversion IS `getDirectionFromAngle`'s DIR_BACKWARD negation, whose cone is 90 deg wide
+    about 180 (`DIR_BACKWARD_CONE`, the 0x6000 row of `knowledge/reference/constants.md`) -- so an arc
+    of that half-width about ``travel + 0x8000`` looks like a derived bound on the flip stick. It is
+    not: the cone is about ``travel`` AT THE CONVERSION FRAME, which the optional ESS snap and the L
+    frame's own travel chase move. Measured on a real 71-frame arrival, the variant that lands
+    **1.644 u** at the accepted 75-frame budget sits **61 deg** off the ARRIVAL's back-bearing --
+    outside that cone -- where the best variant inside it lands 4.112.
+
+    So `flip_arc`'s ``half`` is a BUDGET (`FLIP_SPAN`, wide enough for every firing variant s72 saw)
+    and `fires` is the filter. Gated on the two properties a budget must have: the shipped default is
+    in the swept set (so sweeping can never rank worse than not sweeping), and the set is ordered
+    outward from it (so a truncated sweep degrades toward the default)."""
+    run, hl = bed
+    down = hl.bearing_bam()
+    arc = AW.flip_arc(hl, step=0x400)
+    assert arc[0] == down                     # the shipped default is the first member
+    assert len(arc) > 8                       # ...and there is a real sweep around it
+
+    def s16(v):
+        v = int(v) & 0xFFFF
+        return v - 0x10000 if v >= 0x8000 else v
+
+    d = [abs(s16(b - down)) for b in arc]
+    assert d == sorted(d)                     # ordered outward from the default
+    assert max(d) <= AW.FLIP_SPAN
+    assert AW.DIR_BACKWARD_CONE == 0x8000 - 0x6000
+    # the span is WIDER than the conversion cone, which is the correction: a cone-width arc about the
+    # arrival's travel would have excluded the measured winner
+    assert AW.FLIP_SPAN > AW.DIR_BACKWARD_CONE
+    # ...and widening to the full circle is available and strictly contains it (no hidden ceiling)
+    full = AW.flip_arc(hl, step=0x400, half=0x8000)
+    assert set(arc).issubset(set(full)) and len(full) > len(arc)
+
+
+def test_sweeping_the_flip_and_rotate_knobs_can_only_improve_the_landing(bed):
+    """**The two knobs `probe` was leaving at their defaults are the ones that STEER the placement**
+    (session 72).
+
+    Session 71 established that the atom's variant choice is placement authority (the test above),
+    then swept 8 variants that between them decide WHEN the atom separates and where Link ends up --
+    but not where its conversion frames push HER. ``flip_bearing`` is that direction and it sat at
+    the herd's own down-bearing; ``rotate_off`` sat at 0x4000. Measured on four real 71-frame arrivals
+    of the s71 full-resolution jf-7 band, sweeping them takes the landing from **4.90 to 0.33**,
+    **4.99 to 0.01** and **8.23 to 0.00 u** and produces the first `aim.handoff_spec` True this work
+    has seen.
+
+    Gated as a DOMINANCE property rather than on those numbers (they belong to arrivals a test bed
+    cannot cheaply rebuild): the swept probe's landing is never worse than the unswept one's, and it
+    stays compliant -- the sweep widens the candidate set and the acceptance is unchanged."""
+    from harness.tetrapush import objective as O
+    from harness.tetrapush import aim as A
+    run, hl = bed
+    thread = O.placement_thread(hl, seeds.load_placements()[0])
+
+    def miss(res):
+        return A.landing_miss(run, hl, thread, (res['resid_along'], res['resid_lat']))['miss']
+
+    stock = AW.probe(run, hl, thread=thread)
+    swept = AW.probe(run, hl, thread=thread, flip_step=0x800, rotate_offs=AW.ROTATE_OFFS)
+    assert stock is not None and swept is not None
+    assert AW.fires(stock) and AW.fires(swept)
+    assert miss(swept) <= miss(stock) + 1e-12
+    # the default is IN the swept set, so an unswept-equivalent call reproduces the stock pick
+    only_default = AW.probe(run, hl, thread=thread, flip_step=None, rotate_offs=(0x4000,))
+    assert miss(only_default) == miss(stock)
+    # ...and the knobs genuinely move Tetra: the sweep reaches residuals the 8 variants cannot
+    arc = AW.flip_arc(hl, step=0x800)
+    cs = AW.snap_csangle(run)
+    lats = []
+    for flip in arc:
+        r = AW.escape_atom(run, hl, flip_bearing=flip,
+                           csangle=cs if cs is not None else int(run.csangle))
+        if r is not None and AW.fires(r):
+            lats.append(r['resid_lat'])
+    assert len(lats) > 2 and max(lats) - min(lats) > 1.0
+
+
+def test_the_frames_rank_prices_the_landing_against_what_the_separation_costs(bed):
+    """**Sweeping the flip knob creates a trade, and a landing-only rank pays any number of frames
+    for it** (session 72).
+
+    Measured on one real arrival: the same state reaches a landing of **0.33 u at ``freeze_f`` 12**
+    and **1.64 u at 4**. The objective allows `objective.TIMELOSS_BUDGET` = 2 frames over the floor,
+    so buying 1.3 u with 8 frames is not a better plan -- it is an inadmissible one. ``rank='frames'``
+    prices the landing in the objective's own currency instead: ``freeze_f +
+    objective.thread_frames(landing)``, which is `full_herd.escape_probe`'s ``bound`` minus the
+    arrival frames (constant across variants), with the miss kept as the tie-break. It was worth
+    77.50 -> **75.13** of bound on the four measured arrivals.
+
+    Gated on the property, not the numbers: the frames rank's pick is the best FRAMES cost among
+    everything `fires` accepts, and the default rank is bit-identical to session 71's."""
+    from harness.tetrapush import objective as O
+    from harness.tetrapush import aim as A
+    run, hl = bed
+    thread = O.placement_thread(hl, seeds.load_placements()[0])
+
+    def cost(res):
+        lm = A.landing_miss(run, hl, thread, (res['resid_along'], res['resid_lat']))
+        return (res['freeze_f'] or 0) + O.thread_frames(lm['along'], lm['lat'], thread)
+
+    def miss(res):
+        return A.landing_miss(run, hl, thread, (res['resid_along'], res['resid_lat']))['miss']
+
+    kw = dict(flip_step=0x800, rotate_offs=AW.ROTATE_OFFS)
+    by_miss = AW.probe(run, hl, thread=thread, **kw)
+    by_frames = AW.probe(run, hl, thread=thread, rank='frames', **kw)
+    assert by_miss is not None and by_frames is not None
+    assert AW.fires(by_frames)
+    assert cost(by_frames) <= cost(by_miss) + 1e-12
+
+    # it is the best frames cost over the WHOLE compliant sweep, which is the claim
+    cs = AW.snap_csangle(run)
+    ex, ez = seeds.ENTRY_ROLL_POS
+    b_entry = AW.world_angle_s16(ex - run.link.pos_x, ez - run.link.pos_z)
+    up_herd = (hl.bearing_bam() + 0x8000) & 0xFFFF
+    ok = []
+    for flip in AW.flip_arc(hl, step=0x800):
+        for ro in AW.ROTATE_OFFS:
+            for ta in (False, True):
+                for side in (1, -1):
+                    for exb in (b_entry, up_herd):
+                        if ta and cs is None:
+                            continue
+                        r = AW.escape_atom(run, hl, turnaround_first=ta, rotate_side=side,
+                                           rotate_off=ro, flip_bearing=flip, exit_bearing=exb,
+                                           csangle=cs if cs is not None else int(run.csangle))
+                        if r is not None and AW.fires(r):
+                            ok.append(r)
+    assert ok
+    assert abs(cost(by_frames) - min(cost(r) for r in ok)) < 1e-9
+    # ...and the default rank is untouched: it is still the best compliant LANDING (session 71)
+    assert abs(miss(by_miss) - min(miss(r) for r in ok)) < 1e-12

@@ -541,7 +541,8 @@ def placement_thread(hl, placements=None):
                 max_chord_dev=dev, lat_at=lambda a: slope * a + intercept)
 
 
-def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMENT_BAND, run=None):
+def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMENT_BAND, run=None,
+               atom_kw=None):
     """Score a plan against the whole objective. ``rows`` is a list of per-frame dicts carrying
     ``sim_link``/``sim_tetra``/``sim_facing``/``speedF`` (the `FreeRun.step(record=True)` shape) or
     the ``link``/``tetra`` shape `search.rollout` emits.
@@ -551,6 +552,12 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
     (`escape_ready`): the terminal verdict is then whether the away walk actually fires from the
     plan's own endpoint, which is the s65 bar. Rows-only callers get the cheap half and should not
     quote ``terminal_ok`` as final.
+
+    ``atom_kw`` (session 72) is forwarded to that probe, and a plan built on a SWEPT atom must pass
+    it or be scored against a different escape than the one it plans: the placement is read POST-atom
+    (below), and the flip/rotate sweep moves that landing by 4.90 -> 0.33 u on real arrivals
+    (`away_walk.probe`). Omit it and the verdict is the shipped default atom's, which for a swept plan
+    is the wrong one.
 
     Returns the figures Dereck's rules ask for, plus the verdict on each. Nothing here tunes or
     ranks -- it REPORTS, so a search can prune on the pieces and a session can state where a plan
@@ -580,7 +587,8 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
             left_regime = i + 1
 
     (lx, lz), (tx, tz), facing, speedF = _pos(rows[-1])
-    term = escape_ready(run, hl) if run is not None else terminal_moving(speedF or 0.0)
+    term = (escape_ready(run, hl, **(atom_kw or {})) if run is not None
+            else terminal_moving(speedF or 0.0))
     # The plan ends at the atom's SLAM (s66): when the exact rule 3 fires, placement, thread
     # position and frame count are read POST-atom -- see the docstring and `full_herd._atom_place`.
     atom_frames = 0

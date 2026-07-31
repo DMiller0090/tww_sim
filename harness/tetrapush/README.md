@@ -1653,7 +1653,110 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
-      - [~] **THE SQUARE ARRIVING ENDPOINT EXISTS -- THE SCREEN'S AIM RESOLUTION COULD NOT SEE IT
+      - [~] **THE PLACEMENT WAS NEVER IN THE HERD'S HANDS AT ALL: THE ESCAPE ATOM'S TWO UNSWEPT
+            KNOBS MOVE TETRA FURTHER THAN A WHOLE CYCLE'S WORTH OF SEARCH DOES, AND THE WHOLE
+            FRONTIER IS CONDITIONAL ON A CAMERA ANGLE NOTHING IN THE PLAN PAYS FOR (session 72).**
+            The band's landing goes **4.90 -> 0.202 u** and the plan's end-to-end score reads **75
+            frames (timeloss +2, INSIDE the accepted budget) at pd 1.644 u**, `objective.verdict`
+            False on the placement band alone (0.644 u) -- but at the LIVE csangle the same band's
+            best is **46.3 u**, because every atom variant there locks the L. Session 71 handed over
+            two steps: probe the true escape over the whole step-1 band, and make the screen
+            two-stage. The first found the frontier was already right and the ATOM was not; the
+            second cannot be built as specified.
+            - **THE WIDE EXACT PROBE CONFIRMS s71's FRONTIER RATHER THAN MOVING IT** (the handoff's
+              step 1b). All **69** step-1 jf-7 rolls, exact escape, 13 s (not the ~10 min estimated --
+              the atom is ~0.06 s, so an exact escape over a whole band is free): the best landing is
+              **4.90 u** and the best coord distance **3.124 u**, i.e. bit-identical to the 15
+              best-PREDICTED that s71 ran. The prediction is optimistic but its TOP is right.
+            - **AND THE BOUND-RANK IS WORTH 2 FRAMES ON THE BINDING CONSTRAINT** (step 1a): ranking
+              the same 8 atom variants by `escape_probe`'s ``bound`` instead of its ``miss`` takes the
+              best from **77.50 to 75.51** (``freeze_f`` 4 against 5, landing 4.90 -> 6.78). The
+              ``freeze_f``-1 arrivals the handoff pointed at are real and useless on their own -- they
+              land 42-50 u out -- so the frames and the landing have to be priced TOGETHER, which is
+              what ``bound`` is.
+            - **THE TWO-STAGE SCREEN CANNOT WORK, BECAUSE PER-ENDPOINT SURVIVAL IS ONE ALPHABET
+              MEMBER WIDE.** Measured over both full-resolution bands (200 surviving rolls): the
+              median live endpoint has **1** surviving aim and the widest survivor window is **0.04
+              deg**. A ``[::step]`` decimation is a strict SUBSET of the full-resolution fan, so no
+              refinement stage can recover what the coarse pass missed -- and it misses most of them:
+              ``probe_step=8`` finds **21%** of jf 7's 66 live endpoints and **8%** of jf 6's 126.
+              What it drops is not tail: it loses jf 7's best bound (77.54 against **75.51**) and jf
+              6's best landing (32.13 against **19.97 u**).
+            - **THE AXIS THAT WORKS IS THE WINDOW, AND IT IS CHEAPER THAN THE STEP.** Survival is
+              razor-thin in aim but its LOCATION is not: every survivor of both bands sits within
+              **8.34 deg** of the bearing to Tetra, and both bands' best arrival on BOTH keys sits
+              inside **2 deg** of it. Per endpoint that is **20 aims** against ~31-35 for the shipped
+              screen, i.e. the complete choice is also the cheap one. Recall of ENDPOINTS still falls
+              with the width (+-2 deg holds 18% / 60%, +-8 deg holds 98% / 99% at 83 aims), and the
+              cost is NOT a general inequality -- the aim alphabet is not uniformly dense, so on the
+              human's own cycle-1 exit +-2 deg holds 62 members of 429 where a uniform fan would hold
+              40. So ``probe_half`` is a budget knob whose cost is measured per stage, gated as such.
+              A fitted lead does NOT shrink it further: the offset correlates strongly WITHIN a band
+              (r -0.87..-0.90 on jf 7) and a pooled single-feature fit still needs +-7.4 deg.
+            - **AND END TO END IT IS NOW A WIN, WHICH IT WAS NOT AT s71.** Cycle 3 off the same dumped
+              s69 cycle-2 beam, same 250-of-4622 pool, at ``probe_contact=True probe_step=1
+              probe_half=+-4 deg`` with ``land_keep`` and the swept escape: **21** roll survivors ->
+              **8** diverse (s71: 12 -> 3 identical), and the best lands **0.49 u** off the thread at
+              80 f with `aim.handoff_spec` **True** -- the first True in a real chain run -- against
+              s71's 21.46 u at 77 f and s70's best-landing 15.70 u at 80 f. 1637 s against 1116.
+            - **THE ATOM'S ``flip_bearing`` AND ``rotate_off`` WERE AT THEIR DEFAULTS, AND THEY ARE
+              THE PLACEMENT.** `away_walk.probe` swept 8 variants that decide WHEN the atom separates
+              and where LINK ends up, and left the direction its conversion frames PUSH HER at the
+              herd's own down-bearing. Those frames are the last inputs with authority over Tetra
+              (s67), so that default was the single largest unexamined term in the plan. Swept
+              (`probe(flip_step=, rotate_offs=)`, 0x400 over +-56 deg x 4 rotates, ~30 s an endpoint),
+              over all 112 unique arrivals of both bands: **51067** firing variants, and the
+              frame-capped frontier reads **75 f -> pd 1.644**, 76 -> 1.242, **77 -> 0.202**, 79 ->
+              0.079, with `aim.handoff_spec` **True** for the first time in this work. Against the
+              session's own starting frontier (4.90 u at bound 77.50) that is the whole remaining gap
+              closed except **0.644 u at the accepted budget**. The landing is PIECEWISE CONSTANT in
+              the flip bearing (plateaus 10-25 deg wide), so 0x400 resolves it and a 0x40 pass found
+              nothing between.
+            - **SWEEPING IT FORCES THE FRAMES RANK, WHICH IS NOT A PREFERENCE.** The same arrival
+              reaches 0.33 u at ``freeze_f`` 12 and 1.64 u at 4, so a landing-only rank pays 8 frames
+              for 1.3 u against an objective that allows 2 (`objective.TIMELOSS_BUDGET`).
+              ``rank='frames'`` prices the landing in the objective's currency (``freeze_f +
+              objective.thread_frames``, i.e. ``bound`` minus the constant arrival) with the miss as
+              tie-break.
+            - **AND THE FLIP HAS NO STATIC ADMISSIBLE ARC -- THE COST OF ASSUMING ONE IS MEASURED.**
+              The conversion IS `getDirectionFromAngle`'s DIR_BACKWARD negation, whose cone is 90 deg
+              wide about 180 (`reference/constants.md`'s 0x6000 row), which looks like a derived bound
+              on the flip stick. It is not: the cone is about ``travel`` AT THE CONVERSION FRAME,
+              which the ESS snap and the L frame's own chase move. The 75-frame winner sits **61 deg**
+              off the ARRIVAL's back-bearing -- outside the cone -- and lands 1.644 u where the best
+              variant inside it lands **4.112**. So `away_walk.flip_arc`'s ``half`` is a BUDGET
+              (`FLIP_SPAN`) and `fires` stays the filter.
+            - **THE END-TO-END SCORE, WHICH IS THE NUMBER TO QUOTE**
+              (`objective.replay_and_score`, log ending at the arrival so `score_plan` probes the atom
+              itself -- appending the atom's own frames instead double-counts and re-probes from a
+              separated state, reading pd 21.5): **frames 75, timeloss +2, INSIDE the accepted
+              budget**, ``terminal_ok`` **True**, ``wall_ok`` and ``regime_ok`` True, pd **1.644 u**
+              -> ``complete`` False and `objective.verdict` False on the placement band alone.
+              ``atom_kw`` now forwards the swept knobs to that probe, without which a swept plan is
+              scored against a different escape than the one it plans.
+            - **AND THE WHOLE THING RESTS ON A CAMERA ANGLE NOTHING IN THE PLAN PAYS FOR, WHICH IS
+              THE OPEN ITEM AND IS NOT NEW TO s72.** `away_walk._clone_for_atom` detaches the wired
+              camera and COMMANDS ``csangle``; `probe` uses `snap_csangle`'s value for EVERY variant,
+              including the ``turnaround_first=False`` ones that never snap. On these arrivals that
+              value is **105-111 deg** from the live csangle, and at the LIVE csangle the band's best
+              placement is **46.3 u** -- because **1024 of 1024** variants there die on ``l_ok``: the
+              arrival's EBS still faces Tetra, so Dereck's rule-1 turnaround is MANDATORY and it needs
+              the snap window (at the snap csangle 493 of the same 1024 fire). One cycle-3 roll's
+              C-stick slew delivers ~**47 deg** of the 105 (0x9ae6 -> 0x79c1 in 19 frames), and asking
+              for it CHANGES the arrival (the roll's exit ESS decodes against csangle), so the aim and
+              the camera target have to be searched jointly -- which is what `roll_candidates`' tcs
+              grid already is. Every atom number in this work since s65 carries this condition; s72 is
+              where it was measured.
+            - **jf 5 IS NOT WHERE THE FRAMES ARE** (a probe worth not repeating): the earliest band
+              arrives at **69 f** against jf 7's 71, and at +-8 deg step 1 it holds 77 live endpoints
+              of 210 whose 78 arrivals ALL fire -- but its best placement is **10.9 u** and its best
+              bound 74.33 comes with pd 57. Two frames earlier, ten units worse.
+            - Do NOT re-pay: a two-stage screen staged on ``step`` (survival is one aim wide), a flip
+              arc derived from the ARRIVAL's travel (the winner is outside it), appending the atom's
+              own frames to a log handed to `score_plan` (it probes the atom itself; the log ends at
+              the arrival), or treating an atom landing as replay-faithful without checking the
+              csangle it was computed at.
+      - [x] **THE SQUARE ARRIVING ENDPOINT EXISTS -- THE SCREEN'S AIM RESOLUTION COULD NOT SEE IT
             (session 71). In the ARRIVING band the endpoint probe finds 2 rollable endpoints of 420 at
             its shipped resolution and 66 at full resolution, and the best of those delivers Tetra to
             lateral +0.26 with Link 1.2 u off her lateral -- a predicted escape landing of 0.53 u where
@@ -1761,6 +1864,10 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               (s70), the narrow fan at a fixed step treated as a superset of the wide one (measured: jf 6
               gives 20 rollable wide against 10 narrow), or the assumption that a band reading 0 rollable
               is dead -- at this stage that is a statement about the screen.
+              **Session 72 answered both handoff steps: the wide exact probe confirms this frontier
+              rather than moving it, the two-stage screen it proposed cannot be built (survival is one
+              aim wide -- the axis is the WINDOW), and the placement was in the ESCAPE ATOM's two
+              unswept knobs all along. See the box above.**
       - [x] **THE OVERSHOOT WAS THE PROBE POOL, WHICH IS A FLATNESS PREFIX AND NOT THE GENERATION
             PREFIX IT SAID IT WAS (session 70): cycle 3's arrival went along 947.4 (+53.5 PAST the
             handoff target) -> 886.81 (7.1 SHORT), frames 75 -> 70, `plan_bound` 77.27 -> 75.03, the

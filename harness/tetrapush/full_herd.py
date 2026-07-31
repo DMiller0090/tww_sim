@@ -1039,7 +1039,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  align_keep=True, per_state=4, aim_share=True, square_keep=True,
                  square_pool=False, corridor=None, arrive_keep=False, target_along=None,
                  resid=None, tcs_landing=False, tcs_square=False, land_keep=False,
-                 probe_contact=False, verbose=False):
+                 probe_contact=False, probe_half=None, escape_flip=None, escape_rots=None,
+                 escape_rank=None, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1122,6 +1123,32 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     it to `pursuit_box`'s measured ``max_delta``, which is what makes ``probe_step=8`` cost what
     ``probe_step=24`` cost before. `roll_probe`'s ``fan_center`` holds the measurement.
 
+    ``probe_half`` (session 72) is the knob that makes the screen AFFORDABLE, and it exists because
+    session 71's proposed two-stage screen (coarse ``step`` to find live endpoints, fine ``step`` on
+    those) cannot work: per-endpoint survival is **ONE alphabet member wide** (measured over both
+    full-resolution bands -- median 1 surviving aim, widest window 0.04 deg), so a ``[::step]``
+    decimation finds ~1/step of the live endpoints however it is staged. Measured, ``probe_step=8``
+    over the ``max_delta`` fan finds **21%** of the jf-7 band's live endpoints and **8%** of jf 6's,
+    and what it drops is not tail: it loses jf 7's best escape bound (77.54 against **75.51**, i.e.
+    2.0 frames) and jf 6's best landing (32.13 against **19.97 u**).
+
+    The axis that works is the WIDTH at full resolution, because survival is razor-thin in aim but its
+    LOCATION is not -- every survivor of both bands sits within **8.34 deg** of the bearing to Tetra,
+    and the two bands' best arrivals on BOTH keys sit inside **2 deg** of it. So ``probe_half`` (BAM,
+    with ``probe_step=1``) buys the frontier for less than the shipped screen costs: measured per
+    endpoint, +-2 deg is **20 aims** and recovers both bands' best arrival, where ``max_delta`` at
+    ``step=8`` is ~31-35 aims and does not. Containment is measured, not assumed
+    (`[[search-space-contains-human]]`): the human's own two rolls sit at +0.76 and +0.63 deg from the
+    bearing to her, and ``fan_edge`` reports the furthest SURVIVING aim so a binding window shows up
+    (`roll_probe`). Recall of ENDPOINTS still falls with the width (+-2 deg holds 18% / 60%), so a
+    wider setting is the thorough one: +-8 deg is 83 aims and 98-99%.
+
+    ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) pass the escape atom's two
+    unswept knobs and its frames rank through ``escape_keep`` (`escape_probe`, `away_walk.probe`):
+    where the conversion frames PUSH her, which on four real arrivals is worth landing 4.90 -> 0.33,
+    4.99 -> 0.01 and 8.23 -> 0.00 u and the first `aim.handoff_spec` True. ~30 s per survivor at
+    ``escape_flip=0x400`` with all four rotates, so a solve opts in on the last cycle.
+
     ``tcs_landing`` / ``tcs_square`` (session 70) are the CAMERA-target cut's two calibrated keys, one
     per kind of cycle: `landing_key` on the LAST one (its exit is the handoff, so rank it by where the
     escape lands, not by a next junction it does not have) and `square_probe_key` mid-chain (a keep
@@ -1146,6 +1173,10 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     # the SCREEN's fan (s71): re-centred on the bearing to Tetra and narrowed to the recorded regime,
     # which is where every surviving roll measurably lives -- see `roll_probe`'s ``fan_center``
     pkw = (dict(fan_center='tetra', half_window=int(box['max_delta'])) if probe_contact else {})
+    if probe_half is not None:
+        # ...and NARROWED at full resolution, which is the axis a decimated ``step`` cannot buy:
+        # survival is one alphabet member wide, its location is not (see the docstring)
+        pkw['half_window'] = int(probe_half)
     # the CAMERA-target cut's key: the landing on the last cycle, the cheap probe mid-chain (s70)
     tcs_key = (landing_key(hl, th_j, resid) if tcs_landing else None)
     tcs_probe = square_probe_key(hl, box, cor_j) if tcs_square else None
@@ -1211,7 +1242,9 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
         # (`escape_probe`) -- so rank it by what the escape lands, and keep a share by that miss.
         th = O.placement_thread(hl, rows_j)
         for n in out:
-            n['escape'] = escape_probe(n['run'], n['frames'], hl, rows_j, th)
+            n['escape'] = escape_probe(n['run'], n['frames'], hl, rows_j, th,
+                                       atom_flip=escape_flip, atom_rots=escape_rots,
+                                       atom_rank=escape_rank)
         out.sort(key=lambda n: n['escape']['bound'])
         if verbose:
             fired = [n for n in out if n['escape']['fires']]
@@ -1357,7 +1390,9 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                rank='bound', last_rank='thread', budget=None, placements=None,
                corridor_keep=True, last_escape=True, per_state=4, aim_share=True,
                square_keep=True, c1_square=True, handoff=True, corridor=None,
-               last_arrive=True, last_landing=True, mid_square=False, verbose=False):
+               last_arrive=True, last_landing=True, mid_square=False, land_keep=False,
+               probe_step=24, probe_contact=False, probe_half=None, escape_flip=None,
+               escape_rots=None, escape_rank=None, verbose=False):
     """**The full-herd chain**: cycle 1 from state 2 (`cycle1_nodes`), then ``ncycles - 1``
     applications of `extend_cycle`, every cycle sweeping its OWN derived `target_cs` grid.
 
@@ -1409,6 +1444,15 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
     keep share (`square_probe_key`); it costs ~2.7 s per surviving (aim, tcs) pair, i.e. ~15 min a
     cycle, so a solve opts in. Its docstring holds the calibration, including the finding that every
     CHEAP AIM key -- the shape this was expected to take -- is measurably WORSE than the stock one.
+
+    ``probe_step`` / ``probe_contact`` / ``probe_half`` / ``land_keep`` (sessions 71-72) are the
+    endpoint SCREEN, forwarded to every cycle: where its fan points, how wide it is and at what
+    resolution, plus the landing axis it keeps on. `extend_cycle` holds the measurement -- the short
+    version is that the shipped screen (``probe_step=24``, the wide fan) misses the arriving band's
+    best arrivals entirely, and the setting that finds them is ``probe_contact=True, probe_step=1``
+    with a narrow ``probe_half``, which costs LESS per endpoint than the shipped one.
+    ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) sweep the escape atom's
+    ``flip_bearing`` and ``rotate_off`` on the last cycle's keep and rank it in frames.
 
     Returns ``dict(beams, best, bar, box, corridor)`` -- the per-cycle beams (so a stalled cycle is
     diagnosable), the best final node, the human's 2-roll rate, the pursuit box and the line in force."""
@@ -1462,6 +1506,11 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                              # squareness probe mid-chain (opt-in, ~2.7 s per surviving pair)
                              tcs_landing=(c == int(ncycles) and last_landing),
                              tcs_square=(c < int(ncycles) and mid_square),
+                             # the SCREEN (s71-s72) and the ESCAPE's atom knobs (s72), both opt-in
+                             land_keep=land_keep, probe_step=probe_step,
+                             probe_contact=probe_contact, probe_half=probe_half,
+                             escape_flip=escape_flip, escape_rots=escape_rots,
+                             escape_rank=escape_rank,
                              verbose=verbose)
         beams.append(nodes)
         if verbose and nodes:
@@ -2438,7 +2487,8 @@ def glide_probe(run, frames, hl, placements, thread, *, max_frames=5, beam=4, n_
     return best
 
 
-def escape_probe(run, frames, hl, placements, thread, atom_landing=True):
+def escape_probe(run, frames, hl, placements, thread, atom_landing=True, atom_flip=None,
+                 atom_rots=None, atom_rank=None):
     """**The LAST cycle's endpoint keep, one stage further out than `glide_probe`: what its ESCAPE
     lands, not what its glide reaches** (session 67).
 
@@ -2462,11 +2512,22 @@ def escape_probe(run, frames, hl, placements, thread, atom_landing=True):
     separate search. Measured over 8 real arrivals it improves 6, median 2.70 u and max 10.08 u of
     landing, taking this stage's best from 16.34 u off the thread to 6.25 at 77 frames.
 
+    ``atom_flip`` / ``atom_rots`` / ``atom_rank`` (session 72) hand `away_walk.probe` the two knobs it
+    was leaving at their defaults -- ``flip_bearing``, the direction the conversion frames PUSH her,
+    and ``rotate_off`` -- plus the frames-currency rank that sweeping them requires. That probe's
+    docstring holds the measurement; what it is worth HERE, on four real 71-frame arrivals of the
+    s71 full-resolution jf-7 band: the landing goes **4.90 -> 0.33**, **4.99 -> 0.01** and
+    **8.23 -> 0.00 u**, ``spec`` reads True for the first time, and under ``atom_rank='frames'`` the
+    bound goes **77.50 -> 75.13**. It costs one atom per (flip, rotate) pair, so it is opt-in: at
+    ``atom_flip=0x400`` with all four rotates that is ~544 atoms (~30 s) per endpoint against the
+    shipped 8 (~0.06 s), which is a last-cycle terminal budget, not an aim-fan one.
+
     Returns ``dict(fires, miss, pd, frames, bound, resid, freeze_f, spec)``; a non-firing endpoint
     reads ``fires=False`` with an infinite bound so it sorts last (it cannot end a plan: rule 3)."""
     from harness.tetrapush import away_walk as AW
     from harness.tetrapush import aim as A
-    res = AW.probe(run, hl, thread=(thread if atom_landing else None))
+    res = AW.probe(run, hl, thread=(thread if atom_landing else None), flip_step=atom_flip,
+                   rotate_offs=atom_rots, rank=(atom_rank or 'miss'))
     if res is None or not AW.fires(res):
         return dict(fires=False, miss=None, pd=None, frames=frames, bound=float('inf'),
                     resid=None, freeze_f=None if res is None else res['freeze_f'], spec=None)

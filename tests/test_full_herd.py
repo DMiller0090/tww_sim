@@ -1478,3 +1478,80 @@ def test_the_probe_fan_is_recentred_on_tetra_because_that_is_where_survivors_liv
     assert wide_ok and cont_ok, "no endpoint off the human's own exit rolls at all"
     # the window does not cut off anything the wide fan found: every wide survivor's aim is inside it
     assert edge < narrow
+
+
+def test_the_screens_axis_is_the_window_not_the_step_because_survival_is_one_aim_wide(env, hl, box):
+    """**Session 71 handed over a two-stage screen -- coarse ``step`` to find live endpoints, fine
+    ``step`` on those -- and it cannot work, because per-endpoint survival is ONE alphabet member
+    wide** (session 72).
+
+    Measured over both full-resolution bands of a real cycle-2 exit (200 surviving rolls): the median
+    endpoint has **1** surviving aim and the widest survivor window is **0.04 deg**. A ``[::step]``
+    decimation therefore finds ~1/step of the live endpoints however it is staged -- ``probe_step=8``
+    over the `pursuit_box` fan finds **21%** of the jf-7 band's 66 live endpoints and **8%** of jf 6's
+    126 -- and what it drops is not tail: it loses jf 7's best escape bound (77.54 against **75.51**)
+    and jf 6's best landing (32.13 against **19.97 u**).
+
+    The axis that does work is the WIDTH at full resolution, because survival is razor-thin in aim but
+    its LOCATION is not: every survivor of both bands sits within **8.34 deg** of the bearing to
+    Tetra, and both bands' best arrival on BOTH keys sits inside **2 deg** of it. On those band
+    endpoints the narrow full-resolution screen is also the CHEAPER one -- +-2 deg holds 20 aims
+    against ~31-35 for ``max_delta`` at ``step=8``.
+
+    That cost comparison is per-state, not a general inequality, and this gate pins why: the aim
+    alphabet is NOT uniformly dense in angle (measured on the human's own cycle-1 exit, +-2 deg holds
+    62 members of 429 where a uniform fan would hold ~40, so there the narrow step-1 screen costs
+    MORE than the decimated wide one). Which is affordable is therefore a measurement per stage, and
+    ``probe_half`` is a budget knob rather than a default.
+
+    Gated on the structural fact that makes the CONCLUSION follow (the band counts need a
+    4622-endpoint pool a unit test should not rebuild): a decimated fan is a strict SUBSET of the
+    full-resolution one over the same window, so no refinement stage can recover what the coarse pass
+    missed -- which is exactly what a two-stage screen would have to do."""
+    from harness.tetrapush import two_roll as T
+    from harness.tetrapush import aim as A
+    rows = seeds.load_placements()[0]
+    cor = A.handoff_corridor(env, hl, O.placement_thread(hl, rows), rows=rows)
+    dtm = seeds.dtm_input_at(env)
+    base = seeds.make_freerun(env)
+    base.pre_seed_input(dtm(0))
+    for k in range(1, 21):
+        base.step(dtm(k))
+    run = base
+    centre = F._bearing((run.link.pos_x, run.link.pos_z), (run.tx, run.tz))
+    narrow = int(box['max_delta'])
+
+    # (1) decimation is a strict subset: a coarse pass cannot find what the fine pass would
+    fine = T.roll_facing_fan(run, centre, narrow, 1)
+    for step in (8, 24):
+        coarse = T.roll_facing_fan(run, centre, narrow, step)
+        assert set(coarse).issubset(set(fine))
+        assert 0 < len(coarse) < len(fine)
+    # ...and it thins by exactly the step, which is why its endpoint recall is ~1/step
+    assert len(T.roll_facing_fan(run, centre, narrow, 8)) == -(-len(fine) // 8)
+
+    # (2) the window is a BUDGET whose cost is per-state: the alphabet is not uniformly dense, so
+    # here +-2 deg holds MORE members than a uniform fan would (see the docstring)
+    deg = 65536.0 / 360.0
+    tight = T.roll_facing_fan(run, centre, int(round(2.0 * deg)), 1)
+    assert len(tight) > len(fine) * 2.0 / (narrow / deg)          # denser than uniform, measured
+    # ...and the measured survivor extremum (8.34 deg) is inside the regime the box already gates,
+    # so the narrowing is a budget choice within a derived bound, not a new bound
+    assert 8.34 * deg < narrow
+
+    # (3) the knob reaches the probe: `extend_cycle(probe_half=)` sets `roll_probe`'s half-window,
+    # which reports itself (``fan_half``) so a binding window is visible rather than assumed away
+    ends = F._dedup_endpoints(F.junction_beam(dict(run=run, log=[dtm(k) for k in range(21)],
+                                                  frames=20),
+                                             hl, box, max_frames=8, beam=16, ess_step=2,
+                                             aim_step=32, keep=10 ** 6, corridor=cor))[:40]
+    got = None
+    for e in ends:
+        p = F.roll_probe(e, hl, step=1, corridor=cor, fan_center='tetra',
+                         half_window=int(round(4.0 * deg)))
+        if p is not None:
+            got = p
+            break
+    assert got is not None, "no endpoint off the human's own exit rolls inside +-4 deg"
+    assert got['fan_half'] == int(round(4.0 * deg))
+    assert got['fan_edge'] <= got['fan_half']

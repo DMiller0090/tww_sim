@@ -74,6 +74,17 @@ DIP_BUDGET = 3
 _SNAP_MIN_TURN = 0x4000
 _SNAP_KEEP_SPEED = -24.5
 
+#: The conversion's DIR_BACKWARD cone, 90 deg wide about 180 (`reference/constants.md`'s 0x6000 row).
+#: NOT a bound on the flip bearing -- see `flip_arc`.
+DIR_BACKWARD_CONE = 0x8000 - 0x6000
+
+#: The flip sweep's default half-width about the herd down-bearing -- a BUDGET, see `flip_arc`.
+FLIP_SPAN = 0x2800
+
+#: The rotate offsets on the 0x1000 grid that keep the slam's want-angle step under the genuine-flip
+#: gate (0x6000, `_check_next_mode`'s procSlip branch); 0x4000 is the recipe's own.
+ROTATE_OFFS = (0x3000, 0x4000, 0x5000, 0x6000)
+
 
 def _s16(v):
     v = int(v) & 0xFFFF
@@ -239,7 +250,31 @@ def fires(res):
                 and res['rec17_f'] is not None)
 
 
-def probe(run0, hl, *, max_frames=18, thread=None):
+def flip_arc(hl, *, step=0x400, half=FLIP_SPAN, center=None):
+    """The flip bearings a swept probe tries: ``center +- half`` thinned by ``step``, with the herd's
+    own down-bearing (the shipped default, `escape_atom`'s ``flip_bearing=None``) always included so
+    a swept probe can never rank worse than the unswept one. Sorted by distance from that default, so
+    a truncated sweep degrades toward it rather than to an arbitrary member.
+
+    ``half`` is a BUDGET, not a bound, and session 72 measured the cost of mistaking it for one. The
+    branch that gates the conversion is `getDirectionFromAngle`'s DIR_BACKWARD cone -- 90 deg wide
+    about 180, `DIR_BACKWARD_CONE`, the constant `knowledge/reference/constants.md` already names --
+    which looks like a derived arc about ``travel + 0x8000``. It is not: the cone is about ``travel``
+    AT THE CONVERSION FRAME, which the optional ESS snap and the L frame's own travel chase move. On a
+    real 71-frame arrival the variant that lands **1.644 u** at the accepted 75-frame budget sits
+    **61 deg** off the ARRIVAL's back-bearing -- outside the cone -- where the best variant inside it
+    lands 4.112. So `FLIP_SPAN` is simply wide enough for every firing variant s72 measured (winners
+    out to +-56 deg), a caller that cares can widen to the full circle (``half=0x8000``), and `fires`
+    stays the filter."""
+    down = hl.bearing_bam()
+    cen = down if center is None else (int(center) & 0xFFFF)
+    out = {down}
+    for d in range(-int(half), int(half) + 1, int(step)):
+        out.add((cen + d) & 0xFFFF)
+    return sorted(out, key=lambda b: abs(_s16(b - down)))
+
+
+def probe(run0, hl, *, max_frames=18, thread=None, flip_step=None, rotate_offs=None, rank='miss'):
     """Sweep the atom's knobs from a terminal state and return the best variant.
 
     Rank: L-cone compliance first (Dereck's rule -- a locking variant is wrong tech however fast),
@@ -264,35 +299,72 @@ def probe(run0, hl, *, max_frames=18, thread=None):
     The acceptance is unchanged and comes FIRST: ``l_ok``, the follow shell, separation, Dereck's
     ``DIP_BUDGET`` and receding-at-the-cap are all hard terms ahead of the landing, so this only
     reorders variants that `fires` already accepts. Below the bar the order is the stock one, and
-    without ``thread`` the key is bit-identical to the session-65 rank."""
+    without ``thread`` the key is bit-identical to the session-65 rank.
+
+    ``flip_step``/``rotate_offs`` (session 72) sweep the two knobs this probe was leaving at their
+    defaults, and they are the two that STEER the placement rather than merely time it. The
+    conversion frames are the last inputs with authority over Tetra (s67) and ``flip_bearing`` IS the
+    direction that push points -- yet it sat at the herd's own down-bearing while ``rotate_off`` sat
+    at 0x4000, so the 8 variants swept everything about the atom EXCEPT where it pushes her. Measured
+    on four real 71-frame arrivals of the s71 full-resolution jf-7 band, off the shipped default:
+    landing **4.90 -> 0.33**, **4.99 -> 0.01**, **8.23 -> 0.00** and 7.01 -> 4.09 u, the first
+    `aim.handoff_spec` True this work has produced (it needs the landing inside
+    `objective.PLACEMENT_BAND` 1.0), and separately a 2-frame gain on the escape's own bound
+    (77.50 -> 75.13). ``flip_step`` thins `flip_arc`, the DIR_BACKWARD arc derived per state; the
+    landing is PIECEWISE CONSTANT in the flip bearing (plateaus 10-25 deg wide), so 0x400 resolves
+    every plateau -- a 0x40 pass over the same span found nothing between them. Default None keeps
+    the shipped single default, so an unswept call is bit-identical.
+
+    ``rank='frames'`` is what the flip sweep MAKES necessary, and it is not a preference: the sweep
+    buys landing WITH frames (the same arrival reaches 0.33 u at ``freeze_f`` 12 and 1.64 u at 4), so
+    a landing-only rank spends 8 frames on 1.3 u against an objective that allows 2 over the floor
+    (`objective.frame_floor`). The frames key is the landing in the objective's OWN currency --
+    ``freeze_f + objective.thread_frames(landing)``, i.e. `full_herd.escape_probe`'s ``bound`` minus
+    the arrival frames, which are constant across variants -- with the miss kept as the tie-break.
+    Measured on the same four arrivals it is worth 2.4 frames of bound (77.50 -> 75.13) where the
+    miss rank reads 83.06. Default ``'miss'`` so the s71 key is bit-identical."""
     ex, ez = seeds.ENTRY_ROLL_POS
     b_entry = world_angle_s16(ex - run0.link.pos_x, ez - run0.link.pos_z)
     up_herd = (hl.bearing_bam() + 0x8000) & 0xFFFF
     # The snap window depends only on the start state -- sweep it once for all knob variants.
     cs = snap_csangle(run0)
+    flips = [None] if flip_step is None else flip_arc(hl, step=int(flip_step))
+    rots = ROTATE_OFFS[1:2] if rotate_offs is None else tuple(rotate_offs)
     best = None
-    for ta in (False, True):
-        for side in (1, -1):
-            for exit_b in (b_entry, up_herd):
-                if ta and cs is None:
-                    continue
-                r = escape_atom(run0, hl, turnaround_first=ta, rotate_side=side,
-                                exit_bearing=exit_b,
-                                csangle=cs if cs is not None else int(run0.csangle),
-                                max_frames=max_frames)
-                if r is None:
-                    continue
-                key = (not r['l_ok'], r['followed'], r['freeze_f'] is None, len(r['dips']),
-                       r['rec17_f'] if r['rec17_f'] is not None else 99,
-                       r['d_e_end'] if r['d_e_end'] is not None else 1e9)
-                if thread is not None:
-                    from harness.tetrapush import aim as A
-                    # the acceptance stays ahead of the landing; only ACCEPTED variants reorder
-                    lm = A.landing_miss(run0, hl, thread, (r['resid_along'], r['resid_lat']))
-                    key = (not fires(r),) + (lm['miss'],) + key
-                r['knobs'] = dict(turnaround_first=ta, rotate_side=side, exit_bearing=exit_b)
-                if best is None or key < best[0]:
-                    best = (key, r)
+    for flip in flips:
+        for ro in rots:
+            for ta in (False, True):
+                for side in (1, -1):
+                    for exit_b in (b_entry, up_herd):
+                        if ta and cs is None:
+                            continue
+                        r = escape_atom(run0, hl, turnaround_first=ta, rotate_side=side,
+                                        rotate_off=ro, flip_bearing=flip, exit_bearing=exit_b,
+                                        csangle=cs if cs is not None else int(run0.csangle),
+                                        max_frames=max_frames)
+                        if r is None:
+                            continue
+                        key = (not r['l_ok'], r['followed'], r['freeze_f'] is None, len(r['dips']),
+                               r['rec17_f'] if r['rec17_f'] is not None else 99,
+                               r['d_e_end'] if r['d_e_end'] is not None else 1e9)
+                        if thread is not None:
+                            from harness.tetrapush import aim as A
+                            from harness.tetrapush import objective as O
+                            # the acceptance stays ahead of the landing; only ACCEPTED variants move
+                            lm = A.landing_miss(run0, hl, thread,
+                                                (r['resid_along'], r['resid_lat']))
+                            if rank == 'frames':
+                                # the landing priced in the objective's own currency, plus what the
+                                # separation itself costs -- the trade the flip sweep creates
+                                cost = ((r['freeze_f'] or 0)
+                                        + O.thread_frames(lm['along'], lm['lat'], thread))
+                                key = (not fires(r), cost, lm['miss']) + key
+                            else:
+                                key = (not fires(r),) + (lm['miss'],) + key
+                        r['knobs'] = dict(turnaround_first=ta, rotate_side=side,
+                                          exit_bearing=exit_b, rotate_off=ro, flip_bearing=flip)
+                        if best is None or key < best[0]:
+                            best = (key, r)
     return best[1] if best else None
 
 
