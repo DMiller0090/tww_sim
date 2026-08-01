@@ -1704,25 +1704,32 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               coords. Each configuration's own band is 0 to 5e-5 wide and sits offset **on the
               positive side**, so a search centred on resid 0 aims between them. That is why the
               stride-2 pass could report **1018** near-zero candidates and zero clips.
-            - **THE PASS.** 18161 candidates (stride 2, 7 base nodes) x 243 configurations, 595 s:
-              1018 near-zero, 0 genuine. Re-run against the 6 qualified configurations the same
-              candidates cost **2 s instead of 269**. So the eval is no longer the budget -- the FAN
-              is, at ~3.5k `FreeRun` steps/s, and that is the next lever.
+            - **THE PASSES.** 18161 candidates (stride 2, 7 base nodes) x 243 configurations, 595 s:
+              1018 near-zero, 0 genuine. Then the widest: **43596 candidates** (stride 1, 7 bases,
+              jmax 12) x the 6 qualified configurations -- fan **1444 s**, eval **11 s**, **72
+              near-zero, 0 genuine**, best gap 2.21e-4. Base nodes past n0=6 add nothing and stride 1
+              saturates. 72 near-zero over 262k evaluations against a ~1e-5..5e-5 band is an expected
+              **~0.2 hits**, so a confident hit wants **~50x more candidates** -- which is ~20 h of
+              Python fan and minutes of `CourtyardFleet.run_par`. The eval is no longer the budget;
+              the FAN is, at ~3.5k `FreeRun` steps/s. Fan cached at
+              `_generated/s80/fan_s1_j12_b7.json`.
             - **Gates** (+11 in `tests/test_entry_search.py`, 26 fast + 2 slow): the nine-table
               fidelity diff, the post-entry-frame convention (and the pre-entry mismatch), the
               bit-exact entry/lean conversions, the armed-latch clearance, the analytic schedule
               0-ULP over facing x lean x thrust, the 81-vs-11 alphabet with every sampled aim fired
               and read back, thrust independence, the per-configuration band, the leverage census,
               the walk fan's two prunes, and the signed-gap rank.
-            - **NEXT.** The fan is the only remaining lever and it is Python-step-bound. Grow it
-              (stride 1, more base frames, then TWO-SEGMENT holds) and, when that runs out, move the
-              fan onto the native fleet -- the eval side already has 40x of headroom. Then the one
-              link the fan still does not exercise: `confirm_entry` replays a hit's own plan with a
-              REAL A-press on the courtyard engine and checks the predicted entry/facing/lean
-              bit-for-bit. It already caught an INPUT_DELAY bookkeeping error in the plan attribution
-              (the fan's j-step endpoint is not the endpoint of a j-frame plan), which is fixed for
-              the entry values but means **a hit's `plan` must be re-derived through `confirm_entry`
-              before it is delivered.**
+            - **NEXT: move the FAN onto the native fleet.** Stride and base frames are exhausted, so
+              the 50x wants `CourtyardFleet.run_par` (1M steps/s vs 3.5k) and then TWO-SEGMENT holds;
+              gate it 0-ULP against the cached Python fan first. And every hit owes `confirm_entry`,
+              which replays a hit's own plan with a REAL A-press on the courtyard engine and checks
+              the predicted entry/facing/lean bit-for-bit. It has already earned its keep twice: it
+              caught an INPUT_DELAY off-by-one in the fan's plan labels (now fixed and gated -- the
+              endpoint after j+1 steps is what a j-frame plan rolls from), and it found that
+              `roll_entry` assumes an entry frame that does not BRAKE. When the aim swings far from
+              travel, MOVE decelerates before the roll dispatches and nspeed lands at 18.99 instead
+              of 26 -- about one candidate-aim pair in eight. Whenever it does roll, the walk
+              endpoint, facing and lean are exactly as labelled.
       - [x] **THE s45 FORK IS SETTLED BY MEASUREMENT AND ROUTE (A) IS DEAD: STANDING EXACTLY ON THE
             TABULATED ENTRY DOES NOT CLIP THE CONSOLE'S OWN TETRA, BECAUSE HER 0.4321 u MISS ON COORD
             274 IS 0.4314 u *PERPENDICULAR* TO THE COORD THREAD. ROUTE (B) IS ALIVE AND MEASURED: WITH
