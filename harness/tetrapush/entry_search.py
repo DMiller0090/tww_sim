@@ -86,6 +86,18 @@ reseed forces it off, and it does contact the wall mid-roll, but the bonk cone n
 the B edge fires (0 of 246 entry x facing rolls differ), so `ShoveCtx` having no crash branch is
 exact here; and the reseed's 9 baked tables are bit-identical to a real A-press roll out of a walk.
 
+WHAT SESSION 82 CHANGED: the roll's MOMENTUM is a configuration axis too, and it is a CLOSED one.
+`fast_schedule` baked the walk cap's own roll momentum (26), so the fan pruned every sub-cap endpoint.
+That prune was an assumption, and it is now generalized -- `roll_nspeed` threads the real
+`clamp(1.5 * speedF + 0.5, 5, 26)` through the schedule, the entry step and the band key, gated
+bit-exact against a real sub-cap A-press roll. It bought nothing: 2 of 181 momenta between 17 and 26
+are productive and both sit at the cap, the rest are barren along their whole locus (`locus_scan`) at
+every facing in the circle, and an uncapped pass returns the same near-misses as a capped one gap for
+gap. The reason is geometric -- a shorter roll never reaches the wall brace that pins `old`, or
+reaches it with Tetra already out of Co range on the cut frame (zero push, no leverage from any entry).
+The lever that IS still priced nonzero is the camera: 32 BAM of productive facings against four
+reachable aims.
+
     python -m harness.tetrapush.entry_search verdict   # the fork measurement (A is dead)
     python -m harness.tetrapush.entry_search window    # the acceptance window off the 288 coords
     python -m harness.tetrapush.entry_search locus     # map the genuine entries (slow; writes json)
@@ -132,8 +144,8 @@ TAB_FACING = SD.ENTRY_ROLL_FACING
 #: The escape atom's neutral C-stick freezes the camera here (console-confirmed), so this is the
 #: csangle every roll facing is measured against.
 CSANGLE = 34325
-#: The roll's constant momentum out of the speedF-17 walk cap: clamp(17*1.5 + 0.5, 5, 26) == 26.
-ROLL_NSPEED = 26.0
+#: The walk cap the escape's held stick sits at, and what the fan used to REQUIRE of a candidate.
+WALK_CAP = 17.0
 #: Facings worth aiming at: the seam gap's angular window, widened enough to hold the whole alphabet.
 AIM_WINDOW = (40400, 41300)
 #: Thrust steps that still dispatch a CUT out of this roll schedule -- each bakes its own locus.
@@ -145,6 +157,38 @@ _CHAIN_CACHE = {}
 _CTX_CACHE = {}
 _CTX_CACHE_MAX = 8
 _M37 = None
+
+
+def roll_nspeed(speedF):
+    """`_roll_init`'s clamp, exactly: the roll's WHOLE momentum, set once from the pre-roll speedF as
+    ``clamp(speedF * 1.5 + 0.5, 5, 26)`` (`tww_sim/land/procs/roll.py`), read off `LandState`'s own
+    constants rather than restated here.
+
+    Session 81 measured the fan's ``speedF == 17.0`` prune as a `fast_schedule` ASSUMPTION, not a
+    physical one: a sub-cap walk rolls too, just slower, and the schedule's `dx`/`dz` scale with the
+    momentum while the cut lunge (a constant root translate) does not. So every distinct walk speed
+    bakes its own schedule and its own locus -- 4146 of them across one full-resolution fan.
+
+    Session 82 then PRICED that axis at zero on this corner: 2 of 181 momenta between 17 and 26 admit
+    anything genuine and both sit at the cap, every other one is barren along its whole locus at every
+    facing in the circle, and an uncapped pass finds the same near-misses as a capped one gap for gap
+    (`locus_scan`, `knowledge/history/entry-search-s81-momentum-lever.md`). The generalization stays
+    because it is what CLOSED the axis -- but do not reopen it here expecting draws."""
+    v = f32(f32(speedF * LandState.ROLL_SPD) + LandState.ROLL_ADD)
+    if v < LandState.ROLL_MIN:
+        return f32(LandState.ROLL_MIN)
+    cap = f32(LandState.ROLL_ADD + f32(LandState.MAX_NSPEED * LandState.ROLL_SPD))
+    return cap if v > cap else v
+
+
+#: The roll momentum off the walk cap -- DERIVED from the law above, not asserted: it is 26.0.
+ROLL_NSPEED = roll_nspeed(WALK_CAP)
+
+
+def candidate_nspeed(key):
+    """The momentum a fan candidate's roll carries. A CAPPED fan's 3-tuple key is at the walk cap by
+    construction; an uncapped one carries the endpoint's own speedF as a fourth element."""
+    return roll_nspeed(key[3]) if len(key) > 3 else ROLL_NSPEED
 
 
 def _cut_root_translate():
@@ -186,11 +230,13 @@ def resid_fn(sch):
     return resid
 
 
-def build_at(entry=TAB_ENTRY, facing=TAB_FACING, m351c=0, thrust=TA.THRUST):
-    """(ctx, sch, resid) for one (facing, m351C, thrust). The ctx is valid for ANY entry POSITION --
-    the baked schedule is position-independent (gated: `test_schedule_is_entry_position_invariant`),
-    and `sweep_par` takes link_x0/link_z0 per sample -- but NOT for another facing or m351C."""
-    ctx, sch = TA.build_ctx_at(entry, facing, m351c, TA.GROUND_Y, thrust)
+def build_at(entry=TAB_ENTRY, facing=TAB_FACING, m351c=0, thrust=TA.THRUST, nspeed=None):
+    """(ctx, sch, resid) for one (facing, m351C, thrust, nspeed), SIMULATED -- the reference
+    `fast_schedule` is gated against. The ctx is valid for ANY entry POSITION -- the baked schedule is
+    position-independent (gated: `test_schedule_is_entry_position_invariant`), and `sweep_par` takes
+    link_x0/link_z0 per sample -- but NOT for another facing, m351C, or momentum."""
+    ctx, sch = TA.build_ctx_at(entry, facing, m351c, TA.GROUND_Y, thrust,
+                               nspeed=(ROLL_NSPEED if nspeed is None else nspeed))
     return ctx, sch, resid_fn(sch)
 
 
@@ -204,15 +250,15 @@ def lean_at_roll(m351c):
     return 0 if sv == 0 else ((int(m351c) & 0xFFFF) - sv) & 0xFFFF
 
 
-def roll_entry(walk_pos, facing):
+def roll_entry(walk_pos, facing, nspeed=None):
     """Link's ROLL ENTRY from a walk endpoint: the entry frame moves him one full roll step before
     the schedule's step 0 (which IS the roll's second frame). `_roll_init` takes nspeed from the walk
-    cap -- clamp(17*1.5 + 0.5) == 26 exactly -- and snaps travel to the commanded facing, so the step
-    is `fadds(p, fmuls(26, sin/cos(facing)))`, bit-exact (gated `test_the_roll_entry_is_the_walk_
-    endpoint_plus_one_roll_step`).
+    speedF -- `roll_nspeed`, which is 26 exactly at the cap -- and snaps travel to the commanded
+    facing, so the step is `fadds(p, fmuls(nspeed, sin/cos(facing)))`, bit-exact (gated
+    `test_the_roll_entry_is_the_walk_endpoint_plus_one_roll_step`, at the cap and below it).
 
-    This is the correction that matters most to a search: the aim MOVES the entry 26 u, so each aim
-    contributes its own entry as well as its own locus.
+    This is the correction that matters most to a search: the aim MOVES the entry one whole roll step
+    (26 u at the cap), so each aim contributes its own entry as well as its own locus.
 
     ASSUMES THE ENTRY FRAME DOES NOT BRAKE, which is not always true. `_roll_init` reads the speedF
     that same frame computed, and MOVE runs first: when the aim swings far enough from travel the walk
@@ -221,25 +267,32 @@ def roll_entry(walk_pos, facing):
     plans do not roll at all. So a swept hit is a PREDICTION until `confirm_entry` reproduces it with
     a real A-press -- which is exactly what that function is for."""
     facing = int(facing) & 0xFFFF
-    return (fadds(walk_pos[0], fmuls(ROLL_NSPEED, ML.cM_ssin_s16(facing))),
-            fadds(walk_pos[1], fmuls(ROLL_NSPEED, ML.cM_scos_s16(facing))))
+    v = ROLL_NSPEED if nspeed is None else nspeed
+    return (fadds(walk_pos[0], fmuls(v, ML.cM_ssin_s16(facing))),
+            fadds(walk_pos[1], fmuls(v, ML.cM_scos_s16(facing))))
 
 
-def fast_schedule(facing, m351c, thrust=TA.THRUST, entry=TAB_ENTRY, link_y=TA.GROUND_Y):
+def fast_schedule(facing, m351c, thrust=TA.THRUST, entry=TAB_ENTRY, link_y=TA.GROUND_Y,
+                  nspeed=None):
     """`turnaround.extract_schedule_at` WITHOUT the simulation -- 0-ULP identical, ~110x cheaper
     (gated `test_the_analytic_schedule_is_the_simulated_one`).
 
     A ctx build was 22 ms and all of it was a 17-frame Python coupled roll run to read back numbers
     that never depended on the world; that cost, not the size of the aim alphabet, is what bounds the
-    search. The schedule is a pure function of (facing, m351C, thrust): speedF is the constant 26.0
-    and travel == facing on every frame including the cut entry, `roll_frame` is the f32 accumulation
-    of ROLL_RATE, `_draw_lean` is m351C >> 1 with m351C decaying 35% per frame, the Co chain is a
-    direct `roll_co_chain_consts` on those three, the cut lunge is the constant joint-0 root translate
-    at CUT_START rotated by the facing, and the cut lands `thrust + 2`."""
+    search. The schedule is a pure function of (facing, m351C, thrust, nspeed): speedF is the roll's
+    CONSTANT momentum and travel == facing on every frame including the cut entry, `roll_frame` is the
+    f32 accumulation of ROLL_RATE, `_draw_lean` is m351C >> 1 with m351C decaying 35% per frame, the Co
+    chain is a direct `roll_co_chain_consts` on those three, the cut lunge is the constant joint-0 root
+    translate at CUT_START rotated by the facing, and the cut lands `thrust + 2`.
+
+    ``nspeed`` defaults to the walk cap's 26.0. It is the axis session 82 opened: it scales `dx`/`dz`
+    and NOTHING else (the cut lunge is a root translate, the pose chain is frame- and lean-driven), so
+    a sub-cap roll is a different locus rather than a worse one."""
     facing = int(facing) & 0xFFFF
     cut_step = int(thrust) + 2
-    dxv = fmuls(ROLL_NSPEED, ML.cM_ssin_s16(facing))
-    dzv = fmuls(ROLL_NSPEED, ML.cM_scos_s16(facing))
+    v = ROLL_NSPEED if nspeed is None else nspeed
+    dxv = fmuls(v, ML.cM_ssin_s16(facing))
+    dzv = fmuls(v, ML.cM_scos_s16(facing))
     m37 = _cut_root_translate()
     s_, c_ = ML.cM_ssin_s16(facing), ML.cM_scos_s16(facing)
     cx = f32(f32(m37[2] * s_) + f32(m37[0] * c_))
@@ -269,17 +322,21 @@ def fast_schedule(facing, m351c, thrust=TA.THRUST, entry=TAB_ENTRY, link_y=TA.GR
 
 
 def build_fast(facing=TAB_FACING, m351c=0, thrust=TA.THRUST, entry=TAB_ENTRY, margin=140.0,
-               cache=False):
+               cache=False, nspeed=None):
     """(ctx, sch, resid) off `fast_schedule` -- the search's ctx factory.
 
     ``cache`` keeps the LAST few builds, which is what a Newton solve wants: `zero_the_resid` asks
     for the SAME (facing, m351C, thrust) once per iteration, and a ShoveCtx copies the whole
-    collision mesh, so the cache is deliberately tiny (`_CTX_CACHE_MAX`) rather than unbounded."""
+    collision mesh, so the cache is deliberately tiny (`_CTX_CACHE_MAX`) rather than unbounded.
+
+    A search that varies lean or momentum wants `CtxPool` instead: this compiles the world every
+    call (1.5 ms) for a schedule that costs microseconds."""
     from tww_sim.core._shovec import ShoveCtx
-    key = (int(facing) & 0xFFFF, int(m351c) & 0xFFFF, int(thrust), entry, margin)
+    key = (int(facing) & 0xFFFF, int(m351c) & 0xFFFF, int(thrust), entry, margin,
+           ROLL_NSPEED if nspeed is None else nspeed)
     if cache and key in _CTX_CACHE:
         return _CTX_CACHE[key]
-    sch = fast_schedule(facing, m351c, thrust, entry)
+    sch = fast_schedule(facing, m351c, thrust, entry, nspeed=nspeed)
     sh = push_shares(WEIGHT_LINK, WEIGHT_TETRA_V5)
     ctx = ShoveCtx(TA.WALLS, GT.TRIS, GT.wA.pla, GT.wB.pla, GT.LINK_Y,
                    ML._SIN_TABLE, ML._COS_TABLE, ML._ATN_TABLE,
@@ -296,6 +353,41 @@ def build_fast(facing=TAB_FACING, m351c=0, thrust=TA.THRUST, entry=TAB_ENTRY, ma
             _CTX_CACHE.clear()
         _CTX_CACHE[key] = out
     return out
+
+
+class CtxPool:
+    """ONE compiled `ShoveCtx` per (facing, thrust), re-scheduled per (m351C, nspeed).
+
+    Everything expensive in a ctx is the world -- the culled mesh, its planes, and the precomputed
+    WallCorrect slices -- and none of it depends on the roll. `build_fast` pays that 1.5 ms every
+    call, which was affordable while the search's only per-group axis was the lean (~2000 groups) and
+    is not once the momentum joins the key: a full-resolution uncapped pass groups by (lean, nspeed)
+    and would spend hours recompiling one unchanging courtyard.
+
+    `ShoveCtx.set_link_schedule` swaps just Link's baked schedule, and a re-scheduled ctx sweeps
+    IDENTICALLY to one built at that configuration -- gated, not assumed
+    (`test_a_re_scheduled_ctx_is_a_freshly_built_one`)."""
+
+    def __init__(self, entry=TAB_ENTRY, margin=140.0):
+        self.entry = entry
+        self.margin = margin
+        self.pool = {}
+        self.n_built = 0
+
+    def get(self, facing, m351c, thrust=TA.THRUST, nspeed=None):
+        """(ctx, sch, resid) for a full configuration. The ctx is SHARED and re-scheduled in place,
+        so a caller must finish sweeping one configuration before asking for the next."""
+        key = (int(facing) & 0xFFFF, int(thrust))
+        ctx = self.pool.get(key)
+        if ctx is None:
+            ctx, _sch, _r = build_fast(facing, m351c, thrust, self.entry, self.margin,
+                                       nspeed=nspeed)
+            self.pool[key] = ctx
+            self.n_built += 1
+        sch = fast_schedule(facing, m351c, thrust, self.entry, nspeed=nspeed)
+        ctx.set_link_schedule(sch['dx'], sch['dz'], sch['cutx'], sch['cutz'], sch['is_pose'],
+                              sch['chx'], sch['chz'], sch['nroot'], sch['cut_step'])
+        return ctx, sch, resid_fn(sch)
 
 
 def aim_alphabet(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=0.0):
@@ -315,14 +407,14 @@ def aim_alphabet(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=0.
     return sorted(out)
 
 
-def zero_the_resid(tetra, facing, thrust, lean, start, iters=40, tol=1e-6):
+def zero_the_resid(tetra, facing, thrust, lean, start, iters=40, tol=1e-6, nspeed=None):
     """Newton the entry along the residual gradient to `resid ~ 0`. Returns (entry, resid, grad).
 
     A grad that stays ~0 is the diagnostic that this configuration has NO LEVERAGE -- the pushed
     actor is out of Co range on the cut frame, so nothing about the entry moves the razor there."""
     p, g = tuple(start), None
     for _ in range(iters):
-        g = entry_gradient(tetra, p, facing=facing, m351c=lean, thrust=thrust)
+        g = entry_gradient(tetra, p, facing=facing, m351c=lean, thrust=thrust, nspeed=nspeed)
         if abs(g['resid']) < tol or g['grad'] == 0.0:
             break
         s = g['resid'] / (g['grad'] ** 2)
@@ -330,8 +422,8 @@ def zero_the_resid(tetra, facing, thrust, lean, start, iters=40, tol=1e-6):
     return p, g['resid'], g['grad']
 
 
-def configuration_band(tetra, facing, thrust, lean, ref_entry, half=0.006, n=1201):
-    """THE ACCEPTANCE BAND AT ONE (facing, thrust, lean) -- measured, not inherited.
+def configuration_band(tetra, facing, thrust, lean, ref_entry, half=0.006, n=1201, nspeed=None):
+    """THE ACCEPTANCE BAND AT ONE (facing, thrust, lean, nspeed) -- measured, not inherited.
 
     The window in `fixtures/courtyard_entry_locus_s79.json` was read off the 288 tabulated coords at
     ONE configuration (facing 40835, thrust 14). It is a UNION, not the target: a single configuration's
@@ -341,12 +433,12 @@ def configuration_band(tetra, facing, thrust, lean, ref_entry, half=0.006, n=120
 
     Some configurations have no band at all -- either no leverage (grad ~ 0) or simply nothing genuine
     anywhere along the residual zero. Both are worth knowing before spending candidates on them."""
-    p, r, grad = zero_the_resid(tetra, facing, thrust, lean, ref_entry)
+    p, r, grad = zero_the_resid(tetra, facing, thrust, lean, ref_entry, nspeed=nspeed)
     if grad < 1e-3 or abs(r) > 1e-3:
         return dict(productive=False, reason='no leverage' if grad < 1e-3 else 'resid will not zero',
                     grad=grad, resid=r, entry=list(p), lo=None, hi=None, width=0.0, n_genuine=0)
-    ctx, sch, resid = build_fast(facing, lean, thrust)
-    g = entry_gradient(tetra, p, facing=facing, m351c=lean, thrust=thrust)
+    ctx, sch, resid = build_fast(facing, lean, thrust, nspeed=nspeed)
+    g = entry_gradient(tetra, p, facing=facing, m351c=lean, thrust=thrust, nspeed=nspeed)
     ux, uz = g['gx'] / g['grad'], g['gz'] / g['grad']     # sweep ACROSS the locus, not along it
     pts = [(p[0] + (2.0 * i / (n - 1) - 1.0) * half * ux,
             p[1] + (2.0 * i / (n - 1) - 1.0) * half * uz) for i in range(n)]
@@ -358,16 +450,58 @@ def configuration_band(tetra, facing, thrust, lean, ref_entry, half=0.006, n=120
                 lo=min(ok), hi=max(ok), width=max(ok) - min(ok), n_genuine=len(ok))
 
 
+def locus_scan(tetra, facing, thrust, lean, ref_entry, nspeed=None, span=70.0, step=2.0,
+               half=0.02, n=2001):
+    """Is there genuine dust ANYWHERE on this configuration's residual zero?
+
+    `configuration_band` sweeps ACROSS the locus at ONE point, which is enough to size a band but not
+    to declare a configuration barren: the genuine set at the cap is a 104 u CURVE, so dust that has
+    slid along it reads as "no genuine on the residual zero". This marches the locus instead --
+    re-projecting onto resid 0 at every station, since the curve bends -- and sweeps across at each.
+
+    It is the strong form of the question, and it is what a NEGATIVE result has to be argued from:
+    session 82 used it to close the momentum axis (control at the cap lights 44 of 58 stations; every
+    sub-cap momentum reads 0 of ~60). Returns dict(stations, live, walkable)."""
+    ctx, sch, resid = build_fast(facing, lean, thrust, nspeed=nspeed)
+    p, r, grad = zero_the_resid(tetra, facing, thrust, lean, ref_entry, nspeed=nspeed)
+    if grad < 1e-3:
+        return dict(stations=0, live=0, walkable=0, reason='no leverage at the seed')
+    g = entry_gradient(tetra, p, facing=facing, m351c=lean, thrust=thrust, nspeed=nspeed)
+    tx_, tz_ = -g['gz'] / g['grad'], g['gx'] / g['grad']       # along the locus, not across it
+    live = walk = stations = 0
+    s = -span
+    while s <= span:
+        q = (p[0] + s * tx_, p[1] + s * tz_)
+        s += step
+        q, r2, gr2 = zero_the_resid(tetra, facing, thrust, lean, q, nspeed=nspeed)
+        if gr2 < 1e-3 or abs(r2) > 1e-3:
+            continue
+        stations += 1
+        gg = entry_gradient(tetra, q, facing=facing, m351c=lean, thrust=thrust, nspeed=nspeed)
+        ux, uz = gg['gx'] / gg['grad'], gg['gz'] / gg['grad']
+        pts = [(tetra[0], tetra[1], q[0] + (2.0 * i / (n - 1) - 1.0) * half * ux,
+                q[1] + (2.0 * i / (n - 1) - 1.0) * half * uz) for i in range(n)]
+        if any(o[0] for o in ctx.sweep_par(pts, 0)):
+            live += 1
+            walk += 1 if TA.is_walkable(q[0], q[1]) else 0
+    return dict(stations=stations, live=live, walkable=walk, reason='')
+
+
 def qualify(tetra, ref_entry, facings=None, thrusts=THRUSTS, lean=0, csangle=CSANGLE,
-            progress=False):
+            progress=False, nspeed=None):
     """Which (facing, thrust) admit a genuine entry locus at all, and where each one's band sits.
-    Spending candidates on the rest buys nothing -- it is the cheapest 4x in the search."""
+    Spending candidates on the rest buys nothing -- it is the cheapest 4x in the search.
+
+    Qualification is measured at ONE (lean, nspeed) and is only a filter for that slice: the
+    productive facing window MOVES with the momentum (session 82), so an uncapped pass must qualify
+    per nspeed or not qualify at all."""
     aims = aim_alphabet(csangle) if facings is None else [(f, None) for f in facings]
     out = []
     for i, (fac, byts) in enumerate(aims):
         for thrust in thrusts:
-            b = configuration_band(tetra, fac, thrust, lean, ref_entry)
-            b.update(facing=fac, thrust=thrust, aim=list(byts) if byts else None, lean=lean)
+            b = configuration_band(tetra, fac, thrust, lean, ref_entry, nspeed=nspeed)
+            b.update(facing=fac, thrust=thrust, aim=list(byts) if byts else None, lean=lean,
+                     nspeed=(ROLL_NSPEED if nspeed is None else nspeed))
             out.append(b)
         if progress and (i + 1) % 20 == 0:
             print("  qualified %d/%d aims: %d productive"
@@ -397,15 +531,21 @@ def evaluate(ctx, resid, tetra, entries):
 # ------------------------------------------------------------------------------------- the search
 # The lottery is countable: candidates reached x INDEPENDENT loci drawn against. See the KB page.
 
-def walk_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, progress=False):
-    """The reachable set: distinct ``(walk endpoint, m351C)`` Link can stand on with the walk cap
-    still under him, continuing the console-confirmed log.
+def walk_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, progress=False,
+             cap=WALK_CAP):
+    """The reachable set: distinct ``(walk endpoint, m351C)`` Link can stand on, continuing the
+    console-confirmed log.
 
     The atom is "hold stick S for j frames" -- a single fanned frame is INERT, because `INPUT_DELAY`
-    2 buffers it and the fan collapses to one child. Two prunes, both hard: speedF must be exactly
-    17.0 (the roll takes its whole nspeed from the walk cap) and Link must stay inside the 230 u
-    follow bar on EVERY frame, since one frame outside starts Tetra turning and she is only a
-    measured constant while she is idle."""
+    2 buffers it and the fan collapses to one child. One prune is hard: Link must stay inside the
+    230 u follow bar on EVERY frame, since one frame outside starts Tetra turning and she is only a
+    measured constant while she is idle.
+
+    ``cap`` is the OTHER one, and it is a schedule assumption rather than a physical bound (session
+    81): the fan kept only ``speedF == 17.0`` because `fast_schedule` baked the cap's own roll
+    momentum. Pass ``cap=None`` to keep every endpoint -- the key then carries the endpoint's own
+    speedF as a fourth element, because that is what picks the roll's schedule (`roll_nspeed`), and
+    two candidates standing on the same point at different speeds are different draws."""
     seed = seed or console_seed()
     env = env or SD.load_env()
     hold = dict(seed['log'][-1], buttons=0)
@@ -426,8 +566,10 @@ def walk_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, progress
                             break                      # she is moving from here on: branch is dead
                         # `INPUT_DELAY`: the endpoint after j+1 steps is the one a plan of j
                         # DELIVERED frames rolls from (measured; gated in test_entry_search)
-                        if j >= 1 and lk.speedF == 17.0:
-                            out[(lk.pos_x, lk.pos_z, lk.m351C & 0xFFFF)] = (n0, sx, sy, j)
+                        if j < 1 or (cap is not None and lk.speedF != cap):
+                            continue
+                        key = (lk.pos_x, lk.pos_z, lk.m351C & 0xFFFF)
+                        out[key if cap is not None else key + (lk.speedF,)] = (n0, sx, sy, j)
             if progress:
                 print("  fan from n0=%d: %d distinct (endpoint, lean)" % (n0, len(out)))
     return out
@@ -458,16 +600,17 @@ def search(candidates=None, facings=None, thrusts=THRUSTS, seed=None, window=Non
     if progress:
         print("  %d productive (facing, thrust) configurations" % len(quals))
 
-    by_lean = {}
+    by_roll = {}
     for k, plan in candidates.items():
-        by_lean.setdefault(lean_at_roll(k[2]), []).append((k, plan))
+        by_roll.setdefault((lean_at_roll(k[2]), candidate_nspeed(k)), []).append((k, plan))
+    pool = CtxPool()
     hits, near, t0 = [], [], time.time()
     for fi, q in enumerate(quals):
         fac, byts, thrust = q['facing'], q['aim'], q['thrust']
         window = q if q.get('lo') is not None else fallback
-        for lean, group in by_lean.items():
-            ctx, sch, resid = build_fast(fac, lean, thrust)
-            ents = [roll_entry((k[0], k[1]), fac) for k, _ in group]
+        for (lean, nsp), group in by_roll.items():
+            ctx, sch, resid = pool.get(fac, lean, thrust, nspeed=nsp)
+            ents = [roll_entry((k[0], k[1]), fac, nsp) for k, _ in group]
             rows = ctx.sweep_par([(tx, tz, e[0], e[1]) for e in ents], 0)
             for (k, plan), e, o in zip(group, ents, rows):
                 r = resid(o)
@@ -476,7 +619,7 @@ def search(candidates=None, facings=None, thrusts=THRUSTS, seed=None, window=Non
                     # no wall collision in the courtyard sim: a point behind a seam wall is unreachable
                     hits.append(dict(entry=[e[0], e[1]], walk=[k[0], k[1]], m351C_walk=k[2],
                                      m351C=lean, facing=fac, aim=list(byts) if byts else None,
-                                     thrust=thrust, b_step=thrust + 2, resid=r, gap=g,
+                                     thrust=thrust, b_step=thrust + 2, resid=r, gap=g, nspeed=nsp,
                                      push=[o[5], o[6]], plan=list(plan),
                                      walkable=bool(TA.is_walkable(k[0], k[1])
                                                    and TA.is_walkable(e[0], e[1]))))
@@ -489,7 +632,8 @@ def search(candidates=None, facings=None, thrusts=THRUSTS, seed=None, window=Non
     walkable.sort(key=lambda h: (h['plan'][0] + h['plan'][3], abs(h['resid'])))
     near.sort()
     return dict(hits=walkable, n_hits_raw=len(hits), n_candidates=len(candidates),
-                n_leans=len(by_lean), n_configurations=len(quals), n_thrusts=len(thrusts),
+                n_leans=len(set(g[0] for g in by_roll)), n_rolls=len(by_roll),
+                n_configurations=len(quals), n_thrusts=len(thrusts),
                 n_near=len(near), near=near[:keep], seconds=time.time() - t0,
                 configurations=[dict(facing=q['facing'], thrust=q['thrust'], lo=q.get('lo'),
                                      hi=q.get('hi')) for q in quals])
@@ -501,31 +645,43 @@ def confirm_entry(hit, seed=None, env=None):
     the courtyard engine, and read the roll entry back.
 
     Returns the measured entry beside the predicted one plus the bit-equality flags. Anything False
-    means the hit is scored at a point Link does not roll from -- the s79 failure, one level down."""
+    means the hit is scored at a point Link does not roll from -- the s79 failure, one level down.
+
+    A plan is ``(n0, sx, sy, j)`` or, for a two-segment hold, ``(n0, sx1, sy1, j1, sx2, sy2, j2)``:
+    the segments are read off in triples, so the same replay serves both."""
     seed = seed or console_seed()
-    n0, sx, sy, j = hit['plan']
+    plan = list(hit['plan'])
+    n0 = plan[0]
     hold = dict(seed['log'][-1], buttons=0)
-    extra = [hold] * n0 + [dict(hold, stickX=sx, stickY=sy)] * j
+    extra = [hold] * n0
+    for i in range(1, len(plan), 3):
+        sx, sy, j = plan[i:i + 3]
+        extra += [dict(hold, stickX=sx, stickY=sy)] * j
     extra.append(dict(hold, stickX=hit['aim'][0], stickY=hit['aim'][1], buttons=0x100))
     extra += [dict(hold, stickX=128, stickY=128)] * 3          # INPUT_DELAY 2, then the entry frame
     run, rows = continue_walk(extra, env=env)
     walk = next((r for r in rows if r['proc'] == FRONT_ROLL), None)
     k = rows.index(walk) if walk else None
     prev = rows[k - 1] if k else None
+    want_nsp = hit.get('nspeed', ROLL_NSPEED)
     got = dict(entry=(walk['x'], walk['z']) if walk else None,
                facing=walk['facing'] if walk else None,
                m351C=walk['m351C'] if walk else None,
                walk=(prev['x'], prev['z']) if prev else None,
                speedF=prev['speedF'] if prev else None,
+               nspeed=walk['nspeed'] if walk else None,
                procs=[r['proc'] for r in rows[-5:]])
     ok = dict(rolled=walk is not None,
               walk_matches=bool(prev) and [prev['x'], prev['z']] == hit['walk'],
-              capped=bool(prev) and prev['speedF'] == 17.0,
+              # the momentum the schedule was baked at -- the cap for a capped fan, the endpoint's
+              # own `roll_nspeed` otherwise. This is the flag that catches the entry-frame brake.
+              nspeed=bool(walk) and walk['nspeed'] == want_nsp,
               facing=bool(walk) and walk['facing'] == hit['facing'],
               lean=bool(walk) and walk['m351C'] == hit['m351C'],
               entry=bool(walk) and [walk['x'], walk['z']] == hit['entry'])
     return dict(measured=got, predicted=dict(entry=hit['entry'], facing=hit['facing'],
-                                             m351C=hit['m351C'], walk=hit['walk']),
+                                             m351C=hit['m351C'], walk=hit['walk'],
+                                             nspeed=want_nsp),
                 ok=ok, all_ok=all(ok.values()))
 
 
@@ -617,14 +773,15 @@ def locus_metrics(hits, seed=None):
                 follow_ok=sum(1 for d in dt if d <= 230.0))
 
 
-def entry_gradient(tetra, entry, *, facing=TAB_FACING, m351c=0, d=0.01, thrust=TA.THRUST):
+def entry_gradient(tetra, entry, *, facing=TAB_FACING, m351c=0, d=0.01, thrust=TA.THRUST,
+                   nspeed=None):
     """|d resid / d entry| at a point, and the entry precision it implies for a given window.
 
     Builds the ANALYTIC ctx (0-ULP identical to the simulated one -- `test_the_analytic_schedule_is_
     the_simulated_one`) and caches it: this runs once per Newton iteration inside `zero_the_resid`,
     and at the simulated 22 ms build a single `configuration_band` cost ~0.9 s, which is what made
     qualifying 243 configurations a 269 s job."""
-    ctx, sch, resid = build_fast(facing, m351c, thrust, TAB_ENTRY, cache=True)
+    ctx, sch, resid = build_fast(facing, m351c, thrust, TAB_ENTRY, cache=True, nspeed=nspeed)
     q = ctx.sweep_par([(tetra[0], tetra[1], entry[0], entry[1]),
                        (tetra[0], tetra[1], entry[0] + d, entry[1]),
                        (tetra[0], tetra[1], entry[0], entry[1] + d)], 0)
@@ -651,7 +808,7 @@ def continue_walk(extra, *, log=None, env=None):
             run.step(inp)
             lk = run.link
             rows.append(dict(n=n0 + k + 1, x=lk.pos_x, z=lk.pos_z, facing=lk.facing & 0xFFFF,
-                             proc=lk.state & 0xFF, speedF=lk.speedF,
+                             proc=lk.state & 0xFF, speedF=lk.speedF, nspeed=lk.nspeed,
                              m351C=getattr(lk, 'm351C', 0) & 0xFFFF,
                              csangle=getattr(lk, 'csangle', 0) & 0xFFFF))
     return run, rows

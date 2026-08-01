@@ -116,6 +116,7 @@ you can triage in one glance.
 - **What's still unresolved?** → [history/open-questions.md](history/open-questions.md)
 - **Why run a search's fidelity gate BEFORE the search / how did a clip search end up aimed at a roll nobody performs?** → [history/entry-search-s79-superseded.md](history/entry-search-s79-superseded.md)
 - **Why audit a search's own accounting before scaling its biggest cost / how did "the fan is the only budget" turn out to be wrong by 12x?** → [history/entry-search-s80-superseded.md](history/entry-search-s80-superseded.md)
+- **I proved a prune was my own assumption, not physics - why isn't removing it a lever? Why price an axis before promoting it?** → [history/entry-search-s81-momentum-lever.md](history/entry-search-s81-momentum-lever.md)
 
 ## Page template (for contributors)
 

@@ -230,9 +230,10 @@ def test_continuing_the_console_log_reproduces_the_measured_endpoint_bit_exactly
 # ------------------------------------------------------- the fidelity gate (session 80) and its fan
 # What makes scoring a RESEEDED roll legitimate -- and what caught s79 feeding it the wrong point.
 
-def _sample_roll(want_facing=40850, n_walk=12, force_m3570=None):
+def _sample_roll(want_facing=40850, n_walk=12, force_m3570=None, b_step=TA.B_STEP):
     """A real from-rest walk + A-press turnaround roll aimed into the seam window, arriving near the
-    usable locus. Returns `roll_fidelity.walk_then_roll`."""
+    usable locus. Returns `roll_fidelity.walk_then_roll`. A short ``n_walk`` arrives BELOW the walk
+    cap; ``b_step`` is the UP+B roll-step index, which for schedule thrust T is ``T + 2``."""
     near = min((h for h in LOCUS['hits'] if h['follow_ok']),
                key=lambda h: math.hypot(h['entry'][0] - SEED['link'][0],
                                         h['entry'][1] - SEED['link'][1]))['entry']
@@ -240,7 +241,7 @@ def _sample_roll(want_facing=40850, n_walk=12, force_m3570=None):
     _, aim = RF.stick_for_facing(want_facing, ES.CSANGLE, msd_min=0.0)
     ux, uz = ML.cM_ssin_s16(wfac), ML.cM_scos_s16(wfac)
     start = (near[0] - 17.0 * (n_walk - 4) * ux, near[1] - 17.0 * (n_walk - 4) * uz)
-    return RF.walk_then_roll(start, wb, aim, n_walk, TA.B_STEP, ES.CSANGLE,
+    return RF.walk_then_roll(start, wb, aim, n_walk, b_step, ES.CSANGLE,
                              force_m3570=force_m3570)
 
 
@@ -292,18 +293,95 @@ def test_the_armed_crash_latch_never_changes_this_roll():
     assert all(r['proc'] in (30, 66, 67) or r['k'] < ent['k'] for r in rows)   # no crash proc
 
 
+_SCH_KEYS = RF.TABLE_KEYS + ('link_x0', 'link_z0', 'link_y', 'tet_seed')
+
+
 def test_the_analytic_schedule_is_the_simulated_one():
     """`fast_schedule` drops the 17-frame coupled roll for a direct evaluation and is 0-ULP identical
     over facing x lean x thrust. That is what makes 81 x 3 loci affordable: the 22 ms ctx build, not
     the size of the alphabet, was the search's whole budget."""
-    keys = RF.TABLE_KEYS + ('link_x0', 'link_z0', 'link_y', 'tet_seed')
     for fac in (40617, 40835, 40884, 41037):
         for lean in (0, 1, 64, 65325, 65432, 65039):
             for thrust in ES.THRUSTS:
                 base = TA.extract_schedule_at(ES.TAB_ENTRY, fac, lean, TA.GROUND_Y,
                                               FS.make_inputs(thrust))
                 fast = ES.fast_schedule(fac, lean, thrust)
-                assert [k for k in keys if base[k] != fast[k]] == []
+                assert [k for k in _SCH_KEYS if base[k] != fast[k]] == []
+
+
+# ------------------------------------------------- the momentum axis (session 82): law, then value
+# Generalizing the schedule off the walk cap is one thing; what that is WORTH is another. Gated apart.
+
+def test_the_roll_momentum_is_the_walk_speed_not_the_cap():
+    """THE LAW, against a REAL A-press out of a decelerating walk. `_roll_init` sets the roll's whole
+    momentum once from the pre-roll speedF -- ``clamp(1.5 * speedF + 0.5, 5, 26)`` -- and the walk
+    ENDPOINT the fan records is the speed it reads, even though the entry frame dispatches after it.
+
+    The s80 fidelity gate only ever ran at the cap, where that clamp saturates and hides itself. Below
+    it every walk speed is its own momentum, and `roll_entry` moves Link by THAT much."""
+    seen = set()
+    for n_walk in (2, 3, 4, 5, 12):
+        rows, ent, _tab = _sample_roll(n_walk=n_walk)
+        pre = rows[ent['k'] - 1]['speedF']
+        assert _bits(ES.roll_nspeed(pre)) == _bits(ent['nspeed'])       # the clamp, bit-for-bit
+        got = ES.roll_entry((ent['walk_x'], ent['walk_z']), ent['facing'], ent['nspeed'])
+        assert _bits(got[0]) == _bits(ent['x']) and _bits(got[1]) == _bits(ent['z'])
+        seen.add(ent['nspeed'])
+    assert len(seen) == 5 and min(seen) < 6.0 and max(seen) == ES.ROLL_NSPEED
+    # and the cap-assuming entry is not a rounding error away: it is a whole roll step out
+    rows, ent, _t = _sample_roll(n_walk=2)
+    capped = ES.roll_entry((ent['walk_x'], ent['walk_z']), ent['facing'])
+    assert math.hypot(capped[0] - ent['x'], capped[1] - ent['z']) > 20.0
+
+
+def test_a_sub_cap_roll_bakes_the_schedule_the_sweep_scores():
+    """The s80 gate, re-run on the momentum axis: a REAL sub-cap A-press roll must bake the reseed's
+    nine tables, and the analytic `fast_schedule(nspeed=)` must be the simulated one. The cap-assuming
+    schedule differs in exactly `dx`/`dz` -- the momentum scales the travel and nothing else (the cut
+    lunge is a constant root translate, the pose chain is frame- and lean-driven)."""
+    for n_walk in (3, 5):
+        for thrust in ES.THRUSTS:
+            _rows, ent, real = _sample_roll(n_walk=n_walk, b_step=thrust + 2)
+            assert ent['nspeed'] < ES.ROLL_NSPEED and real['cut_step'] == thrust + 2
+            sim = TA.extract_schedule_at((ent['x'], ent['z']), ent['facing'], ent['m351C'],
+                                         TA.GROUND_Y, FS.make_inputs(thrust), nspeed=ent['nspeed'])
+            ana = ES.fast_schedule(ent['facing'], ent['m351C'], thrust, (ent['x'], ent['z']),
+                                   nspeed=ent['nspeed'])
+            assert RF.table_diff(real, sim) == []
+            assert [k for k in _SCH_KEYS if sim[k] != ana[k]] == []
+            old = ES.fast_schedule(ent['facing'], ent['m351C'], thrust, (ent['x'], ent['z']))
+            assert [k for k in _SCH_KEYS if ana[k] != old[k]] == ['dx', 'dz']
+
+
+def test_a_re_scheduled_ctx_is_a_freshly_built_one():
+    """`CtxPool` is what makes the momentum affordable at all: the world compiles once per (facing,
+    thrust) and only Link's schedule is swapped. A pooled ctx must sweep IDENTICALLY to one built at
+    that configuration -- the genuine flag, the endpoint, the push, and the residual."""
+    pool = ES.CtxPool()
+    e = _ref_entry()
+    for fac, lean, thrust, nsp in ((40820, 0, 15, 26.0), (40834, 64, 13, 22.673213958740234),
+                                   (40841, 65432, 14, 8.3131036758422852), (40820, 0, 15, 26.0)):
+        ctx, _s, resid = pool.get(fac, lean, thrust, nspeed=nsp)
+        fresh, _s2, r2 = ES.build_fast(fac, lean, thrust, nspeed=nsp)
+        a = ctx.sweep_par([(SEED['tetra'][0], SEED['tetra'][1], e[0], e[1])], 0)[0]
+        b = fresh.sweep_par([(SEED['tetra'][0], SEED['tetra'][1], e[0], e[1])], 0)[0]
+        assert a == b and _bits(resid(a)) == _bits(r2(b))
+    assert pool.n_built == 3                     # three configurations, four gets
+
+
+def test_the_uncapped_fan_is_the_capped_one_plus_its_sub_cap_endpoints():
+    """Dropping the prune is additive, and the key grows a fourth element -- the endpoint's own
+    speedF, because that is what picks the roll's schedule. Two candidates on the same point at
+    different speeds are different draws, not a duplicate."""
+    kw = dict(base_frames=(3,), stride=32, jmax=6)
+    capped = ES.walk_fan(**kw)
+    uncapped = ES.walk_fan(cap=None, **kw)
+    assert all(len(k) == 3 for k in capped) and all(len(k) == 4 for k in uncapped)
+    assert set(capped) <= set(k[:3] for k in uncapped)
+    assert len(uncapped) > len(capped)
+    assert all(k[3] == 17.0 for k in uncapped if k[:3] in capped)
+    assert len(set(ES.roll_nspeed(k[3]) for k in uncapped)) > 1
+    assert ES.candidate_nspeed(next(iter(capped))) == ES.ROLL_NSPEED
 
 
 def test_the_aim_alphabet_is_the_whole_decoded_grid_not_its_octagon_boundary():

@@ -123,11 +123,17 @@ entry frame does not: `_roll_init` runs, and the frame after it is where the ani
 So the reseeded schedule's step 0 is the real roll's *second* frame, and the entry position a compiled
 context wants is the one at the **end** of the entry frame:
 
-    entry = walk_endpoint + one roll step at the AIMED facing        (26 u on the Tetra corner)
+    entry = walk_endpoint + one roll step at the AIMED facing        (26 u at the walk cap)
 
 and the lean is likewise the post-entry-frame value (one decay tick past the walk's). This is decided
 by measurement, not convention: feeding the pre-entry values mismatches the pose-chain tables outright,
 while the post-entry values reproduce a real A-press roll bit-for-bit.
+
+That step is the roll's own momentum, `clamp(1.5 * speedF + 0.5, 5, 26)` off the **walk endpoint's**
+speed - 26 only because the cap saturates the clamp, and measured bit-for-bit against a real A-press
+out of a decelerating walk at five sub-cap momenta. A sub-cap roll bakes the same schedule with
+`dx`/`dz` scaled and nothing else. Whether those extra loci are worth searching is a separate question
+with its own answer ([clip-lottery-draws.md](clip-lottery-draws.md)); here it was no.
 
 The consequence is larger than the correction. That step is taken **along the aim**, so an aim is not
 just its own locus - it is its own candidate. Sweeping aims moves the entry and the target together.
@@ -154,13 +160,18 @@ schedule changes, so:
 
 The budget is **not** the size of the alphabet - it is the cost of compiling one context per
 `(facing, lean, thrust)`. Simulating that roll to read its schedule back is the expensive part (22 ms
-here) and it is unnecessary: the schedule is a pure function of those three parameters. Speed is the
+here) and it is unnecessary: the schedule is a pure function of those parameters. Speed is the
 constant roll momentum and travel equals facing on every frame including the cut entry, the animation
 frame control is a fixed accumulation, the lean decays deterministically, the Co chain is a direct
 evaluation on (facing, frame, lean), and the cut lunge is a constant root translate rotated by the
 facing. Evaluating it directly instead of simulating it ran **~110x** faster, 0-ULP identical, and that
 is what made 243 loci affordable - and, applied to the Newton solve inside the band measurement, took
 qualifying those 243 from 269 s to 4 s.
+
+Even analytic, a context is not free, and everything expensive in it is the compiled *world* - mesh,
+planes, precomputed wall-correction slices - none of which depends on the roll. Once the configuration
+key grows past what a fan reuses (the lean already; the momentum decisively), swap only the baked
+schedule on a kept context, gated by sweeping it against one BUILT at that configuration. 10x here.
 
 Once the context build is analytic, the fan itself is the cost, and it can move to the native fleet -
 but usually not from the run's own start. A stripped search engine (no wired camera / look / neck

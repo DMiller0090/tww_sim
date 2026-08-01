@@ -124,11 +124,15 @@ def entry_from_walk(link0=LINK_START, facing0=LINK_FACING, csangle=CSANGLE, n_wa
 
 # --- the facing-override native schedule (fast_shove bakes facing into dx/dz/cutx/cutz/chx/chz) -----
 
-def extract_schedule_at(entry, facing, m351C, link_y, inputs):
+def extract_schedule_at(entry, facing, m351C, link_y, inputs, nspeed=26.0):
     """FS.extract_schedule, seeded at an EXPLICIT (entry, facing, m351C) rather than the fixture's.
-    Verified bit-exact vs FS.extract_schedule when given the fixture entry/facing (session 23)."""
+    Verified bit-exact vs FS.extract_schedule when given the fixture entry/facing (session 23).
+
+    ``nspeed`` is the roll's constant momentum, 26.0 off the speedF-17 walk cap. A roll entered
+    below the cap carries `clamp(1.5*speedF + 0.5, 5, 26)` instead (`entry_search.roll_nspeed`) --
+    same schedule, scaled travel."""
     link = LandState(pos_x=entry[0], pos_z=entry[1], pos_y=link_y, facing=facing, travel=facing,
-                     state=FRONT_ROLL, nspeed=26.0, speedF=26.0, use_anim=True, native=False,
+                     state=FRONT_ROLL, nspeed=nspeed, speedF=nspeed, use_anim=True, native=False,
                      sword_drawn=True, walls=WALLS)
     link._roll_m3570 = False
     link.m351C = int(m351C) & 0xFFFF
@@ -178,9 +182,9 @@ def extract_schedule_at(entry, facing, m351C, link_y, inputs):
                           STT_IDLE))
 
 
-def build_ctx_at(entry, facing, m351C, link_y, thrust=THRUST, margin=140.0):
+def build_ctx_at(entry, facing, m351C, link_y, thrust=THRUST, margin=140.0, nspeed=26.0):
     from tww_sim.core._shovec import ShoveCtx
-    sch = extract_schedule_at(entry, facing, m351C, link_y, FS.make_inputs(thrust))
+    sch = extract_schedule_at(entry, facing, m351C, link_y, FS.make_inputs(thrust), nspeed=nspeed)
     sh = push_shares(WEIGHT_LINK, WEIGHT_TETRA_V5)
     ctx = ShoveCtx(WALLS, GT.TRIS, GT.wA.pla, GT.wB.pla, GT.LINK_Y,
                    ML._SIN_TABLE, ML._COS_TABLE, ML._ATN_TABLE,

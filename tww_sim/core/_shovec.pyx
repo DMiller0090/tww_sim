@@ -940,6 +940,41 @@ cdef class ShoveCtx:
         _precompute_slices(self.vtx, self.pla, self.sp68x, self.sp6cx, self.ntris,
                            self.tet_wh, 1, self.tet_r, self.tet_std_py, 0.0, self.pc_tet)
 
+    def set_link_schedule(self, dx, dz, cutx, cutz, is_roll_pose, chx, chz, nroot, cut_step):
+        """Rewrite ONLY Link's baked schedule, keeping the compiled world.
+
+        Everything expensive in a ctx is the world: the culled mesh, its planes/AABBs, and the
+        `_precompute_slices` WallCorrect tables. The schedule is ~20 doubles a step. A search that
+        varies the roll's momentum or lean rebuilds the whole ctx per group and pays 1.5 ms of world
+        for a few microseconds of schedule -- so this swaps the schedule in place instead.
+
+        Bit-exactness is not an argument, it is a gate: a ctx re-scheduled to a configuration must
+        sweep identically to one BUILT at it
+        (`tests/test_entry_search.py::test_a_re_scheduled_ctx_is_a_freshly_built_one`)."""
+        cdef int i, j, n
+        n = len(dx)
+        if n != self.nsteps or len(chx[0]) != self.nlvl:
+            free(self.dx); free(self.dz); free(self.cutx); free(self.cutz)
+            free(self.is_roll_pose); free(self.chx); free(self.chz)
+            self.nsteps = n
+            self.nlvl = len(chx[0])
+            self.dx = <double*>malloc(n * sizeof(double))
+            self.dz = <double*>malloc(n * sizeof(double))
+            self.cutx = <double*>malloc(n * sizeof(double))
+            self.cutz = <double*>malloc(n * sizeof(double))
+            self.is_roll_pose = <int*>malloc(n * sizeof(int))
+            self.chx = <double*>malloc(n * self.nlvl * sizeof(double))
+            self.chz = <double*>malloc(n * self.nlvl * sizeof(double))
+        self.cut_step = cut_step
+        self.nroot = nroot
+        for i in range(n):
+            self.dx[i] = dx[i]; self.dz[i] = dz[i]
+            self.cutx[i] = cutx[i]; self.cutz[i] = cutz[i]
+            self.is_roll_pose[i] = is_roll_pose[i]
+            for j in range(self.nlvl):
+                self.chx[i * self.nlvl + j] = chx[i][j]
+                self.chz[i * self.nlvl + j] = chz[i][j]
+
     def __dealloc__(self):
         free(self.vtx); free(self.pla); free(self.aabb)
         free(self.sp68x); free(self.sp6cx)

@@ -108,11 +108,12 @@ def stick_grid(stride):
 
 # --------------------------------------------------------------- the fleet fan
 
-def _fan_chunk(base, part, rows, jmax, tx, tz, nthreads, label):
+def _fan_chunk(base, part, rows, jmax, tx, tz, nthreads, label, cap=ES.WALK_CAP):
     """Run one chunk of held sticks off ``base`` for ``jmax`` frames on the fleet, collecting each
     core's hits in the reference's write order. ``rows`` = the per-core schedule row (one frame, the
-    held input); ``label(i, j)`` -> the plan value stored for core ``i`` at step ``j``. Returns
-    ``(writes, cores)`` -- ``cores`` are the post-run junction states (`fleet_fan2` re-fans them)."""
+    held input); ``label(i, j)`` -> the plan value stored for core ``i`` at step ``j``. ``cap`` is
+    `entry_search.walk_fan`'s speed prune, ``None`` to keep sub-cap endpoints (the key then carries
+    speedF). Returns ``(writes, cores, alive)`` -- ``cores`` are the post-run junction states."""
     cores = [base.clone(base.pe.clone_state()) for _ in part]
     fleet = N.CourtyardFleet(cores, 1)
     fleet.set_schedule([[r] for r in rows])
@@ -126,19 +127,22 @@ def _fan_chunk(base, part, rows, jmax, tx, tz, nthreads, label):
             if math.hypot(c.pos_x - tx, c.pos_z - tz) > ES.FOLLOW_BAR:
                 alive[i] = False              # she is moving from here on: the branch is dead
                 continue
-            if j >= 1 and c.speedF == 17.0:
-                writes[i].append(((c.pos_x, c.pos_z, int(c.m351C) & 0xFFFF), label(i, j)))
+            if j < 1 or (cap is not None and c.speedF != cap):
+                continue
+            key = (c.pos_x, c.pos_z, int(c.m351C) & 0xFFFF)
+            writes[i].append((key if cap is not None else key + (c.speedF,), label(i, j)))
     return writes, cores, alive
 
 
 def iter_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, chunk=CHUNK,
-             nthreads=0, progress=False, csangle=ES.CSANGLE):
+             nthreads=0, progress=False, csangle=ES.CSANGLE, cap=ES.WALK_CAP):
     """`entry_search.walk_fan` on the native fleet, as a STREAM of ``(key, plan)`` in the reference's
     own write order -- so `dict(iter_fan(...))` reproduces it exactly, and a million-candidate pass
     can be evaluated batch-by-batch instead of materialised.
 
     One held stick per core, `run_par(1)` per frame (the schedule is a single constant row, so
-    re-running frame 0 IS the hold), and the two reference prunes read off the C fields."""
+    re-running frame 0 IS the hold), and the reference prunes read off the C fields. ``cap=None``
+    drops the speedF-17 one and keys the sub-cap endpoints by their own speed."""
     seed = seed or ES.console_seed()
     hold = dict(seed['log'][-1], buttons=0)
     trg = int(hold.get('triggerL', 0))
@@ -152,7 +156,7 @@ def iter_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, chunk=CH
             rows = [(sx, sy, 0, trg, csangle) for (sx, sy) in part]
             writes, _cores, _alive = _fan_chunk(
                 base, part, rows, jmax, tx, tz, nthreads,
-                lambda i, j, _n0=n0, _p=part: (_n0, _p[i][0], _p[i][1], j))
+                lambda i, j, _n0=n0, _p=part: (_n0, _p[i][0], _p[i][1], j), cap=cap)
             for w in writes:
                 for kv in w:
                     n += 1
@@ -162,15 +166,17 @@ def iter_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, chunk=CH
 
 
 def fleet_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, chunk=CHUNK,
-              nthreads=0, progress=False, csangle=ES.CSANGLE):
+              nthreads=0, progress=False, csangle=ES.CSANGLE, cap=ES.WALK_CAP):
     """The `iter_fan` stream collapsed to `walk_fan`'s dict (last writer wins). Gated key AND value
     bit-for-bit against the Python reference, at full resolution against the cached s80 pass."""
     return dict(iter_fan(seed=seed, env=env, base_frames=base_frames, stride=stride, jmax=jmax,
-                         chunk=chunk, nthreads=nthreads, progress=progress, csangle=csangle))
+                         chunk=chunk, nthreads=nthreads, progress=progress, csangle=csangle,
+                         cap=cap))
 
 
 def iter_fan2(seed=None, env=None, base_frames=(3, 4), s1_stride=16, j1=(2, 4, 6),
-              s2_stride=1, j2max=6, chunk=CHUNK, nthreads=0, progress=False, csangle=ES.CSANGLE):
+              s2_stride=1, j2max=6, chunk=CHUNK, nthreads=0, progress=False, csangle=ES.CSANGLE,
+              cap=ES.WALK_CAP):
     """TWO-SEGMENT holds: stick S1 for j1 frames, then S2 for j2 -- the lever left once stride 1 x 7
     bases has saturated the one-segment fan (measured, `_notes/s81_saturation.py`).
 
@@ -194,7 +200,7 @@ def iter_fan2(seed=None, env=None, base_frames=(3, 4), s1_stride=16, j1=(2, 4, 6
             fl.set_schedule([[(sx1, sy1, 0, trg, csangle)]])
             for j in range(1, max(j1) + 1):
                 fl.run_par(1, nthreads)
-                if j in j1 and c.speedF == 17.0 \
+                if j in j1 and (cap is None or c.speedF == cap) \
                         and math.hypot(c.pos_x - tx, c.pos_z - tz) <= ES.FOLLOW_BAR:
                     jun[j] = c.clone(c.pe.clone_state())
             for j, jc in jun.items():
@@ -204,7 +210,7 @@ def iter_fan2(seed=None, env=None, base_frames=(3, 4), s1_stride=16, j1=(2, 4, 6
                     writes, _cores, _alive = _fan_chunk(
                         jc, part, rows, j2max, tx, tz, nthreads,
                         lambda i, jj, _n=n0, _p=part, _j=j:
-                        (_n, sx1, sy1, _j, _p[i][0], _p[i][1], jj))
+                        (_n, sx1, sy1, _j, _p[i][0], _p[i][1], jj), cap=cap)
                     for w in writes:
                         for kv in w:
                             n += 1
@@ -227,6 +233,16 @@ BAND_CACHE = os.path.join(_rb, '_generated', 's81', 'bands.json')
 #: A band narrower than this is a single f32 `resid` value, not an interval -- a ULP-odds lottery
 #: ticket. Candidates are still counted against it but it is not what a pass is aimed at.
 MIN_BAND = 1e-6
+
+#: |resid| below which a draw owes its configuration a band measurement -- three orders of margin on
+#: the ~1.2e-4 the bands sit within, and what keeps `BandTable` off the hot path.
+BAND_PROBE = 5e-3
+
+
+def _f32_bits(v):
+    """A momentum's f32 bit pattern -- the band key has to be exact and a float is not a dict key
+    you want to round."""
+    return struct.unpack('<I', struct.pack('<f', v))[0]
 
 
 def ref_entry(seed=None):
@@ -260,7 +276,7 @@ def qualified(seed=None, csangle=ES.CSANGLE, thrusts=ES.THRUSTS, path=QUAL_CACHE
 
 
 class BandTable:
-    """``(facing, thrust, m351C) -> band``, measured on demand and cached to disk.
+    """``(facing, thrust, m351C, nspeed) -> band``, measured on demand and cached to disk.
 
     THE CORRECTION THIS EXISTS FOR (session 81). s80 fixed "the fixture window is a union over
     configurations" by measuring a band per (facing, thrust) -- at ``lean=0``. But the band is a
@@ -272,7 +288,11 @@ class BandTable:
     most of what a "near-zero, 0 genuine" pass was counting.
 
     A band costs ~14 ms (`entry_gradient` is analytic + cached), so a fan's worth of leans is a
-    one-off minute and free afterwards."""
+    one-off minute and free afterwards -- but only while the key is coarse enough to be REUSED. The
+    momentum joined the key in session 82 (`entry_search.roll_nspeed`: a sub-cap walk rolls slower and
+    bakes a different schedule), and an uncapped fan carries nearly one nspeed per candidate, so a
+    table keyed that finely serves each entry once. That is why `stream_search` measures bands only
+    for the near-zero tail instead of eagerly per group."""
 
     def __init__(self, seed=None, path=BAND_CACHE, ref=None):
         self.seed = seed or ES.console_seed()
@@ -282,46 +302,56 @@ class BandTable:
         self.n_measured = 0
         if path and os.path.exists(path):
             for k, v in json.load(open(path)).items():
-                self.tab[tuple(int(x) for x in k.split(','))] = v
+                p = tuple(int(x) for x in k.split(','))
+                # a 3-field key predates the momentum axis: it was measured at the walk cap
+                self.tab[p if len(p) > 3 else p + (_f32_bits(ES.ROLL_NSPEED),)] = v
 
-    def get(self, facing, thrust, lean):
-        key = (int(facing) & 0xFFFF, int(thrust), int(lean) & 0xFFFF)
+    def get(self, facing, thrust, lean, nspeed=None):
+        nsp = ES.ROLL_NSPEED if nspeed is None else nspeed
+        key = (int(facing) & 0xFFFF, int(thrust), int(lean) & 0xFFFF, _f32_bits(nsp))
         b = self.tab.get(key)
         if b is None:
-            b = ES.configuration_band(self.seed['tetra'], key[0], key[1], key[2], self.ref)
+            b = ES.configuration_band(self.seed['tetra'], key[0], key[1], key[2], self.ref,
+                                      nspeed=nsp)
             self.tab[key] = b
             self.n_measured += 1
         return b
 
-    def usable(self, facing, thrust, lean, min_width=MIN_BAND):
-        b = self.get(facing, thrust, lean)
+    def usable(self, facing, thrust, lean, nspeed=None, min_width=MIN_BAND):
+        b = self.get(facing, thrust, lean, nspeed)
         return b if (b['productive'] and b['width'] >= min_width) else None
 
     def save(self):
         if not self.path:
             return
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        json.dump({'%d,%d,%d' % k: v for k, v in self.tab.items()}, open(self.path, 'w'))
+        json.dump({'%d,%d,%d,%d' % k: v for k, v in self.tab.items()}, open(self.path, 'w'))
 
 
 def stream_search(pairs, seed=None, quals=None, batch=250000, keep=40, near_gap=5e-3,
-                  progress=False, bands=None, min_width=MIN_BAND):
+                  progress=False, bands=None, min_width=MIN_BAND, probe=BAND_PROBE):
     """Score a fan STREAM against the productive configurations, batch by batch.
 
     Deduping is on the packed key (a 2M-candidate pass is ~100 MB of key set, where the dict of
-    key -> plan is not), and each batch is grouped by the roll-entry lean so one ctx serves a whole
-    group -- the same structure `entry_search.search` uses, just bounded in memory.
+    key -> plan is not), and each batch is grouped by the ROLL -- (entry lean, entry momentum), the
+    two things that pick the baked schedule -- so one re-scheduled ctx serves a whole group.
 
-    The ranking is `window_gap` against the band of the candidate's OWN (facing, thrust, m351C) --
-    see `BandTable` for why the lean belongs in that key and what counting it wrong did to the
-    near-miss statistic. A (configuration, lean) with no usable band is DEAD: no entry clips it, so
-    its candidates are skipped and reported separately rather than ranked as near-misses.
+    WHERE THE BAND SITS NOW. s81 looked one up per group and SKIPPED the dead ones: a configuration
+    with nothing genuine anywhere along its residual zero cannot be clipped from any entry, so those
+    candidates were free to drop. That inverts once the momentum joins the key (session 82): a band
+    costs ~14 ms against ~0.2 ms to evaluate a whole group, and an uncapped fan carries nearly one
+    momentum per candidate, so measuring a band to save an evaluation costs 70x what it saves. So
+    every draw is now EVALUATED -- `genuine` is ground truth and needs no band at all -- and a band is
+    measured only for the near-zero tail (|resid| < ``probe``), which is the only population the
+    ranking and the lottery estimate are about. A tail draw whose configuration has no usable band is
+    counted DEAD rather than as a near-miss: that is the s81 correction, kept.
 
     Returns the genuine hits plus the near-miss population, which is what sizes the lottery:
     expected hits ~ (near-miss density in resid) x (band width)."""
     seed = seed or ES.console_seed()
     quals = quals if quals is not None else qualified(seed)
     bands = bands if bands is not None else BandTable(seed)
+    pool = ES.CtxPool()
     tx, tz = seed['tetra']
     seen = set()
     hits, near = [], []
@@ -331,36 +361,40 @@ def stream_search(pairs, seed=None, quals=None, batch=250000, keep=40, near_gap=
 
     def flush(buf):
         nonlocal n_eval, n_dead
-        by_lean = {}
+        by_roll = {}
         for k, plan in buf:
-            by_lean.setdefault(ES.lean_at_roll(k[2]), []).append((k, plan))
+            by_roll.setdefault((ES.lean_at_roll(k[2]), ES.candidate_nspeed(k)), []).append((k, plan))
         for q in quals:
             fac, thrust = q['facing'], q['thrust']
-            for lean, group in by_lean.items():
-                band = bands.usable(fac, thrust, lean, min_width)
-                if band is None:
-                    n_dead += len(group)          # nothing genuine at this lean, at any entry
-                    continue
-                ctx, sch, resid = ES.build_fast(fac, lean, thrust)
-                ents = [ES.roll_entry((k[0], k[1]), fac) for k, _ in group]
+            for (lean, nsp), group in by_roll.items():
+                ctx, sch, resid = pool.get(fac, lean, thrust, nspeed=nsp)
+                ents = [ES.roll_entry((k[0], k[1]), fac, nsp) for k, _ in group]
                 rows = ctx.sweep_par([(tx, tz, e[0], e[1]) for e in ents], 0)
                 n_eval += len(rows)
                 for (k, plan), e, o in zip(group, ents, rows):
                     r = resid(o)
-                    g = ES.window_gap(r, band)
+                    if not o[0] and abs(r) >= probe:
+                        continue                  # too far out to be a near-miss OR to owe a band
+                    band = bands.usable(fac, thrust, lean, nsp, min_width)
                     if o[0]:
+                        # `genuine` is ground truth. It is reported whatever the band says -- a band
+                        # is a measurement of the neighbourhood and never a veto on a real hit.
                         hits.append(dict(entry=[e[0], e[1]], walk=[k[0], k[1]], m351C_walk=k[2],
                                          m351C=lean, facing=fac, aim=q['aim'], thrust=thrust,
-                                         b_step=thrust + 2, resid=r, gap=g, push=[o[5], o[6]],
-                                         band=[band['lo'], band['hi']], plan=list(plan),
+                                         b_step=thrust + 2, resid=r, push=[o[5], o[6]], nspeed=nsp,
+                                         gap=(ES.window_gap(r, band) if band else None),
+                                         band=([band['lo'], band['hi']] if band else None),
+                                         plan=list(plan),
                                          walkable=bool(TA.is_walkable(k[0], k[1])
                                                        and TA.is_walkable(e[0], e[1]))))
-                    elif g < near_gap:
-                        near.append(g)
+                    elif band is None:
+                        n_dead += 1               # nothing genuine here, at any entry
+                    elif ES.window_gap(r, band) < near_gap:
+                        near.append(ES.window_gap(r, band))
 
     for k, plan in pairs:
         n_raw += 1
-        p = struct.pack('<ddI', k[0], k[1], k[2])
+        p = struct.pack('<ddI', k[0], k[1], k[2]) + (struct.pack('<f', k[3]) if len(k) > 3 else b'')
         if p in seen:
             continue
         seen.add(p)
@@ -371,7 +405,7 @@ def stream_search(pairs, seed=None, quals=None, batch=250000, keep=40, near_gap=
             buf = []
             bands.save()
             if progress:
-                print("  %d unique of %d streamed, %d live evals (%d dead-lean), %d genuine,"
+                print("  %d unique of %d streamed, %d evals, %d dead-tail, %d genuine,"
                       " %d near  [%.0fs]" % (n_uniq, n_raw, n_eval, n_dead, len(hits), len(near),
                                              time.time() - t0))
     if buf:
@@ -480,8 +514,8 @@ def _report(r, tag, extra=None):
     print("\n%s: %d unique candidates of %d streamed, %d evaluations against %d configurations"
           " [%.0f s]" % (tag, r['n_candidates'], r['n_streamed'], r['n_evaluations'],
                          r['n_configurations'], r['seconds']))
-    print("  dead-lean (no band at ANY entry): %d of %d draws   bands measured %d"
-          % (r['n_dead_lean'], r['n_dead_lean'] + r['n_evaluations'], r['n_bands_measured']))
+    print("  near-zero draws at a DEAD configuration (no band at any entry): %d   bands measured %d"
+          % (r['n_dead_lean'], r['n_bands_measured']))
     print("  near-miss (gap < %g): %d      GENUINE: %d      E[hits] this pass %.2f"
           % (r['near_gap'], r['n_near'], len(r['hits']), r['expected_hits']))
     print("  best gaps: %s" % ["%.3e" % g for g in r['near'][:8]])
@@ -496,12 +530,19 @@ def _report(r, tag, extra=None):
 
 
 def _cmd_search1(argv):
-    """The one-segment pass at its measured saturation (7 bases, jmax 36, stride 1)."""
+    """The one-segment pass at its measured saturation (7 bases, jmax 36, stride 1).
+
+    ``uncapped`` drops the speedF-17 prune: 3x the candidates, and each sub-cap walk speed bakes its
+    own roll schedule and its own locus (`entry_search.roll_nspeed`)."""
     warnings.simplefilter('ignore')
     jmax = int(argv[0]) if argv else 36
-    r = stream_search(iter_fan(base_frames=tuple(range(7)), stride=1, jmax=jmax, progress=True),
-                      progress=True)
-    _report(r, 'seg1_j%d' % jmax, dict(jmax=jmax, bases=7, stride=1))
+    nbase = int(argv[1]) if len(argv) > 1 else 7
+    stride = int(argv[2]) if len(argv) > 2 else 1
+    cap = None if 'uncapped' in argv else ES.WALK_CAP
+    r = stream_search(iter_fan(base_frames=tuple(range(nbase)), stride=stride, jmax=jmax, cap=cap,
+                               progress=True), progress=True)
+    _report(r, 'seg1_j%d_b%d_s%d%s' % (jmax, nbase, stride, '_uncapped' if cap is None else ''),
+            dict(jmax=jmax, bases=nbase, stride=stride, cap=cap))
 
 
 def _cmd_search2(argv):

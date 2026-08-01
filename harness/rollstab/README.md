@@ -91,6 +91,14 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
+> **Shared-tool note (2026-08-01, session 82):** `turnaround.extract_schedule_at` / `build_ctx_at`
+> gained an `nspeed=` parameter (default **26.0**, the roll momentum off the speedF-17 walk cap --
+> exactly what they hard-coded before, so every seam-clip caller is byte-identical). It exists so the
+> Tetra-push entry search (`harness/tetrapush`) can bake the SIMULATED reference schedule for a
+> SUB-CAP roll, where `_roll_init` sets `clamp(1.5 * speedF + 0.5, 5, 26)` instead. Gated in
+> `tests/test_entry_search.py` against a real from-rest walk + A-press roll at five momenta: all nine
+> baked tables identical. Nothing in the seam-clip solver reads the new parameter.
+>
 > **Shared-tool note (2026-07-21):** `cc_stepper.CcCoupledStepper` gained an `atn_lock=` opt-in
 > (default OFF) for the Tetra-push harness (`harness/tetrapush`); when on, it feeds Tetra's XZ as
 > Link's lock-on actor to drive the new ATN_ACTOR untarget brakeslide. Default off => seam-clip

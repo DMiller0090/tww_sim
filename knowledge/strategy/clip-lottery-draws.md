@@ -4,12 +4,15 @@
 pass was too small or aimed at nothing? What counts as one draw? Why can a search get 60% more
 candidates and not one more near-miss? Which prunes in a fan are physics and which are assumptions I
 put there myself?
-**Status:** validated offline (session 81) on the flooded-Hyrule Tetra corner, where the honest recount
-turned a pass that looked like 0.23 expected hits into 0.02 and named where the missing draws are.
-Gated in [`tests/test_entry_fan.py`](../../tests/test_entry_fan.py). Companion to
-[clip-entry-search.md](clip-entry-search.md), which is the entry-sweep method itself.
+**Status:** validated offline (sessions 81-82) on the flooded-Hyrule Tetra corner, where the honest
+recount turned a pass that looked like 0.23 expected hits into 0.02, named where the missing draws
+are - and then priced the biggest of those at zero. Gated in
+[`tests/test_entry_fan.py`](../../tests/test_entry_fan.py). Companion to
+[clip-entry-search.md](clip-entry-search.md), which is the entry-sweep method itself. The session-81
+reading of the speed prune as an untapped lever is in
+[history/entry-search-s81-momentum-lever.md](../history/entry-search-s81-momentum-lever.md).
 **Source:** `harness/tetrapush/entry_fan.py` (`BandTable`, `stream_search`), `harness/tetrapush/
-entry_search.py` (`configuration_band`, `qualify`, `window_gap`).
+entry_search.py` (`configuration_band`, `locus_scan`, `qualify`, `window_gap`, `roll_nspeed`).
 
 ---
 
@@ -59,12 +62,37 @@ state and starts walking, so an entry out there is not an entry - the model does
 **A speed prune usually is not.** This fan kept only endpoints at the walk cap (speedF exactly 17)
 because the compiled roll schedule bakes the cap's own roll momentum (nspeed 26). But a sub-cap walk
 still rolls, at `clamp(1.5 * speedF + 0.5, 5, 26)`; it just bakes a *different* schedule. Dropping the
-prune multiplies the candidates 3x - and, because each distinct nspeed is a different cut geometry,
-those endpoints span **4146 distinct schedules, each with its own locus and its own band.** That is not
-3x more draws, it is thousands of independent loci the search had ruled out by construction. Generalize
-the schedule off the cap and re-gate it (a real sub-cap A-press roll against the reseed) before
-trusting it, but do not mistake a modelling shortcut for an infeasibility - see
-[`[[infeasible-needs-proof]]`](seam-clip-solver.md).
+prune multiplies the candidates 3x, over 4146 distinct schedules - each, genuinely, its own locus and
+its own band. So generalize it: the momentum belongs in the schedule, the entry step and the band key,
+and re-gate it against a real sub-cap A-press roll rather than trusting the algebra.
+
+**And then price the axis, because "unlocked" is not "live".** On this corner the answer was zero. Only
+2 of 181 momenta between 17 and 26 are productive and both sit at the cap; the rest are barren along
+their *whole* locus, at every facing in the entire circle - so an uncapped fan reaching 42807 distinct
+momenta has 4 of them worth a draw. End to end at one resolution: 14529 capped candidates find 4
+near-misses, 43653 uncapped candidates find **the same 4, gap for gap.** The generalization was right
+and the lever was worth nothing, and those are two claims. Pricing costs a handful of band scans along
+the unlocked axis - a minute - so do it before promoting a prune audit to a plan.
+
+The reason is worth carrying to the next corner: a shorter roll is not the same clip started further
+back. Below a momentum threshold the roll never reaches the wall brace that pins the cut's start point,
+and in the middle of the range it reaches the brace but leaves the pushed actor out of Co range by the
+cut frame - zero push, no leverage from any entry. Do not mistake a modelling shortcut for an
+infeasibility ([`[[infeasible-needs-proof]]`](seam-clip-solver.md)); do not mistake removing one for
+progress either.
+
+## Declaring a configuration dead needs the WHOLE locus, not one point
+
+Band measurement sweeps *across* the residual zero at the one entry a Newton solve lands on. That is
+enough to size a live band, and it is **not** enough to call a configuration barren: the genuine set is
+a curve (104 u long here), so dust that has slid along it reads as "nothing genuine on the residual
+zero". March the locus instead - step along it, re-project onto residual zero at every station because
+the curve bends, and sweep across at each. It costs a couple of seconds per configuration.
+
+Always run the live configuration as a control in the same call. The first full-circle sweep above was
+run at 64-BAM steps and reported zero productive facings *at the cap*, which is only because the cap's
+own window is 32 BAM wide and the stride stepped over it. A negative result whose control also reads
+negative is a resolution bug, not a finding.
 
 ## Two facts that kill a local descent before it starts
 
@@ -91,7 +119,8 @@ Before concluding a razor search is too small:
 1. measure the band at the candidate's OWN configuration - every axis of it, lean included;
 2. count draws, not candidates, and report the dead share;
 3. check the near-miss yield against candidate count, not the count alone;
-4. audit each prune for whether it encodes physics or an assumption in your own schedule;
+4. audit each prune for whether it encodes physics or an assumption in your own schedule - then
+   **price** the axis it hides before spending a session on it, with a control in the same sweep;
 5. rank the signed distance to the band, never |residual|
    ([clip-entry-search.md](clip-entry-search.md));
 6. and only then buy more candidates.

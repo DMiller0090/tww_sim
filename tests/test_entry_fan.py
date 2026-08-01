@@ -208,6 +208,56 @@ def test_an_appended_aim_is_buffered_not_acted_on():
     assert held[3] == 17.0 and acted[3] < 17.0
 
 
+def test_the_uncapped_fleet_fan_is_the_python_fan():
+    """The equality contract holds with the speed prune dropped too -- key AND value, and the key is
+    now a 4-tuple carrying the endpoint's own speedF."""
+    kw = dict(base_frames=(0, 1), stride=32, jmax=4, cap=None)
+    ref = ES.walk_fan(**kw)
+    nat = EF.fleet_fan(**kw)
+    r = EF.fan_equality(ref, nat)
+    assert ref and all(len(k) == 4 for k in ref)
+    assert r['equal'], (r['n_only_reference'], r['n_only_native'], r['value_diffs'][:3])
+
+
+# --------------------------------------------- the momentum axis: generalized, then measured DEAD
+# Session 82. "Each sub-cap momentum is its own locus" is true; "with genuine dust on it" is not.
+
+def test_the_momentum_below_the_cap_is_a_dead_axis():
+    """THE FINDING. Scanned ALONG the whole locus (not a one-point band -- `entry_search.locus_scan`,
+    which re-projects onto resid 0 at every station), the cap lights up most of its curve and every
+    sub-cap momentum is barren end to end. So a sub-cap roll is not a worse draw at the same target;
+    it is a draw at a target that does not exist."""
+    ref = EF.ref_entry(SEED)
+    live = ES.locus_scan(SEED['tetra'], 40826, THRUST, 0, ref, span=60.0, step=4.0)
+    assert live['stations'] > 20 and live['live'] > 0.5 * live['stations']   # the control
+    assert live['walkable'] == live['live']
+    dead = []
+    for nsp in (22.673213958740234, 14.608858108520508, 8.3131036758422852):
+        r = ES.locus_scan(SEED['tetra'], 40826, THRUST, 0, ref, nspeed=nsp, span=60.0, step=4.0)
+        assert r['live'] == 0, (nsp, r)
+        dead.append(r)
+    # both death modes present: a locus carrying no dust, and no leverage at all (at 14.6 the roll
+    # leaves Tetra out of Co range on the cut frame, so the push is zero and no entry moves the razor)
+    assert any(d['stations'] > 20 for d in dead)
+    assert any(d['reason'] == 'no leverage at the seed' for d in dead)
+
+
+def test_dropping_the_cap_multiplies_the_draws_and_buys_no_near_misses():
+    """The same thing end to end, which is the only version that settles it: at one resolution, the
+    uncapped pass reaches ~2x the candidates and finds the SAME near-miss population, gap for gap.
+    Every extra candidate rolls at a momentum where nothing is genuine at any entry -- the s80 error
+    (counting draws that could never convert) one axis over."""
+    kw = dict(base_frames=tuple(range(7)), stride=16, jmax=12)
+    bands, quals = EF.BandTable(SEED, path=None), EF.qualified(SEED, path=None)
+    capped = EF.stream_search(EF.iter_fan(cap=ES.WALK_CAP, **kw), quals=quals, bands=bands)
+    uncapped = EF.stream_search(EF.iter_fan(cap=None, **kw), quals=quals, bands=bands)
+    assert uncapped['n_candidates'] > 1.5 * capped['n_candidates']
+    assert capped['n_near'] > 0, "vacuous: this resolution found no near-miss either way"
+    assert uncapped['near'] == capped['near']
+    assert uncapped['expected_hits'] == capped['expected_hits']
+    assert len(uncapped['hits']) == len(capped['hits']) == 0
+
+
 def test_the_speed_cap_prune_is_a_schedule_assumption_not_a_physical_one():
     """The fan keeps only speedF == 17.0 because `fast_schedule` bakes ROLL_NSPEED 26, the roll's
     momentum off the walk cap. A sub-cap walk still rolls -- at ``clamp(1.5*speedF + 0.5, 5, 26)`` --
@@ -232,9 +282,11 @@ def test_the_speed_cap_prune_is_a_schedule_assumption_not_a_physical_one():
                 capk.add((c.pos_x, c.pos_z, int(c.m351C) & 0xFFFF))
     assert capk <= allk
     assert len(allk) > 1.5 * len(capk), (len(capk), len(allk))
-    nsp = set(min(26.0, max(5.0, 1.5 * s + 0.5)) for s in speeds)
+    nsp = set(ES.roll_nspeed(s) for s in speeds)
     assert len(nsp) > 50, len(nsp)               # that many distinct schedules, one locus each
     assert ES.ROLL_NSPEED == 26.0 and max(nsp) == 26.0
+    # ...and exactly ONE of them is the cap, which is the only one worth a draw (the two tests above)
+    assert sum(1 for v in nsp if v >= 25.89) == 1
 
 
 # ------------------------------------------------------------------- the analytic gradient swap
