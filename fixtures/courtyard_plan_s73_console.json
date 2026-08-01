@@ -1,0 +1,1015 @@
+{
+ "source": "Session 78: the TIER-2 CONSOLE CONFIRM of the shipped plan (fixtures/courtyard_plan_s73.json). Delivered by harness/tetrapush/deliver.py -- the plan spliced onto the recorded BOOT movie GZLJ01.s02.dtm at game-frame F0=44974, played with `loadstate 1`, both actors read at the PauseMovie halt (truncate-and-read, one run per N).",
+ "immutable": "LOCKED. For a fixed input log the console is ground truth and never moves -- the SIM converges to this, never the other way round (tests/dolphin/README.md#locked-tests-are-immutable-hard-rule).",
+ "method": {
+  "movie": "splice the tail onto the recorded boot movie",
+  "F0": 44974,
+  "slot": 1,
+  "tick_mode": "extend",
+  "frameCount": 90108,
+  "rt_mismatch": 0,
+  "prefix_ok": true,
+  "read": "Link off the fixed player pointer 0x803AD860; Tetra by RAM scan (find_tetra.tetra_scan) -- her _execute breakpoint cannot trap on a halted movie"
+ },
+ "plan": {
+  "fixture": "fixtures/courtyard_plan_s73.json",
+  "herd_frames": 71,
+  "atom_frames": 7,
+  "scored_frames": 75,
+  "freeze_f": 4,
+  "placement_dist": 0.432087283096482,
+  "placement_idx": 274,
+  "atom_kw": {
+   "flip_step": 1024,
+   "rotate_offs": [
+    12288,
+    16384,
+    20480,
+    24576
+   ],
+   "rank": "frames",
+   "csangle": "live"
+  },
+  "note": "`log` here is the DELIVERABLE sequence: the plan fixture's herd log plus the escape atom's own inputs, which score_plan probes on a clone. The SCORED end is frame 75 (herd + freeze_f); the atom's remaining frames are Link's escape and are delivered so the console measures it too."
+ },
+ "log": [
+  {
+   "stickX": 193,
+   "stickY": 243,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 165,
+   "stickY": 196,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 90,
+   "stickY": 252,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 150,
+   "stickY": 203,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 108,
+   "stickY": 205,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 172,
+   "stickY": 191,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 176,
+   "stickY": 247,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 176,
+   "stickY": 247,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 195,
+   "stickY": 14,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 77,
+   "stickY": 3,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 241,
+   "stickY": 59,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 241,
+   "stickY": 59,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 241,
+   "stickY": 59,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  }
+ ],
+ "samples": [
+  {
+   "n": 1,
+   "link": {
+    "x": -1335.2886962890625,
+    "z": 29.01801109313965,
+    "facing": 12386,
+    "travel": 4695,
+    "proc": 7,
+    "speedF": -24.980012893676758
+   },
+   "tetra": {
+    "x": -1341.76904296875,
+    "z": -12.576733589172363,
+    "stt": 3
+   }
+  },
+  {
+   "n": 4,
+   "link": {
+    "x": -1340.4534912109375,
+    "z": 3.494643211364746,
+    "facing": 35324,
+    "travel": 35324,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1353.8743896484375,
+    "z": -55.393707275390625,
+    "stt": 3
+   }
+  },
+  {
+   "n": 8,
+   "link": {
+    "x": -1350.2652587890625,
+    "z": -38.42845916748047,
+    "facing": 35324,
+    "travel": 35324,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1369.1778564453125,
+    "z": -114.39249420166016,
+    "stt": 3
+   }
+  },
+  {
+   "n": 14,
+   "link": {
+    "x": -1369.9356689453125,
+    "z": -126.82672882080078,
+    "facing": 35324,
+    "travel": 35324,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1387.1802978515625,
+    "z": -177.3770751953125,
+    "stt": 3
+   }
+  },
+  {
+   "n": 21,
+   "link": {
+    "x": -1393.8477783203125,
+    "z": -210.95193481445312,
+    "facing": 37552,
+    "travel": 5820,
+    "proc": 6,
+    "speedF": -25.451574325561523
+   },
+   "tetra": {
+    "x": -1418.9703369140625,
+    "z": -264.33514404296875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 28,
+   "link": {
+    "x": -1441.208984375,
+    "z": -285.8339538574219,
+    "facing": 36665,
+    "travel": 36665,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1460.2921142578125,
+    "z": -335.6875915527344,
+    "stt": 3
+   }
+  },
+  {
+   "n": 35,
+   "link": {
+    "x": -1468.411376953125,
+    "z": -358.6700744628906,
+    "facing": 36665,
+    "travel": 36665,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1499.3709716796875,
+    "z": -432.35302734375,
+    "stt": 3
+   }
+  },
+  {
+   "n": 42,
+   "link": {
+    "x": -1507.53466796875,
+    "z": -462.0494079589844,
+    "facing": 36665,
+    "travel": 36665,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1526.5289306640625,
+    "z": -498.4752502441406,
+    "stt": 3
+   }
+  },
+  {
+   "n": 49,
+   "link": {
+    "x": -1552.86669921875,
+    "z": -531.0663452148438,
+    "facing": 19393,
+    "travel": 5953,
+    "proc": 6,
+    "speedF": -25.665090560913086
+   },
+   "tetra": {
+    "x": -1569.1756591796875,
+    "z": -586.2526245117188,
+    "stt": 3
+   }
+  },
+  {
+   "n": 56,
+   "link": {
+    "x": -1590.531494140625,
+    "z": -604.65234375,
+    "facing": 33997,
+    "travel": 33997,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1596.5399169921875,
+    "z": -666.9962158203125,
+    "stt": 3
+   }
+  },
+  {
+   "n": 62,
+   "link": {
+    "x": -1597.4671630859375,
+    "z": -678.3495483398438,
+    "facing": 33997,
+    "travel": 33997,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1607.75,
+    "z": -748.2399291992188,
+    "stt": 3
+   }
+  },
+  {
+   "n": 66,
+   "link": {
+    "x": -1604.16064453125,
+    "z": -742.3772583007812,
+    "facing": 33997,
+    "travel": 33997,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1613.1536865234375,
+    "z": -787.5061645507812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 69,
+   "link": {
+    "x": -1608.50341796875,
+    "z": -779.600830078125,
+    "facing": 33997,
+    "travel": 33997,
+    "proc": 30,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1617.8837890625,
+    "z": -827.7530517578125,
+    "stt": 3
+   }
+  },
+  {
+   "n": 70,
+   "link": {
+    "x": -1609.2579345703125,
+    "z": -788.1119384765625,
+    "facing": 33997,
+    "travel": 33997,
+    "proc": 9,
+    "speedF": 26.0
+   },
+   "tetra": {
+    "x": -1620.153564453125,
+    "z": -845.0654296875,
+    "stt": 3
+   }
+  },
+  {
+   "n": 71,
+   "link": {
+    "x": -1609.8724365234375,
+    "z": -800.9889526367188,
+    "facing": 33997,
+    "travel": 975,
+    "proc": 6,
+    "speedF": -25.722305297851562
+   },
+   "tetra": {
+    "x": -1621.9031982421875,
+    "z": -857.8018188476562,
+    "stt": 3
+   }
+  },
+  {
+   "n": 72,
+   "link": {
+    "x": -1609.0904541015625,
+    "z": -810.3917236328125,
+    "facing": 985,
+    "travel": 985,
+    "proc": 6,
+    "speedF": -25.711511611938477
+   },
+   "tetra": {
+    "x": -1625.0875244140625,
+    "z": -873.9981079101562,
+    "stt": 3
+   }
+  },
+  {
+   "n": 73,
+   "link": {
+    "x": -1617.7423095703125,
+    "z": -831.9304809570312,
+    "facing": 985,
+    "travel": 3985,
+    "proc": 7,
+    "speedF": -23.211511611938477
+   },
+   "tetra": {
+    "x": -1625.0875244140625,
+    "z": -873.9981079101562,
+    "stt": 3
+   }
+  },
+  {
+   "n": 74,
+   "link": {
+    "x": -1618.536376953125,
+    "z": -837.0095825195312,
+    "facing": 985,
+    "travel": 34753,
+    "proc": 6,
+    "speedF": 17.605754852294922
+   },
+   "tetra": {
+    "x": -1627.6221923828125,
+    "z": -886.2072143554688,
+    "stt": 3
+   }
+  },
+  {
+   "n": 75,
+   "link": {
+    "x": -1612.06689453125,
+    "z": -822.5393676757812,
+    "facing": 2099,
+    "travel": 6558,
+    "proc": 24,
+    "speedF": 8.5
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 76,
+   "link": {
+    "x": -1607.439208984375,
+    "z": -813.4501953125,
+    "facing": 4920,
+    "travel": 4920,
+    "proc": 6,
+    "speedF": 10.19943904876709
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 77,
+   "link": {
+    "x": -1600.4906005859375,
+    "z": -803.71142578125,
+    "facing": 6473,
+    "travel": 6473,
+    "proc": 6,
+    "speedF": 11.963536262512207
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 78,
+   "link": {
+    "x": -1589.0355224609375,
+    "z": -791.1503295898438,
+    "facing": 7715,
+    "travel": 7715,
+    "proc": 6,
+    "speedF": 17.0
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  }
+ ]
+}

@@ -219,6 +219,7 @@ deliberately unported.
 | `capture_push.py` | Load slot 2, locate Tetra, single-step the movie N frames, log both actors + FULL pad to a fixture. The (scalar) GROUND TRUTH -- single-stepped, so `+-1` on edges. Now also logs `nspeed` (mNormalSpeed). Subcommand **`capture_push seed`** = a DETERMINISTIC single read of the complete f0 state (no single-step jitter) -> `fixtures/courtyard_push_seed.json`. |
 | `fixtures/courtyard_push_seed.json` | The complete STATE-2 seed (f0): pos/travel/facing/speedF + the HIDDEN **mNormalSpeed** (`link.nspeed`) the cyl/dtm fixtures never logged, plus mDirection/m34E6/csangle + the attention state, for provenance. Deterministic single read (jitter-free). The from-f0 replay's `seed_nspeed` source AND the planner's initial condition (session 12). Session 16 added **`old_pose`** -- the live `m_old_fdata` per-joint post-morf pre-twist store (quat x,y,z,w + transform, all 42 joints) + morf counters, the `replay(..., seed_old_pose=)` source (at THIS seed it equals the pure-dash warmup; general-correctness for any f0 with live morf residue). |
 | `fixtures/courtyard_plan_s73.json` | **THE PLAN THAT PASSES THE OBJECTIVE** (session 73) -- a complete state-2 input log (71 frames, ending AT THE ARRIVAL because `objective.score_plan` probes the escape atom itself) plus its provenance (which cycle-2 beam node, junction endpoint, roll aim and ``target_cs`` offset) and the ``atom_kw`` it must be scored with. `objective.replay_and_score` on it reads **75 frames (floor 73, timeloss +2), placement 0.4321 u on genuine coord 274, ``complete``/``terminal_ok``/``wall_ok``/``regime_ok``/``within_budget`` all True -> `objective.verdict` TRUE**, with the atom's ``cs_bill`` 0. Gated as a regression (`tests/test_objective.py::test_the_shipped_plan_passes_the_whole_objective_from_its_input_log_alone`), so milestone 2 is a test rather than a session claim. Score it with the fixture's own ``atom_kw``: with the default single-flip atom the same log reads 77 f / pd 4.48, a different escape. |
+| `fixtures/courtyard_plan_s73_console.json` | **THE SAME PLAN, ON CONSOLE** (session 78) -- LOCKED. The DELIVERABLE sequence (the plan fixture's 71 herd frames plus the escape atom's own 7, which `score_plan` probes on a clone and so were never in the plan file) and the console-measured Link + Tetra at **22 truncate-and-read samples**, N = 1..78 covering the first frames after state 2, all three herd cycles, the arrival, the scored frame and every atom frame. **Every one is 0-ULP on both actors**, and matches on ``proc``/``facing``/``travel``/``speedF`` besides; Tetra reads stt 3 throughout, so there is NO open frontier and nothing is xfailed (contrast node 1's curve, whose plan left the regime at 83 and hit a wall at 84). Milestone 2 is a console number here: at the scored frame the console's own Tetra is **0.4321 u from genuine coord 274**. Gated `tests/test_plan_console.py` (6 tests, 48 cases) -- and, like every clean-DTM capture, IMMUTABLE: for a fixed input log the console is ground truth and the sim converges to it. |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). Session 19: extracts **poll index 2** of each 4-poll frame group -- the poll the game actually latches (live-pinned via the camera oracle on the window's two non-uniform groups); regen with no capture preserves the baked live rows. |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
 | `fixtures/courtyard_push_state2.json` | 51-frame session-1 ground-truth capture from state 2 (repo `fixtures/`). |
@@ -1656,6 +1657,56 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE SHIPPED PLAN IS CONFIRMED ON CONSOLE -- 22 OF 22 TRUNCATE-AND-READ SAMPLES 0-ULP ON
+            BOTH ACTORS, AND TETRA'S 0.4321 u LANDING ON GENUINE COORD 274 IS NOW A CONSOLE
+            MEASUREMENT RATHER THAN A SIMULATION RESULT (session 78).** The tier-2 confirm was one of
+            the two genuinely open items and it did not depend on the frame question at all. It passed
+            on the first delivery, with no model work: `fixtures/courtyard_plan_s73.json` spliced onto
+            the recorded boot movie at F0 44974, played with `loadstate 1`, both actors read at the
+            PauseMovie halt for each N (`deliver.divergence_curve`, ~25 s per sample unattended).
+            - **WHAT WAS DELIVERED is the plan PLUS its escape atom.** The shipped log ends at the
+              ARRIVAL because `objective.score_plan` probes the atom on a clone, so the atom's own 7
+              inputs were never in the plan file; `away_walk.probe(...)['log']` re-derives them, and the
+              delivered sequence is **78 frames** -- 71 herd + 7 atom, of which the SCORED end is 75
+              (herd + ``freeze_f`` 4). The remainder is Link's escape, delivered so the console measures
+              that too.
+            - **THE CURVE: N = 1, 4, 8, 14, 21, 28, 35, 42, 49, 56, 62, 66, 69, 70, 71, 72, 73, 74, 75,
+              76, 77, 78 -- every one bit-exact on Link x/z AND Tetra x/z**, and on ``proc``,
+              ``facing``, ``travel`` and ``speedF`` besides. Tetra reads **stt 3 at every sample**, so
+              unlike node 1's curve this plan has NO open frontier and nothing is xfailed: the regime
+              prune and rule 4 are what buy that, and this is the first end-to-end evidence that they
+              do. It is also an independent re-validation of the s55-s59 fidelity fixes on a
+              trajectory none of them was tuned against.
+            - **MILESTONE 2 IS NOW A CONSOLE NUMBER.** At the scored frame the console's own Tetra sits
+              **0.4321 u from genuine coord 274** -- computed from the console read, not from the sim.
+            - **THE ONE CORRECTION, and it is the camera.** The atom is scored on a camera-DETACHED
+              clone commanding the arrival's LIVE csangle, on the premise that its neutral C-stick
+              freezes it there. The freeze is real; the VALUE is not. The C-stick owns the yaw TARGET
+              while the view-cache CHASES it at 0.66/frame, so a plan whose last roll SLEWED the stick
+              hands over a globe still in flight: the shipped plan holds C-stick X at 255 through its
+              last roll and csangle finishes the chase on the atom's FIRST frame, **34181 -> 34330 ->
+              34325**, constant after. The console plays the WIRED value (facing 2099 at the scored
+              frame; the detached clone reads 2070). **Cost, measured: zero where the objective looks**
+              -- Tetra is bit-identical on every atom frame and so are ``freeze_f`` 4, ``reversed_f``
+              4, ``rec17_f`` 7, ``l_ok``, the 3 dips, ``resid`` and every ``tstep``; what moves is
+              Link's own escape path (0.12 -> 0.65 u), which belongs to the separate entry search. Kept
+              for that reason, and because detaching keeps s65-s77's banked rows comparable -- but
+              ``cs_bill`` 0 means "off the ARRIVAL's csangle", not off the delivered one. Before
+              pricing a camera bill on an arrival whose last roll slewed, read the settled value off a
+              WIRED clone.
+            - **AND THE DELIVERED BYTES ARE THE SCORED ONES, measured not assumed.** An authored DTM
+              delivers 255 as 254 and 0 as 1 (`[[octagon-clamp-decode-bug]]`), and this log carries
+              substickY 0 on all 71 frames plus substickX 0/255 on 43 -- so EVERY delivered frame
+              differs from the scored one. The C-stick deltas land inside the camera's own deadzone and
+              the trajectory is bit-identical; a plan whose MAIN stick reached the extremes would move,
+              which is why it is a gate and not a footnote.
+            - **Gates** (+6, 48 cases): `tests/test_plan_console.py` on the LOCKED
+              `fixtures/courtyard_plan_s73_console.json` -- the 22 samples parametrized twice (0-ULP
+              positions; whole-state proc/facing/travel/speedF/stt), the console placement against
+              coord 274, the delivered log's provenance (its prefix IS the plan fixture), the
+              calibration no-op, and the wired-vs-detached camera contrast. KB:
+              `knowledge/mechanics/land-camera.md` gains the neutral-C-stick gotcha and a console
+              re-confirmation in its ``Status:``.
       - [~] **THE 74-FRAME RUNG IS CLOSED ON BOTH LIVE BANDS, AND BY ONE QUANTITY: THE ARRIVAL'S
             CONTACT DEPTH. ROUTE A HAS ITS SEPARATION FRAME BUT **0 OF 4180** VARIANTS FIRE THERE
             (``l_ok`` ON EVERY ONE, AND THE CAMERA CANNOT MOVE IT -- TRAVEL CHASES csangle, SO THE SNAP

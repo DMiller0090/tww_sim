@@ -7,7 +7,9 @@ camera? What did the courtyard Tetra-push planner need modeled, and where is the
 reproduces a fully-chained 120-frame live capture bit-exactly - every committed `csangle`, the
 whole view-cache globe (radius/elevation/yaw), the center chase, and the work springs - across
 settled manual camera, active C-stick orbit, four followCamera blip frames, and two lock-on
-windows (gate `tests/test_land_cam.py`, oracle `fixtures/courtyard_cam_oracle.json`).
+windows (gate `tests/test_land_cam.py`, oracle `fixtures/courtyard_cam_oracle.json`), and
+re-confirmed on console end-to-end inside a 78-frame delivered plan (2026-07-31,
+`tests/test_plan_console.py`).
 **Source:** JP Ghidra decompiles (TWW_JP_NEW3/main.dol): `manualCamera` @ `8017527c`,
 `followCamera` @ `80166bd4`, `nextMode` @ `80160ed8`, `Run` @ `80160260`,
 `limited_range_addition` @ `80161f70`; style table read from the live JP binary
@@ -105,6 +107,14 @@ injected-csangle reference. The camera's per-frame inputs, all from the sim's ow
 
 ## Gotchas (hard-won)
 
+- **A neutral C-stick freezes csangle, but NOT at the value it had.** The stick owns the yaw
+  *target*; the view-cache only *chases* it, at the 0.66/frame cushion. So releasing the stick
+  hands over a globe still in flight, and csangle keeps moving until the chase lands. Measured on
+  console (session 78, `tests/test_plan_console.py`): a plan holding C-stick X at 255 through its
+  last roll hands its escape 144 BAM of unconverged chase, which is collected on the very next
+  frame - `34181 → 34330 → 34325`, constant thereafter. The trap this sets is reading `run.csangle`
+  at a handoff and treating it as the value in force for what follows; take the settled value off a
+  run that has actually stepped a neutral frame.
 - **The zeldaret decomp is unusable for these functions.** `manualCamera` is an empty stub;
   `followCamera`/`lockonCamera` are Nonmatching with a *wrong header binding*: the
   `cSGlobe` SETTER `U`/`V` methods are swapped in `include/SSystem/SComponent/c_angle.h`.

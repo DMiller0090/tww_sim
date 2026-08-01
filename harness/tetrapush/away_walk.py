@@ -116,10 +116,25 @@ def _clone_for_atom(run0):
     """Clone for the atom, in the planner's commanded-csangle convention: a WIRED camera is
     detached (`seed_to_untarget` does the same for the reposition search) so `r.csangle = ...`
     commands the value the sticks are decoded at. The atom's own inputs carry a NEUTRAL C-stick,
-    which FREEZES csangle (`steered_reposition.camera_authority`), so commanding the LIVE value is
-    exactly what the wired camera would do -- that is the replay-faithful convention and it is now
-    `escape_atom`'s default. Commanding a DIFFERENT value is a claim on the camera that only the
-    last roll's C-stick can pay (`snap_bill`); the atom itself has no frames to spare for it."""
+    which FREEZES csangle (`steered_reposition.camera_authority`). Commanding a DIFFERENT value is a
+    claim on the camera that only the last roll's C-stick can pay (`snap_bill`); the atom itself has
+    no frames to spare for it.
+
+    **The freeze is real; the arrival's LIVE value is not what it freezes AT** (session 78,
+    console-measured). The yaw TARGET stops moving with the C-stick, but the view-cache chases it at
+    a 0.66/frame cushion (`knowledge/mechanics/land-camera.md`), so a plan whose last roll SLEWED the
+    C-stick hands the atom a globe still in flight: on the shipped plan the stick sits at 255 through
+    the last roll and csangle finishes its chase on the atom's FIRST frame, 34181 -> 34330 -> 34325,
+    constant thereafter. The console plays the wired value (`tests/test_plan_console.py`), so
+    `escape_atom`'s ``csangle='live'`` default -- and its ``cs_bill`` of 0 -- describe a camera 144
+    BAM off the delivered one.
+
+    Kept anyway, because the cost is MEASURED and it is zero where the objective looks: over the
+    shipped plan's atom, Tetra is bit-identical on every frame and so are ``freeze_f``, ``l_ok``,
+    ``rec17_f``, the dips and every ``tstep``; what moves is Link's own escape path (0.12 -> 0.65 u),
+    which belongs to the separate entry search. Detaching also keeps s65-s77's banked rows
+    comparable. Before pricing a camera bill on an arrival whose last roll slewed, read the settled
+    value off a WIRED clone rather than ``run0.csangle``."""
     r = run0.clone()
     if getattr(r, 'camera', None) is not None:
         r.camera = None
