@@ -1,9 +1,9 @@
 # Actor-vs-actor "Co" push - how Tetra (or any actor) shoves Link
 
 **Answers:** How does another actor push Link (the "Tetra nudge")? What's the cyl-cyl overlap math
-and the weight/rank split? Which way and how far does Link get pushed, and on which frame? How far can
-a push move an actor per frame, and is `|speedF|/2` a hard bound? Can a
+and the weight/rank split? Which way does Link get pushed, and on which frame? Can a
 Tetra push supply the extra displacement a seam clip needs when the roll/thrust falls just short?
+(How FAR a push moves an actor is [push-magnitude.md](push-magnitude.md).)
 **Status:** validated live - decomp-faithful port ([`tww_sim/core/cc_push.py`](../../tww_sim/core/cc_push.py))
 reproduces the game on GZLJ01. The overlap math (`cM3d_Cross_CylCyl`) matches 60/60; the weight split
 is the **`dCcS::SetPosCorrect` rank table** (NOT the base `cCcS` mass-proportional split), confirmed
@@ -14,9 +14,8 @@ cylinder center** (root+neck joint midpoint) is a decomp-faithful anim-engine po
 game's `mCyl` centre during a FRONT_ROLL (2026-07-06). The seam-clip pipeline is now driven by the
 model-derived thrust (`LandState.enter_cut`; reproduces the live (−1727,−990) clip endpoint bit-for-bit),
 and the roll-stab was live-reproduced at the corner - aim/wall-hold/bonk confirmed (2026-07-06, below).
-The per-frame vs sustained push magnitude ([How FAR](#how-far-the-push-can-move-an-actor-per-frame---the-split-law-is-a-steady-state))
-is measured off the recorded courtyard herd (2026-07-28), and the per-frame depth law behind it is
-verified frame by frame over a whole 72-frame herd (2026-07-31).
+The push MAGNITUDE (the per-frame depth law, the sustained ceiling and the depth-vs-distance trade)
+lives in [push-magnitude.md](push-magnitude.md).
 **Source:** decomp `dCcS::SetPosCorrect` / `dCcS::GetRank` / `rank_tbl` (`d_cc_s.cpp:138/153/180`),
 `cM3d_Cross_CylCyl` (`c_m3d.cpp:1553`), `cCcD_Stts::PlusCcMove` (`c_cc_d.cpp`), `daPy_lk_c::posMove`
 + `daPy_lk_c::setCollision` (`d_a_player_main.cpp:9748`) + player/Tetra weights (`:11233`,
@@ -199,36 +198,13 @@ pipeline assumes:
  open - Link's roll passes through that spot, so Tetra must arrive there only on the pre-clip frame (a
  following-NPC timing, or a late position-hack); see the handoff.
 
-## How FAR the push can move an actor per frame - the split law is a STEADY STATE
+## How FAR the push can move an actor per frame
 
-Because the two actors eject in opposite directions along the centre line, a sustained push settles at
-each moving **half** of the pusher's own step: with Link at the roll cap the pushed actor advances at
-most `26 / 2 = 13.0` u/frame **on average**. That is the bound every herd plan is scored against
-([`harness/tetrapush/objective.py`](../../harness/tetrapush/objective.py) `PUSH_CEILING`).
-
-**A single frame is not bounded by it.** The depth is measured to Link's **animated** Co centre (above),
-which moves by his foot term *plus* the pose swing that leads/trails his feet 6-28 u - so a frame in
-which the swing carries the centre forward pushes far harder than half the foot term. Measured on the
-courtyard herd (GZLJ01, the recorded TAS window): the biggest single frame advances Tetra **18.84 u**
-(his 4th, a FRONT_ROLL, ~1.45x the "ceiling"), and a 23-frame search cycle sustains **13.36 u/frame**.
-The swing cancels over a long enough window - the pose returns - which is why his 44-frame mean is
-**12.758**, 98.2% of 13.0 and under it.
-
-So: use 13.0 u/frame for a sustained rate or a distance estimate, never as a per-frame law, and never
-as a hard floor on a plan's length (a ~25-frame window can beat it by ~0.3-0.6 u/frame). A search cycle
-that exceeds it is not a physics bug. Gated by
-[`tests/test_objective.py`](../../tests/test_objective.py)`::test_the_push_ceiling_is_a_sustained_rate_not_a_per_frame_law`.
-
-**What a single frame IS bounded by, exactly:** the ejection is the overlap depth halved, so with the
-pushed actor at rest the frame's push equals `(R_link + R_actor - centre_distance) / 2` - for the
-courtyard pair `(80 - centre_feet) / 2`, measured to the ANIMATED centre. Verified frame by frame over
-a whole 72-frame herd (2026-07-31): `centre_feet` 45.9 → 17.036 u, 59.6 → 10.188 u, every frame, rolls
-included. So the SUSTAINED rate is set by the MEAN centre distance and 13.0 is its fixed point - each
-frame the pusher advances by his step and both actors eject, leaving `centre_next ≈ R_sum - advance`,
-which at the roll cap 26 settles at 54 and hence 13.0 u/frame. A window beats it exactly when the pose
-swing carries the animated centre in faster than the foot term does, and loses to it when contact goes
-shallow: measured on a courtyard arrival, the rolls sustain 99.6% of the ceiling at mean `centre_feet`
-54.1 while the junction frames manage 93.5% at 55.4.
+The magnitude half has its own page: [push-magnitude.md](push-magnitude.md). In one line, a single
+frame's push is exactly the overlap halved - `(R_link + R_actor - centre_distance) / 2`, measured to
+the animated centre above - so the SUSTAINED rate is set by the mean contact depth and settles at
+`|speedF| / 2` (13.0 u/frame at the roll cap). That is an average and not a per-frame bound: the pose
+swing lets one frame reach 18.84 u, and a shallow contact pushes proportionally less.
 
 ## Frame-lag caveat for setups
 

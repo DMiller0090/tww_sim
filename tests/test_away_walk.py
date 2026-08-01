@@ -534,3 +534,181 @@ def test_which_freeze_f_can_fire_is_a_property_of_the_arrival_not_of_the_recipe(
             assert m['recovery'] <= m['plow'] + 1e-6, \
                 "%s freeze_f %s recovers %.3f u by pushing %.3f" % (key, frz, m['recovery'],
                                                                     m['plow'])
+
+
+# --------------------------------------------------------------------- the ledger's own measurement
+
+@pytest.fixture(scope='module')
+def snapreach_s77(env):
+    """The three closest jf-7 PRE-ROLL nodes of `fixtures/courtyard_snapreach_s77.json`, replayed from
+    their delivered input logs. `AW.snap_reach` needs a node and an aim -- it re-fires the roll per
+    camera target, which is the whole point -- so a banked ARRIVAL cannot serve it."""
+    import json
+    import os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'fixtures', 'courtyard_snapreach_s77.json')
+    with open(path) as fh:
+        rec = json.load(fh)
+    out = {}
+    for key, a in rec['nodes'].items():
+        run = seeds.make_freerun(env)
+        run.pre_seed_input(seeds.dtm_input_at(env)(0))
+        for d in a['log']:
+            run.step(d)
+        assert len(a['log']) == a['frames']
+        out[key] = dict(node=dict(run=run, frames=a['frames']), rec=a)
+    return out
+
+
+def test_recovery_row_is_the_ledgers_measurement_and_a_bucket_not_a_rank(hl, arrivals_s75):
+    """**The producer `objective.along_floor`'s ``recovery`` never had** (session 77).
+
+    The rung ledger is ``pd_pre <= recovery(freeze_f) + PLACEMENT_BAND`` and session 76's hard-won half
+    is that the row is a property of the ARRIVAL, never borrowed. A rule that says "measure it here"
+    needs something that measures it: until this, the only producers were scratch scripts, so the rows
+    banked in `fixtures/courtyard_arrivals_s75.json` were not re-derivable by anything tracked.
+
+    Also the correction of session 76's handoff, which asked for a RANK by recovery: at a FIXED arrival
+    ``pd_pre`` is constant, so maximising ``recovery`` is the same ORDER as minimising the landing --
+    which `probe`'s ``rank='miss'`` already is. What the recovery question adds is the ``freeze_f``
+    BUCKET, because ``total = arrival_frames + freeze_f`` and a rung may only spend its own row.
+
+    Cheap grid here; the full-grid 0-ULP re-derivation of both banked rows is the ``slow`` twin below."""
+    kw = dict(flip_step=0x2800, rotate_offs=(0x4000,))
+    rows, _ = seeds.load_placements()
+    for key in ('deep', 'shallow'):
+        a = arrivals_s75[key]
+        r = AW.recovery_row(a['run'], hl, rows, **kw)
+
+        # the ledger's currency, exactly: pd_pre is the arrival's and recovery is what it erases
+        assert r['pd_pre'] == FH._placement_dist(a['run'], rows)
+        assert r['pd_pre'] == a['rec']['arrival']['pd_pre']
+        assert r['centre_feet'] == a['rec']['arrival']['centre_feet']
+        assert r['n_var'] == 3 * 1 * 2 * 2 * 2, "the grid is flips x rots x ta x side x exit"
+
+        for frz, d in r['rows'].items():
+            assert d['n_fire'] <= d['n_all'] and d['n_all'] >= 1
+            if d['n_fire']:
+                # the identity that makes a rank by recovery the same order as a rank by the landing
+                assert d['pd_post'] == pytest.approx(r['pd_pre'] - d['recovery'], abs=1e-12)
+                assert d['recovery'] <= d['plow'] + 1e-6, "recovered more than it pushed"
+                assert d['recovery_all'] >= d['recovery'] and d['plow_all'] >= d['plow']
+                assert d['knobs'] is not None
+
+        # a bucket, NOT a rank: the row is indexed by the frame count it can be spent at, and a
+        # single best-variant probe collapses that away (this is why `probe` cannot answer the ledger)
+        best = AW.probe(a['run'], hl, flip_step=0x2800, rotate_offs=(0x4000,), csangle='live')
+        if best is not None and AW.fires(best):
+            assert best['freeze_f'] in r['rows']
+            assert r['rows'][best['freeze_f']]['recovery'] >= (
+                r['pd_pre'] - FH._placement_dist(best['run'], rows)) - 1e-9
+
+
+@pytest.mark.slow
+def test_recovery_row_re_derives_the_banked_ledger_rows_bit_exact(hl, arrivals_s75):
+    """The full 672-variant grid, 0-ULP against both banked arrivals -- every ``firing_freeze_f`` count
+    and every ``per_freeze_f`` recovery/plow the s75 fixture holds. ~50 s, hence ``slow``: what it buys
+    is that the ledger's numbers stop being a scratch script's word."""
+    rows, _ = seeds.load_placements()
+    for key in ('deep', 'shallow'):
+        a = arrivals_s75[key]
+        r = AW.recovery_row(a['run'], hl, rows)
+        assert r['n_var'] == 672
+        assert {str(f): d['n_fire'] for f, d in r['rows'].items() if d['n_fire']} \
+            == a['rec']['firing_freeze_f'], "%s: the firing population moved" % key
+        for frz, m in a['rec']['per_freeze_f'].items():
+            d = r['rows'][int(frz)]
+            assert d['recovery'] == m['recovery'], "%s frz %s recovery" % (key, frz)   # 0-ULP
+            assert d['plow'] == m['plow'], "%s frz %s plow" % (key, frz)
+
+
+def test_fires_census_attributes_a_refusal_to_a_clause_instead_of_counting_it(hl, arrivals_s75):
+    """**A count is not a diagnosis** (session 77): session 76 reported "0 of 672 variants FIRE" on a
+    whole band and stopped, which is the same dead end as "the pool is empty". `fires` is a CONJUNCTION
+    of five clauses belonging to different stages -- ``l_ok`` is a facing question the previous roll's
+    camera has authority over, ``dips``/``recedes_at_cap`` are the recipe's own shape that no upstream
+    knob buys back -- so which one refuses decides whether a session has anything to spend on.
+
+    Gated on the DECOMPOSITION, which is the part that can rot: `FIRES_CLAUSES` must stay exactly
+    equivalent to `fires`, or the census attributes refusals to the wrong stage."""
+    kw = dict(flip_step=0x2800, rotate_offs=(0x4000,))
+    for key in ('deep', 'shallow'):
+        run = arrivals_s75[key]['run']
+        c = AW.fires_census(run, hl, **kw)
+        assert c['n_var'] == 24 and 0 <= c['n_fire'] <= c['n_var']
+        # every failure counted at least once, and no clause invented
+        assert set(c['fail']) <= set(AW.FIRES_CLAUSES) and set(c['sole']) <= set(c['fail'])
+        assert sum(c['sole'].values()) <= c['n_var'] - c['n_fire']
+
+        # the decomposition IS `fires`: all clauses pass <=> the acceptance accepts
+        ex, ez = seeds.ENTRY_ROLL_POS
+        b_entry = AW.world_angle_s16(ex - run.link.pos_x, ez - run.link.pos_z)
+        n_fire = 0
+        for flip in AW.flip_arc(hl, step=0x2800):
+            for ta in (False, True):
+                for side in (1, -1):
+                    r = AW.escape_atom(run, hl, turnaround_first=ta, rotate_side=side,
+                                       rotate_off=0x4000, flip_bearing=flip, exit_bearing=b_entry,
+                                       csangle=int(run.csangle))
+                    if r is None:
+                        continue
+                    allpass = all(ok(r) for ok in AW.FIRES_CLAUSES.values())
+                    assert allpass == AW.fires(r), \
+                        "FIRES_CLAUSES drifted from `fires` -- the census now mis-attributes"
+                    n_fire += 1 if allpass else 0
+        assert n_fire <= c['n_fire'], "the sub-grid cannot fire more variants than the grid"
+
+
+def test_the_camera_cannot_deliver_the_snap_because_travel_chases_it(hl, snapreach_s77):
+    """**Why a 29 deg camera bill inside a 56 deg slew span is still unpayable** (session 77, and the
+    measurement that closes the escape's camera question rather than re-pricing it).
+
+    `snap_bill` prices the bill against the arrival's live csangle and `full_herd.derived_target_css`
+    supplies the grid the last roll pays from, so it reads affordable. It is not: the snap fires when the
+    ESS stick's world want-angle steps the facing chase ACROSS TRAVEL (`reposition.turnaround`), and the
+    post-roll EBS travel CHASES csangle (s42) -- so slewing the camera moves the stick and the travel
+    together and ``want - travel``, the quantity that decides it, barely moves.
+
+    The gate is the CONTRAST, because either half alone is misleading: over the very same csangles, the
+    REACHABLE states (the roll actually slewed there) essentially never snap, while COMMANDING them onto
+    the travel-frozen arrival does -- which is the cliff a commanded probe sees and no plan can cross."""
+    for key, a in snapreach_s77.items():
+        rec, sr = a['rec'], a['rec']['snap_reach']
+
+        # the banked contrast, on the same csangle set
+        assert rec['commanded']['n_csangles'] == sr['n_states']
+        assert rec['commanded']['n_snap'] >= 9, "%s: the commanded cliff vanished" % key
+        assert sr['n_snap'] <= 1, "%s: reachable snaps now exist -- re-open the camera" % key
+        assert sr['n_clear'] <= 1, "%s: the talk cone is now clearable through target_cs" % key
+
+        # ...and the mechanism behind it: a hole in the reachable want-travel, big enough to hide the
+        # snapping band, which is what the travel chase produces
+        assert sr['gap'] is not None, "%s: the reachable want-travel is now continuous" % key
+        assert sr['gap'][1] - sr['gap'][0] > 12000, \
+            "%s: the hole closed (%s) -- the chase is no longer pinning want-travel" % (key, sr['gap'])
+
+        # and the refusal it causes is `l_ok`, on every variant, with nothing else to fix
+        fc = rec['fires_census']
+        assert fc['n_fire'] == 0 and fc['fail']['l_ok'] == fc['n_var']
+        assert fc['sole'].get('l_ok', 0) > 0, \
+            "%s: l_ok is no longer the sole blocker for any variant" % key
+
+    # re-measured, not just read back: one node, a reduced grid, the same verdict
+    a = snapreach_s77[sorted(snapreach_s77)[0]]
+    sr = AW.snap_reach(a['node'], tuple(a['rec']['aim']), hl, span=0x1000, step=512)
+    assert sr['n_states'] >= 5 and sr['n_snap'] == 0 and sr['n_clear'] == 0
+    assert sr['best_cone'] < 0.0, "Tetra is out of the cone somewhere in the reduced grid"
+
+
+@pytest.mark.slow
+def test_snap_reach_re_derives_the_banked_camera_census(hl, snapreach_s77):
+    """The full +-0x4000 grid at step 64, against every banked node -- the numbers the session-77
+    README box quotes. ~35 s per node, hence ``slow``."""
+    for key, a in snapreach_s77.items():
+        sr = AW.snap_reach(a['node'], tuple(a['rec']['aim']), hl, span=0x4000, step=64)
+        want = a['rec']['snap_reach']
+        for field in ('n_states', 'n_snap', 'n_clear', 'wt_lo', 'wt_hi'):
+            assert sr[field] == want[field], "%s: %s moved %r -> %r" % (key, field, want[field],
+                                                                       sr[field])
+        assert tuple(sr['gap']) == tuple(want['gap'])
+        assert sr['best_cone'] == want['best_cone']          # 0-ULP

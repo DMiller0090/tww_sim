@@ -171,7 +171,17 @@ def snap_bill(run0, *, step=512):
 
     NOTE the bill is not separable from the arrival: the post-roll EBS travel chases csangle, so
     steering the camera to satisfy it MOVES the arrival (s42). It is a term in the roll's ``target_cs``
-    cut (`full_herd.roll_candidates`), never a credit an atom result may assume."""
+    cut (`full_herd.roll_candidates`), never a credit an atom result may assume.
+
+    **AND ON A REAL ARRIVAL IT IS LARGELY UNCOLLECTABLE, not merely coupled** (session 77, and the
+    reason a whole band has no frame answer): the snap is a relation between the ESS stick's world
+    want-angle and the state's TRAVEL, not between the stick and the camera
+    (`reposition.turnaround`) -- and travel chases csangle, so slewing the camera rotates BOTH and
+    the relation is nearly preserved. `snap_reach` measures it: over a roll's whole reachable camera
+    set the quantity that decides the snap has an 87 deg HOLE which is exactly where the snapping
+    band sits, so 0-1 of 110 reachable states snap where a COMMANDED sweep of the same csangles (on a
+    travel-FROZEN state) snaps 5 of 21. A bill this reports as 29 deg can therefore be unpayable at
+    any price -- ask `snap_reach`, not this, before spending a session on the camera."""
     live = int(run0.csangle)
     if snaps_at(run0, live):
         return dict(csangle=live, bam=0, deg=0.0, free=True)
@@ -354,6 +364,210 @@ def fires(res):
     return bool(res is not None and res['l_ok'] and not res['followed']
                 and res['freeze_f'] is not None and len(res['dips']) <= DIP_BUDGET
                 and res['rec17_f'] is not None)
+
+
+#: `fires`' five clauses (True = PASSES), so a refusal can be ATTRIBUTED (`fires_census`) not counted.
+#: The acceptance itself stays in `fires`; this is only its decomposition, gated equivalent to it.
+FIRES_CLAUSES = dict(
+    l_ok=lambda r: bool(r['l_ok']),
+    no_follow=lambda r: not r['followed'],
+    separates=lambda r: r['freeze_f'] is not None,
+    dips=lambda r: len(r['dips']) <= DIP_BUDGET,
+    recedes_at_cap=lambda r: r['rec17_f'] is not None,
+)
+
+
+def fires_census(run0, hl, *, flip_step=0x400, rotate_offs=ROTATE_OFFS, csangle='live',
+                 max_frames=18):
+    """**WHICH `fires` clause refuses an arrival** -- because a count is not a diagnosis (session 77).
+
+    Session 76 reported "0 of 672 variants FIRE" on the jf-7 band and stopped there, which is the same
+    shape of dead end as "the pool is empty" (this work's most-repeated failure mode). `fires` is a
+    CONJUNCTION of five clauses and they belong to different stages: ``l_ok`` is a facing question the
+    previous roll's camera has authority over, ``dips`` and ``recedes_at_cap`` are the recipe's own
+    shape and no upstream knob buys them back, ``separates`` is the arrival's depth. Which one refuses
+    decides whether there is anything left to spend a session on.
+
+    Measured on the jf-7 band's closest arrivals: ``l_ok`` fails on **all 672** variants and is the SOLE
+    blocker on 239-295 of them -- so nothing about the escape's own shape needed fixing, and the whole
+    question was the facing at the frame the L acts. `snap_reach` is then what says whether the camera
+    can move it.
+
+    ``sole`` is the useful column: a variant whose ONLY failing clause is X fires the moment X is fixed.
+
+    Returns ``dict(n_var, n_fire, fail, sole)``, ``fail``/``sole`` counted per clause name."""
+    ex, ez = seeds.ENTRY_ROLL_POS
+    b_entry = world_angle_s16(ex - run0.link.pos_x, ez - run0.link.pos_z)
+    up_herd = (hl.bearing_bam() + 0x8000) & 0xFFFF
+    cs = int(run0.csangle) if csangle == 'live' else (snap_csangle(run0) if csangle == 'snap'
+                                                     else int(csangle))
+    cs = int(run0.csangle) if cs is None else cs
+    fail, sole, n_var, n_fire = {}, {}, 0, 0
+    for flip in flip_arc(hl, step=int(flip_step)):
+        for ro in tuple(rotate_offs):
+            for ta in (False, True):
+                for side in (1, -1):
+                    for exb in (b_entry, up_herd):
+                        r = escape_atom(run0, hl, turnaround_first=ta, rotate_side=side,
+                                        rotate_off=ro, flip_bearing=flip, exit_bearing=exb,
+                                        csangle=cs, max_frames=max_frames)
+                        if r is None:
+                            continue
+                        n_var += 1
+                        bad = [k for k, ok in FIRES_CLAUSES.items() if not ok(r)]
+                        if not bad:
+                            n_fire += 1
+                            continue
+                        for k in bad:
+                            fail[k] = fail.get(k, 0) + 1
+                        if len(bad) == 1:
+                            sole[bad[0]] = sole.get(bad[0], 0) + 1
+    return dict(n_var=n_var, n_fire=n_fire, fail=fail, sole=sole)
+
+
+def _ess_want(csangle):
+    """The ESS turnaround stick's WORLD want-angle at ``csangle`` -- the game's own ``m34E8``, i.e.
+    what the facing chase steps toward on the snap frame (`reposition.turnaround`)."""
+    from harness.tetrapush import two_roll as T
+    from harness.tetrapush.reposition import ESS_DOWN
+    from tww_sim.land.plan_land._primitives import main_stick_decode
+    return T.world_facing(main_stick_decode(ESS_DOWN[0], ESS_DOWN[1])[0], int(csangle))
+
+
+def snap_reach(node, aim, hl, *, span=None, step=64, l_window=(4, 7), gap_min=2000):
+    """**WHICH CAMERA STATES A ROLL CAN ACTUALLY DELIVER, and why the snap is not among them**
+    (session 77) -- the measurement that closes the escape's camera bill instead of re-pricing it.
+
+    `snap_bill` reports the bill against the arrival's live csangle and `full_herd.derived_target_css`
+    supplies the grid the last roll can pay it from, so a bill of 29 deg inside a 56 deg span reads
+    payable. It is not, and the reason is mechanical: `reposition.turnaround`'s snap fires when the ESS
+    stick's world want-angle steps the facing chase ACROSS TRAVEL, so the quantity that decides it is
+    ``want - travel`` -- and the post-roll EBS travel CHASES csangle (s42). Slewing the camera moves the
+    stick and the travel together, so ``want - travel`` stays pinned near 0 while the camera sweeps 87
+    deg, and the snapping band (measured 16-38 deg BEHIND travel) sits in a HOLE of the reachable set.
+
+    Measured on the jf-7 band's three closest arrivals, a +-0x4000 grid at step 64 (513 targets, 110
+    distinct reachable ``(exit_cs, travel)`` states each): ``want - travel`` reaches -21906..+6195 BAM
+    with a **15866 BAM (87 deg) gap**, 0/0/1 states snap, and the same csangles COMMANDED onto a
+    travel-frozen state snap 5 of 21 and clear the talk cone. So a commanded-camera probe sees a cliff
+    no payable state can cross, which is what made a whole band look merely expensive.
+
+    ``node`` is a PRE-roll endpoint (`full_herd.junction_beam`'s shape -- ``run``/``frames``), ``aim``
+    its roll aim: the sweep has to re-fire the roll per target, because the camera's effect on the
+    arrival is the whole point.
+
+    Returns ``dict(n_states, n_snap, n_clear, wt_lo, wt_hi, gap, best_cone, states)``; ``gap`` is the
+    widest hole (> ``gap_min`` BAM) in the reachable ``want - travel`` set, ``None`` if there is none."""
+    from harness.tetrapush import two_roll as T
+    from harness.tetrapush.reposition import ESS_DOWN
+    from harness.tetrapush import search as S
+    span = FH.ESCAPE_TCS_SPAN if span is None else int(span)
+    cs0 = int(node['run'].csangle)
+    seen, states = set(), []
+    for off in range(-int(span), int(span) + 1, int(step)):
+        rr = node['run'].clone()
+        seg = T.roll_segment(rr, tuple(aim), target_cs=(cs0 + off) & 0xFFFF, l_window=l_window)
+        if not seg['ok']:
+            continue
+        cs, travel = int(rr.csangle), int(rr.link.travel)
+        if (cs, travel) in seen:
+            continue
+        seen.add((cs, travel))
+        c = _clone_for_atom(rr)
+        f0 = int(c.link.facing)
+        c.step(_mk(*ESS_DOWN))
+        turned = abs(_s16(int(c.link.facing) - f0))
+        c.step(_mk(*stick_for_bearing(hl.bearing_bam(), int(c.csangle), msd=1.0), l=1))
+        states.append(dict(cs=cs, travel=travel, want_minus_travel=_s16(_ess_want(cs) - travel),
+                           turned=turned, snaps=turned > _SNAP_MIN_TURN,
+                           l_active=bool(S.talk_active(c)), cone=_cone_margin(c)))
+    wts = sorted(s['want_minus_travel'] for s in states)
+    gap = None
+    for a, b in zip(wts, wts[1:]):
+        if b - a > int(gap_min) and (gap is None or b - a > gap[1] - gap[0]):
+            gap = (a, b)
+    return dict(n_states=len(states), n_snap=sum(1 for s in states if s['snaps']),
+                n_clear=sum(1 for s in states if not s['l_active']),
+                wt_lo=(wts[0] if wts else None), wt_hi=(wts[-1] if wts else None), gap=gap,
+                best_cone=(max(s['cone'] for s in states) if states else None), states=states)
+
+
+def _cone_margin(run):
+    """How far OUTSIDE the +-90 deg talk cone Tetra sits, in degrees (negative = inside it, i.e. an L
+    acting now targets her). The `search.talk_active` predicate as a signed margin, so a refusal can be
+    read as a distance rather than a boolean."""
+    b = world_angle_s16(run.tx - run.link.pos_x, run.tz - run.link.pos_z)
+    return abs(_s16(b - int(run.link.facing))) * _BAM_DEG - 90.0
+
+
+def recovery_row(run0, hl, placements, *, flip_step=0x400, rotate_offs=ROTATE_OFFS, csangle='live',
+                 max_frames=18):
+    """**What the escape RECOVERS of one arrival's placement, per separation frame** -- the measuring
+    function `objective.along_floor`'s ``recovery`` argument needs, and did not have (session 77).
+
+    The ledger the frame rungs are decided by is ``pd_pre <= recovery(freeze_f) + PLACEMENT_BAND``, and
+    session 76 established the hard half of it: that row is a property of the ARRIVAL, never portable
+    between bands (``freeze_f`` is set by the arrival's own `full_herd._centre_feet`, and the plow the
+    escape can spend scales with the frames that buys -- at ``freeze_f`` 3 the bound reads 20.31 u on one
+    real arrival and 48.57 on another). A rule that says "measure it here" needs something that measures
+    it, and until this the only producers were scratch scripts, so the numbers banked in
+    `fixtures/courtyard_arrivals_s75.json` were not re-derivable by anything tracked.
+
+    Every variant of the same knob grid `probe` sweeps, bucketed by ``freeze_f`` -- because that bucket
+    IS the frame count a plan reaches (``total = arrival_frames + freeze_f``), so a row is only usable
+    against the rung it belongs to. Both populations, for the same reason `push_profile` keeps both: the
+    FIRING ones are what a plan may use, and ALL of them give the physical plow bound the allowance is
+    made of.
+
+    **This is a bucket, not a new rank** (the correction of session 76's step 1). At a FIXED arrival
+    ``pd_pre`` is constant, so maximising ``recovery = pd_pre - pd_post`` is the same ORDER as
+    minimising the landing -- which `probe`'s ``rank='miss'`` already is. What the recovery question adds
+    over that rank is the ``freeze_f`` split: `probe` returns ONE variant, and a rung needs the best
+    landing reachable AT ITS OWN separation frame, not the best landing anywhere in the grid.
+
+    Returns ``dict(pd_pre, centre_feet, csangle, n_var, n_fire, rows)``, ``rows`` keyed by ``freeze_f``
+    with ``n_all``/``n_fire``/``recovery``/``recovery_all``/``plow``/``plow_all``/``pd_post``/``knobs``
+    (``recovery``/``plow``/``pd_post``/``knobs`` are the FIRING population; ``None`` where none fires)."""
+    ex, ez = seeds.ENTRY_ROLL_POS
+    b_entry = world_angle_s16(ex - run0.link.pos_x, ez - run0.link.pos_z)
+    up_herd = (hl.bearing_bam() + 0x8000) & 0xFFFF
+    cs = int(run0.csangle) if csangle == 'live' else (snap_csangle(run0) if csangle == 'snap'
+                                                     else int(csangle))
+    if cs is None:
+        cs = int(run0.csangle)
+    pd0 = FH._placement_dist(run0, placements)
+    rows, n_var, n_fire = {}, 0, 0
+    for flip in flip_arc(hl, step=int(flip_step)):
+        for ro in tuple(rotate_offs):
+            for ta in (False, True):
+                for side in (1, -1):
+                    for exb in (b_entry, up_herd):
+                        r = escape_atom(run0, hl, turnaround_first=ta, rotate_side=side,
+                                        rotate_off=ro, flip_bearing=flip, exit_bearing=exb,
+                                        csangle=cs, max_frames=max_frames)
+                        n_var += 1
+                        if r is None or r['freeze_f'] is None:
+                            continue
+                        d = rows.setdefault(r['freeze_f'],
+                                            dict(n_all=0, n_fire=0, recovery=None,
+                                                 recovery_all=-1e9, plow=None, plow_all=0.0,
+                                                 pd_post=None, knobs=None))
+                        rec = pd0 - FH._placement_dist(r['run'], placements)
+                        plow = push_profile(r)['total']
+                        d['n_all'] += 1
+                        d['recovery_all'] = max(d['recovery_all'], rec)
+                        d['plow_all'] = max(d['plow_all'], plow)
+                        if not fires(r):
+                            continue
+                        n_fire += 1
+                        d['n_fire'] += 1
+                        d['plow'] = plow if d['plow'] is None else max(d['plow'], plow)
+                        if d['recovery'] is None or rec > d['recovery']:
+                            d['recovery'], d['pd_post'] = rec, pd0 - rec
+                            d['knobs'] = dict(turnaround_first=ta, rotate_side=side,
+                                              rotate_off=ro, flip_bearing=flip, exit_bearing=exb)
+    return dict(pd_pre=pd0, centre_feet=FH._centre_feet(run0), csangle=cs, n_var=n_var,
+                n_fire=n_fire, rows=rows)
 
 
 def flip_arc(hl, *, step=0x400, half=FLIP_SPAN, center=None):

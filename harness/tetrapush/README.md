@@ -258,6 +258,7 @@ deliberately unported.
 | `full_herd.landing_key` | **The LAST cycle's tcs cut, which was ranked by a question that cycle does not have** (session 70). `junction_quality` asks whether the NEXT junction can continue from a roll's exit; the last cycle has none -- `extend_cycle` already turns the GATE off (``require_quality=False``) and s43-s69 left the ORDER ranked by it anyway. Its exit IS the handoff state, so rank it by where the escape lands from it: `objective.thread_frames` of `aim.landing_miss` (the exit plus the MEASURED residual), free to compute and the same prediction `escape_probe` then confirms with the real atom on the survivors. The contrast is measured on real arrivals: `rank_key('thread')` scores an arrival sitting ON the coord -- 44 u past the state the escape needs -- as its **BEST (0.00 frames)** and one at the handoff target **3.36 worse**, because the thread's 47.6 u of along slack charges nothing for along inside it; `landing_key` reverses that, and the exact landing says which is right (the escape from the coord position overshoots the thread by **14.54 u**, from the handoff target one by **5.47**). Wired `chain_herd(last_landing=True)`, default ON. Gated `tests/test_full_herd.py`. |
 | `full_herd.roll_probe(target_along=)` / `aim.handoff_rows` | **THE OVERSHOOT, priced in the keep and in the rank** (session 70). A cycle's roll is a ~205 u atom that cannot stop short, so where a plan FINISHES is decided when its last endpoint is chosen -- and nothing ranked that: s69's cycle-3 endpoints landed Tetra at along **947** against a `aim.handoff_target` of **894**, ~4 frames of push spent going past and then paid back in lateral, which is that run's whole **78-80 against a 75-frame budget**. `roll_probe` already fires the entire aim fan, so the along its rolls DELIVER costs nothing to report: ``arrive`` = the smallest |delivered along - target| any surviving roll reaches, ``over`` its signed value, purely additive (rate/off/n unchanged). A share of `extend_cycle`'s endpoint keep goes to it (``arrive_keep``, `chain_herd(last_arrive=)` default ON, LAST cycle only -- measured, from a cycle-2-range endpoint every surviving roll undershoots by ~300 u, so there the keep is inert by construction). `aim.handoff_rows` is the rank-side twin: the whole placement set translated up-herd by the measured residual, an exact translation (slope/length/off-axis/chord-dev identical, near end == `handoff_target` to the last digit) that drops into any ``placements=``, so `rank_key(resid=)` prices arrival at the handoff -- against the shifted thread the s69 overshoot costs 0.54 frames where the real thread paid it 1.0 for going past. NEVER passed to the admissible budget CUT. Gated `tests/test_aim.py` + `tests/test_full_herd.py`. |
 | `away_walk.snap_bill` / `full_herd.camera_probe_key` | **THE ESCAPE'S CAMERA BILL, AND THE STAGE THAT PAYS IT** (session 73). The atom's turnaround needs the csangle inside its snap window and its own C-stick is neutral, so it cannot slew there -- yet `escape_atom` simply COMMANDED the value, and `snap_csangle` scanned from csangle 0 and returned the FAR edge of a window that is **78.8-81.6 deg wide**: 91.3-113.8 deg off live on every one of 112 real arrivals, which is the camera state every atom number from s65 to s72 was computed at. The NEAREST member is **15.3-37.8 deg** (median 21.0) and one roll's C-stick slews **-46.6..+40.7**, so the bill fits in the LAST ROLL's otherwise idle camera channel. Now: `snap_csangle(near=True)` returns the near member; `escape_atom`'s ``csangle`` defaults to the arrival's own LIVE value (replay-faithful -- the neutral C-stick holds it) with ``'snap'`` an explicit mode and ``cs_bill`` on every result; `snap_bill` reports what is owed; and the last cycle's grid widens `TCS_SPAN` -> `ESCAPE_TCS_SPAN` with `camera_probe_key` as a keep share on the bill (`extend_cycle(tcs_escape=)`, `chain_herd(last_camera=)`, default ON, ~free). **63 of 112 arrivals then owe nothing** (0 do at the shipped neutral camera) and the faithful frontier beats the commanded one: **75 f, pd 0.432 u, `objective.verdict` TRUE** against s72's 1.644 at the same 75. A KEEP and never a filter, measured: over 656 (arrival, tcs) cells 274 fire and only 12 snap, so a filter would drop 96% of the firing states, while a keep of 3 by the bill retains a best-bound cell for 13 of 14 arrivals at median 0.00 frames of loss (the front-cone margin retains 7 / 3). Gated `tests/test_away_walk.py` + `tests/test_full_herd.py`. |
+| `away_walk.recovery_row` / `fires_census` / `snap_reach` | **THE THREE MEASUREMENTS THE LEDGER WAS BEING RUN WITHOUT** (session 77). `recovery_row` is the producer `objective.along_floor`'s ``recovery`` never had: every variant of the knob grid bucketed by ``freeze_f``, both populations, in the ledger's own currency -- it re-derives BOTH banked arrivals of `fixtures/courtyard_arrivals_s75.json` **0-ULP**, so s75/s76's rows stop being a scratch script's word, and the "never borrow a row across bands" rule finally has something to measure with. It is a BUCKET and not a new rank: at a fixed arrival ``pd_pre`` is constant, so max-recovery is the same order as min-landing (``rank='miss'``); what it adds is the per-``freeze_f`` split, since ``total = arrival_frames + freeze_f``. `fires_census` decomposes `fires` into its five clauses (`FIRES_CLAUSES`, gated EQUIVALENT to it) and reports which one refuses plus the SOLE-blocker count -- because "0 of 672 variants fire" is a count, not a diagnosis, and on the live bands the answer is ``l_ok`` on **all 672** with nothing else down on 239-364. `snap_reach` is why that cannot be bought: it sweeps the channel that would actually PAY (the previous roll's ``target_cs``) and reports the ``(csangle, travel)`` states it delivers -- **0-1 of 110 snap where the same csangles COMMANDED on a travel-frozen state snap 9-10**, because travel chases csangle and ``want - travel`` has an 87 deg hole exactly where the window is. Ask it before spending a session on the camera; `snap_bill`'s 29 deg can be unpayable at any price. Gated `tests/test_away_walk.py` (+4, 2 ``slow``) on `fixtures/courtyard_snapreach_s77.json`; the mechanic is `knowledge/mechanics/ebs-turnaround.md`. |
 | `beam_io.py` | **The CHEAP-ITERATION path** (session 61): dump a search beam to JSON and rebuild it BIT-EXACT. A node's identity IS its delivered input log (`confirm_plan`'s own convention), so a beam round-trips through plain JSON with no simulator state to serialise, and `rebuild_beam` (~0.3 ms per logged frame) hands back live nodes `extend_cycle`/`terminal_targeting`/`confirm_plan` accept. Use it instead of re-running the ~475 s stages that produced a beam -- session 61 burned ~25 minutes of search on a one-expression bug for want of this. Gated `tests/test_full_herd.py::test_a_dumped_beam_rebuilds_bit_exact_from_its_input_logs` (fingerprint equality + the rebuilt node confirming). |
 | `feasibility.py` | **The COARSE-FEASIBILITY report** (session 28): from the bit-exact 2-cycle window, answers "can a few push cycles herd Tetra the full ~960 u to the genuine-coord cluster, in-regime?" -- directional (herd bearing vs target bearing), per-cycle reach, and the plow-regime bound. VERDICT: CONFIRMED (0.2 deg direction match, ~3 cycles, dist 40-85 u < engage 230). All numbers recomputed live. CLI `python -m harness.tetrapush.feasibility`. |
 | `_notes/tetrapush-camoracle_probe.py` | (gitignored) Session-18 land-camera ORACLE probe: run A re-captured with the FULL dCamera_c block (0x520 B, incl. mEventFlags/mCurStyle/mCurType), player status words, attention lockstate, both actors' `attention_info.position`, and the pad main-stick angle. Baked to `fixtures/courtyard_cam_oracle.json` (the `test_land_cam.py` gate). |
@@ -1655,11 +1656,107 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
-      - [~] **THE JUNCTION BEAM IS NOT THE BINDING STAGE: 9.8x THE ENDPOINTS BUYS 0.00 u OF ARRIVAL
+      - [~] **THE 74-FRAME RUNG IS CLOSED ON BOTH LIVE BANDS, AND BY ONE QUANTITY: THE ARRIVAL'S
+            CONTACT DEPTH. ROUTE A HAS ITS SEPARATION FRAME BUT **0 OF 4180** VARIANTS FIRE THERE
+            (``l_ok`` ON EVERY ONE, AND THE CAMERA CANNOT MOVE IT -- TRAVEL CHASES csangle, SO THE SNAP
+            WINDOW SITS IN AN 87 deg HOLE OF THE REACHABLE SET); ROUTE D HAS **NO frz-2 VARIANT AT ALL**
+            (MIN SEPARATION 3-4 -- EVERY ARRIVAL OF BOTH BANDS LANDS AT cf 47-51 WHERE frz 2 NEEDS
+            ~55.5). AND DEPTH IS ANTI-CORRELATED WITH PLACEMENT AT 0.32-0.53 u PER u OVER 1525 REAL
+            ARRIVALS, SO THE RUNG'S TWO REQUIREMENTS MOVE IN OPPOSITE DIRECTIONS (session 77).**
+            Session 76 handed over "attack the escape's push DIRECTION, not the arrival's placement --
+            that is where the 74th frame now is", with a two-step recipe: re-rank the atom sweep on
+            recovery, then sweep ``target_cs`` and the atom JOINTLY. Both were run. Step 1's answer was
+            already banked and step 2 turned into the closure, because the joint sweep found the refusal
+            is not a magnitude at all.
+            - **STEP 1 WAS A RANK THAT ALREADY EXISTS, and its number was mis-transcribed.** At a FIXED
+              arrival ``pd_pre`` is constant, so maximising ``recovery = pd_pre - pd_post`` is the same
+              ORDER as minimising the landing -- which `away_walk.probe`'s ``rank='miss'`` already is;
+              what the recovery question adds is the ``freeze_f`` BUCKET, since ``total =
+              arrival_frames + freeze_f`` and a rung may only spend its own row. Re-read off s76's own
+              `s76_reprice` output, the CLOSEST jf-7 arrival (``pd_pre`` 34.162) recovers **28.87 u** at
+              frz 3, not the 21.08 the handoff quoted (that is a different arrival's row, 34.629): the
+              deficit was **4.29 u**, not 12.08.
+            - **AND THE MEASUREMENT IT NEEDS IS NOW SHIPPED, because the ledger had no producer**:
+              `away_walk.recovery_row` -- every variant of the grid bucketed by ``freeze_f``, both
+              populations, in `objective.along_floor`'s own currency. It re-derives BOTH banked arrivals
+              of `fixtures/courtyard_arrivals_s75.json` **0-ULP** (every ``firing_freeze_f`` count and
+              every ``per_freeze_f`` recovery/plow), so s75/s76's rows stop being a scratch script's
+              word. The "never borrow a row" rule now has something to measure with.
+            - **THE JOINT SWEEP: ``target_cs`` IS EXIT-ONLY, SO IT BUYS FIRING AND NOTHING ELSE** (2 x
+              252 cells, 41 camera targets x the 672-variant knob grid on the 6 closest arrivals of each
+              band, ~680 s each over 10 workers). ``pd_pre`` is **bit-identical across all 41 targets**
+              on all 12 arrivals -- `target_cs_is_exit_only`, re-confirmed on the live bands -- so the
+              camera cannot move the placement, only whether a variant fires. And it barely does:
+
+                  band          arrivals  cells with a FIRING variant   best firing total (pd_post)
+                  jf 7 (71 f)      6              1 of 252              75 f, pd_post 7.317
+                  jf 8 (72 f)      6              5 of 252              76 f, pd_post 2.959
+
+              The shipped plan is 75 f at pd **0.432**, so nothing here beats it -- and at the RUNG the
+              two routes need, the count is 0.
+            - **ROUTE A: THE SEPARATION FRAME EXISTS AND NOTHING FIRES AT IT.** At ``freeze_f`` 3 the
+              six jf-7 arrivals hold 202-1278 variants each (4180 in total across the camera grid) and
+              **0 fire, on every arrival**. `away_walk.fires_census` -- new, because a count is not a
+              diagnosis -- names the clause: ``l_ok`` fails on **all 672** variants and is the SOLE
+              blocker on 239-364 of them, so nothing about the escape's own shape needed fixing. The
+              recovery magnitude is short too (frz-3 max 21.7-29.1 u against a 33.16-33.77 u need), so
+              even a firing variant would miss.
+            - **AND THE CAMERA CANNOT FIX ``l_ok``, for a mechanical reason worth not re-paying**
+              (`away_walk.snap_reach`, new, + `knowledge/mechanics/ebs-turnaround.md`, new). The snap
+              fires on ``want - travel`` (the ESS stick's world want-angle against TRAVEL, not against
+              facing -- `reposition.turnaround`), and the post-roll EBS travel CHASES csangle, so
+              slewing the camera moves both together. Measured, +-0x4000 at step 64 → 110 distinct
+              reachable ``(csangle, travel)`` states per arrival:
+
+                                          reachable        commanded (travel frozen)
+                  states that SNAP         0 / 0 / 1        10 / 9 / 9   of 110
+                  want-travel covered      87 deg HOLE      continuous
+
+              The hole is exactly where the snapping band sits. So a bill `snap_bill` prices at 29 deg
+              inside a 56 deg slew span is **unpayable at any price**, and s76's "0 of 672 fire" was not
+              an unmeasured column -- it was this.
+            - **ROUTE D: THE FRAME ITSELF DOES NOT EXIST.** 74 frames from a 72-f arrival needs
+              ``freeze_f`` 2, and across all 6 jf-8 arrivals x 41 camera targets x 672 knobs there are
+              **0 variants at frz 2** -- the minimum separation is 3 or 4. ``freeze_f`` is set by the
+              arrival's own `full_herd._centre_feet` (s75) and every arrival of both bands lands at
+              **47.0-51.2**, where the one real frz-2 arrival sits at **55.50**. So route D fails in
+              FRAMES, before placement is considered.
+            - **WHICH NAMES THE AXIS NOTHING HAS SEARCHED -- AND PRICES IT AGAINST THE PUSH LAW**
+              (`s77_pareto`, 1081 + 444 real arrivals, 11 s each). The bands DO reach shallow arrivals
+              (cf up to 66.4), but placement degrades monotonically with depth, because a contact that
+              finishes shallow was pushing weakly on its way there -- `(80 - centre_feet)/2` per frame,
+              s76's own law:
+
+                  final centre_feet   46-48  48-50  50-52  52-54  54-56  56-60   60+
+                  best pd_pre, jf 7   34.63  34.16  35.46  38.07  37.54  40.27  41.64
+                  best pd_pre, jf 8   24.50  24.99  25.46  25.75  26.69  28.78  29.90
+
+              **0.32-0.53 u of placement per u of depth.** And the rung wants BOTH: a shallow arrival to
+              separate in 2-3 frames, and a close one to be inside the allowance -- while a shallower
+              escape ALSO recovers less (frz 2 ~15 u against frz 3's 21-29). Priced at cf 55: the
+              requirement tightens ~14 u while the supply worsens 3.4 u. That is why s71-s76 each moved
+              a different knob and none moved the frontier -- the two requirements are coupled by the
+              push law, and both bands sit on their own Pareto frontier. KB: the split-out
+              `mechanics/push-magnitude.md` carries the trade.
+            - **Gates** (+4, 2 of them ``slow``): `tests/test_away_walk.py::
+              test_recovery_row_is_the_ledgers_measurement_and_a_bucket_not_a_rank` (the currency, the
+              recovery/pd_post identity, and that a single-best probe cannot answer a per-rung row),
+              `test_recovery_row_re_derives_the_banked_ledger_rows_bit_exact` (``slow``, 0-ULP vs the
+              s75 fixture), `test_fires_census_attributes_a_refusal_to_a_clause_instead_of_counting_it`
+              (pins `FIRES_CLAUSES` EQUIVALENT to `fires`, so the census cannot mis-attribute) and
+              `test_the_camera_cannot_deliver_the_snap_because_travel_chases_it` (the reachable-vs-
+              commanded CONTRAST -- either half alone is misleading -- plus a live re-measure), with
+              `test_snap_reach_re_derives_the_banked_camera_census` (``slow``) re-deriving the numbers
+              above. New fixture `fixtures/courtyard_snapreach_s77.json` (3 pre-roll nodes as delivered
+              input logs -- `snap_reach` needs a NODE, so a banked arrival cannot serve it).
+      - [x] **THE JUNCTION BEAM IS NOT THE BINDING STAGE: 9.8x THE ENDPOINTS BUYS 0.00 u OF ARRIVAL
             REACH. AND THE LEDGER THAT CALLED THE ROUTES SHORT IS NOT BAND-PORTABLE -- MEASURED ON THE
             jf-7 BAND'S OWN ARRIVALS ITS ALLOWANCE IS 34.76-37.05, NOT 23.94, WHICH ADMITS THE BAND.
             WHAT ACTUALLY REFUSES 74 FRAMES IS THE ESCAPE'S PUSH **DIRECTION** (21.08 u of a 33.76 u
             PLOW POINTS AT THE THREAD) AND THE CAMERA BILL (0 of 672 VARIANTS FIRE) (session 76).**
+            Session 77 ran both steps of this box's handoff and CLOSED the rung: the direction is not
+            the binding term either -- ``l_ok`` refuses every frz-3 variant, the camera cannot fix it,
+            and route D has no frz-2 frame at all. See the box above.
             Session 75 handed over "widen the JUNCTION beam, not the node -- it is the stage this
             session measured to be the binding one, and it has never been widened", with one number to
             decide it: does node 0's jf-7 floor drop below 23.94 at ``beam`` 64/128? It was run at full
