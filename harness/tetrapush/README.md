@@ -223,6 +223,7 @@ deliberately unported.
 | `entry_search.py` | **THE SEPARATE ENTRY SEARCH (Dereck s60), and the s45 fork settled by measurement (session 79).** The DUAL of `_generated/tetra_placements.tsv`: the herd is console-confirmed, so Tetra is a MEASURED CONSTANT and the ROLL ENTRY is what gets swept. `tabulated_verdict` is the fork measurement -- standing exactly on `seeds.ENTRY_ROLL_POS` does NOT clip the console's own Tetra (resid **+0.3139 u** against a **1.16e-4 u** window), because her 0.4321 u placement miss is **0.4314 u perpendicular** to the coord thread; route (A) is dead on its premise, not on walk precision. `resid_fn` is the razor's smooth coordinate (the cut ray's offset from the seam vertex S -- the seam PLANES are negative almost everywhere and useless); `acceptance_window` MEASURES the genuine band off the 288 coords rather than assuming it; `genuine_entries` maps the entry locus (coarse residual sweep -> keep near zero -> refine to the f32 dust: blind fine sweeping finds 1 hit in 231k); `locus_metrics`/`entry_gradient` give the shape and the ~1 ULP precision a search must hit; `continue_walk` replays the locked console log and keeps walking (reachability). CLI `{verdict,window,locus,reach}`. Gated `tests/test_entry_search.py` (16). |
 | `roll_fidelity.py` | **THE GATE THAT SAYS THE SWEEP IS SCORING THE RIGHT ROLL** (session 80). `walk_then_roll` performs a REAL from-rest walk + A-press turnaround roll + UP+B in the WALLED coupled engine and bakes the same nine tables `extract_schedule_at` does, so the reseed can be diffed per frame against the thing it stands in for. It decides three questions at once: which frame's position and lean the ctx wants (the END of the entry frame -- the pre-entry reading mismatches `chx/chz`), whether the reseed's cold anim/pose state matters (it does not, all nine bit-identical), and whether the armed crash latch matters (a real roll ARMS `_roll_m3570` and does contact the wall mid-roll, but the bonk cone never lines up before the B edge -- 0 of 246 entry x facing rolls differ). Also the honest way to enumerate aims: fire the roll and read the facing back, never trust a commanded one. Gated `tests/test_entry_search.py`. |
 | `entry_search.{fast_schedule,roll_entry,aim_alphabet,qualify}` | **THE SESSION-80 SEARCH ENGINE.** `fast_schedule` drops the 22 ms simulated ctx build for a 0.19 ms analytic one, 0-ULP identical over facing x lean x thrust -- the ctx build, not the alphabet, was the whole budget. `roll_entry`/`lean_at_roll` convert a walk endpoint into the entry the game hands you (one 26 u roll step along the AIM, one lean decay tick), both bit-exact; s79 fed the walk endpoint straight in. `aim_alphabet` is 81 wide, not 6 -- the msd 1.0 floor was not physical. And `qualify`/`configuration_band` is the one that matters: of 243 (facing, thrust) configurations only **6** admit a genuine locus, **169** have no leverage at all (grad < 1e-3 -- Tetra out of Co range on the cut frame), and each productive one has its OWN acceptance band, narrower than and offset from the fixture window that is their union. |
+| `entry_fan.py` | **THE FAN ON THE NATIVE FLEET, AND THE HONEST DRAW COUNT (session 81).** `graft` transplants the WIRED Python `FreeRun`'s mid-walk state into a `LandCore` -- required because the stripped native config does NOT reproduce the wired replay of the console log (it diverges at log frame 19 on `facing`, the proc-9 re-aim falling back to Tetra's feet), and `LandCore.setup` resets the mid-walk scalars `CARRY` restores. `iter_fan`/`fleet_fan` are `entry_search.walk_fan` on `CourtyardFleet.run_par`: **43596 candidates in 17 s against 1444 s, key AND value bit-identical** to the cached s80 pass (write order is part of the contract -- the reference collapses ~5.5M writes onto 43596 keys, last writer wins). `iter_fan2` adds TWO-SEGMENT holds off the first segment's own junction cores. `BandTable` is the correction that matters: the acceptance band is a function of the **lean** too, so a candidate at a dead lean is not a near-miss -- **83% of the widest pass's draws are dead**, its 72 near-misses are 6, and E[hits] is 0.02 not 0.23. `stream_search` scores a fan stream batch-by-batch against each candidate's OWN (facing, thrust, lean) band. CLI `{gate,fan,fan2,search1,search2}`. Gated `tests/test_entry_fan.py` (11 + 1 slow). |
 | `fixtures/courtyard_entry_locus_s79.json` | **THE ENTRY LOCUS** -- 1735 genuine roll entries for Tetra pinned at her console-measured herd endpoint, at facing 40835 / m351C 0, plus the acceptance window, the fork verdict, the gradient, the m351C sensitivity table and the reachability rows. One thin curve 104 u long; **856 inside the 230 u follow bar** = the usable target, nearest 49.7 u from where the escape leaves Link. DERIVED, not measured -- regenerable by `python -m harness.tetrapush.entry_search locus` (~250 s), pinned so the gates do not pay the sweep. |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). Session 19: extracts **poll index 2** of each 4-poll frame group -- the poll the game actually latches (live-pinned via the camera oracle on the window's two non-uniform groups); regen with no capture preserves the baked live rows. |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
@@ -1661,6 +1662,83 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE FAN IS NATIVE AND GATED (43596 CANDIDATES IN 17 s AGAINST 1444, KEY-FOR-KEY
+            BIT-IDENTICAL) -- AND THE THROUGHPUT'S FIRST FINDING IS THAT THE FAN WAS NEVER THE
+            BINDING CONSTRAINT: THE ACCEPTANCE BAND IS A FUNCTION OF THE **LEAN**, SO **83% OF THE
+            WIDEST PASS'S DRAWS ARE DEAD** -- 72 NEAR-MISSES ARE REALLY 6 AND E[hits] IS **0.02, NOT
+            0.23** (session 81).** The handoff asked for the fan on the fleet and then two-segment
+            holds; the fan landed, and the first thing it bought was an audit that redirected the
+            search away from candidates altogether.
+            - **THE GRAFT IS WHAT MAKES A NATIVE FAN POSSIBLE.** The stripped native config does NOT
+              reproduce the WIRED replay of the console log -- it diverges at log frame **19** on
+              `facing`, the proc-9 re-aim falling back to Tetra's FEET where the wired run has her
+              modeled eyePos -- so the fan cannot run natively from f0. `entry_fan.graft`
+              transplants the wired Python mid-walk state into a `LandCore`: `LandCore.setup` resets
+              the mid-walk physics scalars (`m34dc`/`target`/`msd`/`direction`/`roll_frame`/`_l_prev`),
+              all of them `cdef public`, and restoring them plus the delay-1 buffer is the whole job
+              -- no pyx change. The three private fields it cannot reach are inert here by
+              measurement (the lock reads NONE and the fan's held input has buttons 0 / triggerL 0,
+              so no L edge fires; the C-up counters are never armed; the camera privates are
+              walk-step-only). csangle is frozen at **34325** through the whole fan window.
+            - **THE EQUALITY GATE, at full resolution.** `fleet_fan` == `walk_fan` as a DICT, key and
+              value, over the cached s80 pass: 43596/43596 shared, 0 either side, 0 value diffs, in
+              **17.2 s**. Write order is part of the contract (the reference collapses ~5.5M writes
+              onto 43596 keys and the last writer wins), so the fleet applies each core's hits
+              stick-major / j-inner exactly as the reference loop does.
+            - **THE BAND IS PER (facing, thrust, m351C).** s80 fixed "the fixture window is a union"
+              by measuring a band per (facing, thrust) -- at lean 0 -- and then `search` scored every
+              candidate against it. Swept on the lean axis at one configuration: 448 of 556 finely
+              sampled leans admit something genuine, but only ~40% of those have a real interval
+              rather than a single f32 value, and many (including much of what a real walk-in
+              arrives at) have **nothing genuine at any entry**. Recounted per triple, the widest
+              one-segment pass reads **69038 live evaluations against 345976 dead-lean draws**, 6
+              near-misses, E[hits] **0.02**. The requirement is ~250x, not 50x -- and not in
+              candidates.
+            - **HOLD LENGTH WAS NOT SATURATED, AND SATURATING IT BOUGHT NOTHING.** Measured (cheap
+              now): base nodes past n0=6 add EXACTLY 0, but jmax 12 -> 36 takes the fan from 43596 to
+              **69169** candidates -- and yields **exactly zero** extra near-misses. The extra
+              candidates are longer walks, which go past the locus. Raw candidate count is not the
+              figure of merit; density at the target is.
+            - **THE PRODUCTIVE FACING WINDOW IS 32 BAM WIDE AND THE FROZEN CAMERA REACHES FOUR AIMS
+              IN IT.** Sweeping facing directly at 1 BAM over the whole seam range (2703
+              configurations, 37 s) finds **48 productive**, all inside facings **40816..40847** --
+              one window, 32 distinct facings, thrust 15 carrying the real 3.2e-5 band and thrust 14
+              a zero-width one. s80's "3 distinct" was the spread of the aim SAMPLES. The alphabet at
+              csangle 34325 lands exactly `[40820, 40826, 40834, 40841]` inside it, so the C-stick is
+              worth up to **8x more usable configurations**, at zero frame cost (csangle is
+              position-independent during the walk-in, so one measured stream serves a whole fan).
+            - **AND ONE OF THE TWO FAN PRUNES IS SELF-INFLICTED.** speedF == 17.0 is kept because
+              `fast_schedule` bakes ROLL_NSPEED 26 (the cap's own roll momentum) -- but a sub-cap walk
+              still rolls, at `clamp(1.5*speedF + 0.5, 5, 26)`. Dropping the prune is **3.0x** the
+              candidates (43610 against 14529) spanning **4146 distinct nspeed schedules, each its own
+              locus and band**. That is the biggest untouched lever in the search and it is a schedule
+              generalization, not a new mechanic (it does owe a `roll_fidelity` gate at sub-cap speed).
+            - **WHY A LOCAL DESCENT HAS NO GRADIENT** (two measured facts, both gated): the last
+              delivered frame is only BUFFERED, so re-aiming a plan's final frame lands on the SAME
+              endpoint to the bit (12 held == 11 held + a different aim); and once the new aim does
+              act, a one-frame turn at the alphabet's ~12 BAM local spacing drops Link off the cap and
+              writes lean besides. Perturbing stick BYTES is a third flat objective -- the octagon
+              clamp maps every byte near a saturated aim to the same decoded angle.
+            - **THE TWO-SEGMENT FAN IS BUILT** (`iter_fan2`, junction cores re-fanned, plans are
+              7-tuples) and pilots at the same near-miss yield per candidate as one segment (6 per
+              ~60k live draws). It is a real candidate multiplier; it is just not the cheapest one any
+              more.
+            - **Gates** (+11 fast, +1 slow, `tests/test_entry_fan.py`): the graft bit-for-bit against
+              the wired run (and that dropping CARRY diverges), fan equality at small resolution and
+              against the cached full pass, the per-lean band with three pinned dead leans, the
+              locus moving with lean, the dead-draw majority, the 32-facing window against the four
+              reachable aims, the buffered-aim fact, the cap prune's ratio + nspeed family, the
+              analytic gradient 0-ULP vs the simulated one, and streaming == materialised scoring.
+              KB: `knowledge/strategy/clip-lottery-draws.md` NEW (how to count draws), the s80
+              claims MIGRATED to `knowledge/history/entry-search-s80-superseded.md`.
+            - **NEXT, in this order** (all three are configuration axes, not candidate count):
+              **(i) generalize the schedule off the walk cap** -- `fast_schedule(nspeed=...)` +
+              `roll_entry` from the real `_roll_init` law, gated by `roll_fidelity` at a sub-cap
+              speed; that is 3x candidates and thousands of loci. **(ii) the camera axis** -- slew
+              csangle in the base prefix (measure the stream once in the wired run, inject it into
+              the fleet schedule, which already carries a per-frame csangle) to bring the other 28
+              productive facings into reach. **(iii) then** spend the fleet on a wide two-segment
+              pass. Every hit still owes `confirm_entry`.
       - [~] **THE FIDELITY GATE IS CLOSED, AND RUNNING IT FIRST WAS THE WHOLE SESSION: IT FOUND THE
             s79 SEARCH SCORING AN ENTRY 26 u FROM WHERE LINK ROLLS, AND THEN QUALIFICATION KILLED THE
             "243 INDEPENDENT LOCI" MULTIPLIER -- ONLY **6 OF 243** CONFIGURATIONS ADMIT A GENUINE

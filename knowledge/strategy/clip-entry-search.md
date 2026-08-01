@@ -5,16 +5,19 @@ do when that actor is already placed and I cannot move her - can I solve for Lin
 instead? Which quantity is the razor, and what precision does hitting it need? Why does the
 perpendicular half of a placement miss decide a clip that a nearest-sample distance says is 0.4 u
 away?
-**Status:** validated offline (sessions 79-80) on the flooded-Hyrule Tetra corner: the acceptance
+**Status:** validated offline (sessions 79-81) on the flooded-Hyrule Tetra corner: the acceptance
 window is measured off a live-anchored 288-sample list, the entry locus re-derives that list's own
 endpoint, and the roll the sweep scores is gated bit-identical to a real A-press roll out of a walk.
-All of it is gated in [`tests/test_entry_search.py`](../../tests/test_entry_search.py). No hit has
-been DELIVERED yet (no DTM confirm). Two premises this page carried in session 79 were overturned by
-that gate and now live in
-[history/entry-search-s79-superseded.md](../history/entry-search-s79-superseded.md).
-**Source:** `harness/tetrapush/entry_search.py`, `harness/tetrapush/roll_fidelity.py`,
-`harness/rollstab/turnaround.py`, `harness/rollstab/geometry_tetra.genuine_clip`,
-`tww_sim/core/_shovec.ShoveCtx`. Constants:
+Gated in [`tests/test_entry_search.py`](../../tests/test_entry_search.py) +
+[`tests/test_entry_fan.py`](../../tests/test_entry_fan.py). No hit has been DELIVERED yet (no DTM
+confirm). **How to size such a search honestly - what one draw is, and which of a fan's prunes are
+assumptions rather than physics - is [clip-lottery-draws.md](clip-lottery-draws.md); read it before
+buying more candidates.** Premises this page carried in sessions 79-80 were overturned by measurement
+and now live in [history/entry-search-s79-superseded.md](../history/entry-search-s79-superseded.md)
+and [history/entry-search-s80-superseded.md](../history/entry-search-s80-superseded.md).
+**Source:** `harness/tetrapush/entry_search.py`, `harness/tetrapush/entry_fan.py`,
+`harness/tetrapush/roll_fidelity.py`, `harness/rollstab/turnaround.py`,
+`harness/rollstab/geometry_tetra.genuine_clip`, `tww_sim/core/_shovec.ShoveCtx`. Constants:
 [reference/constants.md](../reference/constants.md#collision-player-wall-cylinders).
 
 ---
@@ -94,17 +97,14 @@ looks like "the entry has no leverage" when it actually means "there is no push 
 The precision a search must hit is `window / |grad resid|`. On the Tetra corner that is
 `1.16e-4 / 1.196 = 9.7e-5 u` - one ULP. You cannot aim at that; you count your way into it. So the
 figure of merit is **how many candidates land near zero, and how finely spaced their residuals are
-there**: `P(a near-zero candidate is genuine) ~ window / local spacing`.
+there**: `P(a near-zero candidate is genuine) ~ window / local spacing`. Measure that spacing **at one
+facing, over the candidates that actually reach near zero** - not over "the N closest by |resid|",
+which are clustered and give an answer that is too good.
 
-Measure that spacing **at one facing, over the candidates that actually reach near zero** - not over
-"the N closest by |resid|", which are clustered and give an answer that is too good. On the Tetra
-corner the honest numbers from a 3699-candidate fan against ONE locus were: 4 candidates inside
-|resid| < 5e-3, local spacing 1.0e-3, so `P ~ 0.11` and an expected 0.4 hits, which is exactly what
-that pass returned (zero). The fix is more draws, never a wider tolerance, and the cheapest draws are
-the multipliers above: correcting the entry and opening the aim and thrust alphabets took the same
-fan from 4 near-zero candidates in 3699 to **53 in 615**. After that, more candidates: finer stick
-stride, more base frames to fan from, and **multi-segment holds** (stick S1 for j1 frames then S2 for
-j2), which is the combinatorially large one.
+Everything about *counting* those draws honestly - why a near-miss at the wrong configuration is not a
+draw at all, why 1.6x the candidates can buy zero extra near-misses, and which of a fan's prunes are
+hiding whole locus families - is [clip-lottery-draws.md](clip-lottery-draws.md). Get that right first:
+on this corner it moved the same pass's expected yield by 12x, downward.
 
 Do not assume the loci are all equally productive. Scanning 281 facings instead of 81 bought only 1.1x
 the near-zero yield for 3.5x the work, because only the aims whose locus threads the candidate cloud
@@ -144,7 +144,13 @@ schedule changes, so:
 - **the thrust step.** The B edge can dispatch the cut at more than one roll frame (13/14/15 here).
   Each lands the cut on a different step and reads a completely different residual at the same entry,
   so each is its own draw.
-- **the camera**, which shifts the whole alphabet by moving `csangle`.
+- **the camera**, which shifts the whole alphabet by moving `csangle`. On this corner that is the
+  biggest of the three and it is measurable: sweeping facing directly at 1 BAM shows the productive
+  window is **32 consecutive facings** wide (and there is exactly one such window in the whole seam
+  range), while the frozen camera's alphabet lands only **four** aims inside it. The gap between those
+  two numbers is what the C-stick is worth - and it costs no frames, because the C-stick is a free
+  channel during the walk-in and `csangle` is position-independent there, so one measured stream serves
+  every candidate in a fan.
 
 The budget is **not** the size of the alphabet - it is the cost of compiling one context per
 `(facing, lean, thrust)`. Simulating that roll to read its schedule back is the expensive part (22 ms
@@ -153,14 +159,29 @@ constant roll momentum and travel equals facing on every frame including the cut
 frame control is a fixed accumulation, the lean decays deterministically, the Co chain is a direct
 evaluation on (facing, frame, lean), and the cut lunge is a constant root translate rotated by the
 facing. Evaluating it directly instead of simulating it ran **~110x** faster, 0-ULP identical, and that
-is what made 243 loci affordable.
+is what made 243 loci affordable - and, applied to the Newton solve inside the band measurement, took
+qualifying those 243 from 269 s to 4 s.
+
+Once the context build is analytic, the fan itself is the cost, and it can move to the native fleet -
+but usually not from the run's own start. A stripped search engine (no wired camera / look / neck
+models) will not reproduce a wired replay of the setup that got you here; on this corner it diverges 19
+frames in, on `facing`, because a lock-on re-aim falls back to the target's feet. Replay the setup in
+the WIRED engine and **graft** the mid-walk state into the native core instead. Grafting is the whole
+job: a core seeded for a run's start resets the mid-walk physics scalars (stick want-angle, chase
+target, stick magnitude, direction, roll frame control, the previous frame's L), and restoring those -
+plus the delay-1 controller buffer - is what makes the transplant bit-exact. Gate it by re-running the
+Python fan's own output key-for-key: here that was 43596 candidates in 17 s against 1444 s, identical.
 
 ## One parameter that is easy to leave out
 
 **Body lean (`m351C`) is not free.** It feeds the roll pose, hence the Co centre that does the pushing.
 On the Tetra corner lean 0 and 1 clip the same entry and **64 already does not** (residual 1.1e-2, ~95
 windows out), while a real walk-in arrives at lean -191 settling near -160. A compiled context is valid
-only for the lean it was built at, so candidates must be grouped by lean. Link's ground Y, by contrast,
+only for the lean it was built at, so candidates must be grouped by lean.
+
+It is worse than "group by it": whether **any** entry clips is itself a function of the lean, so the
+lean belongs in the configuration key beside facing and thrust, and a candidate at a dead lean is not a
+near-miss at all - see [clip-lottery-draws.md](clip-lottery-draws.md). Link's ground Y, by contrast,
 does not matter: the acceptance runs on the geometry's own floor.
 
 ## What the fidelity gate decides (run it FIRST)

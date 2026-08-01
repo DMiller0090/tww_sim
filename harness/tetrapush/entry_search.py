@@ -142,6 +142,8 @@ THRUSTS = (13, 14, 15)
 FOLLOW_BAR = 230.0
 
 _CHAIN_CACHE = {}
+_CTX_CACHE = {}
+_CTX_CACHE_MAX = 8
 _M37 = None
 
 
@@ -266,9 +268,17 @@ def fast_schedule(facing, m351c, thrust=TA.THRUST, entry=TAB_ENTRY, link_y=TA.GR
                 tet_seed=(TA.FAR[0], f32(TA.GROUND_Y), f32(FS.FAR_TETRA_Z), facing, 0.0, STT_IDLE))
 
 
-def build_fast(facing=TAB_FACING, m351c=0, thrust=TA.THRUST, entry=TAB_ENTRY, margin=140.0):
-    """(ctx, sch, resid) off `fast_schedule` -- the search's ctx factory."""
+def build_fast(facing=TAB_FACING, m351c=0, thrust=TA.THRUST, entry=TAB_ENTRY, margin=140.0,
+               cache=False):
+    """(ctx, sch, resid) off `fast_schedule` -- the search's ctx factory.
+
+    ``cache`` keeps the LAST few builds, which is what a Newton solve wants: `zero_the_resid` asks
+    for the SAME (facing, m351C, thrust) once per iteration, and a ShoveCtx copies the whole
+    collision mesh, so the cache is deliberately tiny (`_CTX_CACHE_MAX`) rather than unbounded."""
     from tww_sim.core._shovec import ShoveCtx
+    key = (int(facing) & 0xFFFF, int(m351c) & 0xFFFF, int(thrust), entry, margin)
+    if cache and key in _CTX_CACHE:
+        return _CTX_CACHE[key]
     sch = fast_schedule(facing, m351c, thrust, entry)
     sh = push_shares(WEIGHT_LINK, WEIGHT_TETRA_V5)
     ctx = ShoveCtx(TA.WALLS, GT.TRIS, GT.wA.pla, GT.wB.pla, GT.LINK_Y,
@@ -280,7 +290,12 @@ def build_fast(facing=TAB_FACING, m351c=0, thrust=TA.THRUST, entry=TAB_ENTRY, ma
                    sch['tet_seed'], FS.TET_WH, FS.TET_R, TA.GROUND_Y,
                    LINK_CO_R, LINK_CO_H, TETRA_CO_R, TETRA_CO_H,
                    sh[1], sh[0], margin=margin)
-    return ctx, sch, resid_fn(sch)
+    out = (ctx, sch, resid_fn(sch))
+    if cache:
+        if len(_CTX_CACHE) >= _CTX_CACHE_MAX:
+            _CTX_CACHE.clear()
+        _CTX_CACHE[key] = out
+    return out
 
 
 def aim_alphabet(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=0.0):
@@ -603,8 +618,13 @@ def locus_metrics(hits, seed=None):
 
 
 def entry_gradient(tetra, entry, *, facing=TAB_FACING, m351c=0, d=0.01, thrust=TA.THRUST):
-    """|d resid / d entry| at a point, and the entry precision it implies for a given window."""
-    ctx, sch, resid = build_at(TAB_ENTRY, facing, m351c, thrust)
+    """|d resid / d entry| at a point, and the entry precision it implies for a given window.
+
+    Builds the ANALYTIC ctx (0-ULP identical to the simulated one -- `test_the_analytic_schedule_is_
+    the_simulated_one`) and caches it: this runs once per Newton iteration inside `zero_the_resid`,
+    and at the simulated 22 ms build a single `configuration_band` cost ~0.9 s, which is what made
+    qualifying 243 configurations a 269 s job."""
+    ctx, sch, resid = build_fast(facing, m351c, thrust, TAB_ENTRY, cache=True)
     q = ctx.sweep_par([(tetra[0], tetra[1], entry[0], entry[1]),
                        (tetra[0], tetra[1], entry[0] + d, entry[1]),
                        (tetra[0], tetra[1], entry[0], entry[1] + d)], 0)

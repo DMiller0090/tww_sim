@@ -88,6 +88,7 @@ you can triage in one glance.
 - **From a standstill, fastest way into a roll chain / why hold L on frame 1 / why the frame-6 roll caps at ~25.9?** → [strategy/roll-launch.md](strategy/roll-launch.md)
 - **How do we plan and validate a roll-stab SEAM CLIP (dust acceptance, live calibration, the knobs)?** → [strategy/seam-clip-solver.md](strategy/seam-clip-solver.md)
 - **The pushed actor is already placed and I can't move her - can I solve for Link's roll ENTRY instead? Which quantity is the razor / why does the PERPENDICULAR half of a placement miss decide it?** → [strategy/clip-entry-search.md](strategy/clip-entry-search.md)
+- **My razor search returns "N near-misses, 0 genuine" - is it too small or aimed at nothing? What counts as ONE draw / why did 1.6x the candidates buy zero extra near-misses / which of my fan's prunes are physics?** → [strategy/clip-lottery-draws.md](strategy/clip-lottery-draws.md)
 - **Which partial stick magnitudes are live-valid in a land plan / why NEVER emit Y 192–254?** → [mechanics/precise-stop.md](mechanics/precise-stop.md). NB: this live-valid *stick-input* band is a different thing from the sim's [`Y171` partial-magnitude *regime*](model/land-sim.md#partial-magnitude-regime-y171-msd052) - don't conflate "partial stick" with "partial regime".
 
 ### Model - engine (core)
@@ -114,6 +115,7 @@ you can triage in one glance.
 - **Was <bug> a physics issue or an artifact?** (bug#2, 554, off-axis, omega grid, cosine table) → [history/resolved-bugs.md](history/resolved-bugs.md)
 - **What's still unresolved?** → [history/open-questions.md](history/open-questions.md)
 - **Why run a search's fidelity gate BEFORE the search / how did a clip search end up aimed at a roll nobody performs?** → [history/entry-search-s79-superseded.md](history/entry-search-s79-superseded.md)
+- **Why audit a search's own accounting before scaling its biggest cost / how did "the fan is the only budget" turn out to be wrong by 12x?** → [history/entry-search-s80-superseded.md](history/entry-search-s80-superseded.md)
 
 ## Page template (for contributors)
 
