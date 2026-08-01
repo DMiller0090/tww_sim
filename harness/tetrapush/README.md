@@ -220,6 +220,8 @@ deliberately unported.
 | `fixtures/courtyard_push_seed.json` | The complete STATE-2 seed (f0): pos/travel/facing/speedF + the HIDDEN **mNormalSpeed** (`link.nspeed`) the cyl/dtm fixtures never logged, plus mDirection/m34E6/csangle + the attention state, for provenance. Deterministic single read (jitter-free). The from-f0 replay's `seed_nspeed` source AND the planner's initial condition (session 12). Session 16 added **`old_pose`** -- the live `m_old_fdata` per-joint post-morf pre-twist store (quat x,y,z,w + transform, all 42 joints) + morf counters, the `replay(..., seed_old_pose=)` source (at THIS seed it equals the pure-dash warmup; general-correctness for any f0 with live morf residue). |
 | `fixtures/courtyard_plan_s73.json` | **THE PLAN THAT PASSES THE OBJECTIVE** (session 73) -- a complete state-2 input log (71 frames, ending AT THE ARRIVAL because `objective.score_plan` probes the escape atom itself) plus its provenance (which cycle-2 beam node, junction endpoint, roll aim and ``target_cs`` offset) and the ``atom_kw`` it must be scored with. `objective.replay_and_score` on it reads **75 frames (floor 73, timeloss +2), placement 0.4321 u on genuine coord 274, ``complete``/``terminal_ok``/``wall_ok``/``regime_ok``/``within_budget`` all True -> `objective.verdict` TRUE**, with the atom's ``cs_bill`` 0. Gated as a regression (`tests/test_objective.py::test_the_shipped_plan_passes_the_whole_objective_from_its_input_log_alone`), so milestone 2 is a test rather than a session claim. Score it with the fixture's own ``atom_kw``: with the default single-flip atom the same log reads 77 f / pd 4.48, a different escape. |
 | `fixtures/courtyard_plan_s73_console.json` | **THE SAME PLAN, ON CONSOLE** (session 78) -- LOCKED. The DELIVERABLE sequence (the plan fixture's 71 herd frames plus the escape atom's own 7, which `score_plan` probes on a clone and so were never in the plan file) and the console-measured Link + Tetra at **22 truncate-and-read samples**, N = 1..78 covering the first frames after state 2, all three herd cycles, the arrival, the scored frame and every atom frame. **Every one is 0-ULP on both actors**, and matches on ``proc``/``facing``/``travel``/``speedF`` besides; Tetra reads stt 3 throughout, so there is NO open frontier and nothing is xfailed (contrast node 1's curve, whose plan left the regime at 83 and hit a wall at 84). Milestone 2 is a console number here: at the scored frame the console's own Tetra is **0.4321 u from genuine coord 274**. Gated `tests/test_plan_console.py` (6 tests, 48 cases) -- and, like every clean-DTM capture, IMMUTABLE: for a fixed input log the console is ground truth and the sim converges to it. |
+| `entry_search.py` | **THE SEPARATE ENTRY SEARCH (Dereck s60), and the s45 fork settled by measurement (session 79).** The DUAL of `_generated/tetra_placements.tsv`: the herd is console-confirmed, so Tetra is a MEASURED CONSTANT and the ROLL ENTRY is what gets swept. `tabulated_verdict` is the fork measurement -- standing exactly on `seeds.ENTRY_ROLL_POS` does NOT clip the console's own Tetra (resid **+0.3139 u** against a **1.16e-4 u** window), because her 0.4321 u placement miss is **0.4314 u perpendicular** to the coord thread; route (A) is dead on its premise, not on walk precision. `resid_fn` is the razor's smooth coordinate (the cut ray's offset from the seam vertex S -- the seam PLANES are negative almost everywhere and useless); `acceptance_window` MEASURES the genuine band off the 288 coords rather than assuming it; `genuine_entries` maps the entry locus (coarse residual sweep -> keep near zero -> refine to the f32 dust: blind fine sweeping finds 1 hit in 231k); `locus_metrics`/`entry_gradient` give the shape and the ~1 ULP precision a search must hit; `continue_walk` replays the locked console log and keeps walking (reachability). CLI `{verdict,window,locus,reach}`. Gated `tests/test_entry_search.py` (16). |
+| `fixtures/courtyard_entry_locus_s79.json` | **THE ENTRY LOCUS** -- 1735 genuine roll entries for Tetra pinned at her console-measured herd endpoint, at facing 40835 / m351C 0, plus the acceptance window, the fork verdict, the gradient, the m351C sensitivity table and the reachability rows. One thin curve 104 u long; **856 inside the 230 u follow bar** = the usable target, nearest 49.7 u from where the escape leaves Link. DERIVED, not measured -- regenerable by `python -m harness.tetrapush.entry_search locus` (~250 s), pinned so the gates do not pay the sweep. |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). Session 19: extracts **poll index 2** of each 4-poll frame group -- the poll the game actually latches (live-pinned via the camera oracle on the window's two non-uniform groups); regen with no capture preserves the baked live rows. |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
 | `fixtures/courtyard_push_state2.json` | 51-frame session-1 ground-truth capture from state 2 (repo `fixtures/`). |
@@ -1657,6 +1659,86 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE s45 FORK IS SETTLED BY MEASUREMENT AND ROUTE (A) IS DEAD: STANDING EXACTLY ON THE
+            TABULATED ENTRY DOES NOT CLIP THE CONSOLE'S OWN TETRA, BECAUSE HER 0.4321 u MISS ON COORD
+            274 IS 0.4314 u *PERPENDICULAR* TO THE COORD THREAD. ROUTE (B) IS ALIVE AND MEASURED: WITH
+            TETRA PINNED THERE ARE 1735 GENUINE *ENTRIES* (856 INSIDE THE FOLLOW BAR), AND LINK'S OWN
+            ESCAPE WALK PASSES 3.06 u FROM THEM (session 79).** The handoff asked for the fork to be
+            decided before searching; it is decided, and not by argument.
+            - **THE DUAL OF THE COORD LIST.** `_generated/tetra_placements.tsv` sweeps TETRA at a fixed
+              entry. The herd is finished and console-confirmed, so she is a MEASURED CONSTANT (the
+              console reads her bit-identical on frames 76/77/78) and the free variable is the ENTRY.
+              `harness/tetrapush/entry_search.py` sweeps it: the native `ShoveCtx` already takes
+              `link_x0/link_z0` per sample, and the baked schedule is entry-POSITION-invariant (gated),
+              so one ctx maps the whole entry plane. New `fixtures/courtyard_entry_locus_s79.json`.
+            - **THE RAZOR'S SMOOTH COORDINATE, and the acceptance window MEASURED not assumed.** The
+              seam PLANES are useless here (`behindA/behindB` are negative almost everywhere); the razor
+              is the SEGMENT test, so the residual is the cut ray's signed offset from the seam vertex
+              S -- ``resid = cross(pred - old, S - old)/|pred - old|`` with ``pred = old + roll_step +
+              push + cut_lunge``. Off the 288 tabulated coords at their own entry, the 279 that still
+              read genuine sit in resid **[-2.52e-6, +1.13e-4]**, width **1.16e-4 u** -- about ONE f32
+              ULP at this distance from the origin, which is why the tsv is dust and not a region. The 9
+              that do not read genuine sit INSIDE that band, so the window is a dust edge to aim with,
+              never an acceptance test.
+            - **WHAT ACTUALLY MOVES IT IS THE CUT-FRAME PUSH, NOT THE ENTRY DIRECTLY.** `old` is the
+              same wall-braced point almost everywhere (the roll runs into the corner and CrrPos pins
+              it), so the entry matters only through whether Tetra is still shoving Link on the frame
+              the cut fires. push 0 -> resid **-0.3294** (the bare roll-stab, 0.33 u short of
+              threading); the tabulated entry's push (-1.115,-0.258) -> **+0.3139**; genuine wants
+              ~(-0.551,-0.127). **At Link's own console endpoint the push is exactly ZERO** -- she is out
+              of Co range by the cut frame -- so no knob moves the residual THERE, and the three
+              probe lines through it read a dead-constant -0.3294.
+            - **THE TARGET SET.** 1735 genuine entries at the tabulated facing and m351C 0: ONE thin
+              curve, 104 u long, 0.93 u thick, every one walkable. **856 lie inside the 230 u follow
+              bar** and are the usable target -- past the bar Tetra leaves stt 3 and walks, so an entry
+              out there is not an entry. Nearest usable entry **49.7 u** from where the escape leaves
+              Link, and all of them 136-230 u from her.
+            - **REACHABILITY IS NOT THE PROBLEM.** The console log continued with its own last stick
+              held walks to **3.06 u** of the usable locus by frame 85, and four other steady sticks
+              pass within 3.8-13.1 u by frame 82-86 -- all still at **speedF 17.0**, the walk cap the
+              roll needs for its full nspeed 26. The escape atom manufactures the slot-7 posture for
+              free.
+            - **THE SEARCH IS A COUNTABLE LOTTERY, AND THE FIRST PASS RAN AND CAME UP EMPTY BY THE
+              EXPECTED MARGIN -- IT IS ~10x TOO SMALL, NOT MIS-AIMED.** The needed entry precision is
+              **window / |grad resid| = 1.16e-4 / 1.196 = 9.7e-5 u**, one ULP, so this is a DENSITY
+              problem and not an accuracy one. A stride-2 stick fan x 8 hold lengths from two base
+              nodes, pruned to speedF 17 and the follow bar, gives **3699** distinct
+              ``(entry, m351C)`` candidates over 720 lean groups; against all 6 realizable facings that
+              is 180 s of ctx builds and **0 genuine**. The diagnosis is a count, measured at the best
+              facing (40884): only **4** candidates reach |resid| < 5e-3 and their local spacing is
+              **1.01e-3**, so ``P(a near-zero candidate is genuine) ~ window/spacing ~ 0.11`` and 4
+              tries is an expected 0.4 hits. **The earlier 0.55 estimate was optimistic**: it took the
+              spacing over the 200 closest by |resid|, which are clustered, rather than the local
+              spacing at one facing. Levers in order of cheapness: stride 1 (4x the fan); more base
+              nodes N0; TWO-SEGMENT holds (stick S1 for j1 then S2 for j2 -- combinatorially the big
+              one); and the **C-stick**, which moves csangle ~460-530 BAM/frame and so multiplies the
+              facing alphabet, each facing contributing its own near-zero set.
+            - **RANK THE SIGNED DISTANCE TO THE WINDOW, NOT |resid|.** The window is asymmetric
+              ([-2.5e-6, +1.13e-4]) because its sign carries which side of the gap the ray passes, so
+              |resid| rewards near-misses on the BLOCKED side equally. The first pass's own best
+              candidate was **-5.45e-05** -- inside the window's width, on the wrong side of it.
+            - **TWO PARAMETERS THE SEARCH MUST CARRY (both measured, both easy to get wrong).**
+              (i) **m351C**: 0 and 1 clip the same entry, **64 already does not** (resid 1.1e-2), and the
+              replayed herd hands Link m351C **-191** with a steady walk settling near -160 -- so a ctx
+              is valid only for the lean it was built at, and the search groups candidates by m351C to
+              share one. `link_y`, by contrast, does not matter at all.
+              (ii) **the facing alphabet is only 6 wide at a frozen camera.** csangle is frozen at
+              **34325** by the atom's neutral C-stick, so the realizable roll facings
+              (`two_roll.reachable_stick_fan` + 0x8000 + csangle) inside the 40600-41100 seam window are
+              exactly **40617, 40665, 40773, 40884, 40925, 41037** -- and **40835, the tabulated facing
+              the locus fixture is computed at, is NOT one of them.** Each realizable facing has its own
+              locus (~0.0075 u of shift per BAM), so the real target is a union of 6 curves. The C-stick
+              is what widens that alphabet, and it is otherwise free during the walk-in.
+            - **Gates** (+16, `tests/test_entry_search.py`): the harness reproduces the tsv at its own
+              entry (279/288 + the 9 pinned), the window is ~1 ULP wide, route (A)'s falsification and
+              the perpendicular split, the zero push at Link's endpoint, the schedule's entry-position
+              invariance (what licenses the whole sweep), the m351C sensitivity, the locus's shape and
+              usable subset, the entry precision, and the replay landing 0-ULP on the console endpoint.
+            - **NEXT (the search proper).** Widen the fan by the levers above until the near-zero
+              population is ~10x, ranking the signed distance to the window. Then the one fidelity gate
+              this all rests on: a real A-press roll out of the walk must be shown **bit-identical** to
+              the schedule `extract_schedule_at` bakes (it reseeds a fresh FRONT_ROLL at nspeed 26), so
+              every hit is a CANDIDATE until that confirm passes.
       - [x] **THE SHIPPED PLAN IS CONFIRMED ON CONSOLE -- 22 OF 22 TRUNCATE-AND-READ SAMPLES 0-ULP ON
             BOTH ACTORS, AND TETRA'S 0.4321 u LANDING ON GENUINE COORD 274 IS NOW A CONSOLE
             MEASUREMENT RATHER THAN A SIMULATION RESULT (session 78).** The tier-2 confirm was one of
