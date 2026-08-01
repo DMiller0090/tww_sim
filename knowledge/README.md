@@ -113,6 +113,7 @@ you can triage in one glance.
 ### Provenance & open work
 - **Was <bug> a physics issue or an artifact?** (bug#2, 554, off-axis, omega grid, cosine table) → [history/resolved-bugs.md](history/resolved-bugs.md)
 - **What's still unresolved?** → [history/open-questions.md](history/open-questions.md)
+- **Why run a search's fidelity gate BEFORE the search / how did a clip search end up aimed at a roll nobody performs?** → [history/entry-search-s79-superseded.md](history/entry-search-s79-superseded.md)
 
 ## Page template (for contributors)
 

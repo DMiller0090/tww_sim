@@ -30,9 +30,13 @@ import struct
 
 import pytest
 
+from tww_sim.core import mathlib as ML
+from harness.rollstab import fast_shove as FS
 from harness.rollstab import turnaround as TA
 from harness.tetrapush import entry_search as ES
+from harness.tetrapush import roll_fidelity as RF
 from harness.tetrapush import seeds as SD
+from harness.tetrapush import two_roll as TR
 
 
 def _fx(name):
@@ -221,6 +225,208 @@ def test_continuing_the_console_log_reproduces_the_measured_endpoint_bit_exactly
     assert run.link.speedF == SEED['link_speedF']
     assert (run.link.m351C & 0xFFFF) == 65345          # -191: NOT the m351C 0 the locus assumes
     assert (run.link.csangle & 0xFFFF) == 34325        # frozen by the atom's neutral C-stick
+
+
+# ------------------------------------------------------- the fidelity gate (session 80) and its fan
+# What makes scoring a RESEEDED roll legitimate -- and what caught s79 feeding it the wrong point.
+
+def _sample_roll(want_facing=40850, n_walk=12, force_m3570=None):
+    """A real from-rest walk + A-press turnaround roll aimed into the seam window, arriving near the
+    usable locus. Returns `roll_fidelity.walk_then_roll`."""
+    near = min((h for h in LOCUS['hits'] if h['follow_ok']),
+               key=lambda h: math.hypot(h['entry'][0] - SEED['link'][0],
+                                        h['entry'][1] - SEED['link'][1]))['entry']
+    wfac, wb = RF.stick_for_facing(SEED['link_facing'], ES.CSANGLE)
+    _, aim = RF.stick_for_facing(want_facing, ES.CSANGLE, msd_min=0.0)
+    ux, uz = ML.cM_ssin_s16(wfac), ML.cM_scos_s16(wfac)
+    start = (near[0] - 17.0 * (n_walk - 4) * ux, near[1] - 17.0 * (n_walk - 4) * uz)
+    return RF.walk_then_roll(start, wb, aim, n_walk, TA.B_STEP, ES.CSANGLE,
+                             force_m3570=force_m3570)
+
+
+def test_the_reseeded_roll_is_the_roll_a_real_a_press_does():
+    """THE GATE THE s79 HANDOFF LEFT OPEN. `extract_schedule_at` starts a cold FRONT_ROLL at nspeed
+    26; a real turnaround roll carries anim and pose history in. All nine baked tables are
+    bit-identical -- so the whole locus is scored on the right roll."""
+    rows, ent, real = _sample_roll()
+    assert ent is not None and real['cut_step'] == 16
+    base = TA.extract_schedule_at((ent['x'], ent['z']), ent['facing'], ent['m351C'],
+                                  TA.GROUND_Y, FS.make_inputs(TA.THRUST))
+    assert RF.table_diff(real, base) == []
+
+
+def test_the_reseed_takes_the_post_entry_frame_state_not_the_walks():
+    """WHICH state -- decided by measurement, not convention. The reseed's step 0 IS the roll's
+    SECOND frame, so it must be handed the position and lean at the END of the entry frame. Feeding
+    the pre-entry values (what the walk fan has in hand) mismatches the pose chain."""
+    rows, ent, real = _sample_roll()
+    wrong = TA.extract_schedule_at((ent['walk_x'], ent['walk_z']), ent['facing'],
+                                   ent['m351C_walk'], TA.GROUND_Y, FS.make_inputs(TA.THRUST))
+    assert sorted(RF.table_diff(real, wrong)) == ['chx', 'chz']
+
+
+def test_the_roll_entry_is_the_walk_endpoint_plus_one_roll_step():
+    """The correction the s79 fan was missing, bit-exact: `_roll_init` takes nspeed from the walk cap
+    (17 * 1.5 + 0.5 == 26) and snaps travel to the commanded facing, so the entry frame moves Link one
+    full roll step before the schedule starts. 26 u -- and in a direction the AIM chooses."""
+    for want in (40617, 40850, 41037):
+        for n_walk in (11, 12, 13):
+            rows, ent, _ = _sample_roll(want_facing=want, n_walk=n_walk)
+            assert ent['nspeed'] == ES.ROLL_NSPEED
+            got = ES.roll_entry((ent['walk_x'], ent['walk_z']), ent['facing'])
+            assert _bits(got[0]) == _bits(ent['x']) and _bits(got[1]) == _bits(ent['z'])
+            assert ES.lean_at_roll(ent['m351C_walk']) == ent['m351C']
+            assert math.hypot(ent['x'] - ent['walk_x'], ent['z'] - ent['walk_z']) == \
+                pytest.approx(26.0, abs=1e-3)
+
+
+def test_the_armed_crash_latch_never_changes_this_roll():
+    """The reseed forces ``_roll_m3570`` off and `ShoveCtx` has no crash branch, but a roll started in
+    the open ARMS the mid-roll bonk and this one does hit the wall for ten frames. It never fires:
+    the bonk cone does not line up before the B edge, so disarming it is exact, not an approximation."""
+    rows, ent, real = _sample_roll()
+    assert ent['m3570'] is True                              # started clear of the wall: armed
+    assert any(r['wall_hit'] and r['proc'] == 30 for r in rows)   # and it does contact mid-roll
+    _, _, forced = _sample_roll(force_m3570=False)
+    assert RF.table_diff(real, forced) == []
+    assert all(r['proc'] in (30, 66, 67) or r['k'] < ent['k'] for r in rows)   # no crash proc
+
+
+def test_the_analytic_schedule_is_the_simulated_one():
+    """`fast_schedule` drops the 17-frame coupled roll for a direct evaluation and is 0-ULP identical
+    over facing x lean x thrust. That is what makes 81 x 3 loci affordable: the 22 ms ctx build, not
+    the size of the alphabet, was the search's whole budget."""
+    keys = RF.TABLE_KEYS + ('link_x0', 'link_z0', 'link_y', 'tet_seed')
+    for fac in (40617, 40835, 40884, 41037):
+        for lean in (0, 1, 64, 65325, 65432, 65039):
+            for thrust in ES.THRUSTS:
+                base = TA.extract_schedule_at(ES.TAB_ENTRY, fac, lean, TA.GROUND_Y,
+                                              FS.make_inputs(thrust))
+                fast = ES.fast_schedule(fac, lean, thrust)
+                assert [k for k in keys if base[k] != fast[k]] == []
+
+
+def test_the_aim_alphabet_is_the_whole_decoded_grid_not_its_octagon_boundary():
+    """s79 read the alphabet as SIX wide off ``reachable_stick_fan(msd_min=1.0)``. That floor is not
+    physical -- the roll's speed comes from the walk cap, so the aim needs no magnitude -- and every
+    aim in the window fires the roll and lands on the facing it commands (read back, never assumed)."""
+    wide = ES.aim_alphabet()
+    saturated = [f for f, _ in ES.aim_alphabet(msd_min=1.0)]
+    assert len(wide) == 81 and len(saturated) == 11
+    assert set(saturated) <= set(f for f, _ in wide)          # the old alphabet is a SUBSET
+    for f, byts in wide[::16]:
+        _, ent, _ = _sample_roll(want_facing=f)
+        assert ent is not None and ent['facing'] == f
+        assert TR.main_stick_decode(*byts)[1] < 1.0 or f in saturated
+
+
+def test_each_thrust_step_bakes_its_own_locus():
+    """13/14/15 all dispatch a CUT, land it on a different step, and read a different residual at one
+    entry -- three independent draws of the same lottery, not one."""
+    e = tuple(min((h for h in LOCUS['hits'] if h['follow_ok']),
+                  key=lambda h: math.hypot(h['entry'][0] - SEED['link'][0],
+                                           h['entry'][1] - SEED['link'][1]))['entry'])
+    seen = {}
+    for thrust in ES.THRUSTS:
+        ctx, sch, resid = ES.build_fast(40884, 0, thrust)
+        assert sch['cut_step'] == thrust + 2
+        o = ctx.sweep_par([(SEED['tetra'][0], SEED['tetra'][1], e[0], e[1])], 0)[0]
+        seen[thrust] = resid(o)
+    vals = sorted(seen.values())
+    assert min(abs(a - b) for a, b in zip(vals, vals[1:])) > 0.1   # genuinely different razors
+
+
+def _ref_entry():
+    return tuple(min((h for h in LOCUS['hits'] if h['follow_ok']),
+                     key=lambda h: math.hypot(h['entry'][0] - SEED['link'][0],
+                                              h['entry'][1] - SEED['link'][1]))['entry'])
+
+
+def test_the_acceptance_band_is_per_configuration_not_the_fixture_window():
+    """THE CORRECTION THAT EXPLAINS A THOUSAND NEAR-MISSES AND ZERO CLIPS. The fixture's window was
+    measured at ONE configuration (facing 40835, thrust 14) off the tabulated coords, so it is a
+    UNION. A single configuration's own band is narrower and offset -- and all of them sit on the
+    POSITIVE side, so a search centred on resid 0 aims between them."""
+    w = LOCUS['window']
+    b = ES.configuration_band(SEED['tetra'], LOCUS['facing'], TA.THRUST, 0, _ref_entry())
+    assert b['productive'] and b['n_genuine'] > 0
+    assert b['lo'] > 0.0 and b['hi'] <= w['hi']              # inside the union, on its positive half
+    assert b['width'] <= w['width']
+
+
+def test_most_configurations_have_no_locus_at_all_and_the_reason_is_leverage():
+    """The '81 aims x 3 thrusts = 243 draws' multiplier is mostly ILLUSORY: the aims are all
+    realizable and every one fires the roll, but the clip lives in a ~21 BAM facing window. Two
+    thirds of the configurations have no leverage whatever -- grad ~ 0, which is the measurable form
+    of 'the pushed actor is out of Co range on the cut frame, so no knob moves the razor here'."""
+    quals = ES.qualify(SEED['tetra'], _ref_entry(), facings=[40773, 40820, 40834, 40925, 41037],
+                       thrusts=(14, 15))
+    prod = [q for q in quals if q['productive']]
+    assert prod, "the tabulated facing must still qualify"
+    assert len(prod) < len(quals) / 2
+    assert all(40800 <= q['facing'] <= 40860 for q in prod)   # the productive band is narrow
+    dead = [q for q in quals if not q['productive']]
+    assert any(q['reason'] == 'no leverage' and q['grad'] < 1e-3 for q in dead)
+
+
+@pytest.mark.slow
+def test_the_search_spends_candidates_only_where_a_locus_exists():
+    """`search` qualifies before it sweeps, which is what makes the fan the remaining budget rather
+    than the alphabet: the same candidates cost 6 configurations instead of 243. Slow because it
+    qualifies the whole alphabet (~135 s), which is the point."""
+    fan = ES.walk_fan(base_frames=(3,), stride=64, jmax=6)
+    r = ES.search(candidates=fan)
+    assert 0 < r['n_configurations'] <= 12
+    assert all(q['lo'] is not None and q['lo'] > 0.0 for q in r['configurations'])
+    assert all(h['walkable'] for h in r['hits'])
+
+
+def test_the_rank_is_the_signed_distance_to_the_window_not_the_absolute_residual():
+    """s79's best candidate was -5.45e-5: smaller in |resid| than the window is WIDE, and on the
+    blocked side of the gap. `window_gap` is 0 only inside the window and scores that candidate as the
+    miss it is."""
+    w = LOCUS['window']
+    assert ES.window_gap(0.5 * (w['lo'] + w['hi']), w) == 0.0
+    assert ES.window_gap(w['lo'], w) == 0.0 and ES.window_gap(w['hi'], w) == 0.0
+    blocked = ES.window_gap(-5.45e-05, w)
+    assert blocked > 0.0 and blocked > w['width'] * 0.4
+    assert ES.window_gap(w['hi'] + 1e-6, w) == pytest.approx(1e-6, rel=1e-6)
+
+
+def test_the_fan_labels_a_plan_the_a_press_reproduces():
+    """The fan never presses A, it PREDICTS. `confirm_entry` replays a plan and presses A for real.
+
+    Two things this pins. The plan label is off-by-one against the fan's own step count
+    (`INPUT_DELAY` again) and is now measured, not assumed. And the prediction is not universal: when
+    the aim swings far from travel the entry frame BRAKES before the roll dispatches, so nspeed lands
+    under 26 and the predicted entry is wrong. Most confirm; the rest are why every hit owes a
+    `confirm_entry` before it is quoted."""
+    fan = ES.walk_fan(base_frames=(3,), stride=32, jmax=8)
+    fac, byts = ES.aim_alphabet()[40]
+    ok, rolled, checked = 0, 0, 0
+    for k, plan in sorted(fan.items())[:24]:
+        h = dict(plan=list(plan), aim=list(byts), facing=fac, walk=[k[0], k[1]],
+                 m351C=ES.lean_at_roll(k[2]), entry=list(ES.roll_entry((k[0], k[1]), fac)))
+        r = ES.confirm_entry(h)
+        checked += 1
+        rolled += r['ok']['rolled']
+        ok += r['all_ok']
+        if r['ok']['rolled']:
+            # whenever it DOES roll, the walk endpoint, facing and lean are exactly what was labelled
+            assert r['ok']['walk_matches'] and r['ok']['facing'] and r['ok']['lean']
+    assert ok >= 0.75 * checked and rolled >= 0.8 * checked
+
+
+def test_the_walk_fan_keeps_only_capped_pinned_candidates():
+    """The two hard prunes: speedF exactly 17.0 (the roll takes its whole nspeed from the cap) and
+    inside the 230 u follow bar on every frame -- one frame outside and Tetra is not a constant."""
+    fan = ES.walk_fan(base_frames=(3,), stride=64, jmax=6)
+    assert fan
+    run, _ = ES.continue_walk([])
+    tx, tz = SEED['tetra']
+    for (x, z, lean), plan in fan.items():
+        assert math.hypot(x - tx, z - tz) <= ES.FOLLOW_BAR
+        assert 1 <= plan[3] <= 6 and plan[0] == 3
 
 
 @pytest.mark.slow

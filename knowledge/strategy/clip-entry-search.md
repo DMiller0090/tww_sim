@@ -5,13 +5,16 @@ do when that actor is already placed and I cannot move her - can I solve for Lin
 instead? Which quantity is the razor, and what precision does hitting it need? Why does the
 perpendicular half of a placement miss decide a clip that a nearest-sample distance says is 0.4 u
 away?
-**Status:** validated offline (session 79) on the flooded-Hyrule Tetra corner: the acceptance window
-is measured off a live-anchored 288-sample list, the entry locus re-derives that list's own endpoint,
-and the sweep's premises (schedule invariance, the residual, the parameter sensitivities) are gated in
-[`tests/test_entry_search.py`](../../tests/test_entry_search.py). No hit has been DELIVERED yet: the
-roll-out-of-a-walk fidelity gate below is still open.
-**Source:** `harness/tetrapush/entry_search.py`, `harness/rollstab/turnaround.py`,
-`harness/rollstab/geometry_tetra.genuine_clip`, `tww_sim/core/_shovec.ShoveCtx`. Constants:
+**Status:** validated offline (sessions 79-80) on the flooded-Hyrule Tetra corner: the acceptance
+window is measured off a live-anchored 288-sample list, the entry locus re-derives that list's own
+endpoint, and the roll the sweep scores is gated bit-identical to a real A-press roll out of a walk.
+All of it is gated in [`tests/test_entry_search.py`](../../tests/test_entry_search.py). No hit has
+been DELIVERED yet (no DTM confirm). Two premises this page carried in session 79 were overturned by
+that gate and now live in
+[history/entry-search-s79-superseded.md](../history/entry-search-s79-superseded.md).
+**Source:** `harness/tetrapush/entry_search.py`, `harness/tetrapush/roll_fidelity.py`,
+`harness/rollstab/turnaround.py`, `harness/rollstab/geometry_tetra.genuine_clip`,
+`tww_sim/core/_shovec.ShoveCtx`. Constants:
 [reference/constants.md](../reference/constants.md#collision-player-wall-cylinders).
 
 ---
@@ -95,35 +98,86 @@ there**: `P(a near-zero candidate is genuine) ~ window / local spacing`.
 
 Measure that spacing **at one facing, over the candidates that actually reach near zero** - not over
 "the N closest by |resid|", which are clustered and give an answer that is too good. On the Tetra
-corner the honest numbers from a 3699-candidate fan were: 4 candidates inside |resid| < 5e-3, local
-spacing 1.0e-3, so `P ~ 0.11` and an expected 0.4 hits - which is exactly what the pass returned
-(zero). The fix is more candidates, never a wider tolerance. In rough order of cost: finer stick
-stride; more base frames to fan from; **multi-segment holds** (stick S1 for j1 frames then S2 for j2),
-which is the combinatorially large one; and moving the camera, since each extra realizable facing
-contributes its own independent near-zero set.
+corner the honest numbers from a 3699-candidate fan against ONE locus were: 4 candidates inside
+|resid| < 5e-3, local spacing 1.0e-3, so `P ~ 0.11` and an expected 0.4 hits, which is exactly what
+that pass returned (zero). The fix is more draws, never a wider tolerance, and the cheapest draws are
+the multipliers above: correcting the entry and opening the aim and thrust alphabets took the same
+fan from 4 near-zero candidates in 3699 to **53 in 615**. After that, more candidates: finer stick
+stride, more base frames to fan from, and **multi-segment holds** (stick S1 for j1 frames then S2 for
+j2), which is the combinatorially large one.
+
+Do not assume the loci are all equally productive. Scanning 281 facings instead of 81 bought only 1.1x
+the near-zero yield for 3.5x the work, because only the aims whose locus threads the candidate cloud
+produce anything. Scan wide once, cheaply, to find the productive band; then spend the budget on
+candidates.
 
 And **rank the signed distance to the window, not |resid|**. The window is asymmetric because its sign
 is which side of the gap the ray passes on, so |resid| scores a blocked-side near-miss as highly as a
 real one. The Tetra pass's best candidate was -5.45e-5: inside the window's *width*, on the wrong side
 of it.
 
-## Two parameters that are easy to leave out
+## Sweep the entry the game hands you, not the one the walk ends on
 
-- **Body lean (`m351C`) is not free.** It feeds the roll pose, hence the Co centre that does the
-  pushing. On the Tetra corner lean 0 and 1 clip the same entry and **64 already does not** (residual
-  1.1e-2, ~95 windows out), while a real walk-in arrives at lean -191 settling near -160. A compiled
-  context is valid only for the lean it was built at, so candidates must be grouped by lean. Link's
-  ground Y, by contrast, does not matter - the acceptance runs on the geometry's own floor.
-- **The realizable facing alphabet is narrow at a frozen camera.** The roll facing is
-  `decoded_stick + 0x8000 + csangle` ([land-camera.md](../mechanics/land-camera.md)), so with a
-  neutral C-stick freezing csangle the achievable facings inside a seam window are just a handful -
-  six, on the Tetra corner, and the facing the tabulated list was built at is not one of them. Each
-  realizable facing has its **own** locus (~0.0075 u of shift per BAM here), so the target is a union
-  of curves; the C-stick is what widens the alphabet.
+A reseeded `FRONT_ROLL` advances its animation frame control on its first step. A **real** roll's
+entry frame does not: `_roll_init` runs, and the frame after it is where the animation starts moving.
+So the reseeded schedule's step 0 is the real roll's *second* frame, and the entry position a compiled
+context wants is the one at the **end** of the entry frame:
 
-## The gate a hit still owes
+    entry = walk_endpoint + one roll step at the AIMED facing        (26 u on the Tetra corner)
 
-Sweeping the entry evaluates a *reseeded* roll - a fresh `FRONT_ROLL` at the roll's initial speed with
-the given facing and lean. A real A-press out of a walk carries anim/pose history in. So a swept hit is
-a **candidate** until a real roll from that walk is shown bit-identical to the swept schedule. Until
-then, quote it as a candidate.
+and the lean is likewise the post-entry-frame value (one decay tick past the walk's). This is decided
+by measurement, not convention: feeding the pre-entry values mismatches the pose-chain tables outright,
+while the post-entry values reproduce a real A-press roll bit-for-bit.
+
+The consequence is larger than the correction. That step is taken **along the aim**, so an aim is not
+just its own locus - it is its own candidate. Sweeping aims moves the entry and the target together.
+
+## Three multipliers on the lottery, and where the budget actually goes
+
+The figure of merit is candidates x **independent loci**. A locus is independent whenever the baked cut
+schedule changes, so:
+
+- **the aim.** The roll needs no stick magnitude - it takes its whole speed from the walk cap and
+  `_roll_init` snaps facing to the latched target whatever the deflection - so the alphabet is the full
+  decoded-angle grid, not the saturated octagon boundary. On the Tetra corner that is **81** facings in
+  the seam window rather than 6. Fire each one and read the facing back before believing it.
+- **the thrust step.** The B edge can dispatch the cut at more than one roll frame (13/14/15 here).
+  Each lands the cut on a different step and reads a completely different residual at the same entry,
+  so each is its own draw.
+- **the camera**, which shifts the whole alphabet by moving `csangle`.
+
+The budget is **not** the size of the alphabet - it is the cost of compiling one context per
+`(facing, lean, thrust)`. Simulating that roll to read its schedule back is the expensive part (22 ms
+here) and it is unnecessary: the schedule is a pure function of those three parameters. Speed is the
+constant roll momentum and travel equals facing on every frame including the cut entry, the animation
+frame control is a fixed accumulation, the lean decays deterministically, the Co chain is a direct
+evaluation on (facing, frame, lean), and the cut lunge is a constant root translate rotated by the
+facing. Evaluating it directly instead of simulating it ran **~110x** faster, 0-ULP identical, and that
+is what made 243 loci affordable.
+
+## One parameter that is easy to leave out
+
+**Body lean (`m351C`) is not free.** It feeds the roll pose, hence the Co centre that does the pushing.
+On the Tetra corner lean 0 and 1 clip the same entry and **64 already does not** (residual 1.1e-2, ~95
+windows out), while a real walk-in arrives at lean -191 settling near -160. A compiled context is valid
+only for the lean it was built at, so candidates must be grouped by lean. Link's ground Y, by contrast,
+does not matter: the acceptance runs on the geometry's own floor.
+
+## What the fidelity gate decides (run it FIRST)
+
+Sweeping the entry evaluates a *reseeded* roll. Whether that is the roll Link performs is not a
+formality to settle after a hit turns up - it is the objective function, and a search aimed at the
+wrong one cannot be rescued by making it bigger. Diff a real walk + A-press against the reseeded
+schedule, per frame, in an engine that has the walls, and it decides three things at once:
+
+1. **the seeding convention** (which frame's position and lean the context wants) - the one that was
+   wrong above;
+2. **whether the reseed's anim/pose history matters** - here it does not, all nine baked tables come
+   out bit-identical;
+3. **whether the crash latch matters.** A roll started in the open ARMS the mid-roll bonk, while a
+   reseed typically forces it off and the compiled engine has no crash branch at all. On this corner
+   the roll does contact the wall for ten frames and the bonk still never fires (the cone does not line
+   up before the B edge), so disarming it is exact. That is a *measured* clearance, not an assumption,
+   and it has to be re-measured on any new corner.
+
+A hit is still a candidate until it is DTM-confirmed, but it is a candidate for the right reason.
