@@ -33,6 +33,7 @@ import pytest
 
 from tww_sim.core.anim import _anmc as N
 from tww_sim.land.constants import ROLL_FROM
+from tww_sim.land.land import LandState
 from tww_sim.land.plan_land._primitives import main_stick_decode
 from harness.tetrapush import entry_fan as EF
 from harness.tetrapush import entry_search as ES
@@ -195,8 +196,13 @@ def test_the_productive_facing_window_is_wider_than_the_aims_that_reach_it():
         assert b['productive'], facing
     for facing in (40800, 40860):                  # outside it, nothing is productive
         assert not bands.get(facing, THRUST, 0)['productive'], facing
+    # Session 88 halved this: two of the four aims were representatives too shallow to dispatch a roll
+    # (`test_attack_threshold.py`), and facing 40834 has no deep member at all.
     reach = [f for f, _b in ES.aim_alphabet() if 40816 <= f <= 40847]
-    assert reach == [40820, 40826, 40834, 40841]
+    assert reach == [40820, 40841]
+    assert [f for f, _b in ES.aim_alphabet(msd_min=0.0)
+            if 40816 <= f <= 40847] == [40820, 40826, 40834, 40841]
+    assert len({ES.aim_cell(f) for f in reach}) == 2, "both productive cells are still reachable"
 
 
 # -------------------------------------------------------- the two structural facts the descent hit
@@ -725,32 +731,46 @@ def test_the_session_85_pass_rescores_to_its_seven_survivors():
     assert all(r['resid'] == r['resid_s85'] for r in kept)
 
 
-_S87_HITS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                         'fixtures', 'courtyard_entry_s87_hits.json')
+_FIXTURES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fixtures')
+_S87_HITS = os.path.join(_FIXTURES, 'courtyard_entry_s87_hits.json')
 
 
-def test_the_current_candidate_list_still_scores_and_confirms():
-    """**THE PASS, RE-RUN ON THE FIXED ENGINE.** Same scoping as session 85's
-    (`search2 2 1,2 1 6 2`, 39.3 M candidates, 4997 s): **55 distinct genuine draws, 55 of 55
-    confirmed by a real A-press and 55 of 55 DTM-deliverable**, frame floor **4**.
+def _fx(name):
+    return os.path.join(_FIXTURES, name)
 
-    The yield barely moved -- 1950 near draws against s85's 2007, E[hits] 4.547 against 4.638,
-    0.2417 near/family against 0.2487 -- but the POPULATION did: only 7 of s85's 49 are in it. That
-    is the "a survivor rate is a lower bound" caveat of the re-score gate, measured.
 
-    Both halves are cheap enough to gate for real (0.1 s to re-sweep, 2.5 s to replay all 55), so
-    this pins the list itself rather than a summary of it."""
+def test_the_session_87_pass_still_scores_but_two_thirds_of_it_cannot_ROLL():
+    """**THE PASS, AND THE GATE IT WAS MISSING.** Same scoping as session 85's
+    (`search2 2 1,2 1 6 2`, 39.3 M candidates, 4997 s): 55 distinct genuine draws, frame floor 4, and
+    the yield barely moved -- 1950 near draws against s85's 2007, E[hits] 4.547 against 4.638.
+
+    Every one of the 55 still SCORES genuine at the residual it recorded: `rescore` is bit-stable, so
+    the razor itself has not drifted. What moved is `confirm`. Session 88's first console delivery
+    found that an A-press below `LandState.ATTACK_MSD_MIN` does not roll at all
+    (`test_attack_threshold.py`), and this pass drew from an aim alphabet that offered two
+    representatives, one of them 0.5705 deep. **36 of the 55 cannot roll on console and 19 can**, so
+    the frame floor moves 4 -> 5. The list is still pinned in full because that split is the
+    measurement: `fixtures/courtyard_entry_s88_hits.json` carries the survivors."""
     fx = json.load(open(_S87_HITS))
     hits = [dict(r, plan=list(r['plan'])) for r in fx['rows']]
     assert len(hits) == fx['n_hits'] == 55
-    assert fx['n_confirmed'] == fx['n_deliverable'] == 55
     assert fx['frame_floor'] == min(r['frames'] for r in fx['rows']) == 4
     for got, want in zip(EF.rescore(hits), fx['rows']):
         assert got['genuine'] is True, want['plan']
         assert got['resid'] == want['resid'], want['plan']
-    for got, want in zip(EF.confirm_hits(hits), fx['rows']):
-        assert got['confirm']['all_ok'], got['hit']['plan']
-        assert got['deliverable'], got['hit']['plan']
+    # `confirm_hits` re-ranks (confirmed first), so index its rows by plan rather than by position.
+    by_plan = {(tuple(r['hit']['plan']), tuple(r['hit']['aim'])): r for r in EF.confirm_hits(hits)}
+    assert len(by_plan) == 55
+    deep = [h for h in hits if main_stick_decode(*h['aim'])[1] > float(LandState.ATTACK_MSD_MIN)]
+    assert len(deep) == 19
+    for h in hits:
+        got = by_plan[(tuple(h['plan']), tuple(h['aim']))]
+        if h in deep:
+            assert got['confirm']['all_ok'] and got['deliverable'], h['plan']
+        else:
+            assert not got['confirm']['ok']['rolled'], h['plan']
+    s88 = json.load(open(_fx('courtyard_entry_s88_hits.json')))
+    assert s88['frame_floor'] == 5 and len(s88['dropped']) == 36
 
 
 def test_the_two_passes_of_one_scoping_overlap_only_where_the_lean_is_small():

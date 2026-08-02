@@ -1,0 +1,107 @@
+{
+ "source": "harness/tetrapush/deliver.py truncate-and-read on the spliced boot movie (_notes/s88_clip.py), session 88, 2026-08-02. Each sample is one ~30 s delivery of log[:n], read at the PauseMovie halt on plan frame n-1.",
+ "immutable": "LOCKED clean-DTM console capture. For a fixed input log the console is ground truth and never moves: a disagreement is the SIM's to fix, never this file's.",
+ "verdict": "THE A-PRESS DID NOT ROLL. The plan was delivered exactly as authored and Link never entered FRONT_ROLL at all: at the sampled frame he is in MOVE, coasting to a stop with his walk facing continued past the A-press, and TETRA IS BIT-IDENTICAL to her pre-roll position -- he never reached her, so nothing was pushed. The decomp names it: `setDoStatusBasic` (d_a_player_main.cpp:2220) sets dActStts_ATTACK_e -- the only status checkNextActionFromButton (4318) turns into procFrontRoll_init -- solely for `mStickDistance > m_HIO->mBasic.m.field_0x1C` = 0.75. This aim decodes to 0.570479, so the press was dActStts_PUT_AWAY_e (2218) and SHEATHED the sword. Session 86's delivery rolled with an aim at 0.889082, so the two runs BRACKET the threshold on the real game.",
+ "threshold": {
+  "value": 0.75,
+  "hio": "m_HIO->mBasic.m.field_0x1C",
+  "decomp": [
+   "setDoStatusBasic d_a_player_main.cpp:2220 (ATTACK) / :2218 (PUT_AWAY)",
+   "checkNextActionFromButton d_a_player_main.cpp:4318",
+   "daPy_HIO_basic_c0::m, d_a_player_HIO_data.inc:4, field_0x1C"
+  ],
+  "heavy_scale": 0.5,
+  "heavy_hio": "m_HIO->mMove.m.field_0x80"
+ },
+ "console_bracket": [
+  {
+   "aim": [
+    85,
+    182
+   ],
+   "msd": 0.8890817691968743,
+   "rolled": true,
+   "fixture": "fixtures/courtyard_entry_s86_console.json"
+  },
+  {
+   "aim": [
+    95,
+    168
+   ],
+   "msd": 0.5704785852129394,
+   "rolled": false,
+   "fixture": "this file"
+  }
+ ],
+ "hit": {
+  "plan": [
+   0,
+   208,
+   110,
+   2,
+   169,
+   192,
+   2
+  ],
+  "aim": [
+   95,
+   168
+  ],
+  "facing": 40834,
+  "thrust": 15,
+  "m351C": 64761,
+  "m351C_walk": 64345,
+  "nspeed": 26.0,
+  "entry": [
+   -1531.178466796875,
+   -781.7215576171875
+  ],
+  "walk": [
+   -1513.0206298828125,
+   -763.112548828125
+  ],
+  "resid": 6.24293879321751e-05,
+  "frames": 4,
+  "confirmed": true,
+  "deliverable": true
+ },
+ "plan": {
+  "hits": "fixtures/courtyard_entry_s87_hits.json (row 0)",
+  "n_console": 78,
+  "a_i": 82,
+  "entry_i": 83,
+  "b_log": 100,
+  "cut_i_predicted": 101,
+  "note": "The model of the day predicted FRONT_ROLL at plan frame 83 and a CUT at 101; the console did neither."
+ },
+ "samples": [
+  {
+   "n": 102,
+   "i": 101,
+   "link": {
+    "x": -1463.8309326171875,
+    "z": -774.2553100585938,
+    "facing": 21710,
+    "travel": 21710,
+    "proc": 6,
+    "speedF": 0.060567665845155716,
+    "m351C": 0,
+    "nspeed": 1.239572286605835
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  }
+ ],
+ "model_of_the_day": {
+  "i": 101,
+  "proc": 66,
+  "link_x": -1727.218017578125,
+  "link_z": -990.5089111328125,
+  "tetra_x": -1618.349609375,
+  "tetra_z": -940.0362548828125,
+  "note": "What the pre-session-88 sim predicted for the sampled frame, kept as the falsified prediction -- NOT a value to reproduce."
+ }
+}

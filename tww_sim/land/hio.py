@@ -55,6 +55,10 @@ class _LandHIO:
     ROLL_EARLY = f32(17.0)          # field_0x10 = getFrame()>this -> checkNextMode(1) moving-stick exit
     # (with a neutral stick checkNextMode(1) is inert -- 4457 returns false when msd<=0.05 and no action
     # button -- so a neutral roll runs to ROLL_END; a held stick exits one frame early, e.g. the roll-EBS.)
+    # THE ROLL'S OWN STICK GATE (setDoStatusBasic 2220 -> 4318), not the 0.05 locomotion floor; at or
+    # below it the press sheathes. Console-bracketed: mechanics/roll-attack-threshold.md.
+    ATTACK_MSD_MIN = f32(0.75)      # mBasic.field_0x1C
+    ATTACK_MSD_HEAVY = f32(0.5)     # mMove.field_0x80: scales it while carrying (never, in this model)
 
     # HIO mCut sword-thrust cuts (roll stab). d_a_player_HIO_data.inc:31/27, procCutF/A sword.inc:660/430;
     # the roll-stab lunge model + why 49.22u: knowledge/mechanics/land-movement.md + reference/constants.md.

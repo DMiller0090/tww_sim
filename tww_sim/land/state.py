@@ -96,6 +96,9 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         self.line_hit = False                    # LINE_CHECK_HIT
         # Planner-rejection signal (sidle-suppressed roll); a bonk = FRONT_ROLL_CRASH in visited.
         self.sidle_blocked = False
+        # Planner-rejection signal: an A-press at or below ATTACK_MSD_MIN, which the game answers
+        # with PUT_AWAY (sheathe) and not the roll -- the unmodeled dispatch, session 88.
+        self.attack_blocked = False
         # Vertical state for the ballistic hops. pos_y accumulates in f32; ground_y = the jump-entry
         # height. Seed pos_y from live for a bit-exact airtime (the vertical rounding is magnitude-dependent).
         self.pos_y = f32(pos_y)
@@ -448,6 +451,10 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
                 # ATTACK, 4188); the guard forbids the roll, the sidle stays unmodeled.
                 if self._walls is not None and sidle_blocks_roll(self):
                     self.sidle_blocked = True    # sticky: planners reject this input stream
+                elif self.msd <= self.ATTACK_MSD_MIN:
+                    # Too shallow to be ATTACK: the press is PUT_AWAY and sheathes (unmodeled), so
+                    # flag it like the sidle and do NOT roll. mechanics/roll-attack-threshold.md.
+                    self.attack_blocked = True   # sticky: planners reject this input stream
                 else:
                     self.facing = self.target
                     self._roll_init()
@@ -721,7 +728,7 @@ _LAND_CONSTS = {n: getattr(LandState, n) for n in (
     'ATN_TURN_MAX', 'ATN_TURN_MIN', 'ATN_TURN_SCALE',
     'ATNB_MAX', 'ATNB_SPD', 'ATNB_ACC', 'ATNB_DEC', 'ATNB_SCL', 'ATNB_COS_FWD', 'ATNB_COS_BACK',
     'ROLL_SPD', 'ROLL_ADD', 'ROLL_MIN', 'ROLL_END', 'ROLL_RATE', 'ROLL_ENTRY_MORF',
-    'MOVE_REENTRY_MORF', 'ROLL_EARLY',
+    'MOVE_REENTRY_MORF', 'ROLL_EARLY', 'ATTACK_MSD_MIN',
     'TURN_MAX', 'TURN_MIN', 'TURN_SCALE', 'WAIT_TURN_ANIM_RATE',
     'SLIP_THRESH', 'SLIP_ENTRY', 'SLIP_DEC_SCALE', 'SLIP_DEC_MAX', 'SLIP_DEC_MIN',
     'SLIP_ANIM_RATE', 'SLIP_MORF', 'MT_SLIP_SEED')}

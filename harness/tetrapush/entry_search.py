@@ -71,10 +71,14 @@ turned out to be the thing that was wrong, in three places, all now measured:
      full 26 u roll step short, so every candidate was scored at a place Link never rolls from. See
      `roll_entry` -- and note the consequence: the aim MOVES the entry, so an aim is not just its own
      locus, it is its own candidate.
-  2. **THE AIM ALPHABET IS 81 WIDE, NOT 6.** s79 read it off `reachable_stick_fan(msd_min=1.0)`, the
-     saturated octagon boundary. Nothing needs that magnitude: the roll takes its speed from the walk
-     cap and `_roll_init` snaps facing to the latched target whatever the deflection. Measured, every
-     aim in the window fires the roll and lands on the facing it commands. See `aim_alphabet`.
+  2. **THE AIM ALPHABET IS THE WHOLE GRID OF ANGLES, NOT THE OCTAGON BOUNDARY -- BUT EVERY MEMBER
+     MUST STILL DISPATCH.** s79 read it off `reachable_stick_fan(msd_min=1.0)`, the saturated
+     boundary, which is too narrow: the roll takes its speed from the walk cap and `_roll_init` snaps
+     facing to the latched target whatever the deflection, so any angle is aimable. What s79-s87 then
+     read as "any DEFLECTION too" was measured in a sim with no ATTACK gate, and session 88's console
+     delivery falsified it: an A-press at or below `LandState.ATTACK_MSD_MIN` sheathes the sword
+     instead of rolling. The alphabet is one deep-enough representative per angle
+     (`two_roll.roll_aim_fan`). See `aim_alphabet`.
   3. **THE THRUST STEP IS A THIRD DRAW.** 13/14/15 all dispatch a CUT (cut_step 15/16/17) and read
      wildly different residuals at one entry (+2.78 / -0.09 / +0.27), so each bakes an independent
      locus. See `THRUSTS`.
@@ -409,17 +413,22 @@ class CtxPool:
         return ctx, sch, resid_fn(sch)
 
 
-def aim_alphabet(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=0.0):
+def aim_alphabet(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=None):
     """The roll facings this camera can actually deliver, as [(facing, (sx, sy))].
 
     s79 read this as SIX wide, off `two_roll.reachable_stick_fan(msd_min=1.0)` -- the saturated
-    octagon-boundary bytes. That floor is not a physical one: `_set_stick_data` latches the target
-    from ANY non-dead-centre stick and `_roll_init` snaps facing to it unconditionally, while the
-    roll's speed comes from the walk cap and not from the stick. Measured, every aim in the window
-    fires the roll and lands on the facing it commands, so the alphabet is the whole decoded-angle
-    grid -- 81 in the seam window, not 6 (gated `test_the_aim_alphabet_is_the_whole_decoded_grid`)."""
+    octagon-boundary bytes -- and s79-s87 read it as the WHOLE decoded-angle grid, 81 in the seam
+    window, on the grounds that `_roll_init` snaps facing to the latched target whatever the
+    deflection. The second reading was measured in a sim that had no ATTACK gate, and **session 88's
+    console delivery falsified it**: below `LandState.ATTACK_MSD_MIN` the press is not a roll at all
+    (`setDoStatusBasic` 2220 -> PUT_AWAY, the sword goes away and Link keeps walking). The truth is
+    in between -- the whole grid of ANGLES, each represented by a member deep enough to dispatch
+    (`two_roll.roll_aim_fan`), which is the default here. ``msd_min`` overrides the floor for
+    diagnostics only; pass 0.0 to reproduce a pre-s88 alphabet.
+    See knowledge/mechanics/roll-attack-threshold.md + history/aim-alphabet-whole-grid.md."""
+    fan = TR.roll_aim_fan() if msd_min is None else TR.reachable_stick_fan(msd_min=msd_min)
     out = []
-    for ang, byts in TR.reachable_stick_fan(msd_min=msd_min):
+    for ang, byts in fan:
         f = (ang + 0x8000 + int(csangle)) & 0xFFFF
         if lo <= f <= hi:
             out.append((f, byts))
@@ -441,7 +450,7 @@ def aim_cell(facing):
     return (int(facing) & 0xFFFF) >> 4
 
 
-def aim_cells(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=0.0):
+def aim_cells(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=None):
     """`aim_alphabet` collapsed onto its real atoms: ``[(facing, bytes, [sibling bytes...])]``, one
     entry per sine-table cell.
 

@@ -106,6 +106,17 @@ engines that had never been compared to each other.
 6. **If a quantity is computed by two engines, gate them against each other, not only each against
    its own fixture.** A term present in one and absent from the other is invisible for exactly as
    long as nobody puts the two side by side on the same frames.
+7. **Cross-engine agreement is a property of the CANDIDATE, not of the engines** (session 88). Making
+   them agree for one hit and gating that reads as "the engines agree"; run the same diff over the
+   candidate list and some entries disagree by a few ULP of the pushed actor mid-roll - which is the
+   scale rule 3 measured the verdict flipping at. Two of 19 survivors had the composite **blocking**
+   the very lunge the sweep scored genuine, and one of those two was the frame-minimal candidate, i.e.
+   the one a delivery would have been spent on. So diff the two engines **for the candidate you are
+   about to deliver**; it costs one rollout and no console runs.
+8. **A dispatch is not priced by the model that performs it** ([../mechanics/roll-attack-threshold.md](../mechanics/roll-attack-threshold.md)).
+   Every term of the residual can be console-exact while the input never produces the action at all.
+   Check the branch that decides the action against the decomp, separately from the physics that
+   follows it - a replay-based confirm shares the omission and will agree with you.
 
 ## See also
 

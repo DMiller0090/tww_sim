@@ -82,6 +82,7 @@ you can triage in one glance.
 - **What is a brakeslide / extended brakeslide (EBS) / why does ESS left-or-right hold speed almost forever / what is the wiggle EBS?** → is *facing* (not travel) relative to `csangle` → [mechanics/brakeslide-ebs.md](mechanics/brakeslide-ebs.md)
 - **How does the 1-frame facing snap out of an EBS work / can the camera be steered to make it fire?** → the facing chase crossing TRAVEL, and NO: travel chases csangle, so the window is unreachable → [mechanics/ebs-turnaround.md](mechanics/ebs-turnaround.md)
 - **How does the forward roll work / the 26 cap / chained + intermediate roll speeds / the frame-perfect roll-EBS?** → [mechanics/roll.md](mechanics/roll.md)
+- **My A-press rolled in the sim and did NOT roll on console - what deflection does a roll need / what does the game do with a shallower press / which searches owe that gate?** → `mStickDistance > 0.75`, else it sheathes → [mechanics/roll-attack-threshold.md](mechanics/roll-attack-threshold.md)
 - **What is the roll stab / the 49.22 single-frame lunge (CUT_F/CUT_A) that reaches a seam clip?** → [mechanics/roll-stab.md](mechanics/roll-stab.md)
 - **How do the big-reversal ground turns work (WAIT_TURN pivot / MOVE_TURN turn-around / SLIP skid)?** → [mechanics/ground-turns.md](mechanics/ground-turns.md)
 - **What are the targeted ballistic hops (sidehop / backflip) / the A=roll vs L+A=hop mapping / the ESS aim-turn?** → [mechanics/ballistic-hops.md](mechanics/ballistic-hops.md)
@@ -124,6 +125,7 @@ you can triage in one glance.
 - **I proved a prune was my own assumption, not physics - why isn't removing it a lever? Why price an axis before promoting it?** → [history/entry-search-s81-momentum-lever.md](history/entry-search-s81-momentum-lever.md)
 - **My axis priced at exactly 8x - why is a perfectly integral multiplier a warning sign? How did sweeping a facing at 1 BAM measure the same configuration sixteen times?** → [history/entry-search-s81-camera-lever.md](history/entry-search-s81-camera-lever.md)
 - **My model is live-gated 0 ULP and still wrong - how? Why record the REGIME a capture covers next to the claim it proves?** → [history/co-centre-body-chn-twist.md](history/co-centre-body-chn-twist.md)
+- **I widened my search's input alphabet on a measurement and the console refused a third of it - why can a gate on the model prove nothing about a DISPATCH? What does a containment check actually promise?** → [history/aim-alphabet-whole-grid.md](history/aim-alphabet-whole-grid.md)
 
 ## Page template (for contributors)
 

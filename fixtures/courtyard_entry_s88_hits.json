@@ -1,0 +1,1412 @@
+{
+ "source": "python -m harness.tetrapush.entry_fan search2 2 1,2 1 6 2  (the SESSION-85 scoping, re-run on the session-87 engine), 2026-08-02. Confirmed with entry_fan confirm.",
+ "note": "NOT a console capture -- a MODEL output. The current candidate list for the Courtyard clip entry, pinned so the engine cannot move under it without the gate naming which hits moved. The session-85 run of this exact scoping is fixtures/courtyard_entry_s87_rescored.json (its 49, of which 7 survive here); this pass finds 55, so the population is largely NEW rather than smaller.",
+ "pass_": {
+  "tag": "seg2_a2_j1-2_s1_j6_b2",
+  "candidates": 39291750,
+  "evaluations": 117875250,
+  "families": 8069,
+  "near": 1950,
+  "expected_hits": 4.546887776110217,
+  "seconds": 4997.255250930786,
+  "scorings": 81,
+  "draws": 55,
+  "configurations": 3
+ },
+ "attack_msd_min": 0.75,
+ "n_hits": 15,
+ "frame_floor": 5,
+ "rows": [
+  {
+   "plan": [
+    1,
+    196,
+    92,
+    1,
+    202,
+    152,
+    3
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 64652,
+   "m351C_walk": 64177,
+   "nspeed": 26.0,
+   "entry": [
+    -1517.9427490234375,
+    -765.2719116210938
+   ],
+   "walk": [
+    -1499.8134765625,
+    -746.6350708007812
+   ],
+   "resid": -5.453928597390321e-06,
+   "frames": 5,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    1,
+    156,
+    88,
+    1,
+    184,
+    180,
+    3
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 64895,
+   "m351C_walk": 64551,
+   "nspeed": 26.0,
+   "entry": [
+    -1522.01806640625,
+    -770.08740234375
+   ],
+   "walk": [
+    -1503.8887939453125,
+    -751.4505615234375
+   ],
+   "resid": 1.0101213787880477e-05,
+   "frames": 5,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    1,
+    200,
+    160,
+    2,
+    183,
+    76,
+    2
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 65151,
+   "m351C_walk": 64945,
+   "nspeed": 26.0,
+   "entry": [
+    -1517.5201416015625,
+    -764.3341064453125
+   ],
+   "walk": [
+    -1499.390869140625,
+    -745.697265625
+   ],
+   "resid": 1.6895165508067826e-05,
+   "frames": 5,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.85839324269722,
+    "composite_moved": 49.85839324269722,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    0,
+    148,
+    54,
+    1,
+    193,
+    164,
+    4
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 64891,
+   "m351C_walk": 64545,
+   "nspeed": 26.0,
+   "entry": [
+    -1519.49072265625,
+    -766.9931030273438
+   ],
+   "walk": [
+    -1501.3614501953125,
+    -748.3562622070312
+   ],
+   "resid": 2.4115705944307594e-05,
+   "frames": 5,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    0,
+    154,
+    78,
+    1,
+    198,
+    160,
+    4
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 64850,
+   "m351C_walk": 64481,
+   "nspeed": 26.0,
+   "entry": [
+    -1519.661376953125,
+    -767.22900390625
+   ],
+   "walk": [
+    -1501.5321044921875,
+    -748.5921630859375
+   ],
+   "resid": 2.4115705944307594e-05,
+   "frames": 5,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    1,
+    192,
+    156,
+    1,
+    198,
+    104,
+    3
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 64998,
+   "m351C_walk": 64709,
+   "nspeed": 26.0,
+   "entry": [
+    -1519.483154296875,
+    -766.9029541015625
+   ],
+   "walk": [
+    -1501.3538818359375,
+    -748.26611328125
+   ],
+   "resid": 2.4115705944307594e-05,
+   "frames": 5,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    1,
+    192,
+    156,
+    1,
+    197,
+    104,
+    3
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 64999,
+   "m351C_walk": 64711,
+   "nspeed": 26.0,
+   "entry": [
+    -1519.483154296875,
+    -766.9029541015625
+   ],
+   "walk": [
+    -1501.3538818359375,
+    -748.26611328125
+   ],
+   "resid": 2.4115705944307594e-05,
+   "frames": 5,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    1,
+    164,
+    90,
+    1,
+    191,
+    169,
+    3
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 64895,
+   "m351C_walk": 64551,
+   "nspeed": 26.0,
+   "entry": [
+    -1521.467529296875,
+    -769.4155883789062
+   ],
+   "walk": [
+    -1503.3382568359375,
+    -750.7787475585938
+   ],
+   "resid": 3.0672070760170374e-05,
+   "frames": 5,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    0,
+    188,
+    66,
+    2,
+    208,
+    107,
+    4
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 64919,
+   "m351C_walk": 64587,
+   "nspeed": 26.0,
+   "entry": [
+    -1506.4112548828125,
+    -750.2601318359375
+   ],
+   "walk": [
+    -1488.281982421875,
+    -731.623291015625
+   ],
+   "resid": 3.581582845347479e-06,
+   "frames": 6,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    0,
+    64,
+    2,
+    1,
+    200,
+    149,
+    5
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 64784,
+   "m351C_walk": 64380,
+   "nspeed": 26.0,
+   "entry": [
+    -1507.9403076171875,
+    -752.3492431640625
+   ],
+   "walk": [
+    -1489.81103515625,
+    -733.71240234375
+   ],
+   "resid": -7.52941952268431e-06,
+   "frames": 6,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    1,
+    202,
+    92,
+    2,
+    192,
+    86,
+    3
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 65156,
+   "m351C_walk": 64952,
+   "nspeed": 26.0,
+   "entry": [
+    -1505.63330078125,
+    -749.134033203125
+   ],
+   "walk": [
+    -1487.5040283203125,
+    -730.4971923828125
+   ],
+   "resid": 3.656952627262224e-05,
+   "frames": 6,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.85839324269722,
+    "composite_moved": 49.85839324269722,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    1,
+    208,
+    108,
+    2,
+    181,
+    73,
+    3
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 65281,
+   "m351C_walk": 65145,
+   "nspeed": 26.0,
+   "entry": [
+    -1505.6617431640625,
+    -749.0580444335938
+   ],
+   "walk": [
+    -1487.532470703125,
+    -730.4212036132812
+   ],
+   "resid": 3.656952627262224e-05,
+   "frames": 6,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.85839324269722,
+    "composite_moved": 49.85839324269722,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    0,
+    204,
+    106,
+    1,
+    190,
+    85,
+    5
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 65364,
+   "m351C_walk": 65272,
+   "nspeed": 26.0,
+   "entry": [
+    -1505.5250244140625,
+    -748.8271484375
+   ],
+   "walk": [
+    -1487.395751953125,
+    -730.1903076171875
+   ],
+   "resid": 3.860295913169042e-05,
+   "frames": 6,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.85839324269722,
+    "composite_moved": 49.85839324269722,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    1,
+    192,
+    174,
+    2,
+    145,
+    43,
+    3
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 65281,
+   "m351C_walk": 65145,
+   "nspeed": 26.0,
+   "entry": [
+    -1506.7894287109375,
+    -750.533447265625
+   ],
+   "walk": [
+    -1488.66015625,
+    -731.8966064453125
+   ],
+   "resid": 4.1569829012182335e-05,
+   "frames": 6,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.85839324269722,
+    "composite_moved": 49.85839324269722,
+    "deliverable": true
+   }
+  },
+  {
+   "plan": [
+    1,
+    76,
+    88,
+    1,
+    199,
+    102,
+    5
+   ],
+   "aim": [
+    85,
+    182
+   ],
+   "facing": 40820,
+   "thrust": 15,
+   "m351C": 64815,
+   "m351C_walk": 64428,
+   "nspeed": 26.0,
+   "entry": [
+    -1497.66845703125,
+    -738.7113037109375
+   ],
+   "walk": [
+    -1479.5391845703125,
+    -720.074462890625
+   ],
+   "resid": 2.633657782126134e-05,
+   "frames": 7,
+   "confirmed": true,
+   "deliverable": true,
+   "aim_msd": 0.8890817691968743,
+   "cross_engine": {
+    "entry_i": 86,
+    "b_log": 103,
+    "cut_i": 104,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "predicted_lunge": 49.85804798547372,
+    "composite_moved": 49.85804798547372,
+    "deliverable": true
+   }
+  }
+ ],
+ "rejected": [
+  {
+   "plan": [
+    0,
+    186,
+    98,
+    1,
+    200,
+    108,
+    4
+   ],
+   "m351C": 64915,
+   "resid": 1.1024416428249801e-06,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 584459,
+    "cut_ok": false,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 0.1533895567015212,
+    "deliverable": false
+   }
+  },
+  {
+   "plan": [
+    0,
+    158,
+    78,
+    1,
+    197,
+    157,
+    4
+   ],
+   "m351C": 64850,
+   "resid": 2.4115705944307594e-05,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 1,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": false
+   }
+  },
+  {
+   "plan": [
+    0,
+    94,
+    58,
+    1,
+    177,
+    186,
+    4
+   ],
+   "m351C": 64891,
+   "resid": 3.0672070760170374e-05,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 1,
+    "cut_ok": true,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": false
+   }
+  },
+  {
+   "plan": [
+    0,
+    86,
+    96,
+    1,
+    194,
+    162,
+    4
+   ],
+   "m351C": 64850,
+   "resid": 3.3151202878790605e-05,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 584459,
+    "cut_ok": false,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 0.1533895567015212,
+    "deliverable": false
+   }
+  }
+ ],
+ "dropped": [
+  {
+   "plan": [
+    0,
+    208,
+    110,
+    2,
+    169,
+    192,
+    2
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    204,
+    148,
+    2,
+    188,
+    175,
+    2
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    200,
+    100,
+    1,
+    190,
+    172,
+    3
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    106,
+    66,
+    1,
+    190,
+    174,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    194,
+    98,
+    1,
+    199,
+    105,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    88,
+    100,
+    1,
+    174,
+    190,
+    3
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    188,
+    174,
+    2,
+    166,
+    64,
+    3
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    172,
+    100,
+    1,
+    203,
+    108,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    174,
+    184,
+    1,
+    194,
+    90,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    194,
+    90,
+    1,
+    204,
+    154,
+    3
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    194,
+    90,
+    1,
+    199,
+    153,
+    3
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    196,
+    98,
+    1,
+    200,
+    104,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    168,
+    62,
+    1,
+    201,
+    156,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    194,
+    84,
+    2,
+    202,
+    158,
+    3
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    194,
+    152,
+    1,
+    201,
+    105,
+    3
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    110,
+    54,
+    1,
+    193,
+    170,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    192,
+    86,
+    2,
+    194,
+    93,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    192,
+    82,
+    1,
+    194,
+    92,
+    5
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    152,
+    50,
+    1,
+    199,
+    145,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    104,
+    62,
+    1,
+    201,
+    144,
+    5
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    170,
+    82,
+    1,
+    200,
+    96,
+    5
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    186,
+    76,
+    1,
+    201,
+    96,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    78,
+    92,
+    1,
+    198,
+    151,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    200,
+    166,
+    2,
+    156,
+    59,
+    3
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    102,
+    66,
+    1,
+    199,
+    145,
+    5
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    202,
+    148,
+    2,
+    173,
+    65,
+    3
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    146,
+    148,
+    1,
+    201,
+    96,
+    5
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    156,
+    52,
+    2,
+    192,
+    169,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    70,
+    112,
+    1,
+    205,
+    104,
+    5
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    148,
+    68,
+    1,
+    196,
+    94,
+    6
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    64,
+    114,
+    1,
+    200,
+    105,
+    5
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    74,
+    96,
+    1,
+    202,
+    99,
+    5
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    80,
+    86,
+    1,
+    202,
+    99,
+    5
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    102,
+    56,
+    2,
+    187,
+    175,
+    4
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    0,
+    152,
+    68,
+    1,
+    195,
+    93,
+    6
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  },
+  {
+   "plan": [
+    1,
+    64,
+    112,
+    1,
+    200,
+    105,
+    5
+   ],
+   "aim": [
+    95,
+    168
+   ],
+   "aim_msd": 0.5704785852129394,
+   "rolled": false
+  }
+ ]
+}

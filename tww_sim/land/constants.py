@@ -32,7 +32,8 @@ BACK_JUMP = 0x22       # daPyProc_BACK_JUMP_e       (backflip: stick back while 
 BACK_JUMP_LAND = 0x23  # daPyProc_BACK_JUMP_LAND_e  (backflip recovery -> WAIT)
 
 #: Procs an A-press dispatches the ATTACK ROLL from (checkNextActionFromButton 4309 -> 4188): grounded
-#: AND locomoting. A planner owes it too; see knowledge/strategy/search-prune-the-dispatch.md.
+#: AND locomoting AND deflected past `LandState.ATTACK_MSD_MIN` (hio.py -- the press is only ATTACK
+#: above it). A planner owes all three; see knowledge/strategy/search-prune-the-dispatch.md.
 ROLL_FROM = (MOVE, ATN_MOVE)
 
 _STATE_TAG = {MOVE: "MOVE", ATN_MOVE: "ATN", ATN_ACTOR_MOVE: "ATNACT", ATN_ACTOR_WAIT: "ATNACTW",

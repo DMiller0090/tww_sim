@@ -190,6 +190,7 @@ The walk/run, brakeslide/EBS, roll, and ballistic-hop constants. Decomp `d_a_pla
 | ATN travel-chase `cLib_addCalcAngleS(scale,max,min)` | 6 / 3000 / 2000 | |
 | direction cos thresholds (fwd / back) `mAtnMoveB.0x2C/0x30` | ≥0.99 → FORWARD · ≤−0.99 → BACKWARD (else side) | |
 | roll speed `clamp(speedF·field_0x18 + field_0x1C, field_0x20, cap)` | **×1.5 + 0.5, floor 5.0, cap 26.0** (= 0.5 + 17·1.5) | `mRoll` |
+| A-press → roll (ATTACK) stick floor | `mStickDistance > `**0.75** (×**0.5** while heavy); at or below → `PUT_AWAY`, sheathe, no roll | `mBasic.field_0x1C` / `mMove.field_0x80` (`setDoStatusBasic` 2220/2218 → 4318); [roll-attack-threshold.md](../mechanics/roll-attack-threshold.md) |
 | roll duration / exit frame `mRoll.field_0x10` | **17** (anim rate 1.1, ≈18 frames) | |
 | roll-EBS (frame-perfect) | full-run roll → hold L+down through roll → release L into ESS-down → **≈ −23.1** | live |
 | WAIT idle blend `setMoveAnime(0, f28, f25, WAITS, WALK, 2)` | f28 **1.1** / f25 **0.8** | `mMove.field_0x38`/`0x40` |

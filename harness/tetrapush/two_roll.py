@@ -75,7 +75,7 @@ from harness.tetrapush import primitives as P
 from harness.tetrapush.reposition import HerdLine, on_line_ok, ESS_DOWN
 from harness.tetrapush.steered_reposition import _s16, _bearing
 from tww_sim.core.mathlib import main_stick_decode
-from tww_sim.land.land import FRONT_ROLL
+from tww_sim.land.land import FRONT_ROLL, LandState
 from tww_sim.land.plan_land._primitives import stick_for_bearing
 
 CSTICK_NEUTRAL = 128
@@ -116,18 +116,22 @@ def human_baseline(env, hl=None, upto=45):
 _FAN_CACHE = {}
 
 
-def reachable_stick_fan(msd_min=1.0):
+def reachable_stick_fan(msd_min=1.0, strict=False):
     """**The controller's true aim alphabet**: every distinct main-stick aim the pad can physically
-    deliver at magnitude >= ``msd_min``, enumerated from the FULL 256x256 byte grid and deduped by
-    the DECODED stick angle (the only thing the physics reads -- `main_stick_decode`).
+    deliver at magnitude >= ``msd_min`` (> it, with ``strict``), enumerated from the FULL 256x256
+    byte grid and deduped by the DECODED stick angle (the only thing the physics reads --
+    `main_stick_decode`).
 
     Returns ``[(stick_angle_s16, (sx, sy))]`` sorted by angle. The decoded angle is
     csangle-INDEPENDENT, so this set is computed once and reused at every camera state; the world
     facing a member achieves is `stick_angle + 0x8000 + csangle_at_act`.
 
     This replaces inverting world bearings through `stick_for_bearing`, whose image is only the
-    maximal-radius octagon-boundary bytes -- 544 of these 2280 aims (see the module docstring)."""
-    key = float(msd_min)
+    maximal-radius octagon-boundary bytes -- 544 of these 2280 aims (see the module docstring).
+
+    For a ROLL aim call `roll_aim_fan` instead: an angle's first-in-grid-order representative is
+    often too shallow to dispatch a roll at all."""
+    key = (float(msd_min), bool(strict))
     if key in _FAN_CACHE:
         return _FAN_CACHE[key]
     seen = {}
@@ -136,10 +140,26 @@ def reachable_stick_fan(msd_min=1.0):
             ang, msd = main_stick_decode(sx, sy)
             if ang is None:                    # dead-centre: no aim, only the neutral member
                 continue
-            if msd >= key and ang not in seen:
+            if (msd > key[0] if strict else msd >= key[0]) and ang not in seen:
                 seen[ang] = (sx, sy)
     _FAN_CACHE[key] = sorted(seen.items())
     return _FAN_CACHE[key]
+
+
+def roll_aim_fan():
+    """The aims that actually **dispatch a roll**: `reachable_stick_fan` under the game's own ATTACK
+    gate, ``msd > LandState.ATTACK_MSD_MIN`` (strict, `setDoStatusBasic` 2220).
+
+    This is not a narrowing of the alphabet, it is the alphabet's real membership test, and session
+    88 paid a console delivery to learn it. Deduping the byte grid by decoded angle keeps the FIRST
+    pair in grid order, which is typically a shallow interior one -- e.g. angle 28732 is represented
+    by (154, 170) at msd 0.540, while the human delivers (181, 236) at msd 1.0 for the same angle.
+    A shallow representative aims the roll correctly in a sim whose only gate is the 0.05 locomotion
+    floor, and on console the same press SHEATHES THE SWORD and Link keeps walking. Every angle a
+    shallow pair reaches is still reachable here -- by a deeper member of its own class -- so the
+    containment `contains_human` asserts is untouched (that check is on the angle, over ALL delivered
+    bytes, and keeps the unrestricted fan)."""
+    return reachable_stick_fan(msd_min=float(LandState.ATTACK_MSD_MIN), strict=True)
 
 
 def world_facing(stick_angle, csangle):
@@ -363,7 +383,7 @@ def reproduces_recorded_roll(env, which=0, upto=45):
     # The aim comes from the FAN, not from the human's bytes: pick the alphabet member whose decoded
     # angle matches his, so this exercises the generator, not a replay of his controller.
     want_ang, _ = main_stick_decode(*aim)
-    gen = next((b for a, b in reachable_stick_fan(msd_min=0.0) if a == want_ang), aim)
+    gen = next((b for a, b in roll_aim_fan() if a == want_ang), aim)
 
     def trace(fn):
         r = base.clone()
@@ -578,8 +598,7 @@ def reproduces_recorded_chain(env, upto=45):
                 aim = (int(dtm(a_f).get('stickX', 128)), int(dtm(a_f).get('stickY', 128)))
                 knobs = _fit_roll_knobs([dtm(a_f + j) for j in range(min(n, upto - a_f))], aim)
                 want_ang, _ = main_stick_decode(*aim)
-                fan_aim = next((b for a, b in reachable_stick_fan(msd_min=0.0)
-                                if a == want_ang), aim)
+                fan_aim = next((b for a, b in roll_aim_fan() if a == want_ang), aim)
                 return roll_stream(fan_aim, **knobs)(k - a_f)
         # a junction frame: re-emit through the phase reader
         j0 = k

@@ -37,6 +37,7 @@ from harness.tetrapush import entry_search as ES
 from harness.tetrapush import roll_fidelity as RF
 from harness.tetrapush import seeds as SD
 from harness.tetrapush import two_roll as TR
+from tww_sim.land.land import LandState
 
 
 def _fx(name):
@@ -384,18 +385,23 @@ def test_the_uncapped_fan_is_the_capped_one_plus_its_sub_cap_endpoints():
     assert ES.candidate_nspeed(next(iter(capped))) == ES.ROLL_NSPEED
 
 
-def test_the_aim_alphabet_is_the_whole_decoded_grid_not_its_octagon_boundary():
-    """s79 read the alphabet as SIX wide off ``reachable_stick_fan(msd_min=1.0)``. That floor is not
-    physical -- the roll's speed comes from the walk cap, so the aim needs no magnitude -- and every
-    aim in the window fires the roll and lands on the facing it commands (read back, never assumed)."""
+def test_the_aim_alphabet_is_every_angle_that_can_dispatch_not_the_octagon_boundary():
+    """The alphabet sits between the two readings it has had. s79 read it as SIX wide off
+    ``reachable_stick_fan(msd_min=1.0)``, the saturated boundary: too narrow, because the roll takes
+    its speed from the walk cap and the aim needs no MAXIMAL magnitude. s79-s87 then read it as the
+    whole 81-wide decoded grid: too wide, because a press below `LandState.ATTACK_MSD_MIN` is not a
+    roll at all (session 88's console delivery -- `test_attack_threshold.py`). It is every angle with
+    a representative deep enough to dispatch: 60 aims, of which the 11 saturated ones are a subset,
+    and each fires the roll onto the facing it commands (read back, never assumed)."""
     wide = ES.aim_alphabet()
     saturated = [f for f, _ in ES.aim_alphabet(msd_min=1.0)]
-    assert len(wide) == 81 and len(saturated) == 11
-    assert set(saturated) <= set(f for f, _ in wide)          # the old alphabet is a SUBSET
-    for f, byts in wide[::16]:
+    assert len(wide) == 60 and len(saturated) == 11
+    assert len(ES.aim_alphabet(msd_min=0.0)) == 81            # the falsified reading, for diagnostics
+    assert set(saturated) <= set(f for f, _ in wide)          # the narrow alphabet is a SUBSET
+    for f, byts in wide[::12]:
         _, ent, _ = _sample_roll(want_facing=f)
         assert ent is not None and ent['facing'] == f
-        assert TR.main_stick_decode(*byts)[1] < 1.0 or f in saturated
+        assert TR.main_stick_decode(*byts)[1] > float(LandState.ATTACK_MSD_MIN)
 
 
 def _sched_bits(facing, lean=0, thrust=15, nspeed=None):
@@ -423,17 +429,19 @@ def test_the_aim_alphabet_resolves_to_the_sine_table_cell():
     assert _sched_bits(nxt) != base and ES.roll_entry((0.0, 0.0), nxt) != ent
     # and the alphabet collapses onto those atoms, siblings kept for `confirm_entry`
     aims, cells = ES.aim_alphabet(), ES.aim_cells()
-    assert len(aims) == 81 and len(cells) == 49
+    assert len(aims) == 60 and len(cells) == 45      # 81 / 49 before the session-88 ATTACK gate
     assert sum(len(sib) for _, _, sib in cells) == len(aims)
     assert len({ES.aim_cell(f) for f, _, _ in cells}) == len(cells)
 
 
 def test_the_camera_cannot_add_an_aim_cell():
     """THE CAMERA AXIS, PRICED AT ZERO (session 83). The productive facing window is 32 BAM wide and
-    the frozen csangle reaches four aims inside it -- which read as '8x more usable configurations'
-    only in BAM. In cells the window is TWO, the frozen camera already reaches BOTH, and no csangle
-    offset can add one. Scoring per aim instead of per cell is what inflated it: the four aims are
-    two draws, and their residuals are bit-identical within a cell."""
+    the frozen csangle reaches TWO aims inside it -- one per cell. In cells the window is TWO, the
+    frozen camera already reaches BOTH, and no csangle offset can add one.
+
+    Session 88 halved the aim count without changing the conclusion: two of the four aims that used
+    to reach the window were representatives too shallow to dispatch a roll, so the "four aims are
+    two draws" arithmetic is now "two aims, two draws". The camera still cannot add a cell."""
     lo, hi = ES.PRODUCTIVE_CELLS[0] * ES.SIN_CELL_BAM, (ES.PRODUCTIVE_CELLS[-1] + 1) * ES.SIN_CELL_BAM - 1
 
     def in_window(cs):
@@ -443,12 +451,13 @@ def test_the_camera_cannot_add_an_aim_cell():
     assert frozen == set(ES.PRODUCTIVE_CELLS)              # already every cell the window contains
     for d in range(ES.SIN_CELL_BAM):
         assert in_window(ES.CSANGLE + d) <= frozen         # a slew can only re-index, never add
-    # the same two cells, reached by four aims -- one draw each, bit-identical
+    # the same two cells; one dispatching aim each now, and the shallow siblings that used to double
+    # the count are still bit-identical within their cell -- the per-cell claim, on the wider set
     aims = sorted(f for f, _ in ES.aim_alphabet(ES.CSANGLE) if lo <= f <= hi)
-    assert len(aims) == 4
+    assert len(aims) == 2 and {ES.aim_cell(f) for f in aims} == set(ES.PRODUCTIVE_CELLS)
     e = _ref_entry()
     per_cell = {}
-    for f in aims:
+    for f in sorted(f for f, _ in ES.aim_alphabet(ES.CSANGLE, msd_min=0.0) if lo <= f <= hi):
         ctx, sch, resid = ES.build_fast(f, 0, 15)
         o = ctx.sweep_par([(SEED['tetra'][0], SEED['tetra'][1], *ES.roll_entry(e, f))], 0)[0]
         per_cell.setdefault(ES.aim_cell(f), []).append(resid(o))

@@ -233,6 +233,9 @@ deliberately unported.
 | `entry_score.rescore` (CLI `entry_fan rescore <hits json>`) | **ASK A FINISHED PASS AGAIN, ON THE ENGINE AS IT STANDS (session 87).** One sweep per hit, grouped by configuration so the `CtxPool` re-schedules instead of recompiling the courtyard. A hit is a claim about the engine that scored it, and when the correction is a function of the candidate -- as the `body_chn` twist is, through the lean -- it cannot be reasoned about hit by hit. On s85's 49: **7 kept**, the 42 rejected all past -1e-3, the survivors' residuals unchanged to the bit. What it does NOT give you is a re-measured axis: the hits are the old engine's, so the survivor rate is a lower bound. |
 | `fixtures/courtyard_entry_s87_rescored.json` | **THE 49 RE-SCORED (session 87).** A MODEL output, not a console capture -- every hit of the s85 pass with its verdict and residual on the fixed engine beside the recorded ones, pinned so the engine cannot move under the candidate set without the gate naming which hits moved. 7 genuine, frame floor 5. Gate `tests/test_entry_fan.py`. |
 | `fixtures/courtyard_entry_s87_hits.json` | **THE CURRENT CANDIDATE LIST (session 87).** s85's scoping re-run on the fixed engine (`search2 2 1,2 1 6 2`, 39.3 M candidates, 4997 s): **55 distinct genuine draws, 55/55 confirmed by a real A-press and 55/55 DTM-deliverable**, frame floor **4**, five at gap exactly 0. Yield unchanged vs s85 (1950 near draws / E[hits] 4.547 / 0.2417 near per family, against 2007 / 4.638 / 0.2487) over a largely NEW population -- only 7 of s85's 49 are in it, which is why a re-score is a lower bound and not a measurement. A MODEL output, pinned with the list itself rather than a summary (re-sweeping all 55 is 0.1 s, replaying them 2.5 s). Gate `tests/test_entry_fan.py`. |
+| `fixtures/courtyard_attack_gate_s88_console.json` | **THE PRESS THAT DID NOT ROLL (session 88; LOCKED).** The frame-minimal hit of the s87 55, delivered: the movie went out exactly as authored and Link never entered FRONT_ROLL at all -- MOVE at the sampled frame, walk facing continued past the A-press, and **Tetra bit-identical to her pre-roll position** because he never reached her. `setDoStatusBasic` (2220) only sets `dActStts_ATTACK_e` for `mStickDistance > mBasic.field_0x1C` = **0.75**; this aim decodes to 0.5705, so the press was `PUT_AWAY` and SHEATHED the sword. With s86's aim at 0.889 the two deliveries BRACKET the threshold on the real game. Carries the falsified model prediction as `model_of_the_day`. Gate `tests/test_attack_threshold.py` (10). |
+| `fixtures/courtyard_clip_s88_console.json` | **THE CLIP, ON CONSOLE (session 88; LOCKED) -- `genuine` is a measured number now.** The frame-minimal survivor of the re-confirmed list delivered end to end: at the cut frame Link is **bit-identical to the prediction, 49.8582 u off `old` and out through the seam**, and five frames later he is in `daPyProc_FALL_e` off the courtyard floor. Tetra bit-frozen, stt 3, both samples. Nothing past `cut_i` is claimed -- the composite is a flat-ground engine and the console has left the floor (`post_cut`). Gate `tests/test_clip_delivered.py` (10). |
+| `fixtures/courtyard_entry_s88_hits.json` | **THE CANDIDATE LIST, TWICE FILTERED (session 88).** The s87 55 re-confirmed against the ATTACK gate (36 `dropped` -- their aim cannot roll) and then against the CROSS-ENGINE gate (`rejected`): **15 deliverable, frame floor 5**. Each row carries its `cross_engine` block (handover, worst ULP over the roll, cut-frame agreement, `ShoveCtx` lunge vs the composite's own move). Row 0 is the one delivered. A MODEL output; regenerate with `_notes/s88_{confirm,agree}.py`. Gates `tests/test_clip_delivered.py` + `tests/test_entry_fan.py`. |
 | `fixtures/courtyard_entry_locus_s79.json` | **THE ENTRY LOCUS** -- 1735 genuine roll entries for Tetra pinned at her console-measured herd endpoint, at facing 40835 / m351C 0, plus the acceptance window, the fork verdict, the gradient, the m351C sensitivity table and the reachability rows. One thin curve 104 u long; **856 inside the 230 u follow bar** = the usable target, nearest 49.7 u from where the escape leaves Link. DERIVED, not measured -- regenerable by `python -m harness.tetrapush.entry_search locus` (~250 s), pinned so the gates do not pay the sweep. |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). Session 19: extracts **poll index 2** of each 4-poll frame group -- the poll the game actually latches (live-pinned via the camera oracle on the window's two non-uniform groups); regen with no capture preserves the baked live rows. |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
@@ -1671,7 +1674,72 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
-      - [~] **THE CLIP FRAME IS BIT-EXACT NOW, BOTH ACTORS, IN BOTH ENGINES -- AND THE VERDICT THE
+      - [x] **THE CONSOLE CLIPPED. `genuine` IS A MEASURED NUMBER NOW -- MILESTONE 2's VERDICT COLUMN
+            IS CONSOLE-CONFIRMED. IT TOOK TWO DELIVERIES, AND THE FIRST ONE FOUND A GATE THE MODEL
+            NEVER HAD: AN A-PRESS BELOW `mStickDistance` 0.75 IS NOT A ROLL, IT SHEATHES THE SWORD --
+            SO **36 OF THE 55 COULD NEVER HAVE ROLLED**, AND THE CROSS-ENGINE DIFF THEN REJECTED 4
+            MORE (session 88).** The handoff said to spend ONE delivery on the frame-minimal hit and
+            read the cut frame first. That delivery came back with Link WALKING and Tetra untouched,
+            which is a stranger result than a missed clip and a cheaper one to diagnose.
+            - **THE FIRST DELIVERY: THE PRESS DID NOTHING.** Not a roll that went wrong -- MOVE at the
+              sampled frame, the walk facing continued past the A-press, and Tetra **bit-identical**
+              to her pre-roll position, so Link never reached her. Decomp-first named it in one read:
+              `setDoStatusBasic` (`d_a_player_main.cpp:2220`) sets `dActStts_ATTACK_e` -- the ONLY
+              status `checkNextActionFromButton` (4318) turns into `procFrontRoll_init` -- solely for
+              `mStickDistance > m_HIO->mBasic.m.field_0x1C`, and `daPy_HIO_basic_c0::m` puts that at
+              **0.75**. At or below it the same press is `dActStts_PUT_AWAY_e` (2218) and the sword
+              goes away. The delivered aim `[95,168]` decodes to **0.5705**; s86's `[85,182]`, which
+              rolled, is **0.889**. Two deliveries, one each side of the threshold.
+            - **THE MODEL GATED THE ROLL ON THE 0.05 LOCOMOTION FLOOR** in both engines. Fixed at the
+              source: `LandState.ATTACK_MSD_MIN` (hio.py, beside the other `mBasic` fields), the
+              dispatch in `state.py` latching a new sticky `attack_blocked` the way a wall-suppressed
+              roll latches `sidle_blocked` (the sheathe proc stays unmodelled), and BOTH native
+              `_anmc.pyx` dispatch sites. New `two_roll.roll_aim_fan` is the aim alphabet's real
+              membership test; `entry_search.aim_alphabet` defaults to it (`msd_min=0.0` still
+              reproduces the falsified one for diagnostics). Land goldens byte-identical.
+            - **WHY IT SURVIVED NINE SESSIONS, and it is a gating lesson.** s80 removed the alphabet's
+              magnitude floor on the measurement "every aim in the window fires the roll and lands on
+              the facing it commands" -- measured on a sim whose roll gate was the 0.05 floor, so it
+              could only agree. `confirm_entry`, whose entire job is "does Link actually roll from
+              here", replays a real A-press **on that same engine**. A gate is evidence only about
+              what it does not share with the claim. Worse, the alphabet dedupes the byte grid by
+              decoded ANGLE keeping the FIRST pair in grid order -- typically a shallow interior one
+              -- so widening did not add deep aims, it REPLACED representatives with shallow ones.
+              MIGRATED to `knowledge/history/aim-alphabet-whole-grid.md`; truth in
+              `knowledge/mechanics/roll-attack-threshold.md`.
+            - **WHAT IT COSTS THE AXIS.** The seam window's alphabet goes 81 aims / 49 cells ->
+              **60 / 45**; facing 40834's cell drops out entirely because NO byte pair reaching that
+              angle clears 0.75. Both PRODUCTIVE cells (2551/2552) are still reachable, so the camera
+              conclusion is unchanged. Of the pinned 55: every one still SCORES genuine at its
+              recorded residual to the bit (the razor did not drift), **36 cannot roll**, 19 confirm,
+              frame floor 4 -> **5**.
+            - **THEN THE CROSS-ENGINE DIFF REJECTED 4 MORE, AND ONE OF THEM WAS THE NEXT CANDIDATE IN
+              LINE.** s87 made `ShoveCtx` and the composite agree for ONE hit and gated it; run the
+              same diff per candidate and agreement is a property of the CANDIDATE. Two of the 19 have
+              the composite **blocking** the very lunge `ShoveCtx` scores genuine (0.15 u where the
+              prediction has 49.86), two more diverge by 1 ULP pre-cut -- and the frame-minimal
+              survivor was one of the blocked pair, i.e. exactly what a third delivery would have been
+              spent on. It costs one rollout and no console runs, so it is now a pre-flight:
+              `_notes/s88_agree.py`, pinned into `fixtures/courtyard_entry_s88_hits.json`
+              (**15 deliverable, frame floor 5**). Razor rule 7.
+            - **THE SECOND DELIVERY CLIPPED.** Plan `[1,196,92,1,202,152,3]`, aim `[85,182]`, facing
+              40820, thrust 15, m351C 64652, entry `(-1517.9427490234, -765.2719116211)`, resid
+              -5.454e-06, 5 walk frames, cut at plan frame 102. Every pre-flight passed first
+              (handover 0-ULP, cut at `b_log + 1`, 18 plan frames 0-ULP cross-engine on both actors,
+              delivered bytes bit-identical) and then the console put Link at
+              **(-1727.3033447266, -990.5955200195) -- bit-identical to the prediction, 49.8582 u off
+              `old`, out through the seam** -- 0-ULP on x, z, facing, proc, speedF and on Tetra, who is
+              still stt 3 and frozen. Five frames later the console is in `daPyProc_FALL_e`: off the
+              floor, which is what a seam clip IS. `fixtures/courtyard_clip_s88_console.json` LOCKED,
+              gate `tests/test_clip_delivered.py`. Nothing past the cut is claimed -- the composite is
+              flat-ground and the console has left the floor.
+            - **NEXT: RE-RUN THE PASS ON THE CORRECTED ALPHABET** (`search2 2 1,2 1 6 2`, ~4997 s).
+              The 15 in hand are enough to deliver from, but they are a FILTERED old population, not a
+              measurement of the axis: the corrected alphabet changes which byte pairs represent each
+              cell, so the walk endpoints -- and therefore the entries -- are different candidates.
+              Run `two_roll contain` and the new `tests/test_attack_threshold.py` first, then score
+              with the cross-engine pre-flight in the loop rather than after it.
+      - [x] **THE CLIP FRAME IS BIT-EXACT NOW, BOTH ACTORS, IN BOTH ENGINES -- AND THE VERDICT THE
             CONSOLE FALSIFIED IS THE VERDICT THE MODEL NOW RETURNS. THE UNPRICED TERM WAS **TWO**
             TERMS IN **TWO DIFFERENT ENGINES**: TETRA HAD NO BG PASS IN THE COURTYARD TRACKING, AND
             THE SEARCH'S BAKED Co CENTRE HAD NO `body_chn` TWIST. **RE-SCORING THE 49 KEEPS 7**, AND

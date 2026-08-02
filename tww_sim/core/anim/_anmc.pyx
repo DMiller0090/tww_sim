@@ -2047,7 +2047,7 @@ cdef long long _L_ATN_TURN_MAX, _L_ATN_TURN_MIN, _L_ATN_TURN_SCALE
 cdef double _L_ATNB_MAX, _L_ATNB_SPD, _L_ATNB_ACC, _L_ATNB_DEC, _L_ATNB_SCL
 cdef double _L_ATNB_COS_FWD, _L_ATNB_COS_BACK
 cdef double _L_ROLL_SPD, _L_ROLL_ADD, _L_ROLL_MIN, _L_ROLL_END, _L_ROLL_RATE
-cdef double _L_ROLL_ENTRY_MORF, _L_MOVE_REENTRY_MORF, _L_ROLL_EARLY
+cdef double _L_ROLL_ENTRY_MORF, _L_MOVE_REENTRY_MORF, _L_ROLL_EARLY, _L_ATTACK_MSD_MIN
 cdef long long _L_TURN_MAX, _L_TURN_MIN, _L_TURN_SCALE
 cdef double _L_WAIT_TURN_ANIM_RATE
 cdef double _L_SLIP_THRESH, _L_SLIP_ENTRY, _L_SLIP_DEC_SCALE, _L_SLIP_DEC_MAX, _L_SLIP_DEC_MIN
@@ -2064,7 +2064,7 @@ def land_init_consts(c):
     global _L_ATNB_MAX, _L_ATNB_SPD, _L_ATNB_ACC, _L_ATNB_DEC, _L_ATNB_SCL
     global _L_ATNB_COS_FWD, _L_ATNB_COS_BACK
     global _L_ROLL_SPD, _L_ROLL_ADD, _L_ROLL_MIN, _L_ROLL_END, _L_ROLL_RATE
-    global _L_ROLL_ENTRY_MORF, _L_MOVE_REENTRY_MORF, _L_ROLL_EARLY
+    global _L_ROLL_ENTRY_MORF, _L_MOVE_REENTRY_MORF, _L_ROLL_EARLY, _L_ATTACK_MSD_MIN
     global _L_TURN_MAX, _L_TURN_MIN, _L_TURN_SCALE, _L_WAIT_TURN_ANIM_RATE
     global _L_SLIP_THRESH, _L_SLIP_ENTRY, _L_SLIP_DEC_SCALE, _L_SLIP_DEC_MAX, _L_SLIP_DEC_MIN
     global _L_SLIP_ANIM_RATE, _L_SLIP_MORF, _L_MT_SLIP_SEED, _LAND_CONSTS_READY
@@ -2080,7 +2080,7 @@ def land_init_consts(c):
     _L_ROLL_SPD = c['ROLL_SPD']; _L_ROLL_ADD = c['ROLL_ADD']; _L_ROLL_MIN = c['ROLL_MIN']
     _L_ROLL_END = c['ROLL_END']; _L_ROLL_RATE = c['ROLL_RATE']
     _L_ROLL_ENTRY_MORF = c['ROLL_ENTRY_MORF']; _L_MOVE_REENTRY_MORF = c['MOVE_REENTRY_MORF']
-    _L_ROLL_EARLY = c['ROLL_EARLY']
+    _L_ROLL_EARLY = c['ROLL_EARLY']; _L_ATTACK_MSD_MIN = c['ATTACK_MSD_MIN']
     _L_TURN_MAX = c['TURN_MAX']; _L_TURN_MIN = c['TURN_MIN']; _L_TURN_SCALE = c['TURN_SCALE']
     _L_WAIT_TURN_ANIM_RATE = c['WAIT_TURN_ANIM_RATE']
     _L_SLIP_THRESH = c['SLIP_THRESH']; _L_SLIP_ENTRY = c['SLIP_ENTRY']
@@ -2735,7 +2735,10 @@ cdef class LandCore:
 
         if l_held and not self._l_prev:
             self.m34E6 = self.facing
-        if a_pressed and moving and (self.state == LS_MOVE or self.state == LS_ATN_MOVE):
+        # The A-press is only ATTACK (the roll) above mBasic.field_0x1C -- setDoStatusBasic 2220; at or
+        # below it the game sheathes instead (PUT_AWAY, 2218), which this model does not carry.
+        if (a_pressed and self.msd > _L_ATTACK_MSD_MIN
+                and (self.state == LS_MOVE or self.state == LS_ATN_MOVE)):
             self.facing = self.target
             self._roll_init()
 
@@ -3007,10 +3010,12 @@ cdef class LandCore:
         self._atn_update(l_held, self._atn_target_present(), True)
         if l_held and not self._l_prev:
             self.m34E6 = self.facing
-        # A dispatch: L-off attack roll only (the L-held jump does not occur in this window).
+        # A dispatch: L-off attack roll only (the L-held jump does not occur in this window). The press
+        # is ATTACK only above mBasic.field_0x1C (setDoStatusBasic 2220); at or below it the game
+        # sheathes (PUT_AWAY, 2218) and there is no roll -- see land/hio.py ATTACK_MSD_MIN.
         cdef bint grounded = (self.state == LS_WAIT or self.state == LS_FREE_WAIT
                               or self.state == LS_MOVE or self.state == LS_ATN_MOVE)
-        if (a_pressed and grounded and not l_held and moving
+        if (a_pressed and grounded and not l_held and self.msd > _L_ATTACK_MSD_MIN
                 and (self.state == LS_MOVE or self.state == LS_ATN_MOVE)):
             self.facing = self.target
             self._roll_init()

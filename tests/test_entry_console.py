@@ -30,7 +30,8 @@ import pytest
 from harness.tetrapush import entry_fan as EF
 from harness.tetrapush import entry_search as ES
 from harness.tetrapush import seeds
-from tww_sim.land.land import FRONT_ROLL
+from tww_sim.core.mathlib import main_stick_decode
+from tww_sim.land.land import FRONT_ROLL, LandState
 
 
 def _fx(name):
@@ -150,18 +151,23 @@ def test_every_delivered_byte_reaches_the_console_as_the_physics_it_was_scored_a
         assert EF.survives_delivery(sx, sy)
 
 
-def test_the_hit_is_the_frame_minimal_deliverable_one_of_the_confirmed_set():
-    """Which of the 49 was spent, pinned so a re-bake cannot quietly deliver a different one. The
-    hits file lives under the gitignored `_generated/`, so the cross-check runs only where the pass's
-    output survives; the frame count and the deliverability are pinned unconditionally."""
+def test_the_hit_was_the_frame_minimal_deliverable_one_of_the_confirmed_set():
+    """Which of the 49 was spent, pinned so a re-bake cannot quietly deliver a different one -- and
+    the hit's OWN properties are what is pinned now, for two separate reasons.
+
+    The `confirm_hits` ranking it was picked by has moved: session 88 added the ATTACK threshold, so
+    4-frame candidates whose aim is too shallow to roll are not confirmable any more
+    (`test_attack_threshold.py`). And the ranking cannot be re-derived either -- `FIX['plan']['hits']`
+    is under the gitignored `_generated/`, where `entry_fan confirm`/`search2` OVERWRITE a tag's
+    output, and the session-87 re-run of this scoping did exactly that. A mutable artifact is not
+    something to assert against; the fixtures are. What survives is stronger anyway: this hit's aim
+    clears the threshold -- it is the console measurement that brackets it from ABOVE -- it is still
+    4 frames, still delivered unrewritten, and still `confirm_entry`-clean on the gated engine."""
     assert HIT['plan'][0] + sum(HIT['plan'][3::3]) == 4, "the measured frame floor (session 85)"
     assert EF.survives_delivery(*HIT['aim'])
-    path = os.path.join(os.path.dirname(os.path.dirname(_fx('.'))), FIX['plan']['hits'])
-    if not os.path.exists(path):
-        pytest.skip("the session-85 hits pass is not on this clone (_generated/ is gitignored)")
-    best = next(h for h in json.load(open(path))
-                if h['confirm']['all_ok'] and h.get('deliverable'))
-    assert best['hit']['plan'] == HIT['plan'] and best['hit']['aim'] == HIT['aim']
+    assert main_stick_decode(*HIT['aim'])[1] > float(LandState.ATTACK_MSD_MIN), \
+        "the aim that rolled on console"
+    assert ES.confirm_entry(HIT)['all_ok'], "it still confirms under the ATTACK gate"
 
 
 def test_the_offline_confirm_and_the_console_agree_on_the_same_entry():
