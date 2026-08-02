@@ -12,9 +12,10 @@ held-stick alphabet and took the reference pass from 220 s to 48 s for a bit-ide
 [clip-entry-search.md](clip-entry-search.md), which is the entry-sweep method itself. The session-81
 reading of the speed prune as an untapped lever is in
 [history/entry-search-s81-momentum-lever.md](../history/entry-search-s81-momentum-lever.md).
-**Source:** `harness/tetrapush/entry_fan.py` (`BandTable`, `stream_search`, `stick_alphabet`,
-`dedupe_near`, `lottery`), `harness/tetrapush/entry_search.py` (`configuration_band`, `locus_scan`,
-`qualify`, `window_gap`, `roll_nspeed`).
+**Source:** `harness/tetrapush/entry_score.py` (`BandTable`, `stream_search`, `dedupe_near`,
+`lottery`, `near_families`, `subgrid_rate`), `harness/tetrapush/entry_fan.py` (`stick_alphabet`),
+`harness/tetrapush/entry_search.py` (`configuration_band`, `locus_scan`, `qualify`, `window_gap`,
+`roll_nspeed`).
 
 ---
 
@@ -138,6 +139,15 @@ Two things to get right once the price is quoted per family:
   informative of the three. Against that order the honest saturation test is not a tail slope at
   all: it is **two passes whose alphabets both cover the whole circle**, compared on draws per
   family. Only reach for the marginal rate when families are drawn in an order that mixes.
+- **You do not have to run the second pass. A fine alphabet CONTAINS every coarser one**, so restrict
+  the finished pass's own families to the coarse sub-grid and read that sub-pass's rate straight off.
+  One pass then answers the saturation question at every stride it contains, for free, and it answers
+  it in the only unit that means anything - draws per family, not the tail slope. Record which
+  families produced draws while the pass runs; it is one row per family and it is the difference
+  between an axis you can price and one you have to re-buy. The estimate's limit is *attribution*
+  rather than physics: when the alphabet is a collapsed one, a coarse stride may represent a decode
+  class by a different byte pair, so a draw can land in a neighbouring family - the endpoints are
+  identical (that is what the collapse guarantees), the bookkeeping is approximate.
 
 ## The prunes are where the missing draws are hiding
 

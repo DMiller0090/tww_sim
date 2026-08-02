@@ -91,6 +91,7 @@ you can triage in one glance.
 - **My razor search returns "N near-misses, 0 genuine" - is it too small or aimed at nothing? What counts as ONE draw / why did 1.6x the candidates buy zero extra near-misses / which of my fan's prunes are physics?** → [strategy/clip-lottery-draws.md](strategy/clip-lottery-draws.md)
 - **My fan spends most of its frames re-walking paths it already walked - why, and how do I tell? How do I widen a pass past what its dedup key set fits in RAM?** → [strategy/clip-search-budget.md](strategy/clip-search-budget.md)
 - **My entry sweep is too slow for the resolution the razor needs - what is eating the time? Do I have to SIMULATE the roll to score it / when does a compiled context stop being reusable / how do I move the fan onto the native fleet?** → [strategy/clip-search-budget.md](strategy/clip-search-budget.md)
+- **My search's hits keep getting REJECTED by the confirm/replay step even though the state looks right - what prune am I missing? Which frame's proc does a queued button dispatch from?** → [strategy/search-prune-the-dispatch.md](strategy/search-prune-the-dispatch.md)
 - **Which partial stick magnitudes are live-valid in a land plan / why NEVER emit Y 192–254?** → [mechanics/precise-stop.md](mechanics/precise-stop.md). NB: this live-valid *stick-input* band is a different thing from the sim's [`Y171` partial-magnitude *regime*](model/land-sim.md#partial-magnitude-regime-y171-msd052) - don't conflate "partial stick" with "partial regime".
 
 ### Model - engine (core)

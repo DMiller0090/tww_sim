@@ -202,3 +202,8 @@ schedule, per frame, in an engine that has the walls, and it decides three thing
    and it has to be re-measured on any new corner.
 
 A hit is still a candidate until it is DTM-confirmed, but it is a candidate for the right reason.
+
+And the gate keeps earning its place after the search is built: it is what caught the fan predicting
+rolls from endpoints the A-press could not roll from at all. Every condition in that dispatch is a
+prune the fan owes -
+[search-prune-the-dispatch.md](search-prune-the-dispatch.md).

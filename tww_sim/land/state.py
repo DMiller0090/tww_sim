@@ -443,7 +443,7 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
                     self._side_step_init(jdir)
                 elif jdir == DIR_BACKWARD:
                     self._back_jump_init()
-            elif moving and self.state in (MOVE, ATN_MOVE):
+            elif moving and self.state in ROLL_FROM:
                 # A against a wall offers SIDLE, not the roll (setDoStatus 2241 preempts
                 # ATTACK, 4188); the guard forbids the roll, the sidle stays unmodeled.
                 if self._walls is not None and sidle_blocks_roll(self):

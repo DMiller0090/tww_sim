@@ -31,6 +31,10 @@ SIDE_STEP_LAND = 0x0B  # daPyProc_SIDE_STEP_LAND_e  (sidehop recovery -> WAIT)
 BACK_JUMP = 0x22       # daPyProc_BACK_JUMP_e       (backflip: stick back while targeting)
 BACK_JUMP_LAND = 0x23  # daPyProc_BACK_JUMP_LAND_e  (backflip recovery -> WAIT)
 
+#: Procs an A-press dispatches the ATTACK ROLL from (checkNextActionFromButton 4309 -> 4188): grounded
+#: AND locomoting. A planner owes it too; see knowledge/strategy/search-prune-the-dispatch.md.
+ROLL_FROM = (MOVE, ATN_MOVE)
+
 _STATE_TAG = {MOVE: "MOVE", ATN_MOVE: "ATN", ATN_ACTOR_MOVE: "ATNACT", ATN_ACTOR_WAIT: "ATNACTW",
               FRONT_ROLL: "ROLL", FRONT_ROLL_CRASH: "CRASH",
               WAIT_TURN: "WAITTURN",

@@ -31,6 +31,7 @@ import struct
 import pytest
 
 from tww_sim.core.anim import _anmc as N
+from tww_sim.land.constants import ROLL_FROM
 from tww_sim.land.plan_land._primitives import main_stick_decode
 from harness.tetrapush import entry_fan as EF
 from harness.tetrapush import entry_search as ES
@@ -528,6 +529,131 @@ def test_a_finer_alphabet_contains_the_coarser_one():
         c = {EF._decoded(*p) for p in EF.stick_alphabet(coarse)}
         f = {EF._decoded(*p) for p in EF.stick_alphabet(fine)}
         assert c < f, (coarse, fine, len(c), len(f))
+
+
+def _replay_the_a_press(key, plan, aim):
+    """`confirm_entry` on a bare fan candidate: only the roll trigger is under test here, so the
+    scoring fields it also checks (entry, facing, lean) are left unset."""
+    return ES.confirm_entry(dict(plan=list(plan), aim=list(aim), walk=[key[0], key[1]],
+                                 entry=None, facing=None, m351C=None), seed=SEED)
+
+
+def test_the_proc_prune_agrees_with_a_real_a_press_both_ways():
+    """THE PRUNE SESSION 84'S FAILURES ASKED FOR. Its three unconfirmed draws all read
+    ``procs [24, 24, 6, 6, 6]`` -- `MOVE_TURN` at the aim frame, so the A-press turned instead of
+    rolling -- and the fan had no reason to notice, because it pruned only on speedF and the follow
+    bar.
+
+    The predicate is `state.py`'s own dispatch condition (`land.ROLL_FROM`) read off the same public C
+    field, so what needs gating is not the code path but that the field means what it is being asked
+    to mean: the endpoint's proc IS the proc the A frame dispatches. So the prune is checked against a
+    real A-press in BOTH directions -- everything kept rolls, and nothing dropped would have."""
+    kw = dict(base_frames=(1,), s1_stride=64, j1=(2, 6), s2_stride=8, j2max=4)
+    loose = dict(EF.iter_fan2(rollable=False, **kw))
+    tight = dict(EF.iter_fan2(rollable=True, **kw))
+    assert set(tight) < set(loose), "the prune dropped nothing -- the gate would be vacuous"
+    assert all(tight[k] == loose[k] for k in tight), "a surviving key changed its plan"
+    dropped = [k for k in loose if k not in tight]
+    aim = ES.aim_cells()[0][1]
+    for keys, want in ((list(tight)[::max(1, len(tight) // 4)], True),
+                       (dropped[::max(1, len(dropped) // 4)], False)):
+        for k in keys[:4]:
+            c = _replay_the_a_press(k, loose[k], aim)
+            assert c['ok']['rolled'] is want, (k, loose[k], c['measured']['procs'])
+            # and the WIRED Python replay's own proc at that frame agrees with the native core's:
+            # procs is the last 5 rows, whose tail is the aim frame plus three neutral ones
+            assert ((c['measured']['procs'][-4] in ROLL_FROM) is want), c['measured']['procs']
+
+
+def test_a_hit_is_checked_against_what_a_dtm_actually_delivers():
+    """The last promise in the chain: a plan's BYTES have to reach the console as the physics they
+    were scored at. `dtm_make` clamps the extremes (255 -> 254, 0 -> 1), and simming the raw bytes
+    instead of the delivered ones is a known 60-tread error (`[[octagon-clamp-decode-bug]]`).
+
+    The check is on the DECODE, not on the presence of a 0 or a 255: the dead zone and the octagon
+    clamp mean a clamped extreme usually lands in the same class, and calling those undeliverable
+    would shrink the search for nothing. `confirm_hits` reports the flag and ranks an undeliverable
+    hit behind a deliverable one of the same length."""
+    assert EF.delivered(0, 255) == (1, 254) and EF.delivered(128, 110) == (128, 110)
+    assert EF.survives_delivery(128, 110)                     # interior: delivered verbatim
+    extremes = [(sx, sy) for sx in (0, 255) for sy in range(0, 256, 8)]
+    assert any(EF.survives_delivery(*p) for p in extremes), "the clamp is never survivable?"
+    assert not all(EF.survives_delivery(*p) for p in extremes), "the clamp never bites?"
+    # every member of the s84-style alphabet is chosen interior, so the whole alphabet survives
+    assert all(EF.survives_delivery(*p) for p in EF.stick_alphabet(16))
+
+
+def test_the_band_cache_survives_a_killed_pass_and_a_concurrent_one(tmp_path):
+    """A HARNESS TRAP, fixed in place (`[[harden-harness-traps]]`). `stream_search` saves the band
+    cache every batch, and the save used to be a plain dump onto the live path -- so the file was
+    truncated for the duration of every write. Killing a long pass mid-save poisoned the cache for
+    every later run, and starting a second pass while the first was running read a torn file and died
+    in `json.load` (this happened, session 85).
+
+    Two properties: the save leaves no window where the path is unreadable, and a cache that IS
+    damaged costs a re-measure rather than the pass. Nothing here is a tolerance -- the reloaded table
+    must be the saved one."""
+    path = str(tmp_path / 'bands.json')
+    t = EF.BandTable(SEED, path=path)
+    t.tab[(FACING, THRUST, 0, EF._f32_bits(ES.ROLL_NSPEED))] = dict(productive=True, width=3.2e-5)
+    t.save()
+    assert not [p for p in tmp_path.iterdir() if p.name.endswith('.tmp')], "temp file left behind"
+    assert EF.BandTable(SEED, path=path).tab == t.tab                      # round-trips exactly
+
+    open(path, 'w').write('{"40820,15,0,1"')                               # a torn write
+    with pytest.warns(UserWarning, match='unreadable cache'):
+        damaged = EF.BandTable(SEED, path=path)
+    assert damaged.tab == {}
+    damaged.save()                                                         # and it heals on the next
+    assert EF.BandTable(SEED, path=path).tab == {}
+
+
+def test_a_coarser_pass_is_read_out_of_the_finer_one_it_is_contained_in():
+    """THE TWO-ALPHABET SATURATION TEST, FROM ONE PASS. `clip-lottery-draws.md` says the honest read
+    on whether an axis still pays is two whole-circle alphabets compared on draws per family -- which
+    costs a second pass, and the tail marginal (the number that is free) is the one s84 proved is
+    misleading, because the stick grid is x-major and a sweep crosses the productive band once.
+
+    A fine alphabet CONTAINS every coarser one, so the coarse pass's rate is just the finer pass's
+    families restricted to the coarse sub-grid. Gated on a real pass rather than a fabricated dict:
+    the sub-grid must be a subset, must shrink as the stride grows, and the full pass must agree with
+    `subgrid_rate` at stride 1."""
+    kw = dict(base_frames=(0,), s1_stride=8, j1=(2,), s2_stride=16, j2max=4)
+    r = EF.stream_search(EF.iter_fan2(**kw), quals=EF.qualified(SEED, path=None),
+                         bands=EF.BandTable(SEED, path=None), family_of=EF.family_of_plan)
+    assert r['n_families'] > 1 and r['near_families'], "no draws -- the readout would be vacuous"
+    assert sum(n for _f, n in r['near_families']) == r['n_near']
+    # the running pass must report the SAME quantity it is judged on: the trace's counts are draws,
+    # not scorings (they differed by 2.3x while the s85 pass ran, which is the number a human watches)
+    assert r['trace'][-1]['near'] == r['n_near']
+    assert r['trace'][-1]['genuine'] == r['n_hit_draws']
+    whole = EF.subgrid_rate(r, 1)
+    assert whole['families'] == r['n_families'] and whole['draws'] == r['n_near']
+    prev = whole
+    for s in (16, 32, 64):
+        g = EF.subgrid_rate(r, s)
+        assert g['families'] <= prev['families'] and g['draws'] <= prev['draws'], (s, g, prev)
+        prev = g
+
+
+def test_entry_fan_still_re_exports_the_scoring_half():
+    """The session-85 split moved the streaming eval to `entry_score`, and the re-export is a
+    CONTRACT (the repo's shim convention: import paths must not churn on a refactor). Every public
+    name has to be the same object, not a copy -- a shadowing redefinition would pass an equality
+    test and silently give callers a second `BandTable` class."""
+    from harness.tetrapush import entry_score as EC
+    for name in ('stream_search', 'BandTable', 'qualified', 'ref_entry', 'family_of_plan',
+                 'draw_key', 'hit_draws', 'dedupe_near', 'lottery', 'distinct_near',
+                 'confirm_hits', 'MIN_BAND', 'BAND_PROBE', 'QUAL_CACHE', 'BAND_CACHE'):
+        assert getattr(EF, name) is getattr(EC, name), name
+
+
+def test_the_one_segment_fan_keeps_its_unpruned_contract():
+    """`iter_fan` must NOT take the prune. It is gated key AND value against `entry_search.walk_fan`,
+    which has no proc condition, so pruning it would break an equality the whole native fan rests on
+    -- the same reason `stick_alphabet` is deliberately not wired into it."""
+    kw = dict(base_frames=(0, 1), stride=64, jmax=4)
+    assert EF.fan_equality(ES.walk_fan(**kw), EF.fleet_fan(**kw))['equal']
 
 
 def test_genuine_hits_are_counted_in_draws_like_near_misses_are():

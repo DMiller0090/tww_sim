@@ -12,8 +12,8 @@ is a measured before/after on that search. Gated in
 [clip-entry-search.md](clip-entry-search.md) (the method) and
 [clip-lottery-draws.md](clip-lottery-draws.md) (how to count what it returns).
 **Source:** `harness/tetrapush/entry_search.py` (`fast_schedule`, `build_fast`, `CtxPool`),
-`harness/tetrapush/entry_fan.py` (`graft`, `iter_fan`, `stick_alphabet`, `stream_search`
-`dedup_scope`), `tww_sim/core/_shovec.ShoveCtx`.
+`harness/tetrapush/entry_fan.py` (`graft`, `iter_fan`, `stick_alphabet`),
+`harness/tetrapush/entry_score.py` (`stream_search` `dedup_scope`), `tww_sim/core/_shovec.ShoveCtx`.
 
 ---
 
