@@ -1724,7 +1724,11 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               `test_dropping_the_cap...` moved to stride 4 to stay non-vacuous -- 14529 candidates,
               1 near-miss, E[hits] 0.0032. A survivor count is a LOWER bound on the axis, never a
               re-measurement: the fixed engine can make genuine a candidate the old one threw away.
-              Re-running the s85 pass (`search2 2 1,2 1 6 2`, ~85 min) is what measures it.
+              Re-running the s85 pass (`search2 2 1,2 1 6 2`, ~90 min) is what measures it -- STARTED
+              at the end of this session (`_generated/s87_search2_a2_j1-2_b2.out`) and **it does
+              still yield**: 1 genuine and 88 near at 939 families / 5.0 M unique candidates, marginal
+              0.0714 near/family against s85's 0.2487 draws/family over 8069. Read the finished
+              `_report` before quoting a ratio -- the streaming counter may not be the same unit.
             - **THE GATE THAT WAS MISSING, now standing.** `tests/test_clip_console.py` diffs
               `ShoveCtx` against the composite frame for frame on both actors, and both against the
               console log -- 16 tests, no xfails. Two engines each gated against their own fixture
