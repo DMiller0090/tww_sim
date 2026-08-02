@@ -784,3 +784,37 @@ def test_the_two_passes_of_one_scoping_overlap_only_where_the_lean_is_small():
     assert len(shared) == 7
     kept = [r for r in old['rows'] if r['genuine']]
     assert {key(r) for r in kept} == shared, "the survivors ARE the overlap, by construction"
+
+
+def test_the_session_89_pass_is_the_same_population_reached_by_an_aim_that_ROLLS():
+    """**THE RE-RUN, AND WHAT IT ACTUALLY CORRECTED.** Same scoping again
+    (`search2 2 1,2 1 6 2`, 39.3 M candidates, 4701 s), and the first attempt came back
+    BIT-IDENTICAL to session 87's because `entry_score.qualified`'s cache did not key on the ATTACK
+    threshold (`test_attack_threshold.py::test_the_gate_reaches_the_PASS_and_not_only_the_alphabet`).
+    With the key fixed the pass is still the same 81 scorings at the same entries and residuals --
+    because the physical atom is the sine-table CELL and 40834/40841 are both cell 2552 -- but the
+    REPRESENTATIVE moved: cell 2552's aim goes from `[95,168]` msd 0.5705, which sheathes, to
+    `[82,186]` msd 0.9817, which rolls.
+
+    So session 88's "36 of the 55 cannot roll" was a property of the PINNED ROW, not of the
+    candidates. Re-represented, **0 of 81 scorings carry an unrollable aim** (against 57), all 55
+    draws confirm, and the frame floor returns to 4. The only survivors that are really lost are the
+    4 the cross-engine gate rejects, which are the Co-centre seam (`test_centre_seam.py`)."""
+    s89 = json.load(open(_fx('courtyard_entry_s89_hits.json')))
+    assert s89['n_hits'] == 51 and s89['frame_floor'] == 4
+    assert len(s89['dropped']) == 0, "every candidate now rolls; nothing dies at the A-press"
+    assert len(s89['rejected']) == 4
+
+    rows = s89['rows']
+    for r in rows:
+        assert main_stick_decode(*r['aim'])[1] > float(LandState.ATTACK_MSD_MIN), r['plan']
+        assert r['confirmed'] and r['deliverable'] and r['cross_engine']['deliverable']
+    assert min(r['frames'] for r in rows) == 4
+
+    # the cell is the atom: the s87 pass's population survives, only its representative moved
+    s87 = json.load(open(_S87_HITS))
+    key = lambda r: (tuple(r['plan']), r['thrust'], r['m351C'], tuple(r['entry']))
+    assert ({key(r) for r in s87['rows']}
+            == {key(r) for r in rows} | {key(r) for r in s89['rejected']})
+    assert {ES.aim_cell(r['facing']) for r in rows} == {2551, 2552}
+    assert ES.aim_cell(40834) == ES.aim_cell(40841) == 2552

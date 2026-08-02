@@ -236,6 +236,9 @@ deliberately unported.
 | `fixtures/courtyard_attack_gate_s88_console.json` | **THE PRESS THAT DID NOT ROLL (session 88; LOCKED).** The frame-minimal hit of the s87 55, delivered: the movie went out exactly as authored and Link never entered FRONT_ROLL at all -- MOVE at the sampled frame, walk facing continued past the A-press, and **Tetra bit-identical to her pre-roll position** because he never reached her. `setDoStatusBasic` (2220) only sets `dActStts_ATTACK_e` for `mStickDistance > mBasic.field_0x1C` = **0.75**; this aim decodes to 0.5705, so the press was `PUT_AWAY` and SHEATHED the sword. With s86's aim at 0.889 the two deliveries BRACKET the threshold on the real game. Carries the falsified model prediction as `model_of_the_day`. Gate `tests/test_attack_threshold.py` (10). |
 | `fixtures/courtyard_clip_s88_console.json` | **THE CLIP, ON CONSOLE (session 88; LOCKED) -- `genuine` is a measured number now.** The frame-minimal survivor of the re-confirmed list delivered end to end: at the cut frame Link is **bit-identical to the prediction, 49.8582 u off `old` and out through the seam**, and five frames later he is in `daPyProc_FALL_e` off the courtyard floor. Tetra bit-frozen, stt 3, both samples. Nothing past `cut_i` is claimed -- the composite is a flat-ground engine and the console has left the floor (`post_cut`). Gate `tests/test_clip_delivered.py` (10). |
 | `fixtures/courtyard_entry_s88_hits.json` | **THE CANDIDATE LIST, TWICE FILTERED (session 88).** The s87 55 re-confirmed against the ATTACK gate (36 `dropped` -- their aim cannot roll) and then against the CROSS-ENGINE gate (`rejected`): **15 deliverable, frame floor 5**. Each row carries its `cross_engine` block (handover, worst ULP over the roll, cut-frame agreement, `ShoveCtx` lunge vs the composite's own move). Row 0 is the one delivered. A MODEL output; regenerate with `_notes/s88_{confirm,agree}.py`. Gates `tests/test_clip_delivered.py` + `tests/test_entry_fan.py`. |
+| `cross_engine.py` (+ `entry_score.confirm_hits(cross_engine=True)`, CLI `entry_fan confirm <hits> xengine`) | **THE CROSS-ENGINE PRE-FLIGHT, PROMOTED INTO THE SCORING LOOP (session 89).** Session 88 ran this diff by hand after the confirm step and it rejected 4 of 19 -- one of them the frame-minimal candidate the next delivery would have gone to -- so it is a filter, not a diagnostic, and it now runs where the other two do. `composite_log`/`composite_rollout` are s88's composite path verbatim (the wired delay-1 `FreeRun`, culled mesh on BOTH actors, plan frame i == plan frame i); `agree(hit)` returns the handover, `genuine`, `worst_ulp` over the roll on both actors, `cut_ok`, `predicted_lunge` vs `composite_moved`, and `deliverable` = all of them. `blocked(res)` names the expensive class (the composite refusing a lunge `ShoveCtx` scores ~50 u). Costs one rollout (~0.4 s) per confirmed hit and no console runs; only confirmed + DTM-clean hits are rolled out. Reproduces s88's 55 -> 19 -> 15 with floor 5 in 10 s. **A 1-ULP pre-cut divergence can still end in a bit-identical cut frame, so `cut_ok` alone is not agreement** -- `deliverable` demands `worst_ulp == 0` too. Gated `tests/test_cross_engine.py` (12). |
+| `fixtures/courtyard_entry_s89_hits.json` | **THE CURRENT CANDIDATE LIST (session 89).** The s85/s87 scoping re-run once the ATTACK gate actually reached the pass (`search2 2 1,2 1 6 2`, 39.3 M candidates, 4701 s): the same 81 walkable scorings / **55 draws** at the same entries and residuals as s87 -- the sine-table CELL is the atom and 40834/40841 are both 2552, so the gate moved the cell's REPRESENTATIVE (`[95,168]` msd 0.5705, sheathes -> `[82,186]` msd 0.9817, rolls) rather than the population. **0 of 81 aims are unrollable (was 57), all 55 confirm (0 dropped, was 36), 51 of 55 deliverable at frame floor 4** (s88: 15 at 5). The 4 rejections are the Co-centre seam and each carries its WHOLE hit, so it can be re-run from this file. A MODEL output; regenerate with `entry_fan confirm <hits> xengine` + `_notes/s89_pin.py`. Gate `tests/test_entry_fan.py`. |
+| `fixtures/courtyard_centre_seam_s89.json` | **THE CROSS-ENGINE REJECTIONS ARE ONE CODE SEAM (session 89).** A MODEL output (regenerate with `_notes/s89_centre_seam.py`). The composite and the search compute Link's Co centre with two different ports -- `foot_fk.body_co_center` off the stored old pose vs `body_cyl.roll_co_chain_consts` sampling `rollf` directly -- agreeing only to **1-2 ULP**. Census: **4 of 4** cross-engine rejections have a roll frame where the two differ, **0 of 36** ATTACK-gate drops do, 1 of 15 kept does. Causal: swap the composite onto the search's centre and **all four agree**, two flipping from 0.1534 u (blocked) to the identical 49.8582 u lunge. Cost: 15 of 19 deliverable becomes 19 of 19, frame floor **unchanged at 5**. **Which port is right is OPEN** -- both console captures fall where the two agree, so the composite is byte-identical either way and neither discriminates; the experiment is a delivery on a BLOCKED candidate. Gate `tests/test_centre_seam.py` (6); KB [`mechanics/link-co-centre.md`](../../knowledge/mechanics/link-co-centre.md#the-two-engines-and-the-1-2-ulp-between-them), razor rule 9. |
 | `fixtures/courtyard_entry_locus_s79.json` | **THE ENTRY LOCUS** -- 1735 genuine roll entries for Tetra pinned at her console-measured herd endpoint, at facing 40835 / m351C 0, plus the acceptance window, the fork verdict, the gradient, the m351C sensitivity table and the reachability rows. One thin curve 104 u long; **856 inside the 230 u follow bar** = the usable target, nearest 49.7 u from where the escape leaves Link. DERIVED, not measured -- regenerable by `python -m harness.tetrapush.entry_search locus` (~250 s), pinned so the gates do not pay the sweep. |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). Session 19: extracts **poll index 2** of each 4-poll frame group -- the poll the game actually latches (live-pinned via the camera oracle on the window's two non-uniform groups); regen with no capture preserves the baked live rows. |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
@@ -1674,6 +1677,79 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE RE-RUN CAME BACK BIT-IDENTICAL, AND THAT WAS THE RESULT: THE 0.75 ATTACK GATE
+            NEVER REACHED THE PASS, BECAUSE THE PRODUCTIVE-CONFIGURATION CACHE DID NOT KEY ON IT.
+            ALSO: THE FOUR CROSS-ENGINE REJECTIONS ARE NOT FOUR CANDIDATES, THEY ARE **ONE CODE
+            SEAM** -- TWO PORTS OF LINK'S Co CENTRE THAT AGREE TO 1-2 ULP (session 89).** The handoff
+            asked for the pass re-run on the corrected alphabet plus one diagnosis each on the two
+            blocked candidates. Both came back bigger than asked.
+            - **THE PASS RE-RUN MEASURED NOTHING, AND FINDING THAT OUT IS THE SESSION'S MAIN RESULT.**
+              `search2 2 1,2 1 6 2`, 5000 s, and the output was **bit-identical to session 87's**:
+              same 39291750 candidates, same 1950 near draws, same E[hits] 4.547, the same **81
+              genuine scorings**, every entry and residual to the bit, and not one aim byte pair
+              changed. The cause: `entry_score.qualified` caches the productive (facing, thrust) set
+              -- and the aim bytes that reach each one -- to `_generated/s81/qualified.json`, and its
+              key validated `cells`/`csangle`/`thrusts` and **not the threshold**. So the pass was
+              handed a qualification written before session 88 existed, in which **2 of the 3
+              configurations carried aim `[95,168]`, msd 0.5705 -- the exact aim of the delivery that
+              sheathed the sword**, and 57 of the 81 scorings had an aim that cannot roll.
+              `msd_min` is in the key now and a pre-gate cache is refused. **Refreshed, the
+              productive set really does move: facing 40834 is gone and 40841 takes its place**
+              (thrusts 14+15, aim `[82,186]` msd 0.9817, both zero-width bands), while 40820 keeps
+              thrust 15 at aim `[85,182]` msd 0.8891 -- the aim that rolled on console -- with a
+              3.205e-05 band. Gate
+              `tests/test_attack_threshold.py::test_the_gate_reaches_the_PASS_and_not_only_the_alphabet`;
+              razor rule 10 (**a re-run that reproduces the previous run exactly is a RESULT, not a
+              relief** -- diff the populations before reading the yield).
+            - **THE CORRECTED PASS: THE ATTACK GATE COSTS THE AXIS NOTHING, AND THE FRAME FLOOR GOES
+              BACK TO 4.** Re-run on the fixed qualification (4701 s, same 39291750 candidates): the
+              population is *still* the same 81 walkable scorings / 55 draws at the same entries and
+              residuals, 1950 near, E[hits] 4.547 -- because **the physical atom is the sine-table
+              CELL, and 40834/40841 are both cell 2552**. Dropping the angle only moved the cell's
+              REPRESENTATIVE, from `[95,168]` msd 0.5705 (sheathes) to `[82,186]` msd 0.9817 (rolls).
+              So **0 of the 81 scorings now carry an unrollable aim, against 57**; all 55 draws
+              confirm (**0 dropped at the A-press**, against 36); and with the cross-engine filter in
+              the same loop **51 of 55 are deliverable at frame floor 4**, against s88's 15 at 5. The
+              four rejections are the same four, and they are the Co-centre seam below. Session 88's
+              "36 of the 55 are dead, floor 4 -> 5" was a property of the PINNED ROW re-confirmed
+              against the stale representative, never of the candidates -- corrected on
+              [`mechanics/roll-attack-threshold.md`](../../knowledge/mechanics/roll-attack-threshold.md)
+              and in [`history/aim-alphabet-whole-grid.md`](../../knowledge/history/aim-alphabet-whole-grid.md).
+              Pinned `fixtures/courtyard_entry_s89_hits.json` (rejected rows now carry the WHOLE hit,
+              so a rejection is re-runnable from the file); gate `tests/test_entry_fan.py`. The
+              frame-minimal is **plan `[0,208,110,2,169,192,2]`, aim `[82,186]`, facing 40841, thrust
+              15, m351C 64761, entry `(-1531.1784667969, -781.7215576172)`, resid +6.2429e-05, 4 walk
+              frames, lunge 49.7368 u**.
+            - **THE CROSS-ENGINE PRE-FLIGHT IS IN THE SCORING LOOP NOW**, which is what the handoff
+              asked for and where session 88's 4-of-19 failure rate said it belonged. New tracked
+              `cross_engine.py` (session 88's composite path verbatim, plus `agree`/`blocked`), wired
+              as `confirm_hits(cross_engine=True)` and `entry_fan confirm <hits> xengine`; only
+              confirmed + DTM-clean hits are rolled out, ~0.4 s each. It reproduces s88's
+              55 -> 19 -> 15 at frame floor 5 in **10 s and two commands**, where the session before
+              needed three scripts. Gate `tests/test_cross_engine.py` (12).
+            - **AND THE REJECTIONS IT MAKES ARE ONE SEAM.** The composite computes Link's Co centre
+              with `foot_fk.body_co_center` (rebuilt from the pose driver's STORED OLD POSE) and the
+              search bakes `body_cyl.roll_co_chain_consts` (the `rollf` anim sampled directly). Same
+              quantity, two routes, **1-2 ULP apart on isolated frames** -- and nothing gated them
+              against each other, because `test_body_co_native.py` gates FootFK's native fold against
+              FootFK's own Python loop. Census over the s88 population: **4 of 4** cross-engine
+              rejections sit on a frame where the two differ, **0 of 36** ATTACK-gate drops do, 1 of
+              15 kept does. Causal: put the composite on the search's centre and **all four agree**,
+              two of them flipping from the composite refusing to move Link (0.1534 u) to the
+              identical **49.8582 u** lunge. Cost: 15 of 19 deliverable becomes 19 of 19, frame floor
+              **unchanged at 5**.
+            - **WHICH PORT IS RIGHT IS OPEN, AND NEITHER ENGINE WAS CHANGED.** Both console captures
+              fall on candidates where the two paths agree -- measured, not assumed: swapping the
+              centre changes the composite on **0** frames of the s86 console roll -- so neither
+              capture discriminates. `roll_co_center` is console-gated 0-ULP for these leans;
+              `body_co_center` is live-pinned only to a **<=6.1e-5 u tolerance**, about 1 ULP at
+              these magnitudes. Suggestive, not evidence. **THE EXPERIMENT: deliver a BLOCKED
+              candidate** -- `ShoveCtx` and a body_cyl-composite predict 49.8582 u out through the
+              seam, the FootFK composite predicts 0.1534 u and no clip; one console run settles it
+              for the whole population. `fixtures/courtyard_centre_seam_s89.json` +
+              `tests/test_centre_seam.py` (6); KB
+              [`mechanics/link-co-centre.md`](../../knowledge/mechanics/link-co-centre.md#the-two-engines-and-the-1-2-ulp-between-them),
+              razor rule 9 (**"a property of the candidate" is a code seam you have not named yet**).
       - [x] **THE CONSOLE CLIPPED. `genuine` IS A MEASURED NUMBER NOW -- MILESTONE 2's VERDICT COLUMN
             IS CONSOLE-CONFIRMED. IT TOOK TWO DELIVERIES, AND THE FIRST ONE FOUND A GATE THE MODEL
             NEVER HAD: AN A-PRESS BELOW `mStickDistance` 0.75 IS NOT A ROLL, IT SHEATHES THE SWORD --

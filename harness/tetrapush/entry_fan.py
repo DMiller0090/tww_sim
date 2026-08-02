@@ -49,7 +49,7 @@ The SCORING half -- bands, `stream_search`, and the whole draw-counting vocabula
     python -m harness.tetrapush.entry_fan fan2 [s1_stride j1 s2_stride j2max]
     python -m harness.tetrapush.entry_fan search1 [jmax nbase stride [uncapped]]
     python -m harness.tetrapush.entry_fan search2 [s1_stride j1 s2_stride j2max nbase]
-    python -m harness.tetrapush.entry_fan confirm <hits json | tag>   # the A-press replay
+    python -m harness.tetrapush.entry_fan confirm <hits json | tag> [xengine]  # the A-press replay
 """
 import json
 import math
@@ -494,30 +494,45 @@ def _cmd_search2(argv):
 
 
 def _cmd_confirm(argv):
-    """Replay every hit in a pass's json with a real A-press and report what survives."""
+    """Replay every hit in a pass's json with a real A-press and report what survives.
+
+    ``xengine`` adds the cross-engine filter (`cross_engine.agree`) to the same loop, which is where
+    session 88 learned it belongs -- see `entry_score.confirm_hits`. The three filters are
+    independent and each has rejected candidates the other two passed."""
     warnings.simplefilter('ignore')
     if not argv:
-        raise SystemExit("usage: confirm <hits json>   (written by search1/search2)")
+        raise SystemExit("usage: confirm <hits json> [all] [xengine]   (written by search1/search2)")
     tag = argv[0][len('hits_'):] if argv[0].startswith('hits_') else argv[0]
     path = argv[0] if os.path.exists(argv[0]) \
         else os.path.join(_rb, '_generated', 's81', 'hits_%s.json' % tag.replace('.json', ''))
     r = json.load(open(path))
+    xe = 'xengine' in argv
     # one replay per DRAW by default -- the extra prefixes are alternative deliveries of an entry
     # already confirmed, and a pass can carry a hundred of them. `all` replays every one.
     hits = r['hits'] if 'all' in argv else hit_draws(r['hits'])
-    print("%s: %d hits to confirm (%d walkable scorings collapse to %d draws)"
-          % (os.path.basename(path), len(hits), len(r['hits']), len(hit_draws(r['hits']))))
-    rows = confirm_hits(hits, progress=True)
+    print("%s: %d hits to confirm (%d walkable scorings collapse to %d draws)%s"
+          % (os.path.basename(path), len(hits), len(r['hits']), len(hit_draws(r['hits'])),
+             "   [+ cross-engine]" if xe else ""))
+    rows = confirm_hits(hits, progress=True, cross_engine=xe)
     ok = [x for x in rows if x['confirm']['all_ok']]
     nd = [x for x in ok if not x['deliverable']]
     print("\nCONFIRMED %d of %d   (of which %d would be REWRITTEN by dtm_make and are not"
           " deliverable as scored)" % (len(ok), len(rows), len(nd)))
     for x in ok:
         h, m = x['hit'], x['confirm']['measured']
-        print("  plan %s  aim %s  facing %d thrust %d  entry (%r,%r)  resid %+.3e  frames %d%s"
+        print("  plan %s  aim %s  facing %d thrust %d  entry (%r,%r)  resid %+.3e  frames %d%s%s"
               % (h['plan'], h['aim'], h['facing'], h['thrust'], m['entry'][0], m['entry'][1],
                  h['resid'], h['plan'][0] + sum(h['plan'][3::3]),
-                 "" if x['deliverable'] else "   [NOT DTM-DELIVERABLE]"))
+                 "" if x['deliverable'] else "   [NOT DTM-DELIVERABLE]",
+                 "" if not xe or x['agrees'] else
+                 "   [%s]" % ("COMPOSITE BLOCKS THE LUNGE" if x['blocked'] else "CROSS-ENGINE DIFF")))
+    if xe:
+        good = [x for x in ok if x['deliverable'] and x['agrees']]
+        print("\nDELIVERABLE (confirmed + DTM-clean + both engines agree): %d of %d"
+              % (len(good), len(rows)))
+        if good:
+            print("frame floor among the deliverable: %d"
+                  % min(x['hit']['plan'][0] + sum(x['hit']['plan'][3::3]) for x in good))
     out = path.replace('.json', '_confirmed.json')
     json.dump(rows, open(out, 'w'), indent=1)
     print("wrote %s" % out)

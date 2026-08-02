@@ -20,6 +20,7 @@ import os
 
 import pytest
 
+from harness.tetrapush import entry_score as SC
 from harness.tetrapush import entry_search as ES
 from harness.tetrapush import two_roll as TR
 from tww_sim.core.mathlib import main_stick_decode
@@ -130,6 +131,35 @@ def test_every_angle_keeps_a_representative_that_can_roll_where_one_exists():
     assert all(main_stick_decode(sx, sy)[1] <= T
                for sx in range(256) for sy in range(256)
                if main_stick_decode(sx, sy)[0] == ang), "no deep member of that angle exists"
+
+
+def test_the_gate_reaches_the_PASS_and_not_only_the_alphabet(tmp_path):
+    """**THE FIX HAS TO CROSS THE CACHE, and session 89 spent 5000 s learning that it did not.**
+
+    `entry_score.qualified` is the only thing a pass consults for which (facing, thrust) is worth
+    spending candidates on AND for the aim bytes that reach each one, and it is cached to disk. The
+    key validated `cells`/`csangle`/`thrusts` -- nothing about the threshold -- so the session-89
+    re-run silently re-used a qualification written before the gate existed and came back
+    BIT-IDENTICAL to the pass before it: 2 of its 3 configurations carried aim `[95,168]`, msd
+    0.5705, the exact aim of the delivery that sheathed the sword.
+
+    So: a cache at the wrong threshold is refused, and every configuration a pass is handed can
+    actually roll. The general rule is razor rule 10 -- every input to a cached derivation belongs in
+    its key."""
+    p = str(tmp_path / 'qualified.json')
+    live = SC.qualified(path=p)
+    assert live, "the qualification must be non-empty or this gate proves nothing"
+    for q in live:
+        assert q['aim'] is None or main_stick_decode(*q['aim'])[1] > T, q
+    assert json.load(open(p))['msd_min'] == T
+
+    stale = json.load(open(p))
+    stale['msd_min'] = 0.0                       # a cache written before the gate existed
+    stale['quals'] = [dict(stale['quals'][0], facing=1, aim=[95, 168])]
+    json.dump(stale, open(p, 'w'))
+    again = SC.qualified(path=p)
+    assert [q['facing'] for q in again] != [1], "a pre-gate cache was silently re-used"
+    assert json.load(open(p))['msd_min'] == T, "and the refusal must rewrite it"
 
 
 def test_confirm_entry_now_rejects_the_candidate_the_console_falsified():

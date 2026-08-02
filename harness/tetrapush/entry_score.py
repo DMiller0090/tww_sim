@@ -29,6 +29,7 @@ if _rb not in sys.path:
 
 from harness.rollstab import turnaround as TA
 from harness.tetrapush import entry_search as ES
+from tww_sim.land.land import LandState
 
 QUAL_CACHE = os.path.join(_rb, '_generated', 's81', 'qualified.json')
 BAND_CACHE = os.path.join(_rb, '_generated', 's81', 'bands.json')
@@ -67,19 +68,29 @@ def qualified(seed=None, csangle=ES.CSANGLE, thrusts=ES.THRUSTS, path=QUAL_CACHE
     ULP odds; the ones worth spending candidates on are the ones with real width.
 
     One configuration per sine-table CELL since session 83 (`entry_search.aim_cells`) -- aims inside
-    one cell are the same draw, and counting them separately is what let the camera price at 8x. A
-    cache written before that is refused rather than silently re-used."""
+    one cell are the same draw, and counting them separately is what let the camera price at 8x.
+
+    **THE CACHE KEY IS PART OF THE MODEL, and session 89 paid 5000 s to learn it.** This file is the
+    only thing the pass consults for "which (facing, thrust) is worth spending candidates on" and for
+    the aim bytes that reach each one -- so every input to `aim_cells` has to be in the key or a pass
+    silently re-runs the old alphabet. Session 88 gated the aim alphabet on the 0.75 ATTACK threshold
+    and the s89 re-run came back BIT-IDENTICAL to the pass before it, because the key validated
+    `cells`/`csangle`/`thrusts` and not the gate: 2 of the 3 cached configurations carried aim
+    `[95,168]`, msd 0.5705 -- the exact aim of the delivery that sheathed the sword. `msd_min` is in
+    the key now. A cache written before either change is refused rather than silently re-used."""
+    msd_min = float(LandState.ATTACK_MSD_MIN)
     if not refresh and path and os.path.exists(path):
         d = json.load(open(path))
-        if d.get('cells') and d['csangle'] == csangle and tuple(d['thrusts']) == tuple(thrusts):
+        if (d.get('cells') and d['csangle'] == csangle and tuple(d['thrusts']) == tuple(thrusts)
+                and d.get('msd_min') == msd_min):
             return d['quals']
     seed = seed or ES.console_seed()
     quals = [q for q in ES.qualify(seed['tetra'], ref_entry(seed), thrusts=thrusts,
                                    csangle=csangle) if q['productive']]
     if path:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        json.dump(dict(csangle=csangle, thrusts=list(thrusts), cells=True, quals=quals),
-                  open(path, 'w'))
+        json.dump(dict(csangle=csangle, thrusts=list(thrusts), cells=True, msd_min=msd_min,
+                       quals=quals), open(path, 'w'))
     return quals
 
 
@@ -471,7 +482,7 @@ def rescore(hits, seed=None, progress=False):
     return out
 
 
-def confirm_hits(hits, seed=None, env=None, progress=False):
+def confirm_hits(hits, seed=None, env=None, progress=False, cross_engine=False):
     """`entry_search.confirm_entry` over a pass's hits -- the A-press replay each one owes.
 
     A swept hit is a PREDICTION: the fan never presses A, it predicts the entry from the walk
@@ -482,7 +493,16 @@ def confirm_hits(hits, seed=None, env=None, progress=False):
     the physics it was scored at, after `dtm_make`'s extreme-clamp (`entry_fan.survives_delivery`).
     The replay runs the RAW bytes, so a hit can pass every flag here and still evaporate on console --
     the failure mode `[[octagon-clamp-decode-bug]]` cost 60 treads once. The held sticks come from an
-    alphabet that already prefers interior representatives; the AIM does not."""
+    alphabet that already prefers interior representatives; the AIM does not.
+
+    ``cross_engine`` adds the third filter, and session 88 paid for learning it belongs HERE rather
+    than in front of a delivery: this replay and the pass that produced the hit run the SAME engine,
+    so neither can catch a candidate the composite disagrees with -- 4 of session 88's 19, two of them
+    with the composite refusing the lunge `ShoveCtx` scored genuine, and one of those two was the
+    frame-minimal survivor a delivery would have gone to. It costs one rollout per confirmed hit
+    (~1 s) and no console runs. Rows gain ``cross_engine`` (`cross_engine.agree`) and ``agrees``, and
+    the ranking demands it. Off by default: it is a delivery filter, not a scoring one, and
+    `test_entry_fan.py`'s ranking contract predates it."""
     from harness.tetrapush import entry_fan as EF
     out = []
     for i, h in enumerate(hits):
@@ -490,12 +510,26 @@ def confirm_hits(hits, seed=None, env=None, progress=False):
         pairs = [tuple(h['plan'][k:k + 2]) for k in range(1, len(h['plan']), 3)]
         pairs += [tuple(h['aim'])] if h.get('aim') else []
         deliverable = all(EF.survives_delivery(*p) for p in pairs)
-        out.append(dict(hit=h, confirm=c, deliverable=deliverable))
+        row = dict(hit=h, confirm=c, deliverable=deliverable)
+        out.append(row)
+        # Only confirmed, DTM-deliverable hits are worth a rollout: the others cannot be delivered
+        # whatever the two engines say about them.
+        if cross_engine and c['all_ok'] and deliverable:
+            from harness.tetrapush import cross_engine as XE
+            row['cross_engine'] = xe = XE.agree(h, seed=seed, env=env)
+            row['agrees'] = bool(xe['deliverable'])
+            row['blocked'] = XE.blocked(xe)
+        elif cross_engine:
+            row['cross_engine'], row['agrees'], row['blocked'] = None, False, False
         if progress:
-            print("  hit %d/%d plan %s: all_ok %s%s  %s"
+            print("  hit %d/%d plan %s: all_ok %s%s%s  %s"
                   % (i + 1, len(hits), h['plan'], c['all_ok'],
                      "" if deliverable else "  NOT DTM-DELIVERABLE",
+                     ("  x-engine %s" % ("agrees" if row['agrees'] else
+                                         "BLOCKED" if row['blocked'] else "DIFF"))
+                     if cross_engine and row['cross_engine'] else "",
                      "" if c['all_ok'] else [k for k, v in c['ok'].items() if not v]))
-    out.sort(key=lambda r: (not (r['confirm']['all_ok'] and r['deliverable']),
+    out.sort(key=lambda r: (not (r['confirm']['all_ok'] and r['deliverable']
+                                 and (r['agrees'] if cross_engine else True)),
                             r['hit']['plan'][0] + sum(r['hit']['plan'][3::3])))
     return out

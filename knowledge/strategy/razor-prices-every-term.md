@@ -117,6 +117,25 @@ engines that had never been compared to each other.
    Every term of the residual can be console-exact while the input never produces the action at all.
    Check the branch that decides the action against the decomp, separately from the physics that
    follows it - a replay-based confirm shares the omission and will agree with you.
+9. **"A property of the candidate" is a code seam you have not named yet** (session 89). Rule 7 is
+   how you SHIP safely; it is not the diagnosis. Ask instead which frames the disagreement lands on
+   and what the two engines do differently there: session 88's four rejections were one seam - two
+   different ports of Link's Co centre, agreeing to 1-2 ULP - and swapping one engine onto the other's
+   port made all four agree at once
+   ([../mechanics/link-co-centre.md](../mechanics/link-co-centre.md#the-two-engines-and-the-1-2-ulp-between-them)).
+   The corollary for rule 6: **a cross-engine gate is only evidence on frames where the engines CAN
+   differ.** Both console captures ran on candidates where the two ports agree, so the gate was
+   green and blind for two sessions. Pick the diffing candidate on purpose, and when no capture can
+   discriminate, say the question is OPEN and name the one delivery that would close it rather than
+   inferring a winner from the looser fixture.
+10. **Every input to a cached derivation belongs in its cache key** (session 89). A fix that lands in
+    a function the search calls has not landed in the search if a stale artifact sits between them.
+    The 0.75 ATTACK gate of rule 8 was correct, gated, and green in nine tests, and the re-run that
+    was supposed to measure it came back **bit-identical** to the pass before it - because the
+    productive-configuration cache keyed on camera and thrusts and not on the threshold, and handed
+    the pass two configurations whose aim was the very byte pair the console had refused. **A re-run
+    that reproduces the previous run exactly is a RESULT, not a relief:** diff the populations before
+    reading the yield, and if nothing moved, find out what the run actually consumed.
 
 ## See also
 

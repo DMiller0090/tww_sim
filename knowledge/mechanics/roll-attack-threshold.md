@@ -61,9 +61,18 @@ the roll and false about **getting** the roll. See
 
 Consequence for the Courtyard entry search: the aim alphabet's atom is a decoded angle, represented
 by the first byte pair in grid order, which is typically a shallow interior one. Filtered to pairs
-that dispatch (`two_roll.roll_aim_fan`) the seam window's alphabet goes 81 aims / 49 sine-table cells
--> **60 / 45**, and one former cell (facing 40834) drops out entirely because **no** byte pair
-reaching that angle clears 0.75. Of a finished 55-hit pass, **36 could never have rolled**.
+that dispatch (`two_roll.roll_aim_fan`) the seam window's alphabet goes 81 aims / 49 decoded angles
+-> **60 / 45**, and the angle 40834 drops out entirely because **no** byte pair reaching it clears
+0.75.
+
+**And that costs the search nothing, which session 89 had to re-run a pass to find out.** The
+physical atom is not the angle, it is the **sine-table cell** ([clip-entry-search.md](../strategy/clip-entry-search.md)):
+40834 and 40841 are both cell 2552, so dropping the angle only moves the cell's representative -
+from `(95,168)` msd 0.5705, which sheathes, to `(82,186)` msd 0.9817, which rolls. Re-run with the
+gate actually reaching the pass, the population is the same 81 scorings at the same entries and
+residuals, **0 of them carry an unrollable aim** (against 57), all 55 draws confirm, and the frame
+floor is back at **4**. Session 88's "36 of the 55 are dead" was a property of the PINNED ROW - the
+list had been re-confirmed against the old representative - and not of the candidates.
 
 **Rule:** an input the search emits must be checked against the dispatch it assumes, not only against
 the physics that follows it. `confirm_entry` "confirms with a real A-press" - and confirmed 36

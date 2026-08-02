@@ -1,0 +1,3004 @@
+{
+ "source": "hits_seg2_a2_j1-2_s1_j6_b2_confirmed.json",
+ "note": "A MODEL output, not a console capture. A pass's hits through all three filters: the A-press replay (the 0.75 ATTACK gate), dtm_make's extreme-clamp, and the cross-engine diff -- the last one run INSIDE the confirm loop from session 89.",
+ "pass_": "search2 2 1,2 1 6 2 (corrected qualification; 39291750 candidates, 4701 s)",
+ "attack_msd_min": 0.75,
+ "n_hits": 51,
+ "frame_floor": 4,
+ "rows": [
+  {
+   "entry": [
+    -1531.178466796875,
+    -781.7215576171875
+   ],
+   "walk": [
+    -1513.0206298828125,
+    -763.112548828125
+   ],
+   "m351C_walk": 64345,
+   "m351C": 64761,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 6.24293879321751e-05,
+   "push": [
+    -0.5971483588218689,
+    -0.13827794790267944
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    208,
+    110,
+    2,
+    169,
+    192,
+    2
+   ],
+   "walkable": true,
+   "frames": 4,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 83,
+    "b_log": 100,
+    "cut_i": 101,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.736814026712636,
+    "composite_moved": 49.736814026712636,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1530.525146484375,
+    -780.9196166992188
+   ],
+   "walk": [
+    -1512.3673095703125,
+    -762.3106079101562
+   ],
+   "m351C_walk": 64345,
+   "m351C": 64761,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 9.094014493849574e-05,
+   "push": [
+    -0.5972162485122681,
+    -0.13830594718456268
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    204,
+    148,
+    2,
+    188,
+    175,
+    2
+   ],
+   "walkable": true,
+   "frames": 4,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 83,
+    "b_log": 100,
+    "cut_i": 101,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.736814026712636,
+    "composite_moved": 49.736814026712636,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1530.7659912109375,
+    -781.2150268554688
+   ],
+   "walk": [
+    -1512.608154296875,
+    -762.6060180664062
+   ],
+   "m351C_walk": 64345,
+   "m351C": 64761,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 9.663790027912262e-05,
+   "push": [
+    -0.5972209572792053,
+    -0.13830254971981049
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    200,
+    100,
+    1,
+    190,
+    172,
+    3
+   ],
+   "walkable": true,
+   "frames": 4,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 83,
+    "b_log": 100,
+    "cut_i": 101,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.736814026712636,
+    "composite_moved": 49.736814026712636,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1517.9427490234375,
+    -765.2719116210938
+   ],
+   "walk": [
+    -1499.8134765625,
+    -746.6350708007812
+   ],
+   "m351C_walk": 64177,
+   "m351C": 64652,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": -5.453928597390321e-06,
+   "push": [
+    -0.7366353869438171,
+    -0.17213979363441467
+   ],
+   "nspeed": 26.0,
+   "gap": 4.860859220522049e-05,
+   "band": [
+    4.3154663607830166e-05,
+    7.520348255504795e-05
+   ],
+   "plan": [
+    1,
+    196,
+    92,
+    1,
+    202,
+    152,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1522.3399658203125,
+    -770.406005859375
+   ],
+   "walk": [
+    -1504.18212890625,
+    -751.7969970703125
+   ],
+   "m351C_walk": 64481,
+   "m351C": 64850,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 8.463943483185015e-06,
+   "push": [
+    -0.5972321033477783,
+    -0.13844041526317596
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    106,
+    66,
+    1,
+    190,
+    174,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73698665531973,
+    "composite_moved": 49.73698665531973,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1522.01806640625,
+    -770.08740234375
+   ],
+   "walk": [
+    -1503.8887939453125,
+    -751.4505615234375
+   ],
+   "m351C_walk": 64551,
+   "m351C": 64895,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 1.0101213787880477e-05,
+   "push": [
+    -0.7366490364074707,
+    -0.1721312701702118
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    156,
+    88,
+    1,
+    184,
+    180,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1517.5201416015625,
+    -764.3341064453125
+   ],
+   "walk": [
+    -1499.390869140625,
+    -745.697265625
+   ],
+   "m351C_walk": 64945,
+   "m351C": 65151,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 1.6895165508067826e-05,
+   "push": [
+    -0.7367807626724243,
+    -0.17225521802902222
+   ],
+   "nspeed": 26.0,
+   "gap": 8.425981242395884e-06,
+   "band": [
+    2.532114675046371e-05,
+    2.9812378790196717e-05
+   ],
+   "plan": [
+    1,
+    200,
+    160,
+    2,
+    183,
+    76,
+    2
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.85839324269722,
+    "composite_moved": 49.85839324269722,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1519.49072265625,
+    -766.9931030273438
+   ],
+   "walk": [
+    -1501.3614501953125,
+    -748.3562622070312
+   ],
+   "m351C_walk": 64545,
+   "m351C": 64891,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 2.4115705944307594e-05,
+   "push": [
+    -0.7366845607757568,
+    -0.17214716970920563
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    148,
+    54,
+    1,
+    193,
+    164,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1519.661376953125,
+    -767.22900390625
+   ],
+   "walk": [
+    -1501.5321044921875,
+    -748.5921630859375
+   ],
+   "m351C_walk": 64481,
+   "m351C": 64850,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 2.4115705944307594e-05,
+   "push": [
+    -0.7366845607757568,
+    -0.17214716970920563
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    154,
+    78,
+    1,
+    198,
+    160,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1519.483154296875,
+    -766.9029541015625
+   ],
+   "walk": [
+    -1501.3538818359375,
+    -748.26611328125
+   ],
+   "m351C_walk": 64709,
+   "m351C": 64998,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 2.4115705944307594e-05,
+   "push": [
+    -0.7366845607757568,
+    -0.17214716970920563
+   ],
+   "nspeed": 26.0,
+   "gap": 1.9038957663522572e-05,
+   "band": [
+    4.3154663607830166e-05,
+    7.520348255504795e-05
+   ],
+   "plan": [
+    1,
+    192,
+    156,
+    1,
+    198,
+    104,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1519.483154296875,
+    -766.9029541015625
+   ],
+   "walk": [
+    -1501.3538818359375,
+    -748.26611328125
+   ],
+   "m351C_walk": 64711,
+   "m351C": 64999,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 2.4115705944307594e-05,
+   "push": [
+    -0.7366845607757568,
+    -0.17214716970920563
+   ],
+   "nspeed": 26.0,
+   "gap": 1.9038957663522572e-05,
+   "band": [
+    4.3154663607830166e-05,
+    7.520348255504795e-05
+   ],
+   "plan": [
+    1,
+    192,
+    156,
+    1,
+    197,
+    104,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1521.467529296875,
+    -769.4155883789062
+   ],
+   "walk": [
+    -1503.3382568359375,
+    -750.7787475585938
+   ],
+   "m351C_walk": 64551,
+   "m351C": 64895,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 3.0672070760170374e-05,
+   "push": [
+    -0.7366895079612732,
+    -0.17214275896549225
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    164,
+    90,
+    1,
+    191,
+    169,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1518.073486328125,
+    -765.0390625
+   ],
+   "walk": [
+    -1499.9156494140625,
+    -746.4300537109375
+   ],
+   "m351C_walk": 64585,
+   "m351C": 64917,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 3.848490581410077e-05,
+   "push": [
+    -0.597357451915741,
+    -0.13852457702159882
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    194,
+    98,
+    1,
+    199,
+    105,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73715928392686,
+    "composite_moved": 49.73715928392686,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1522.4420166015625,
+    -770.5059204101562
+   ],
+   "walk": [
+    -1504.2841796875,
+    -751.8969116210938
+   ],
+   "m351C_walk": 64551,
+   "m351C": 64895,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 4.758450620348051e-05,
+   "push": [
+    -0.5973028540611267,
+    -0.1384560912847519
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    88,
+    100,
+    1,
+    174,
+    190,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73698665531973,
+    "composite_moved": 49.73698665531973,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1517.5841064453125,
+    -764.0216674804688
+   ],
+   "walk": [
+    -1499.42626953125,
+    -745.4126586914062
+   ],
+   "m351C_walk": 65345,
+   "m351C": 65411,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 5.5459149779490045e-05,
+   "push": [
+    -0.5975205302238464,
+    -0.13866576552391052
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    188,
+    174,
+    2,
+    166,
+    64,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1518.263671875,
+    -765.2817993164062
+   ],
+   "walk": [
+    -1500.1058349609375,
+    -746.6727905273438
+   ],
+   "m351C_walk": 64581,
+   "m351C": 64915,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 5.8684413517977614e-05,
+   "push": [
+    -0.5973914265632629,
+    -0.13853007555007935
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    172,
+    100,
+    1,
+    203,
+    108,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73715928392686,
+    "composite_moved": 49.73715928392686,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1518.7952880859375,
+    -765.5762329101562
+   ],
+   "walk": [
+    -1500.637451171875,
+    -746.9672241210938
+   ],
+   "m351C_walk": 65194,
+   "m351C": 65313,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 6.73261057176901e-05,
+   "push": [
+    -0.5975205302238464,
+    -0.13864873349666595
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    174,
+    184,
+    1,
+    194,
+    90,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1518.04541015625,
+    -765.2445068359375
+   ],
+   "walk": [
+    -1499.8875732421875,
+    -746.635498046875
+   ],
+   "m351C_walk": 64177,
+   "m351C": 64652,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 6.87144991663461e-05,
+   "push": [
+    -0.5974131226539612,
+    -0.1385377049446106
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    194,
+    90,
+    1,
+    204,
+    154,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73715928392686,
+    "composite_moved": 49.73715928392686,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1518.04541015625,
+    -765.2445068359375
+   ],
+   "walk": [
+    -1499.8875732421875,
+    -746.635498046875
+   ],
+   "m351C_walk": 64178,
+   "m351C": 64653,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 6.87144991663461e-05,
+   "push": [
+    -0.5974131226539612,
+    -0.1385377049446106
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    194,
+    90,
+    1,
+    199,
+    153,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73715928392686,
+    "composite_moved": 49.73715928392686,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1517.47216796875,
+    -764.2792358398438
+   ],
+   "walk": [
+    -1499.3143310546875,
+    -745.6702270507812
+   ],
+   "m351C_walk": 64500,
+   "m351C": 64862,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 7.062901351720349e-05,
+   "push": [
+    -0.5974262952804565,
+    -0.1385483294725418
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    196,
+    98,
+    1,
+    200,
+    104,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73715928392686,
+    "composite_moved": 49.73715928392686,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1518.70849609375,
+    -765.8538208007812
+   ],
+   "walk": [
+    -1500.5506591796875,
+    -747.2448120117188
+   ],
+   "m351C_walk": 64545,
+   "m351C": 64891,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 7.122950569293271e-05,
+   "push": [
+    -0.5974074602127075,
+    -0.13852834701538086
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    168,
+    62,
+    1,
+    201,
+    156,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73715928392686,
+    "composite_moved": 49.73715928392686,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1518.2005615234375,
+    -765.44287109375
+   ],
+   "walk": [
+    -1500.042724609375,
+    -746.8338623046875
+   ],
+   "m351C_walk": 64245,
+   "m351C": 64696,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 8.89139703336055e-05,
+   "push": [
+    -0.5974470973014832,
+    -0.13854320347309113
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    194,
+    84,
+    2,
+    202,
+    158,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73715928392686,
+    "composite_moved": 49.73715928392686,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1519.1400146484375,
+    -766.3303833007812
+   ],
+   "walk": [
+    -1500.982177734375,
+    -747.7213745117188
+   ],
+   "m351C_walk": 64681,
+   "m351C": 64980,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 0.0001071567602896264,
+   "push": [
+    -0.597467839717865,
+    -0.13853807747364044
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    194,
+    152,
+    1,
+    201,
+    105,
+    3
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73715928392686,
+    "composite_moved": 49.73715928392686,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1519.963134765625,
+    -767.4585571289062
+   ],
+   "walk": [
+    -1501.8052978515625,
+    -748.8495483398438
+   ],
+   "m351C_walk": 64545,
+   "m351C": 64891,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 0.00011095035929757807,
+   "push": [
+    -0.5974593758583069,
+    -0.13852404057979584
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    110,
+    54,
+    1,
+    193,
+    170,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73715928392686,
+    "composite_moved": 49.73715928392686,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1506.4112548828125,
+    -750.2601318359375
+   ],
+   "walk": [
+    -1488.281982421875,
+    -731.623291015625
+   ],
+   "m351C_walk": 64587,
+   "m351C": 64919,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 3.581582845347479e-06,
+   "push": [
+    -0.7366505265235901,
+    -0.1721421629190445
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    188,
+    66,
+    2,
+    208,
+    107,
+    4
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1507.9403076171875,
+    -752.3492431640625
+   ],
+   "walk": [
+    -1489.81103515625,
+    -733.71240234375
+   ],
+   "m351C_walk": 64380,
+   "m351C": 64784,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": -7.52941952268431e-06,
+   "push": [
+    -0.7366379499435425,
+    -0.17214538156986237
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    64,
+    2,
+    1,
+    200,
+    149,
+    5
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1505.88427734375,
+    -749.0166625976562
+   ],
+   "walk": [
+    -1487.7264404296875,
+    -730.4076538085938
+   ],
+   "m351C_walk": 64802,
+   "m351C": 65058,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 1.3998645682488142e-05,
+   "push": [
+    -0.597480833530426,
+    -0.1386849731206894
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    192,
+    86,
+    2,
+    194,
+    93,
+    4
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1505.8887939453125,
+    -749.0225830078125
+   ],
+   "walk": [
+    -1487.73095703125,
+    -730.41357421875
+   ],
+   "m351C_walk": 64816,
+   "m351C": 65068,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 1.3998645682488142e-05,
+   "push": [
+    -0.597480833530426,
+    -0.1386849731206894
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    192,
+    82,
+    1,
+    194,
+    92,
+    5
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1506.7940673828125,
+    -750.4762573242188
+   ],
+   "walk": [
+    -1488.63623046875,
+    -731.8672485351562
+   ],
+   "m351C_walk": 64380,
+   "m351C": 64784,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 3.351998081951995e-05,
+   "push": [
+    -0.5974987745285034,
+    -0.13867516815662384
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    152,
+    50,
+    1,
+    199,
+    145,
+    4
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1505.63330078125,
+    -749.134033203125
+   ],
+   "walk": [
+    -1487.5040283203125,
+    -730.4971923828125
+   ],
+   "m351C_walk": 64952,
+   "m351C": 65156,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 3.656952627262224e-05,
+   "push": [
+    -0.7367892265319824,
+    -0.17223550379276276
+   ],
+   "nspeed": 26.0,
+   "gap": 6.75714748242552e-06,
+   "band": [
+    2.532114675046371e-05,
+    2.9812378790196717e-05
+   ],
+   "plan": [
+    1,
+    202,
+    92,
+    2,
+    192,
+    86,
+    3
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.85839324269722,
+    "composite_moved": 49.85839324269722,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1505.6617431640625,
+    -749.0580444335938
+   ],
+   "walk": [
+    -1487.532470703125,
+    -730.4212036132812
+   ],
+   "m351C_walk": 65145,
+   "m351C": 65281,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 3.656952627262224e-05,
+   "push": [
+    -0.7367892265319824,
+    -0.17223550379276276
+   ],
+   "nspeed": 26.0,
+   "gap": 6.75714748242552e-06,
+   "band": [
+    2.532114675046371e-05,
+    2.9812378790196717e-05
+   ],
+   "plan": [
+    1,
+    208,
+    108,
+    2,
+    181,
+    73,
+    3
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.85839324269722,
+    "composite_moved": 49.85839324269722,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1505.5250244140625,
+    -748.8271484375
+   ],
+   "walk": [
+    -1487.395751953125,
+    -730.1903076171875
+   ],
+   "m351C_walk": 65272,
+   "m351C": 65364,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 3.860295913169042e-05,
+   "push": [
+    -0.7367866039276123,
+    -0.17222991585731506
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    204,
+    106,
+    1,
+    190,
+    85,
+    5
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.85839324269722,
+    "composite_moved": 49.85839324269722,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1506.7894287109375,
+    -750.533447265625
+   ],
+   "walk": [
+    -1488.66015625,
+    -731.8966064453125
+   ],
+   "m351C_walk": 65145,
+   "m351C": 65281,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 4.1569829012182335e-05,
+   "push": [
+    -0.7368096709251404,
+    -0.17224906384944916
+   ],
+   "nspeed": 26.0,
+   "gap": 1.1757450221985618e-05,
+   "band": [
+    2.532114675046371e-05,
+    2.9812378790196717e-05
+   ],
+   "plan": [
+    1,
+    192,
+    174,
+    2,
+    145,
+    43,
+    3
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.85839324269722,
+    "composite_moved": 49.85839324269722,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1508.7596435546875,
+    -753.0599365234375
+   ],
+   "walk": [
+    -1490.601806640625,
+    -734.450927734375
+   ],
+   "m351C_walk": 64378,
+   "m351C": 64783,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 4.348279782678132e-05,
+   "push": [
+    -0.5974856019020081,
+    -0.13864749670028687
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    104,
+    62,
+    1,
+    201,
+    144,
+    5
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1506.7447509765625,
+    -750.1821899414062
+   ],
+   "walk": [
+    -1488.5869140625,
+    -731.5731811523438
+   ],
+   "m351C_walk": 64731,
+   "m351C": 65012,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 5.038700374202554e-05,
+   "push": [
+    -0.597531795501709,
+    -0.13868448138237
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    170,
+    82,
+    1,
+    200,
+    96,
+    5
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1505.99755859375,
+    -749.25390625
+   ],
+   "walk": [
+    -1487.8397216796875,
+    -730.6448974609375
+   ],
+   "m351C_walk": 64676,
+   "m351C": 64977,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 5.548422213407164e-05,
+   "push": [
+    -0.5975553393363953,
+    -0.13870106637477875
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    186,
+    76,
+    1,
+    201,
+    96,
+    4
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1509.6068115234375,
+    -754.179443359375
+   ],
+   "walk": [
+    -1491.448974609375,
+    -735.5704345703125
+   ],
+   "m351C_walk": 64351,
+   "m351C": 64765,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 6.28648213014493e-05,
+   "push": [
+    -0.59751296043396,
+    -0.13864745199680328
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    78,
+    92,
+    1,
+    198,
+    151,
+    4
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1506.4261474609375,
+    -749.6688842773438
+   ],
+   "walk": [
+    -1488.268310546875,
+    -731.0598754882812
+   ],
+   "m351C_walk": 65145,
+   "m351C": 65281,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 6.72523676204666e-05,
+   "push": [
+    -0.5976600050926208,
+    -0.13879042863845825
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    200,
+    166,
+    2,
+    156,
+    59,
+    3
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73750454114121,
+    "composite_moved": 49.73750454114121,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1509.3909912109375,
+    -753.8938598632812
+   ],
+   "walk": [
+    -1491.233154296875,
+    -735.2848510742188
+   ],
+   "m351C_walk": 64368,
+   "m351C": 64776,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 7.939959671429865e-05,
+   "push": [
+    -0.5975459814071655,
+    -0.13865724205970764
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    102,
+    66,
+    1,
+    199,
+    145,
+    5
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1505.9439697265625,
+    -749.0128173828125
+   ],
+   "walk": [
+    -1487.7861328125,
+    -730.40380859375
+   ],
+   "m351C_walk": 65145,
+   "m351C": 65281,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 8.042290421171856e-05,
+   "push": [
+    -0.5976920127868652,
+    -0.13880401849746704
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    202,
+    148,
+    2,
+    173,
+    65,
+    3
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73750454114121,
+    "composite_moved": 49.73750454114121,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1506.753662109375,
+    -750.220703125
+   ],
+   "walk": [
+    -1488.5958251953125,
+    -731.6116943359375
+   ],
+   "m351C_walk": 64720,
+   "m351C": 65005,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 8.26598834389373e-05,
+   "push": [
+    -0.59759122133255,
+    -0.1386984884738922
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    146,
+    148,
+    1,
+    201,
+    96,
+    5
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1509.22119140625,
+    -753.4281616210938
+   ],
+   "walk": [
+    -1491.0633544921875,
+    -734.8191528320312
+   ],
+   "m351C_walk": 64745,
+   "m351C": 65021,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 9.39012924359773e-05,
+   "push": [
+    -0.5975752472877502,
+    -0.13866613805294037
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    156,
+    52,
+    2,
+    192,
+    169,
+    4
+   ],
+   "walkable": true,
+   "frames": 6,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 85,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73733191253402,
+    "composite_moved": 49.73733191253402,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1497.66845703125,
+    -738.7113037109375
+   ],
+   "walk": [
+    -1479.5391845703125,
+    -720.074462890625
+   ],
+   "m351C_walk": 64428,
+   "m351C": 64815,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 2.633657782126134e-05,
+   "push": [
+    -0.7365679740905762,
+    -0.1720256209373474
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    76,
+    88,
+    1,
+    199,
+    102,
+    5
+   ],
+   "walkable": true,
+   "frames": 7,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 86,
+    "b_log": 103,
+    "cut_i": 104,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.85804798547372,
+    "composite_moved": 49.85804798547372,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1496.567138671875,
+    -741.2989501953125
+   ],
+   "walk": [
+    -1478.4093017578125,
+    -722.68994140625
+   ],
+   "m351C_walk": 64378,
+   "m351C": 64783,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 14,
+   "b_step": 16,
+   "resid": 4.1375196734393787e-05,
+   "push": [
+    -0.549046516418457,
+    -0.12515053153038025
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    70,
+    112,
+    1,
+    205,
+    104,
+    5
+   ],
+   "walkable": true,
+   "frames": 7,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 86,
+    "b_log": 102,
+    "cut_i": 103,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 16,
+    "predicted_lunge": 49.69367624308579,
+    "composite_moved": 49.69367624308579,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1497.700439453125,
+    -737.9303588867188
+   ],
+   "walk": [
+    -1479.5426025390625,
+    -719.3213500976562
+   ],
+   "m351C_walk": 64740,
+   "m351C": 65018,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 5.323262932540296e-05,
+   "push": [
+    -0.5976213216781616,
+    -0.13877128064632416
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    148,
+    68,
+    1,
+    196,
+    94,
+    6
+   ],
+   "walkable": true,
+   "frames": 7,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 86,
+    "b_log": 103,
+    "cut_i": 104,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73750454114121,
+    "composite_moved": 49.73750454114121,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1497.6324462890625,
+    -738.036865234375
+   ],
+   "walk": [
+    -1479.474609375,
+    -719.4278564453125
+   ],
+   "m351C_walk": 64311,
+   "m351C": 64739,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 5.323262932540296e-05,
+   "push": [
+    -0.5976213216781616,
+    -0.13877128064632416
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    64,
+    114,
+    1,
+    200,
+    105,
+    5
+   ],
+   "walkable": true,
+   "frames": 7,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 86,
+    "b_log": 103,
+    "cut_i": 104,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73750454114121,
+    "composite_moved": 49.73750454114121,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1497.88134765625,
+    -738.2950439453125
+   ],
+   "walk": [
+    -1479.7235107421875,
+    -719.68603515625
+   ],
+   "m351C_walk": 64506,
+   "m351C": 64866,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 5.323262932540296e-05,
+   "push": [
+    -0.5976213216781616,
+    -0.13877128064632416
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    74,
+    96,
+    1,
+    202,
+    99,
+    5
+   ],
+   "walkable": true,
+   "frames": 7,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 86,
+    "b_log": 103,
+    "cut_i": 104,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73750454114121,
+    "composite_moved": 49.73750454114121,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1497.88134765625,
+    -738.2950439453125
+   ],
+   "walk": [
+    -1479.7235107421875,
+    -719.68603515625
+   ],
+   "m351C_walk": 64504,
+   "m351C": 64865,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 5.323262932540296e-05,
+   "push": [
+    -0.5976213216781616,
+    -0.13877128064632416
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    80,
+    86,
+    1,
+    202,
+    99,
+    5
+   ],
+   "walkable": true,
+   "frames": 7,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 86,
+    "b_log": 103,
+    "cut_i": 104,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73750454114121,
+    "composite_moved": 49.73750454114121,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1498.81396484375,
+    -739.5458984375
+   ],
+   "walk": [
+    -1480.6561279296875,
+    -720.9368896484375
+   ],
+   "m351C_walk": 64545,
+   "m351C": 64891,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 6.212339363234735e-05,
+   "push": [
+    -0.5976364016532898,
+    -0.1387738287448883
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    102,
+    56,
+    2,
+    187,
+    175,
+    4
+   ],
+   "walkable": true,
+   "frames": 7,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 86,
+    "b_log": 103,
+    "cut_i": 104,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73750454114121,
+    "composite_moved": 49.73750454114121,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1497.5960693359375,
+    -737.790771484375
+   ],
+   "walk": [
+    -1479.438232421875,
+    -719.1817626953125
+   ],
+   "m351C_walk": 64795,
+   "m351C": 65054,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 8.549504292476706e-05,
+   "push": [
+    -0.5976807475090027,
+    -0.13878530263900757
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    152,
+    68,
+    1,
+    195,
+    93,
+    6
+   ],
+   "walkable": true,
+   "frames": 7,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 86,
+    "b_log": 103,
+    "cut_i": 104,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73750454114121,
+    "composite_moved": 49.73750454114121,
+    "deliverable": true
+   }
+  },
+  {
+   "entry": [
+    -1497.63134765625,
+    -738.035400390625
+   ],
+   "walk": [
+    -1479.4735107421875,
+    -719.4263916015625
+   ],
+   "m351C_walk": 64311,
+   "m351C": 64739,
+   "facing": 40841,
+   "aim": [
+    82,
+    186
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 8.549504292476706e-05,
+   "push": [
+    -0.5976807475090027,
+    -0.13878530263900757
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    1,
+    64,
+    112,
+    1,
+    200,
+    105,
+    5
+   ],
+   "walkable": true,
+   "frames": 7,
+   "aim_msd": 0.9816561689406349,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 86,
+    "b_log": 103,
+    "cut_i": 104,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 0,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.73750454114121,
+    "composite_moved": 49.73750454114121,
+    "deliverable": true
+   }
+  }
+ ],
+ "rejected": [
+  {
+   "entry": [
+    -1519.8988037109375,
+    -767.5052490234375
+   ],
+   "walk": [
+    -1501.76953125,
+    -748.868408203125
+   ],
+   "m351C_walk": 64581,
+   "m351C": 64915,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 1.1024416428249801e-06,
+   "push": [
+    -0.7366403341293335,
+    -0.1721353828907013
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    186,
+    98,
+    1,
+    200,
+    108,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 584459,
+    "cut_ok": false,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 0.1533895567015212,
+    "deliverable": false
+   }
+  },
+  {
+   "entry": [
+    -1519.4608154296875,
+    -766.9747314453125
+   ],
+   "walk": [
+    -1501.33154296875,
+    -748.337890625
+   ],
+   "m351C_walk": 64481,
+   "m351C": 64850,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 2.4115705944307594e-05,
+   "push": [
+    -0.7366845607757568,
+    -0.17214716970920563
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    158,
+    78,
+    1,
+    197,
+    157,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 1,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": false
+   }
+  },
+  {
+   "entry": [
+    -1521.3863525390625,
+    -769.3170776367188
+   ],
+   "walk": [
+    -1503.257080078125,
+    -750.6802368164062
+   ],
+   "m351C_walk": 64545,
+   "m351C": 64891,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 3.0672070760170374e-05,
+   "push": [
+    -0.7366895079612732,
+    -0.17214275896549225
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    94,
+    58,
+    1,
+    177,
+    186,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 1,
+    "cut_ok": true,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 49.858220614085454,
+    "deliverable": false
+   }
+  },
+  {
+   "entry": [
+    -1519.9344482421875,
+    -767.57568359375
+   ],
+   "walk": [
+    -1501.80517578125,
+    -748.9388427734375
+   ],
+   "m351C_walk": 64481,
+   "m351C": 64850,
+   "facing": 40820,
+   "aim": [
+    85,
+    182
+   ],
+   "thrust": 15,
+   "b_step": 17,
+   "resid": 3.3151202878790605e-05,
+   "push": [
+    -0.7366997003555298,
+    -0.17214953899383545
+   ],
+   "nspeed": 26.0,
+   "gap": null,
+   "band": null,
+   "plan": [
+    0,
+    86,
+    96,
+    1,
+    194,
+    162,
+    4
+   ],
+   "walkable": true,
+   "frames": 5,
+   "aim_msd": 0.8890817691968743,
+   "confirmed": true,
+   "deliverable": true,
+   "cross_engine": {
+    "entry_i": 84,
+    "b_log": 101,
+    "cut_i": 102,
+    "handover_ok": true,
+    "genuine": true,
+    "worst_ulp": 584459,
+    "cut_ok": false,
+    "cut_step": 17,
+    "predicted_lunge": 49.858220614085454,
+    "composite_moved": 0.1533895567015212,
+    "deliverable": false
+   }
+  }
+ ],
+ "dropped": []
+}

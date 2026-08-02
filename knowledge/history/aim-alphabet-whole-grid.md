@@ -49,8 +49,18 @@ pass, aim `(95,168)` at msd 0.5705. The movie went out exactly as authored and L
 pre-roll position, because he never reached her. `fixtures/courtyard_attack_gate_s88_console.json`.
 
 Of that pass's 55 confirmed, DTM-deliverable hits, **36 used the shallow representative** and could
-never have rolled; 19 survived, and the frame floor moved 4 -> 5. The seam window's alphabet is 60
-aims / 45 cells rather than 81 / 49, and the cell at facing 40834 has no deep member at all.
+never have rolled as pinned; 19 survived a re-confirm, and the frame floor read 4 -> 5. The seam
+window's alphabet is 60 aims / 45 decoded angles rather than 81 / 49, and the angle 40834 has no deep
+member at all.
+
+**Session 89 measured what that actually cost the axis, and the answer is nothing.** The physical
+atom is the sine-table CELL, not the angle, and 40834/40841 share cell 2552 - so the gate moves the
+cell's representative to `(82,186)` msd 0.9817 rather than removing it. Re-run correctly, the same 81
+scorings come back at the same entries and residuals with **no unrollable aim among them**, all 55
+draws confirm, and the floor is 4 again. The "36 dead / floor 5" numbers above describe the pinned
+session-87 rows re-confirmed against the stale representative; they were never a property of the
+candidates. (Getting that re-run to consume the new alphabet at all took a second fix - the
+productive-configuration cache did not key on the threshold; razor rule 10.)
 
 Session 80's correction of s79 was still right, and the honest reading is the one in between: the
 alphabet is every ANGLE, each represented by a member deep enough to dispatch
