@@ -347,13 +347,9 @@ class FootFK:
 
     @staticmethod
     def _quat_concat(a, b):
-        """mDoMtx_QuatConcat(a, b) -- the quaternion product the jointBeforeCB adjust uses."""
-        aw, ax, ay, az = a
-        bw, bx, by, bz = b
-        return (fp.f32(aw * bw - ax * bx - ay * by - az * bz),
-                fp.f32(aw * bx + ax * bw + ay * bz - az * by),
-                fp.f32(aw * by - ax * bz + ay * bw + az * bx),
-                fp.f32(aw * bz + ax * by - ay * bx + az * bw))
+        """mDoMtx_QuatConcat(a, b) -- the quaternion product the jointBeforeCB adjust uses.
+        Canonical in `quat.quat_concat` (`body_cyl`'s baked chain runs the same twist)."""
+        return Q.quat_concat(a, b)
 
     @staticmethod
     def _sx(v):

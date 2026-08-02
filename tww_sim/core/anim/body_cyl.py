@@ -40,6 +40,9 @@ from . import quat as Q
 # joint indices in _generated/anim/link_skeleton.json (link_root / neck_jnt).
 CL_JNT_LINK_ROOT = 0
 CL_JNT_NECK_JNT = 14
+#: The joint `jointBeforeCB` post-multiplies by Rx(-mBodyAngle.z) -- see `roll_co_center`'s
+#: ``body_lean``. Same index `foot_fk._local_from_old` twists (its NECK_CHAIN is this chain).
+CL_JNT_BODY_CHN = 2
 
 # FRONT_ROLL Co cylinder (d_a_player_main.cpp:9762/9778-9780). Duplicated in
 # harness/collision/tetra_clip.py + knowledge/reference/constants.md#collision-actor-co-push.
@@ -66,26 +69,40 @@ def _chains():
     return _CACHE
 
 
-def _local_mtx(anm, jidx, frame):
+def _sx(v):
+    """Sign-extend an s16 (an unsigned-masked negative lean halves 180 deg away in the quat)."""
+    v = int(v) & 0xFFFF
+    return v - 0x10000 if v >= 0x8000 else v
+
+
+def _local_mtx(anm, jidx, frame, body_x=0):
     """Single-anim local joint matrix via the quat path (mDoMtx_quat = PSMTXQuat); scale==1 on this
-    chain, so it is just the rotation with the animated translate in the last column."""
+    chain, so it is just the rotation with the animated translate in the last column.
+
+    ``body_x`` (s16) = the ``jointBeforeCB`` extra x-rotation (``-mBodyAngle.z``), post-multiplied
+    onto the animated quat exactly as `foot_fk._local_from_old` does -- nonzero only at
+    ``CL_JNT_BODY_CHN``."""
     tr = j3d_eval.calc_transform(anm, jidx, frame)
-    m = Q.psmtx_quat(Q.euler_to_quat(*tr['rotation']))
+    q = Q.euler_to_quat(*tr['rotation'])
+    if body_x:
+        q = Q.quat_concat(q, Q.euler_to_quat(_sx(body_x), 0, 0))
+    m = Q.psmtx_quat(q)
     m[0][3] = fp.f32(tr['translate'][0])
     m[1][3] = fp.f32(tr['translate'][1])
     m[2][3] = fp.f32(tr['translate'][2])
     return m
 
 
-def _world_jnt(anm, chain, frame, base):
+def _world_jnt(anm, chain, frame, base, body_x=0):
     """World anim matrix getAnmMtx(joint) = worldBase * localChain(joint), fused (fk.mtx_concat)."""
     cur = [row[:] for row in base]
     for j in chain:
-        cur = fk.mtx_concat(cur, _local_mtx(anm, j, frame))
+        cur = fk.mtx_concat(cur, _local_mtx(anm, j, frame,
+                                            body_x=body_x if j == CL_JNT_BODY_CHN else 0))
     return cur
 
 
-def roll_co_center(pos_x, pos_z, facing, frame, shape_z=0):
+def roll_co_center(pos_x, pos_z, facing, frame, shape_z=0, body_lean=0):
     """The FRONT_ROLL body Co cylinder centre (x, z) at rollf animation ``frame``, Link standing at
     world (``pos_x``, ``pos_z``) facing ``facing`` (s16 BAM), with body lean ``shape_z``. Port of
     ``setCollision`` spD0.x/z for the FRONT_ROLL branch: the horizontal midpoint of the root & neck
@@ -94,13 +111,21 @@ def roll_co_center(pos_x, pos_z, facing, frame, shape_z=0):
     ``shape_z`` is ``shape_angle.z`` (the MOVE turn-lean ``m351C>>1``) fed to the ``setWorldMatrix``
     base ``ZXYrotM`` z-tilt. It is the lean from the PREVIOUS frame -- ``setWorldMatrix`` (which builds
     the pose base) runs BEFORE ``setMoveSlantAngle`` updates the lean (d_a_player_main.cpp:11551 vs
-    :11561), the same one-frame lag the foot draw uses. This is the ONLY body-lean term that reaches
-    the root/neck xz midpoint: the ``jointBeforeCB`` root tilt (``m34F2``/``m34F4``) is 0 outside
-    damage/ice-slip, and its ``body_chn`` rotation (``-mBodyAngle.z``) contributes nothing to the
-    centre (verified live: base-lean-only is 0 ULP on every settled roll frame; adding the body_chn
-    quat breaks it). The lean decays ~35%/frame during a roll, so on a straight-approach roll (lean 0)
-    this is a no-op and the clean pose is already exact. Live-gated by ``tests/test_body_cyl.py`` +
-    ``fixtures/hyrule_roll_lean.json``.
+    :11561), the same one-frame lag the foot draw uses. The lean decays ~35%/frame during a roll, so
+    on a straight-approach roll (lean 0) this is a no-op and the clean pose is already exact.
+    Live-gated by ``tests/test_body_cyl.py`` + ``fixtures/hyrule_roll_lean.json``.
+
+    ``body_lean`` is the SECOND body-lean term: the ``jointBeforeCB`` ``body_chn`` counter-twist
+    ``Rx(-mBodyAngle.z)`` at ``CL_JNT_BODY_CHN``, taking this frame's **POST-update** lean
+    (``m351C >> 1``), one lean-update ahead of the base -- the session-16 timing law
+    `foot_fk.body_co_center` runs. (The other ``jointBeforeCB`` root tilt, ``m34F2``/``m34F4``, is 0
+    outside damage/ice-slip.) It was long recorded here as contributing nothing, because the only
+    lean capture available (``hyrule_roll_lean.json``, max |lean| 28 past the exempt entry frames) is
+    below the sine-table bucket where it first moves the midpoint -- and because feeding it the OLD
+    lean does break the fit. On a roll that carries a real turn lean it is worth up to ~0.35 u:
+    session 87 measured it against the courtyard console (leans -388..-46), where twisting with the
+    post-update lean is 0 ULP on every roll frame and omitting it is 500-4000 ULP out. Default 0 =
+    no twist, which is exact only while the lean is small.
 
     ``pos``/``facing`` feed ``worldBase`` exactly as the game does (the FK accumulates at world
     magnitude, so the base matters); py is immaterial to x/z. Clean single-anim pose otherwise (no
@@ -109,14 +134,15 @@ def roll_co_center(pos_x, pos_z, facing, frame, shape_z=0):
     anm, ch_root, ch_neck = _chains()
     roll = anm['rollf']
     base, _ = fk.world_base(pos_x, 0.0, pos_z, facing, shape_z)
-    mr = _world_jnt(roll, ch_root, frame, base)
-    mn = _world_jnt(roll, ch_neck, frame, base)
+    body_x = -_sx(body_lean)
+    mr = _world_jnt(roll, ch_root, frame, base, body_x=body_x)
+    mn = _world_jnt(roll, ch_neck, frame, base, body_x=body_x)
     cx = fp.fmuls(0.5, fp.fadds(mr[0][3], mn[0][3]))
     cz = fp.fmuls(0.5, fp.fadds(mr[2][3], mn[2][3]))
     return cx, cz
 
 
-def roll_co_chain_consts(facing, frame, shape_z=0):
+def roll_co_chain_consts(facing, frame, shape_z=0, body_lean=0):
     """EXACT decomposition of :func:`roll_co_center` into position-independent per-level translate
     constants, for the table-driven fast coupled engine (Phase T search).
 
@@ -129,17 +155,21 @@ def roll_co_chain_consts(facing, frame, shape_z=0):
         tx = pos_x;  for c in chain: tx = fadds(c[0], tx)      # same for z with c[1]
         cx = fmuls(0.5, fadds(tx_root, tx_neck))
 
+    ``body_lean`` is the ``body_chn`` counter-twist, as in `roll_co_center` -- it changes a LOCAL
+    rotation, so the decomposition is untouched by it.
+
     Returns ``(root_chain, neck_chain)``: each a list of (cx, cz) f32 constants, one per joint
     level. Gated identical to ``roll_co_center`` in tests/test_shove_fast.py."""
     anm, ch_root, ch_neck = _chains()
     roll = anm['rollf']
     base, _ = fk.world_base(0.0, 0.0, 0.0, facing, shape_z)
+    body_x = -_sx(body_lean)
 
     def consts(chain):
         cur = [row[:] for row in base]
         out = []
         for j in chain:
-            lm = _local_mtx(roll, j, frame)
+            lm = _local_mtx(roll, j, frame, body_x=body_x if j == CL_JNT_BODY_CHN else 0)
             dots = [fp.fmadds(cur[i][2], lm[2][3],
                               fp.fmadds(cur[i][1], lm[1][3],
                                         fp.fmuls(cur[i][0], lm[0][3]))) for i in range(3)]
@@ -148,6 +178,18 @@ def roll_co_chain_consts(facing, frame, shape_z=0):
         return out
 
     return consts(ch_root), consts(ch_neck)
+
+
+def co_leans(link):
+    """The ``(shape_z, body_lean)`` pair the Co centre wants, off a JUST-STEPPED ``LandState``.
+
+    Two different leans, one frame apart (the session-16 timing law): the ``setWorldMatrix`` base
+    keeps the DRAW lean (``_draw_lean``, the value before this frame's ``setMoveSlantAngle``) and the
+    ``body_chn`` counter-twist takes the POST-update one (``m351C >> 1``). Every schedule baker got
+    the first and dropped the second until session 87, so it lives here rather than in each of them.
+    Duck-typed on the two attributes -- no ``land`` import from ``core``."""
+    m = int(getattr(link, 'm351C', 0)) & 0xFFFF
+    return getattr(link, '_draw_lean', 0), _sx(m) >> 1
 
 
 def available():

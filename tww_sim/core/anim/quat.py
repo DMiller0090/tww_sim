@@ -65,6 +65,17 @@ def euler_to_quat(rx, ry, rz):
     return (w, x, y, z)
 
 
+def quat_concat(a, b):
+    """``mDoMtx_QuatConcat(a, b)`` -- the quaternion product the ``jointBeforeCB`` adjusts use
+    (the BODY_CHN counter-twist and the head-look callback). (w, x, y, z), each component f32."""
+    aw, ax, ay, az = a
+    bw, bx, by, bz = b
+    return (fp.f32(aw * bw - ax * bx - ay * by - az * bz),
+            fp.f32(aw * bx + ax * bw + ay * bz - az * by),
+            fp.f32(aw * by - ax * bz + ay * bw + az * bx),
+            fp.f32(aw * bz + ax * by - ay * bx + az * bw))
+
+
 def quat_lerp(a, b, t):
     """JMAQuatLerp: (w,x,y,z). dot in f32; sign-flip b; lerp in f64 -> f32. Not normalized."""
     aw, ax, ay, az = a

@@ -24,6 +24,7 @@ speedF 17 cap -- and that cap is a `fast_schedule` assumption (ROLL_NSPEED 26), 
 Offline: the native fleet + `ShoveCtx`, no Dolphin. The full-resolution equality gate needs the
 gitignored s80 fan cache and is skipped without it.
 """
+import json
 import math
 import os
 import struct
@@ -132,17 +133,25 @@ def test_the_fleet_fan_reproduces_the_cached_full_resolution_pass():
 
 def test_the_acceptance_band_is_per_lean_not_just_per_configuration():
     """THE s81 CORRECTION. At one (facing, thrust) the band is a function of m351C: lean 0 and +6
-    carry the full 3.2e-5 interval, +136 a narrower one, and the negative leans measured here have
-    NOTHING genuine at any entry along the locus. s80 scored every candidate against the lean-0 band,
-    so a candidate at a dead lean was ranked as a near-miss it could never convert."""
+    carry the full 3.2e-5 interval, +266 a narrower one, and a far enough negative lean is DEAD. s80
+    scored every candidate against the lean-0 band, so a candidate at a dead lean was ranked as a
+    near-miss it could never convert.
+
+    Session 87 re-measured this against the fixed Co centre (`body_cyl.co_leans` -- the baked chain
+    was missing the `body_chn` twist, which is a function of the lean, so the lean axis is exactly
+    where the old engine was most wrong). The structure is unchanged and the productive widths are
+    the same to the bit; which negative leans die, and how, moved -- s81's three examples are in
+    `knowledge/history/`."""
     bands = EF.BandTable(SEED, path=None)
     live = bands.get(FACING, THRUST, 0)
     assert live['productive'] and live['width'] > 3e-5
     assert bands.get(FACING, THRUST, 6)['width'] == pytest.approx(live['width'], abs=0.0)
-    for dead in (64302, 65342, 64891):             # signed -1234, -194, -645
-        b = bands.get(FACING, THRUST, dead)
-        assert not b['productive'] and b['n_genuine'] == 0
-        assert b['reason'] == 'no genuine on the residual zero'
+    narrow = bands.get(FACING, THRUST, 266)
+    assert narrow['productive'] and 0.0 < narrow['width'] < live['width']
+    # -1234: the roll leaves Tetra out of Co range on the cut frame, so no entry moves the razor.
+    b = bands.get(FACING, THRUST, 64302)
+    assert not b['productive'] and b['n_genuine'] == 0
+    assert b['reason'] == 'no leverage' and b['grad'] == 0.0
 
 
 def test_the_bands_locus_moves_with_the_lean():
@@ -245,14 +254,18 @@ def test_the_momentum_below_the_cap_is_a_dead_axis():
 
 def test_dropping_the_cap_multiplies_the_draws_and_buys_no_near_misses():
     """The same thing end to end, which is the only version that settles it: at one resolution, the
-    uncapped pass reaches ~2x the candidates and finds the SAME near-miss population, gap for gap.
+    uncapped pass reaches 3x the candidates and finds the SAME near-miss population, gap for gap.
     Every extra candidate rolls at a momentum where nothing is genuine at any entry -- the s80 error
-    (counting draws that could never convert) one axis over."""
-    kw = dict(base_frames=tuple(range(7)), stride=16, jmax=12)
+    (counting draws that could never convert) one axis over.
+
+    Stride 4, not s82's 16: on the fixed Co centre (session 87) the coarse fan reaches no near-miss
+    at all, and a comparison of two empty populations settles nothing. That is itself the headline
+    -- the axis got harder, see the README s87 box."""
+    kw = dict(base_frames=tuple(range(7)), stride=4, jmax=12)
     bands, quals = EF.BandTable(SEED, path=None), EF.qualified(SEED, path=None)
     capped = EF.stream_search(EF.iter_fan(cap=ES.WALK_CAP, **kw), quals=quals, bands=bands)
     uncapped = EF.stream_search(EF.iter_fan(cap=None, **kw), quals=quals, bands=bands)
-    assert uncapped['n_candidates'] > 1.5 * capped['n_candidates']
+    assert uncapped['n_candidates'] > 2.5 * capped['n_candidates']
     assert capped['n_near'] > 0, "vacuous: this resolution found no near-miss either way"
     assert uncapped['near'] == capped['near']
     assert uncapped['expected_hits'] == capped['expected_hits']
@@ -675,3 +688,36 @@ def test_genuine_hits_are_counted_in_draws_like_near_misses_are():
     two = EF.hit_draws(one_entry_three_prefixes + [other])
     assert len(two) == 2 and two[0]['plan'] == [0, 9, 9, 1]               # frame-minimal first
     assert EF.hit_draws([]) == []
+
+
+# ------------------------------------------------------- the session-85 pass, re-scored (session 87)
+
+_RESCORED = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         'fixtures', 'courtyard_entry_s87_rescored.json')
+
+
+def test_the_session_85_pass_rescores_to_its_seven_survivors():
+    """**THE 49, ASKED AGAIN.** They were scored by an engine whose baked Co centre dropped the
+    `body_chn` twist (`body_cyl.co_leans`) -- a term that scales with the roll's turn lean, i.e. with
+    the candidate -- so the correction could not be reasoned about hit by hit and every one had to be
+    re-swept. **7 of 49 survive**, and the frame floor moves from the 4 the console falsified to 5.
+
+    Pinned as a fixture because the survivor set is the current candidate list: if the engine moves
+    again this names which hits moved with it. It is a MODEL output, not a console capture -- and a
+    survivor rate is a lower bound on the axis, since the fixed engine can make genuine a candidate
+    the old one threw away. Re-running the pass is what measures that."""
+    fx = json.load(open(_RESCORED))
+    rows = EF.rescore([dict(r, plan=list(r['plan'])) for r in fx['rows']])
+    assert len(rows) == fx['n_hits'] == 49
+    for got, want in zip(rows, fx['rows']):
+        assert got['genuine'] is want['genuine'], want['plan']
+        assert got['resid'] == want['resid'], want['plan']
+    kept = [r for r in fx['rows'] if r['genuine']]
+    assert len(kept) == fx['n_kept'] == 7
+    assert min(r['frames'] for r in kept) == 5
+    # the rejected ones are not near-misses that drifted: they land decades outside the window
+    tossed = [r for r in fx['rows'] if not r['genuine']]
+    assert max(r['resid'] for r in tossed) < -1e-3
+    # and every survivor's recorded resid is UNCHANGED -- their leans are the small ones, where the
+    # twist is below the sine-table bucket. That is the shape of the term, not a coincidence.
+    assert all(r['resid'] == r['resid_s85'] for r in kept)

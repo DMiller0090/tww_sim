@@ -64,6 +64,7 @@ you can triage in one glance.
 - **Why do seam clips work (walking/rolling through a wall corner) / the float-precision root cause / why ≥~36 u + corner >90° + vertical walls / how do I predict one?** → [mechanics/seam-clip.md](mechanics/seam-clip.md)
 - **How does an actor push Link (the Tetra "nudge") / cyl-cyl overlap + weight split / can it supply the extra displacement for a seam clip?** → [mechanics/actor-push.md](mechanics/actor-push.md)
 - **How FAR can a push move an actor per frame / is `|speedF|/2` a hard bound / what does a plan pay to make the contact END shallow?** → the overlap halved per frame; 13.0 u/f is a steady state, and depth trades against distance → [mechanics/push-magnitude.md](mechanics/push-magnitude.md)
+- **Where is the cylinder that pushes other actors (it is not Link's feet) / which lean tilts it and which frame's value does each term read / why does a roll off a curved approach push differently?** → [mechanics/link-co-centre.md](mechanics/link-co-centre.md)
 - **When/how does Tetra follow Link (follow radius, speed), and when can Link lock onto / talk to her (the region a planner must avoid)?** → [mechanics/tetra-follow.md](mechanics/tetra-follow.md)
 - **Where do Tetra's eyePos (the proc-9 re-aim target) and attention position (the camera's lock target) come from -- her look-at head chase, anims, hidden seed state?** → [mechanics/tetra-look.md](mechanics/tetra-look.md)
 - **How does Link's own head turn toward a lock-on target (the m3564 setNeckAngle twist) / what moves mHeadTopPos / why does it feed back into facing through Tetra's look-at?** → [mechanics/link-head-look.md](mechanics/link-head-look.md)
@@ -122,6 +123,7 @@ you can triage in one glance.
 - **Why audit a search's own accounting before scaling its biggest cost / how did "the fan is the only budget" turn out to be wrong by 12x?** → [history/entry-search-s80-superseded.md](history/entry-search-s80-superseded.md)
 - **I proved a prune was my own assumption, not physics - why isn't removing it a lever? Why price an axis before promoting it?** → [history/entry-search-s81-momentum-lever.md](history/entry-search-s81-momentum-lever.md)
 - **My axis priced at exactly 8x - why is a perfectly integral multiplier a warning sign? How did sweeping a facing at 1 BAM measure the same configuration sixteen times?** → [history/entry-search-s81-camera-lever.md](history/entry-search-s81-camera-lever.md)
+- **My model is live-gated 0 ULP and still wrong - how? Why record the REGIME a capture covers next to the claim it proves?** → [history/co-centre-body-chn-twist.md](history/co-centre-body-chn-twist.md)
 
 ## Page template (for contributors)
 

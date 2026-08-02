@@ -88,15 +88,10 @@ console frame-by-frame through plan frame 38).
  it sways ~16–22 u from `current.pos` while walking and, during a **FRONT_ROLL lunge, leads the feet
  by 10–31 u** (peaks ~frame 5–6 of the roll). The offline port
  [`tww_sim/core/anim/body_cyl.roll_co_center(pos, facing, frame, shape_z)`](../../tww_sim/core/anim/body_cyl.py)
- runs the same world-space FK the walk foot chain uses and is **live-validated bit-exact** (GZLJ01,
- Link rolling pinned at a wall so pos/facing were constant): **0 ULP on every settled roll frame** once
- the `shape_z` body lean is fed in. The early-frame residual of the older clean-only port was **NOT** the
- oldframe-morf (that touches roll frame 0 only, `initOldFrameMorf(mRoll.field_0x14=2.0, 0, 0x2A)`) - it
- was the missing `setWorldMatrix` base `ZXYrotM` z-tilt by `shape_angle.z` (the MOVE turn lean
- `m351C>>1`, decaying ~35%/frame). Feed the **previous frame's** `shape_z` (the setWorldMatrix /
- setMoveSlantAngle one-frame lag) and it vanishes; the `jointBeforeCB` root tilt (`m34F2`/`m34F4`) is 0
- outside damage, and its `body_chn` rotation contributes nothing to the xz midpoint. See the module +
- `tests/test_body_cyl.py` + `fixtures/hyrule_roll_lean.json` (`harness/rollstab/capture_roll_lean.py`).
+ runs the same world-space FK the walk foot chain uses and is **live-validated bit-exact** once
+ **both** body-lean terms are fed in - the turn lean reaches the midpoint TWICE, one frame apart, and
+ the twist is a no-op below ~30 BAM and worth ~0.35 u at a real one. That, the two ports and the
+ regime trap in gating them are [link-co-centre.md](link-co-centre.md).
 - **Tetra** (NPC `Zl1`) body Co cylinder **R = 50, H = 140, center = `current.pos`** (feet). Weight
  is `0xFF` (immovable, GetRank 10) by default in `createInit`, but **`0x8C` = 140 (GetRank 5)** for
  the `field_0x84F == 5` variant - and the **flooded-Hyrule Tetra is live-confirmed as that variant**
@@ -214,6 +209,7 @@ Because Tetra (rank 5, same as Link) also recoils each overlap frame, a multi-fr
 hold the overlap for exactly the frame before the clip.
 
 ## See also
+- [mechanics/link-co-centre.md](link-co-centre.md) - where Link's pushing cylinder actually is, and the two turn-lean terms that tilt it.
 - [mechanics/seam-clip.md](seam-clip.md) - the wall-corner clip this push feeds; `min_f32_clip` reachability.
 - [mechanics/collision.md](collision.md) - the DZB wall mesh and the `CrrPos` wall barriers.
 - [reference/constants-npc.md](../reference/constants-npc.md#collision-actor-co-push) - cylinder radii/heights, ranks.

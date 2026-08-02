@@ -337,7 +337,7 @@ def fleet_fan2(**kw):
 from harness.tetrapush.entry_score import (          # noqa: E402,F401
     QUAL_CACHE, BAND_CACHE, MIN_BAND, BAND_PROBE, BandTable, ref_entry, qualified,
     family_of_plan, stream_search, draw_key, hit_draws, dedupe_near, lottery, distinct_near,
-    near_families, subgrid_rate, confirm_hits, _f32_bits, _marginal, _expected_hits)
+    near_families, subgrid_rate, confirm_hits, rescore, _f32_bits, _marginal, _expected_hits)
 
 
 # ------------------------------------------------------------------- the gate
@@ -523,6 +523,29 @@ def _cmd_confirm(argv):
     print("wrote %s" % out)
 
 
+def _cmd_rescore(argv):
+    """Ask a finished pass's hits again, on the engine as it stands now."""
+    warnings.simplefilter('ignore')
+    if not argv:
+        raise SystemExit("usage: rescore <hits json | confirmed json>")
+    path = argv[0] if os.path.exists(argv[0]) \
+        else os.path.join(_rb, '_generated', 's81', argv[0])
+    r = json.load(open(path))
+    hits = [x['hit'] for x in r] if isinstance(r, list) else r['hits']
+    rows = rescore(hits, progress=True)
+    kept = [x for x in rows if x['kept']]
+    print("\nKEPT %d of %d" % (len(kept), len(rows)))
+    for x in sorted(kept, key=lambda x: (x['hit']['plan'][0] + sum(x['hit']['plan'][3::3]),
+                                         abs(x['resid']))):
+        h = x['hit']
+        print("  plan %s  aim %s  facing %d thrust %d  m351C %d  resid %+.4e (was %+.4e)"
+              "  frames %d" % (h['plan'], h['aim'], h['facing'], h['thrust'], h['m351C'],
+                               x['resid'], x['was'], h['plan'][0] + sum(h['plan'][3::3])))
+    out = path.replace('.json', '_rescored.json')
+    json.dump(rows, open(out, 'w'), indent=1)
+    print("wrote %s" % out)
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     cmd = argv.pop(0) if argv else 'gate'
@@ -538,6 +561,8 @@ def main(argv=None):
         _cmd_search2(argv)
     elif cmd == 'confirm':
         _cmd_confirm(argv)
+    elif cmd == 'rescore':
+        _cmd_rescore(argv)
     else:
         raise SystemExit(__doc__)
 

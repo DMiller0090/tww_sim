@@ -321,16 +321,17 @@ def fast_schedule(facing, m351c, thrust=TA.THRUST, entry=TAB_ENTRY, link_y=TA.GR
         rf = f32(rf + LandState.ROLL_RATE)
         draw = s16_signed(lean) >> 1
         lean = lean_at_roll(lean)
+        twist = s16_signed(lean) >> 1        # the POST-update lean the body_chn twist takes
         dx.append(dxv)
         dz.append(dzv)
         cutx.append(cx if k == cut_step else 0.0)
         cutz.append(cz if k == cut_step else 0.0)
-        row = _CHAIN_CACHE.get((facing, rf, draw))
+        row = _CHAIN_CACHE.get((facing, rf, draw, twist))
         if row is None:
-            rc, nc = body_cyl.roll_co_chain_consts(facing, rf, shape_z=draw)
+            rc, nc = body_cyl.roll_co_chain_consts(facing, rf, shape_z=draw, body_lean=twist)
             row = ([c[0] for c in rc] + [c[0] for c in nc],
                    [c[1] for c in rc] + [c[1] for c in nc], len(rc))
-            _CHAIN_CACHE[(facing, rf, draw)] = row
+            _CHAIN_CACHE[(facing, rf, draw, twist)] = row
         chx.append(row[0])
         chz.append(row[1])
         nroot = row[2]

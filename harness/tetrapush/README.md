@@ -229,6 +229,9 @@ deliberately unported.
 | `entry_search.{roll_nspeed,CtxPool,locus_scan}` | **THE MOMENTUM AXIS (session 82) -- generalized, gated, and measured DEAD.** `roll_nspeed` is `_roll_init`'s clamp off `LandState`'s own constants (`ROLL_NSPEED` is DERIVED from it at the cap, not written down); it threads through `fast_schedule`/`roll_entry`/`build_fast`/`configuration_band`/`qualify`, and `turnaround.extract_schedule_at(nspeed=)` lets the simulated reference follow. `CtxPool` keeps one compiled ctx per (facing, thrust) and swaps only Link's baked schedule via the new `ShoveCtx.set_link_schedule` (1.52 ms -> 0.16 ms), which is what makes a per-candidate configuration key affordable. `locus_scan` is the STRONG form of "is this configuration barren" -- march ALONG the locus re-projecting onto resid 0 at every station, because a one-point band cannot declare a curve dead. The verdict: 2 of 181 momenta productive (both at the cap), every sub-cap one barren along its whole locus and at every facing in the full circle, and an uncapped pass finds the SAME near-misses as a capped one gap for gap. |
 | `fixtures/courtyard_entry_s86_console.json` | **THE ENTRY HANDOVER, ON CONSOLE (session 86; LOCKED).** The s78 herd log plus the frame-minimal confirmed entry plan and a real A-press, delivered as one 86-frame movie and truncate-and-read at nine frames (n=78 the control, n=79..86 the entry). All nine 0-ULP on Link x/z/`proc`/`facing`/`travel`/`speedF`/`m351C`/`nspeed` and on Tetra x/z, who stays stt 3 and bit-frozen -- so the console rolls from the entry the walled engine scored, exactly. Gate `tests/test_entry_console.py` (24). |
 | `fixtures/courtyard_clip_s86_console.json` | **THE CLIP ATTEMPT, ON CONSOLE (session 86; LOCKED).** The same log extended to the thrust. Carries the eight console samples across the roll, the `ShoveCtx` prediction it is being judged against (`genuine`, `old`, `new`, `push`, the window), the measured Tetra wall brace (plane -990.255615 + R 50 = -940.255615) and the `tetra_ulp` price: **one f32 step of her x flips `genuine`**. The console did NOT clip. Gate `tests/test_clip_console.py` (8 + 7 xfail(strict) on a contiguous open suffix). |
+| `body_cyl.{co_leans,roll_co_center,roll_co_chain_consts}` + `from_f0.FreeRun(walls_tetra=)` | **THE TWO TERMS THAT MADE `genuine` A FALSE POSITIVE (session 87), one per engine.** `walls_tetra=` runs Tetra's own `mObjAcch.CrrPos` (R 50 / half-H 30) in the courtyard tracking, where she had no BG collision at all and the clip roll drove her through the back wall -- attaching it took the whole s86 xfail frontier to 0 ULP on both actors in one change. `co_leans(link)` is the OTHER half: the Co centre takes the turn lean TWICE, one frame apart (`setWorldMatrix` base = the DRAW lean, `jointBeforeCB` `body_chn` twist = the POST-update one), and the baked chain the native `ShoveCtx` sweeps carried only the base. Below ~30 BAM the twist rounds to the identity in `jmaSinTable`, which is why the live lean capture (max 28) could never decide it and why the search was wrong only where a candidate's roll carries a real lean; at -388 it is ~0.35 u of centre. All four schedule bakers (`turnaround.extract_schedule_at`, `fast_shove.extract_schedule`, `entry_search.fast_schedule`, `roll_fidelity.walk_then_roll`) and `cc_stepper.link_co_center` pass both leans. KB `knowledge/mechanics/link-co-centre.md`; the overturned claim in `knowledge/history/co-centre-body-chn-twist.md`. Gated `tests/test_body_cyl.py` (incl. the fixture's own lean bound) + `tests/test_clip_console.py`. |
+| `entry_score.rescore` (CLI `entry_fan rescore <hits json>`) | **ASK A FINISHED PASS AGAIN, ON THE ENGINE AS IT STANDS (session 87).** One sweep per hit, grouped by configuration so the `CtxPool` re-schedules instead of recompiling the courtyard. A hit is a claim about the engine that scored it, and when the correction is a function of the candidate -- as the `body_chn` twist is, through the lean -- it cannot be reasoned about hit by hit. On s85's 49: **7 kept**, the 42 rejected all past -1e-3, the survivors' residuals unchanged to the bit. What it does NOT give you is a re-measured axis: the hits are the old engine's, so the survivor rate is a lower bound. |
+| `fixtures/courtyard_entry_s87_rescored.json` | **THE 49 RE-SCORED (session 87).** A MODEL output, not a console capture -- every hit of the s85 pass with its verdict and residual on the fixed engine beside the recorded ones, pinned so the engine cannot move under the candidate set without the gate naming which hits moved. 7 genuine, frame floor 5. Gate `tests/test_entry_fan.py`. |
 | `fixtures/courtyard_entry_locus_s79.json` | **THE ENTRY LOCUS** -- 1735 genuine roll entries for Tetra pinned at her console-measured herd endpoint, at facing 40835 / m351C 0, plus the acceptance window, the fork verdict, the gradient, the m351C sensitivity table and the reachability rows. One thin curve 104 u long; **856 inside the 230 u follow bar** = the usable target, nearest 49.7 u from where the escape leaves Link. DERIVED, not measured -- regenerable by `python -m harness.tetrapush.entry_search locus` (~250 s), pinned so the gates do not pay the sweep. |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). Session 19: extracts **poll index 2** of each 4-poll frame group -- the poll the game actually latches (live-pinned via the camera oracle on the window's two non-uniform groups); regen with no capture preserves the baked live rows. |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
@@ -1667,6 +1670,72 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE CLIP FRAME IS BIT-EXACT NOW, BOTH ACTORS, IN BOTH ENGINES -- AND THE VERDICT THE
+            CONSOLE FALSIFIED IS THE VERDICT THE MODEL NOW RETURNS. THE UNPRICED TERM WAS **TWO**
+            TERMS IN **TWO DIFFERENT ENGINES**: TETRA HAD NO BG PASS IN THE COURTYARD TRACKING, AND
+            THE SEARCH'S BAKED Co CENTRE HAD NO `body_chn` TWIST. **RE-SCORING THE 49 KEEPS 7**, AND
+            THE FRAME FLOOR MOVES 4 -> 5 (session 87).** The handoff named step 1 (give her the wall)
+            and step 2 (close the residual 0.15 u, suspecting the push split). Step 1 was right and
+            one line long. Step 2 was a different bug in the other engine, and the thing that found
+            it was diffing the two engines against each other -- which nothing had ever done.
+            - **TETRA'S BG PASS, and the whole xfail frontier XPASSED on it.** `from_f0.FreeRun`
+              gains `walls_tetra=`, running her `mObjAcch.CrrPos` (R 50 / half-H 30) at the same
+              point in the frame `npc_zl1.Zl1FollowState.step` does -- after `posMove` consumes the
+              CC recoil, `speed_y` 0 on the flat floor. Every previously-open console sample went
+              **0 ULP on both actors in one change**, including the cut frame: the composite blocks
+              the lunge exactly as the game did (0.16 u off `old`, not 49.97).
+            - **THE 0.15 u WAS NOT THE PUSH SPLIT.** With her walled the COMPOSITE is console-exact
+              at the cut frame, so the 0.15 u belonged to the other engine. Diffing `ShoveCtx`'s
+              trace against the composite's plan frames: both actors agree for three steps, then
+              diverge EQUAL-AND-OPPOSITE from the first contact frame -- the push-split signature
+              again, and again not the split. Subtracting Link's own position difference leaves a
+              CHAIN difference that decays to exactly 0 by roll frame 6, which is the shape of a
+              lean, not of a morf (the morf counter reads 0 all through).
+            - **THE TERM: the `body_chn` counter-twist.** `body_cyl.roll_co_center` /
+              `roll_co_chain_consts` applied the `setWorldMatrix` base lean and NOT the
+              `jointBeforeCB` `Rx(-mBodyAngle.z)` twist at `CL_JNT_BODY_CHN`, which takes the
+              **POST-update** lean -- the session-16 timing law `foot_fk.body_co_center` has run
+              since it was found, which is why the composite was right all along and the search was
+              not. Twisting reproduces the composite's posed centre 0 ULP on every roll frame.
+              `body_cyl.co_leans(link)` returns the (base, twist) pair and all four schedule bakers
+              plus `cc_stepper.link_co_center` now pass both. New KB page
+              `knowledge/mechanics/link-co-centre.md`; the overturned claim MIGRATED to
+              `knowledge/history/co-centre-body-chn-twist.md`.
+            - **WHY IT HID FOR A YEAR, and it is a gating lesson not an FP one.** `euler_to_quat`
+              halves the angle into `jmaSinTable[(u16)a >> 4]`, so a twist below ~30 BAM rounds to
+              the identity. `fixtures/hyrule_roll_lean.json` -- the capture built to isolate the
+              lean, and the one that recorded "adding the body_chn quat breaks it" -- never exceeds
+              **28** past its exempt entry frames, so it cannot decide the term in either direction;
+              and the "breaks it" measurement had fed the twist the OLD lean. At the lean a roll off
+              a curved approach carries (`m351C >> 1` = -388) the term is worth **~0.35 u** of
+              centre, ~0.17 u of push per frame, compounding through the plow into the 0.15 u.
+              `tests/test_body_cyl.py` now asserts that fixture's own lean bound, so a future
+              capture with a real lean makes the gate demand the term instead of permitting it.
+            - **THE 49, RE-SCORED: 7 SURVIVE.** `entry_score.rescore` (+ `entry_fan rescore` CLI)
+              re-sweeps a finished pass on the engine as it stands. The 42 that fall are not
+              near-misses that drifted -- every one lands past **-1e-3**, decades outside a 1.2e-4
+              window -- and the survivors' residuals are UNCHANGED to the bit, because their leans
+              are the small ones. All 7 still `confirm_entry` clean and DTM-deliverable. The
+              frame-minimal survivors are **5 frames** (`[0,188,174,2,166,64,3]` aim `[95,168]` and
+              `[0,174,184,1,194,90,4]`), against the 4-frame hit the console falsified. Pinned
+              `fixtures/courtyard_entry_s87_rescored.json` + `tests/test_entry_fan.py`.
+            - **THE AXIS GOT HARDER, and the coarse gates say so.** On the fixed engine a stride-16
+              two-segment pass finds NO near-miss at all (it found some before), so
+              `test_dropping_the_cap...` moved to stride 4 to stay non-vacuous -- 14529 candidates,
+              1 near-miss, E[hits] 0.0032. A survivor count is a LOWER bound on the axis, never a
+              re-measurement: the fixed engine can make genuine a candidate the old one threw away.
+              Re-running the s85 pass (`search2 2 1,2 1 6 2`, ~85 min) is what measures it.
+            - **THE GATE THAT WAS MISSING, now standing.** `tests/test_clip_console.py` diffs
+              `ShoveCtx` against the composite frame for frame on both actors, and both against the
+              console log -- 16 tests, no xfails. Two engines each gated against their own fixture
+              and never against each other is exactly how a term present in one and absent from the
+              other survives.
+            - **NEXT: RE-RUN THE PASS, then deliver a survivor.** The 49 came from an engine that
+              was wrong in a lean-dependent way, so the pass's near-miss population is as suspect as
+              its hits; re-run the same scoping (not a wider one) and see what the axis is really
+              worth. Then spend one console delivery on the frame-minimal survivor -- with both
+              engines console-exact through the cut frame, that delivery is now a real test of
+              `genuine` rather than of the model.
       - [~] **THE COMPOSITE IS ON CONSOLE, AND IT SPLIT IN TWO: THE HANDOVER IS PERFECT AND THE CLIP
             DID NOT HAPPEN. THE ENTRY, THE 17-FRAME ROLL AND EVERY WALL BRACE REPLAY **BIT-EXACT**
             ON THE REAL GAME -- LINK'S PRE-CUT POINT IS `ShoveCtx`'s OWN `old` TO THE BIT -- AND THEN

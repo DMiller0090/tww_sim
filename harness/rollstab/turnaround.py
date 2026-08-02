@@ -161,8 +161,9 @@ def extract_schedule_at(entry, facing, m351C, link_y, inputs, nspeed=26.0):
         pose = st in _ROLL_POSE and body_cyl.available()
         is_pose.append(1 if pose else 0)
         if pose:
+            base_lean, twist = body_cyl.co_leans(link)
             rc, nc = body_cyl.roll_co_chain_consts(link.facing, link.roll_frame,
-                                                   shape_z=getattr(link, '_draw_lean', 0))
+                                                   shape_z=base_lean, body_lean=twist)
             nroot = len(rc)
             chx.append([c[0] for c in rc] + [c[0] for c in nc])
             chz.append([c[1] for c in rc] + [c[1] for c in nc])

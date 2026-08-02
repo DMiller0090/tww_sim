@@ -52,10 +52,11 @@ def link_co_center(link):
     (``current.pos``), a first-order proxy that only matters if an overlap fires off a roll. y =
     ``current.pos.y`` (FRONT_ROLL cylinder vertical)."""
     if link.state in _ROLL_POSE_STATES and body_cyl.available():
-        # shape_z = the draw-time body lean (m351C>>1, setWorldMatrix base z-tilt): a curved-approach
-        # roll carries it, shifting the Co centre until it decays. See knowledge/mechanics/actor-push.md.
+        # Two leans, one frame apart (`body_cyl.co_leans`), both shifting the drawn Co centre until
+        # they decay. See knowledge/mechanics/link-co-centre.md.
+        base_lean, twist = body_cyl.co_leans(link)
         cx, cz = body_cyl.roll_co_center(link.pos_x, link.pos_z, link.facing, link.roll_frame,
-                                         shape_z=getattr(link, "_draw_lean", 0))
+                                         shape_z=base_lean, body_lean=twist)
         return (cx, link.pos_y, cz)
     return (link.pos_x, link.pos_y, link.pos_z)
 

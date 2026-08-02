@@ -91,6 +91,20 @@ live run in session 22. When live disagrees with the sim, run `pushaside diff` (
 > that changes `harness/rollstab/*.py` without touching this file, so keep it current.
 > The session prompt (`SESSION_PROMPT.md`) points here for state rather than restating it.
 
+> **SHARED-MODEL FIX (2026-08-02, session 87): the Co centre takes the turn lean TWICE, and this
+> lineage only ever passed one of them.** `body_cyl.roll_co_center` / `roll_co_chain_consts` applied
+> the `setWorldMatrix` base z-tilt but not the `jointBeforeCB` `body_chn` counter-twist, which reads
+> the **POST-update** lean (`foot_fk.body_co_center` has run it since session 16, which is why the
+> two ports disagreed). Both now take `body_lean=`; `body_cyl.co_leans(link)` returns the pair, and
+> `cc_stepper.link_co_center`, `fast_shove.extract_schedule` and `turnaround.extract_schedule_at`
+> pass both. **Every seam-clip gate is byte-identical** -- the twist is a bit-exact no-op below ~30
+> BAM of lean (`jmaSinTable[(u16)a >> 4]` rounds it to the identity) and every clip here rolls
+> straight or nearly so. It matters where a roll carries a real turn lean: at `m351C >> 1` = -388 it
+> moves the centre ~0.35 u, which is what made the Tetra-push entry search score 42 false positives.
+> If a future seam clip enters off a curved approach, this term is now carried. KB
+> `knowledge/mechanics/link-co-centre.md`; the old claim in
+> `knowledge/history/co-centre-body-chn-twist.md`.
+>
 > **Shared-tool note (2026-08-01, session 82):** `turnaround.extract_schedule_at` / `build_ctx_at`
 > gained an `nspeed=` parameter (default **26.0**, the roll momentum off the speedF-17 walk cap --
 > exactly what they hard-coded before, so every seam-clip caller is byte-identical). It exists so the

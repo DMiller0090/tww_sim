@@ -58,8 +58,10 @@ import math
 import struct
 import warnings
 
+from tww_sim.core.collision import acch_crr_pos
 from tww_sim.core.fp import f32, fadds
 from tww_sim.core.npc_zl1 import FOLLOW_ENGAGE_DIST
+from tww_sim.core.npc_zl1 import WALL_H as TETRA_WALL_H, WALL_R as TETRA_WALL_R
 from tww_sim.core.cc_push import co_move_pair, WEIGHT_LINK, WEIGHT_TETRA_V5
 from tww_sim.land.land import LandState, FRONT_ROLL, MOVE
 from harness.tetrapush.link_plow import recoil
@@ -339,10 +341,18 @@ class FreeRun:
     regime, which is exactly why it is a commanded input channel for the planner).
     While the sim's lock is engaged the camera needs the locked actor's attention position:
     inject it per step via ``tattn`` (Tetra's `attention_info.position`, her animated look-at
-    point -- unmodeled, same status as eyePos; keep-last semantics like ``eye``)."""
+    point -- unmodeled, same status as eyePos; keep-last semantics like ``eye``).
+
+    ``walls_tetra`` -- the ordered room mesh for TETRA's own ``mObjAcch.CrrPos`` (the R 50 /
+    half-H 30 BG pass `npc_zl1` already models and `CcCoupledStepper(walls_tetra=)` already
+    applies). None = the bare XZ plow point, which is faithful only while she is clear of the
+    geometry: it is what drove her 53 u THROUGH the courtyard back wall on the clip roll, where
+    the console braces her at the plane + her radius (session 86). Link's own wall pass is the
+    plain `link._walls` attribute; set both to run the composite in one walled engine."""
 
     def __init__(self, seed_row, *, seed_nspeed=None, seed_old_pose=None, computed_pose=True,
-                 camera=None, zl1=None, neck=None, seed_push=None, native_step=False):
+                 camera=None, zl1=None, neck=None, seed_push=None, native_step=False,
+                 walls_tetra=None):
         e = seed_row
         self.link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
         self.computed_pose = bool(computed_pose)
@@ -354,6 +364,7 @@ class FreeRun:
                           (int(e['link']['shape_z']) << 1) & 0xFFFF, old_pose=seed_old_pose)
         self.tx, self.tz = e['tetra']['pos'][0], e['tetra']['pos'][2]
         self.ty = e['tetra']['pos'][1]
+        self.walls_tetra = walls_tetra
         self.camera = camera
         # zl1 (a seeded Zl1Look) replaces the eye + tattn injections -- see the class doc.
         self.zl1 = zl1
@@ -394,6 +405,9 @@ class FreeRun:
             if camera is not None or zl1 is not None or neck is not None:
                 raise ValueError("native_step is the STRIPPED search config -- no camera/zl1/neck "
                                  "(csangle is injected, eye is feet-fallback)")
+            if walls_tetra is not None:
+                raise ValueError("native_step has no Tetra BG pass -- the C engine tracks her as a "
+                                 "bare plow point; run the Python path for a walled Tetra")
             self._core = self._build_core()
 
     def _build_core(self):
@@ -437,6 +451,7 @@ class FreeRun:
         c.link = self.link.clone()
         c.computed_pose = self.computed_pose
         c.tx, c.tz, c.ty = self.tx, self.tz, self.ty
+        c.walls_tetra = self.walls_tetra          # immutable mesh, shared by reference
         c.camera = self.camera.clone() if self.camera is not None else None
         c.zl1 = self.zl1.clone() if self.zl1 is not None else None
         c._eye_next = self._eye_next
@@ -515,6 +530,13 @@ class FreeRun:
         # A f64 residue survives the per-frame round but the plow amplifier explodes it (README s29).
         self.tx = f32(self.tx + self.pend_tetra[0])
         self.tz = f32(self.tz + self.pend_tetra[1])
+        if self.walls_tetra is not None:
+            # Her `mObjAcch.CrrPos` where `Zl1FollowState.step` runs it -- after posMove consumes the
+            # recoil, speed_y 0 on the flat floor (a gravity dip mis-ejects a corrected XZ by 1 ULP).
+            (nx, _ny, nz), _info = acch_crr_pos(
+                (tetra_pre[0], self.ty, tetra_pre[2]), (self.tx, self.ty, self.tz),
+                self.walls_tetra, speed_y=0.0, wall_h=TETRA_WALL_H, wall_r=TETRA_WALL_R)
+            self.tx, self.tz = f32(nx), f32(nz)
 
         # FOLLOW guard: past FOLLOW_ENGAGE_DIST live Tetra enters the stt-4 follow state this
         # stt-3 plow model does not cover (README planner box) -- warn, the sim is unfaithful.

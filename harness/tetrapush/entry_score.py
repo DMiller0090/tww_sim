@@ -439,6 +439,38 @@ def _expected_hits(near, widths, near_gap):
     return (len(near) / (2.0 * near_gap)) * (sum(widths) / len(widths))
 
 
+def rescore(hits, seed=None, progress=False):
+    """Re-run a pass's hits through a FRESH `ShoveCtx` and report the verdict now.
+
+    A hit is a claim about the engine that scored it, so when the engine moves the claim has to be
+    re-asked -- which is cheap (one sweep per hit) next to re-searching, and is the only honest way
+    to keep an old pass's output. Session 87 is the case it was written for: the baked Co centre was
+    missing the `body_chn` twist (`body_cyl.co_leans`), a term that scales with the roll's turn lean,
+    so the correction is a FUNCTION of the candidate and cannot be reasoned about hit by hit.
+
+    Returns one row per hit: ``hit``, ``genuine``, ``resid``, ``push``, plus ``was`` (the recorded
+    resid) and ``kept``. Note what this does NOT tell you: the hits are the old engine's, so a
+    survivor rate is a lower bound on the axis, never a re-measurement of it -- the fixed engine can
+    make genuine a candidate the old one discarded. Re-run the pass for that."""
+    seed = seed or ES.console_seed()
+    tx, tz = seed['tetra']
+    pool = ES.CtxPool()
+    # group by configuration so the pool re-schedules instead of recompiling the courtyard
+    order = sorted(range(len(hits)),
+                   key=lambda i: (hits[i]['facing'], hits[i]['thrust'], hits[i]['m351C'],
+                                  hits[i].get('nspeed') or 0.0))
+    out = [None] * len(hits)
+    for n, i in enumerate(order):
+        h = hits[i]
+        ctx, _sch, resid = pool.get(h['facing'], h['m351C'], h['thrust'], nspeed=h.get('nspeed'))
+        o = ctx.sweep_par([(tx, tz, h['entry'][0], h['entry'][1])], 0)[0]
+        out[i] = dict(hit=h, genuine=bool(o[0]), resid=resid(o), push=[o[5], o[6]],
+                      was=h.get('resid'), kept=bool(o[0]))
+        if progress and (n + 1) % 10 == 0:
+            print("  re-scored %d/%d" % (n + 1, len(hits)))
+    return out
+
+
 def confirm_hits(hits, seed=None, env=None, progress=False):
     """`entry_search.confirm_entry` over a pass's hits -- the A-press replay each one owes.
 
