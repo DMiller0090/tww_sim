@@ -258,9 +258,11 @@ def test_dropping_the_cap_multiplies_the_draws_and_buys_no_near_misses():
     Every extra candidate rolls at a momentum where nothing is genuine at any entry -- the s80 error
     (counting draws that could never convert) one axis over.
 
-    Stride 4, not s82's 16: on the fixed Co centre (session 87) the coarse fan reaches no near-miss
-    at all, and a comparison of two empty populations settles nothing. That is itself the headline
-    -- the axis got harder, see the README s87 box."""
+    Stride 4, not s82's 16: on the fixed Co centre (session 87) this ONE-SEGMENT coarse fan reaches
+    no near-miss at all, and a comparison of two empty populations settles nothing. Note the scope --
+    the full TWO-segment pass's yield barely moved (see
+    `test_the_current_candidate_list_still_scores_and_confirms`); it is the coarse one-segment
+    population that thinned."""
     kw = dict(base_frames=tuple(range(7)), stride=4, jmax=12)
     bands, quals = EF.BandTable(SEED, path=None), EF.qualified(SEED, path=None)
     capped = EF.stream_search(EF.iter_fan(cap=ES.WALK_CAP, **kw), quals=quals, bands=bands)
@@ -721,3 +723,44 @@ def test_the_session_85_pass_rescores_to_its_seven_survivors():
     # and every survivor's recorded resid is UNCHANGED -- their leans are the small ones, where the
     # twist is below the sine-table bucket. That is the shape of the term, not a coincidence.
     assert all(r['resid'] == r['resid_s85'] for r in kept)
+
+
+_S87_HITS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         'fixtures', 'courtyard_entry_s87_hits.json')
+
+
+def test_the_current_candidate_list_still_scores_and_confirms():
+    """**THE PASS, RE-RUN ON THE FIXED ENGINE.** Same scoping as session 85's
+    (`search2 2 1,2 1 6 2`, 39.3 M candidates, 4997 s): **55 distinct genuine draws, 55 of 55
+    confirmed by a real A-press and 55 of 55 DTM-deliverable**, frame floor **4**.
+
+    The yield barely moved -- 1950 near draws against s85's 2007, E[hits] 4.547 against 4.638,
+    0.2417 near/family against 0.2487 -- but the POPULATION did: only 7 of s85's 49 are in it. That
+    is the "a survivor rate is a lower bound" caveat of the re-score gate, measured.
+
+    Both halves are cheap enough to gate for real (0.1 s to re-sweep, 2.5 s to replay all 55), so
+    this pins the list itself rather than a summary of it."""
+    fx = json.load(open(_S87_HITS))
+    hits = [dict(r, plan=list(r['plan'])) for r in fx['rows']]
+    assert len(hits) == fx['n_hits'] == 55
+    assert fx['n_confirmed'] == fx['n_deliverable'] == 55
+    assert fx['frame_floor'] == min(r['frames'] for r in fx['rows']) == 4
+    for got, want in zip(EF.rescore(hits), fx['rows']):
+        assert got['genuine'] is True, want['plan']
+        assert got['resid'] == want['resid'], want['plan']
+    for got, want in zip(EF.confirm_hits(hits), fx['rows']):
+        assert got['confirm']['all_ok'], got['hit']['plan']
+        assert got['deliverable'], got['hit']['plan']
+
+
+def test_the_two_passes_of_one_scoping_overlap_only_where_the_lean_is_small():
+    """The engine fix is not a filter on the old output, it is a different search. Of s85's 49 exactly
+    7 are in the s87 pass's 55, and they are the small-lean ones -- which is the shape of the
+    `body_chn` twist (`body_cyl.co_leans`), a term that is a no-op below ~30 BAM of lean."""
+    old = json.load(open(_RESCORED))
+    new = json.load(open(_S87_HITS))
+    key = lambda r: (tuple(r['plan']), r['facing'], r['thrust'])
+    shared = {key(r) for r in old['rows']} & {key(r) for r in new['rows']}
+    assert len(shared) == 7
+    kept = [r for r in old['rows'] if r['genuine']]
+    assert {key(r) for r in kept} == shared, "the survivors ARE the overlap, by construction"

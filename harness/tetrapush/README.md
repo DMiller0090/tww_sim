@@ -232,6 +232,7 @@ deliberately unported.
 | `body_cyl.{co_leans,roll_co_center,roll_co_chain_consts}` + `from_f0.FreeRun(walls_tetra=)` | **THE TWO TERMS THAT MADE `genuine` A FALSE POSITIVE (session 87), one per engine.** `walls_tetra=` runs Tetra's own `mObjAcch.CrrPos` (R 50 / half-H 30) in the courtyard tracking, where she had no BG collision at all and the clip roll drove her through the back wall -- attaching it took the whole s86 xfail frontier to 0 ULP on both actors in one change. `co_leans(link)` is the OTHER half: the Co centre takes the turn lean TWICE, one frame apart (`setWorldMatrix` base = the DRAW lean, `jointBeforeCB` `body_chn` twist = the POST-update one), and the baked chain the native `ShoveCtx` sweeps carried only the base. Below ~30 BAM the twist rounds to the identity in `jmaSinTable`, which is why the live lean capture (max 28) could never decide it and why the search was wrong only where a candidate's roll carries a real lean; at -388 it is ~0.35 u of centre. All four schedule bakers (`turnaround.extract_schedule_at`, `fast_shove.extract_schedule`, `entry_search.fast_schedule`, `roll_fidelity.walk_then_roll`) and `cc_stepper.link_co_center` pass both leans. KB `knowledge/mechanics/link-co-centre.md`; the overturned claim in `knowledge/history/co-centre-body-chn-twist.md`. Gated `tests/test_body_cyl.py` (incl. the fixture's own lean bound) + `tests/test_clip_console.py`. |
 | `entry_score.rescore` (CLI `entry_fan rescore <hits json>`) | **ASK A FINISHED PASS AGAIN, ON THE ENGINE AS IT STANDS (session 87).** One sweep per hit, grouped by configuration so the `CtxPool` re-schedules instead of recompiling the courtyard. A hit is a claim about the engine that scored it, and when the correction is a function of the candidate -- as the `body_chn` twist is, through the lean -- it cannot be reasoned about hit by hit. On s85's 49: **7 kept**, the 42 rejected all past -1e-3, the survivors' residuals unchanged to the bit. What it does NOT give you is a re-measured axis: the hits are the old engine's, so the survivor rate is a lower bound. |
 | `fixtures/courtyard_entry_s87_rescored.json` | **THE 49 RE-SCORED (session 87).** A MODEL output, not a console capture -- every hit of the s85 pass with its verdict and residual on the fixed engine beside the recorded ones, pinned so the engine cannot move under the candidate set without the gate naming which hits moved. 7 genuine, frame floor 5. Gate `tests/test_entry_fan.py`. |
+| `fixtures/courtyard_entry_s87_hits.json` | **THE CURRENT CANDIDATE LIST (session 87).** s85's scoping re-run on the fixed engine (`search2 2 1,2 1 6 2`, 39.3 M candidates, 4997 s): **55 distinct genuine draws, 55/55 confirmed by a real A-press and 55/55 DTM-deliverable**, frame floor **4**, five at gap exactly 0. Yield unchanged vs s85 (1950 near draws / E[hits] 4.547 / 0.2417 near per family, against 2007 / 4.638 / 0.2487) over a largely NEW population -- only 7 of s85's 49 are in it, which is why a re-score is a lower bound and not a measurement. A MODEL output, pinned with the list itself rather than a summary (re-sweeping all 55 is 0.1 s, replaying them 2.5 s). Gate `tests/test_entry_fan.py`. |
 | `fixtures/courtyard_entry_locus_s79.json` | **THE ENTRY LOCUS** -- 1735 genuine roll entries for Tetra pinned at her console-measured herd endpoint, at facing 40835 / m351C 0, plus the acceptance window, the fork verdict, the gradient, the m351C sensitivity table and the reachability rows. One thin curve 104 u long; **856 inside the 230 u follow bar** = the usable target, nearest 49.7 u from where the escape leaves Link. DERIVED, not measured -- regenerable by `python -m harness.tetrapush.entry_search locus` (~250 s), pinned so the gates do not pay the sweep. |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). Session 19: extracts **poll index 2** of each 4-poll frame group -- the poll the game actually latches (live-pinned via the camera oracle on the window's two non-uniform groups); regen with no capture preserves the baked live rows. |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
@@ -1719,27 +1720,35 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               frame-minimal survivors are **5 frames** (`[0,188,174,2,166,64,3]` aim `[95,168]` and
               `[0,174,184,1,194,90,4]`), against the 4-frame hit the console falsified. Pinned
               `fixtures/courtyard_entry_s87_rescored.json` + `tests/test_entry_fan.py`.
-            - **THE AXIS GOT HARDER, and the coarse gates say so.** On the fixed engine a stride-16
-              two-segment pass finds NO near-miss at all (it found some before), so
-              `test_dropping_the_cap...` moved to stride 4 to stay non-vacuous -- 14529 candidates,
-              1 near-miss, E[hits] 0.0032. A survivor count is a LOWER bound on the axis, never a
-              re-measurement: the fixed engine can make genuine a candidate the old one threw away.
-              Re-running the s85 pass (`search2 2 1,2 1 6 2`, ~90 min) is what measures it -- STARTED
-              at the end of this session (`_generated/s87_search2_a2_j1-2_b2.out`) and **it does
-              still yield**: 1 genuine and 88 near at 939 families / 5.0 M unique candidates, marginal
-              0.0714 near/family against s85's 0.2487 draws/family over 8069. Read the finished
-              `_report` before quoting a ratio -- the streaming counter may not be the same unit.
+            - **THE PASS RE-RUN: THE YIELD IS UNCHANGED AND THE POPULATION IS NEW.** s85's exact
+              scoping (`search2 2 1,2 1 6 2`) on the fixed engine, 39.3 M candidates / 117.9 M
+              evaluations / 4997 s: **1950 near draws** (s85: 2007), **E[hits] 4.547** (4.638),
+              **0.2417 near/family** (0.2487) -- and **55 DISTINCT GENUINE DRAWS from 81 walkable
+              scorings of 81** (s85: 49), **55 of 55 confirmed by a real A-press and 55 of 55
+              DTM-deliverable**, five with gap exactly 0.000e+00. **The frame floor is 4 again**
+              (three 4-frame plans, all facing 40834 / thrust 15 / aim `[95,168]`; the best is
+              `[0,208,110,2,169,192,2]`, resid +6.243e-05). So the axis did not get harder -- what
+              changed is WHICH candidates are genuine: **only 7 of s85's 49 are in the 55**, which is
+              the re-score's "lower bound, not a measurement" caveat measured. Pinned
+              `fixtures/courtyard_entry_s87_hits.json` (+ the overlap) in `tests/test_entry_fan.py`;
+              re-sweeping all 55 is 0.1 s and replaying them 2.5 s, so the list itself is gated.
+              **Scope note:** the ONE-segment coarse fan did thin (a stride-16 `iter_fan` pass now
+              finds no near-miss at all, which is why `test_dropping_the_cap...` moved to stride 4);
+              that is a different population from the two-segment pass and must not be read as the
+              axis.
             - **THE GATE THAT WAS MISSING, now standing.** `tests/test_clip_console.py` diffs
               `ShoveCtx` against the composite frame for frame on both actors, and both against the
               console log -- 16 tests, no xfails. Two engines each gated against their own fixture
               and never against each other is exactly how a term present in one and absent from the
               other survives.
-            - **NEXT: RE-RUN THE PASS, then deliver a survivor.** The 49 came from an engine that
-              was wrong in a lean-dependent way, so the pass's near-miss population is as suspect as
-              its hits; re-run the same scoping (not a wider one) and see what the axis is really
-              worth. Then spend one console delivery on the frame-minimal survivor -- with both
-              engines console-exact through the cut frame, that delivery is now a real test of
-              `genuine` rather than of the model.
+            - **NEXT: SPEND ONE CONSOLE DELIVERY on the frame-minimal hit of the 55**,
+              `[0,208,110,2,169,192,2]` / aim `[95,168]` / thrust 15 / 4 delivered frames. With both
+              engines console-exact on every frame of the roll through the cut, that delivery finally
+              tests `genuine` rather than the model -- which is exactly what s86's could not do.
+              Reuse the s86 composite path unchanged (append to the s78 log, `deliver.py`
+              truncate-and-read); the entry half is locked and gated, so the decisive sample is the
+              cut frame. **Do not widen the fan** -- the axis is re-measured now and 55 confirmed
+              deliverable tickets is not the bottleneck.
       - [~] **THE COMPOSITE IS ON CONSOLE, AND IT SPLIT IN TWO: THE HANDOVER IS PERFECT AND THE CLIP
             DID NOT HAPPEN. THE ENTRY, THE 17-FRAME ROLL AND EVERY WALL BRACE REPLAY **BIT-EXACT**
             ON THE REAL GAME -- LINK'S PRE-CUT POINT IS `ShoveCtx`'s OWN `old` TO THE BIT -- AND THEN
