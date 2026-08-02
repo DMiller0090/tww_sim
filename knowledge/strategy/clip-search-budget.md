@@ -3,15 +3,17 @@
 **Answers:** My entry sweep is too slow to run at the resolution the razor needs - what is actually
 eating the time? Do I have to simulate the roll to score it? When does a compiled context stop being
 reusable, and what do I do then? Can the sweep move onto the native fleet, and why won't it run from
-the run's own start?
-**Status:** validated offline (sessions 80-82) on the flooded-Hyrule Tetra corner; every figure below
+the run's own start? Why is the fan re-walking paths it already walked, and what do I do when the
+pass runs out of RAM before it runs out of clock?
+**Status:** validated offline (sessions 80-84) on the flooded-Hyrule Tetra corner; every figure below
 is a measured before/after on that search. Gated in
 [`tests/test_entry_search.py`](../../tests/test_entry_search.py) +
 [`tests/test_entry_fan.py`](../../tests/test_entry_fan.py). Companion to
 [clip-entry-search.md](clip-entry-search.md) (the method) and
 [clip-lottery-draws.md](clip-lottery-draws.md) (how to count what it returns).
 **Source:** `harness/tetrapush/entry_search.py` (`fast_schedule`, `build_fast`, `CtxPool`),
-`harness/tetrapush/entry_fan.py` (`graft`, `iter_fan`), `tww_sim/core/_shovec.ShoveCtx`.
+`harness/tetrapush/entry_fan.py` (`graft`, `iter_fan`, `stick_alphabet`, `stream_search`
+`dedup_scope`), `tww_sim/core/_shovec.ShoveCtx`.
 
 ---
 
@@ -64,6 +66,49 @@ Gate the whole thing by re-running the reference fan's own output **key-for-key*
 candidates in 17 s against 1444 s, identical. Write order is part of that contract - the reference
 collapses ~5.5M writes onto 43596 keys and the last writer wins, so a chunking that reorders the
 writes gives the right key SET and a different value per key.
+
+## The alphabet you SPEND is redundant too
+
+Once the fan is the budget, audit what the fan is *made of*. A held stick reaches the walk only
+through the main-stick decode, so two byte pairs with the same `(angle, mStickDistance)` bake a
+bit-identical walk - same endpoint, same lean, same speedF, for as long as it is held. The octagon
+clamp and the dead zone make that the common case rather than a corner one: the full 256x256 grid is
+**65536 byte pairs and 11405 draws**, one class holding 1944 members.
+
+So a fan enumerating BYTES buys 5.75 frames of fleet per frame of new physics - and worse than that
+average, because the classes that survive a walk-cap prune are exactly the saturated ones with the
+most members. Collapsing both segments of a two-segment pass onto the decoded alphabet reproduced its
+near-misses **gap for gap in 48 s against 220 s**, and 25x fewer writes streamed.
+
+The tell is a dedup ratio that outruns the physics: if a fan streams far more writes than it has
+distinct endpoints, most of its cores are re-walking a path some other core already walked. This is
+the same lesson as counting a scored axis in the unit the code reads
+([clip-lottery-draws.md](clip-lottery-draws.md)) - it is just worth more here, because the scored
+alphabet costs an evaluation and the spent one costs a simulation.
+
+Two things to keep right when collapsing:
+
+- **Pick the representative for delivery.** Every member of a class is the same physics, so choose the
+  one that survives authoring: `dtm_make` rewrites 0 and 255 to 1 and 254
+  ([`[[octagon-clamp-decode-bug]]`](../mechanics/walk-run.md)), so prefer an interior byte pair
+  wherever the class offers one.
+- **Gate the candidate SET, not the plans.** The collapsed fan must reach exactly the keys the byte
+  grid reached. The plan each key carries may differ: two genuinely different sticks can land on one
+  endpoint, and which one is the last writer depends on the order the alphabet is enumerated in.
+
+## The memory ceiling arrives before the time one
+
+Speed moves the wall rather than removing it. With the fan 5.75x cheaper, the binding constraint on
+this search became the pass's **global dedup key set** - about 200 B a candidate, so a 10M-candidate
+pass is the whole machine, and it hits that hours before it hits the clock.
+
+The way out is to notice that a fan streams **family-major** and nearly all of its repeats are inside
+one family. Scoping the key set per family bounds memory at one family's worth and re-evaluates only
+the handful of endpoints two prefixes genuinely share - and evaluation is a few percent of a pass
+where the key set is all of its memory. Nothing is double-counted as long as the near-misses carry
+identity and are deduped on the draw before anything is reported
+([clip-lottery-draws.md](clip-lottery-draws.md)), which makes the reported population identical to a
+globally deduped pass. The pass is then as wide as the clock allows rather than as wide as RAM allows.
 
 ## What the throughput is worth, and what it is not
 

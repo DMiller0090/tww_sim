@@ -2,17 +2,19 @@
 
 **Answers:** A razor-thin clip search returns "N near-misses, 0 genuine" - how do I tell whether the
 pass was too small or aimed at nothing? What counts as one draw? Why can a search get 60% more
-candidates and not one more near-miss? Which prunes in a fan are physics and which are assumptions I
-put there myself?
-**Status:** validated offline (sessions 81-82) on the flooded-Hyrule Tetra corner, where the honest
+candidates and not one more near-miss? Why is my fan spending most of its frames re-walking paths it
+already walked? Which prunes in a fan are physics and which are assumptions I put there myself?
+**Status:** validated offline (sessions 81-84) on the flooded-Hyrule Tetra corner, where the honest
 recount turned a pass that looked like 0.23 expected hits into 0.02, named where the missing draws
-are - and then priced the biggest of those at zero. Gated in
+are - and then priced the biggest of those at zero. Session 84 turned the same audit on the fan's own
+held-stick alphabet and took the reference pass from 220 s to 48 s for a bit-identical answer. Gated in
 [`tests/test_entry_fan.py`](../../tests/test_entry_fan.py). Companion to
 [clip-entry-search.md](clip-entry-search.md), which is the entry-sweep method itself. The session-81
 reading of the speed prune as an untapped lever is in
 [history/entry-search-s81-momentum-lever.md](../history/entry-search-s81-momentum-lever.md).
-**Source:** `harness/tetrapush/entry_fan.py` (`BandTable`, `stream_search`), `harness/tetrapush/
-entry_search.py` (`configuration_band`, `locus_scan`, `qualify`, `window_gap`, `roll_nspeed`).
+**Source:** `harness/tetrapush/entry_fan.py` (`BandTable`, `stream_search`, `stick_alphabet`,
+`dedupe_near`, `lottery`), `harness/tetrapush/entry_search.py` (`configuration_band`, `locus_scan`,
+`qualify`, `window_gap`, `roll_nspeed`).
 
 ---
 
@@ -20,11 +22,14 @@ entry_search.py` (`configuration_band`, `locus_scan`, `qualify`, `window_gap`, `
 
 The figure of merit for a dust-width acceptance is not the candidate count. It is
 
-    E[hits] = (near-miss density in the razor coordinate) x (acceptance band width)
+    E[hits] = sum over near-misses of (that draw's OWN band width) / (2 x near_gap)
 
-with one hard condition: the band must be the band of the configuration the candidate is actually
-evaluated at. Score a candidate against some *other* configuration's band and you are counting a draw
-that could never have converted, however near-zero its residual looks.
+summed per draw, never a count times a representative width - and the band must be the band of the
+configuration that draw was actually evaluated at, at its own lean. Score a candidate against some
+*other* band and you are counting a draw that could never have converted, however near-zero its
+residual looks; price the whole population at one configuration's lean-0 band and you overstate the
+answer (by 27% on the reference pass here). The band is already measured for every near-miss in order
+to rank it, so this costs nothing.
 
 On the Tetra corner the acceptance band turned out to be a function of the roll's **body lean** as well
 as its facing and thrust step. Measured at one (facing, thrust), sweeping the lean:
@@ -70,6 +75,23 @@ Two tells, both of which were visible before the diagnosis:
 The fix is cheap and worth doing to every axis before it is priced: collapse the alphabet onto the
 quantum the code actually reads, and let the search evaluate one configuration per quantum.
 
+**And do it to the alphabet you SPEND, not only the one you score.** The same audit turned on the
+fan's own held stick found a bigger number than any scoring axis: the byte grid it enumerates is
+5.75x redundant, because a held stick reaches the walk only through its decode. That one is a cost
+rather than a count, so it lives in
+[clip-search-budget.md](clip-search-budget.md#the-alphabet-you-spend-is-redundant-too).
+
+## Dedupe the near-misses on the DRAW, not on the candidate
+
+Identity is not only for auditing a suspicious multiplier - it changes the count. Once the near-miss
+rows carry their walk endpoint, lean and configuration, the reference pass reads **15 rows, 12
+distinct draws**: one draw was reached by three different prefixes and another by two. Two
+configurations off one endpoint ARE two draws - you choose which aim to press - but one draw found
+twice is one lottery ticket, and summing it twice inflates both the count and E[hits].
+
+Deduping at the end, on the draw, is also what frees a pass from its memory ceiling - see the budget
+page.
+
 ## More candidates is not more draws if they are somewhere else
 
 Extending the same fan's hold length until it stopped yielding new endpoints took it from 43596 to
@@ -96,10 +118,26 @@ moves the endpoint ~4e-3 u per direction cell against a band 1.95e-4 u wide, so 
 never resolve into the band. What varies the sub-cell offset is the **prefix** - so the yield should
 scale with the number of distinct prefixes, not with candidates.
 
-Measured, it does: 32 prefix families -> 3 near-misses, 192 -> **13**, with the best gap improving
-8.14e-4 -> 2.79e-4, while the one-segment pass's 27x candidate range moved neither. That is the
-difference between an axis and a bigger pass, and it is the same question as the prune audit below,
-asked about the plan's shape instead of its bounds.
+Measured, it does: the reference pass gets **12 draws from 94 prefix families**, with the best gap
+improving 8.14e-4 -> 2.79e-4, while the one-segment pass's 27x candidate range moved neither. That is
+the difference between an axis and a bigger pass, and it is the same question as the prune audit
+below, asked about the plan's shape instead of its bounds.
+
+Two things to get right once the price is quoted per family:
+
+- **Count the families the pass REALIZED, not the ones it asked for.** That pass was first reported
+  as 192 families because 64 sticks x 3 junctions is 192 - but the alphabet collapses to 57 draws and
+  45% of the junctions never form one (off the walk cap, or already past the regime bar). Quoting the
+  asked number halves the apparent yield per family and doubles the apparent cost of the axis.
+- **Read the MARGINAL rate, not the cumulative one - but only where the sweep order is
+  representative.** The early families stay in the average forever, so a saturating pass keeps a
+  healthy-looking near-per-family long after it has stopped paying. The trap is the other way round
+  for a *spatially ordered* sweep: a byte grid enumerated x-major crosses the productive direction
+  band once, so its marginal rate reads zero at the start, spikes in the middle and returns to zero
+  at the end - and the tail reading, which is the one a pass prints when it finishes, is the least
+  informative of the three. Against that order the honest saturation test is not a tail slope at
+  all: it is **two passes whose alphabets both cover the whole circle**, compared on draws per
+  family. Only reach for the marginal rate when families are drawn in an order that mixes.
 
 ## The prunes are where the missing draws are hiding
 
@@ -172,4 +210,5 @@ Before concluding a razor search is too small:
    **price** the axis it hides before spending a session on it, with a control in the same sweep;
 5. rank the signed distance to the band, never |residual|
    ([clip-entry-search.md](clip-entry-search.md));
-6. and only then buy more candidates.
+6. and only then buy more candidates - as PREFIXES, priced in draws per family against a pass whose
+   alphabet covers the same ground, not as a tail slope on a sweep that runs in spatial order.

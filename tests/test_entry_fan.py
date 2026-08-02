@@ -321,3 +321,231 @@ def test_the_streaming_search_reproduces_a_materialised_one():
     assert a['n_dead_lean'] == b['n_dead_lean']
     assert a['n_near'] == b['n_near'] and a['near'] == b['near']
     assert [h['entry'] for h in a['hits']] == [h['entry'] for h in b['hits']]
+
+
+# ---------------------------------------------- the pass is priced in families (session 84)
+
+def test_the_family_price_is_counted_and_does_not_change_the_answer():
+    """A two-segment pass pays in PREFIX FAMILIES, so `stream_search` counts them -- and counting
+    them must be pure bookkeeping.
+
+    `family_of_plan` is the unit: the same run scored with and without it has to return the same
+    candidates, the same near-misses and the same hits, and the counted families have to be exactly
+    the ``(n0, sx1, sy1, j1)`` prefixes the fan was asked for -- not the candidates, which is the
+    number that made every wide one-segment pass look like it was still buying draws."""
+    kw = dict(base_frames=(0,), s1_stride=64, j1=(2, 4), s2_stride=32, j2max=3)
+    bands = EF.BandTable(SEED, path=None)
+    quals = EF.qualified(SEED, path=None)
+    plain = EF.stream_search(EF.iter_fan2(**kw), quals=quals, bands=bands, batch=997)
+    priced = EF.stream_search(EF.iter_fan2(**kw), quals=quals, bands=bands, batch=997,
+                              family_of=EF.family_of_plan)
+    assert priced['n_candidates'] == plain['n_candidates'] > 0
+    assert priced['n_near'] == plain['n_near'] and priced['near'] == plain['near']
+    assert [h['entry'] for h in priced['hits']] == [h['entry'] for h in plain['hits']]
+
+    wanted = {(0, sx, sy, j) for (sx, sy) in EF.stick_grid(64) for j in (2, 4)}
+    seen = {EF.family_of_plan(p) for _k, p in EF.iter_fan2(**kw)}
+    assert seen <= wanted and seen                      # dead junctions are dropped, none invented
+    assert priced['n_families'] == len(seen)
+    assert priced['near_per_family'] == priced['n_near'] / priced['n_families']
+    assert plain['n_families'] == 0 and plain['near_per_family'] is None
+
+
+def test_the_marginal_rate_is_the_saturation_reading_not_the_cumulative_one():
+    """The stop signal has to be able to FALL while the cumulative rate is still rising.
+
+    That is the whole point of watching the margin: a pass whose families stop paying keeps a
+    healthy-looking cumulative near/family for a long time, because the early families are in the
+    average forever. Fed a trace that goes dead after the first batch, `_marginal` reads 0 while the
+    cumulative rate is still 5-per-100."""
+    dead = [dict(families=100, near=5), dict(families=200, near=5), dict(families=300, near=5)]
+    assert EF._marginal(dead) == 0.0
+    assert dead[-1]['near'] / dead[-1]['families'] > 0.0
+    live = [dict(families=100, near=5), dict(families=200, near=15)]
+    assert EF._marginal(live) == 0.1
+    assert EF._marginal([dict(families=100, near=5)]) is None
+    assert EF._marginal([dict(families=0, near=0), dict(families=0, near=0)]) is None
+
+
+def test_a_near_miss_population_is_counted_in_draws_not_in_scorings():
+    """`distinct_near` is the s83 lesson encoded: report what the count IS, not how often it was
+    scored.
+
+    One walk endpoint scored against three configurations is three near-misses and ONE draw -- the
+    same confusion, one level up, as the 48 near-misses that were 3 candidates counted sixteen times
+    once the aim alphabet collapsed onto its sine-table cells. Two candidates that merely share a
+    lean, or a walk x, are still two draws."""
+    def n(x, z, lean, facing):
+        return (1e-4, dict(walk=[x, z], m351C=lean, facing=facing))
+
+    one_walk_three_aims = [n(1.0, 2.0, 900, 40816), n(1.0, 2.0, 900, 40820), n(1.0, 2.0, 900, 40834)]
+    assert len(one_walk_three_aims) == 3 and EF.distinct_near(one_walk_three_aims) == 1
+    assert EF.distinct_near(one_walk_three_aims + [n(1.0, 2.0, 901, 40820)]) == 2   # lean differs
+    assert EF.distinct_near(one_walk_three_aims + [n(1.0, 3.0, 900, 40820)]) == 2   # endpoint does
+    assert EF.distinct_near([]) == 0
+
+
+def test_the_near_misses_are_reported_with_their_identity():
+    """The gaps and their identities are the same population in the same order -- so a suspicious
+    multiplier can be audited from the pass's own output instead of a re-run."""
+    kw = dict(base_frames=(0,), s1_stride=64, j1=(2, 4), s2_stride=32, j2max=3)
+    r = EF.stream_search(EF.iter_fan2(**kw), quals=EF.qualified(SEED, path=None),
+                         bands=EF.BandTable(SEED, path=None), family_of=EF.family_of_plan)
+    assert [d['gap'] for d in r['near_detail']] == r['near']
+    assert r['n_near_candidates'] <= r['n_near']
+    for d in r['near_detail']:
+        assert EF.family_of_plan(d['plan'])[0] == 0 and len(d['plan']) == 7
+
+
+def test_the_lottery_is_priced_at_each_draws_own_band_not_the_lean_zero_one():
+    """`lottery` sums each near-miss's OWN band; the pre-s84 estimate multiplied the count by a
+    mean width measured at lean 0.
+
+    They agree only when every draw happens to sit at that width. Give the population a real spread
+    -- which is what a fan carrying ~2000 distinct entry leans has -- and the two disagree, so the
+    old one was pricing draws at a band none of them stands in."""
+    gap = 5e-3
+    wide, narrow = 1e-4, 1e-6
+    pop = [(1e-4, dict(width=wide)), (2e-4, dict(width=narrow)), (3e-4, dict(width=narrow))]
+    assert EF.lottery(pop, gap) == (wide + 2 * narrow) / (2 * gap)
+    assert EF.lottery([], gap) == 0.0
+
+    lean0 = EF._expected_hits([g for g, _ in pop], [wide], gap)
+    assert lean0 == 3 * wide / (2 * gap)                     # count x the lean-0 width
+    assert lean0 > EF.lottery(pop, gap) * 2                  # and here it overprices 2.9x
+    same = [(1e-4, dict(width=wide)), (2e-4, dict(width=wide))]
+    assert EF.lottery(same, gap) == EF._expected_hits([g for g, _ in same], [wide], gap)
+
+
+# ------------------------------------- the alphabet is the decoded stick, not the bytes (s84)
+
+def test_byte_pairs_that_decode_alike_walk_alike_bit_for_bit():
+    """The licence for `stick_alphabet`. A held stick reaches the walk only through
+    `main_stick_decode`, so two byte pairs with the same ``(angle, msd)`` must bake an identical
+    walk -- endpoint, lean, speedF and facing, to the bit, for as long as it is held.
+
+    Checked on the widest classes the octagon and the dead zone produce, which is where a byte-grid
+    fan spends most of its frames."""
+    base, _run = EF.base_core(3, seed=SEED, hold=HOLD)
+    classes = {}
+    for p in EF.stick_grid(1):
+        classes.setdefault(EF._decoded(*p), []).append(p)
+    big = sorted((v for v in classes.values() if len(v) > 1), key=len, reverse=True)[:6]
+    assert len(big[0]) > 100                          # the dead zone really is one draw, not 1944
+    for members in big:
+        out = {_walk(base, [members[0]] * 8), _walk(base, [members[-1]] * 8)}
+        assert len(out) == 1
+
+
+def test_the_decoded_alphabet_keeps_every_draw_and_survives_delivery():
+    """Collapsing the grid must lose no physics and no delivery: one member per decoded class, the
+    classes themselves unchanged, and the representative clear of the 0/255 bytes `dtm_make`
+    rewrites to 1/254 (`[[octagon-clamp-decode-bug]]`) wherever the class offers an interior one."""
+    for stride in (32, 8, 1):
+        grid, alpha = EF.stick_grid(stride), EF.stick_alphabet(stride)
+        assert {EF._decoded(*p) for p in alpha} == {EF._decoded(*p) for p in grid}
+        assert len(alpha) == len({EF._decoded(*p) for p in alpha}) < len(grid)
+    full = EF.stick_alphabet(1)
+    assert len(full) == 11405 and len(EF.stick_grid(1)) / len(full) > 5.0
+    interior = {EF._decoded(*p) for p in EF.stick_grid(1) if 0 < p[0] < 255 and 0 < p[1] < 255}
+    for p in full:
+        if EF._decoded(*p) in interior:
+            assert 0 < p[0] < 255 and 0 < p[1] < 255
+
+
+def test_the_two_segment_fan_on_the_decoded_alphabet_is_the_byte_grid_fan():
+    """The 5.75x is pure waste, so it must not move the answer.
+
+    What the search consumes is the CANDIDATE SET -- the ``(endpoint, lean)`` keys -- and that has to
+    be identical, reached with strictly fewer frames. The plan a key carries may differ: two
+    genuinely different sticks can land on one endpoint, and which is the last writer depends on the
+    order the alphabet is enumerated in. Every plan must still be a member of the alphabet."""
+    kw = dict(base_frames=(0,), s1_stride=64, j1=(2,), j2max=2)
+    deduped = list(EF.iter_fan2(s2_stride=32, **kw))
+    byte_grid = _iter_fan2_bytes(s2_stride=32, **kw)
+    assert dict(deduped).keys() == dict(byte_grid).keys() and len(dict(deduped)) > 100
+    assert len(deduped) < len(byte_grid)                          # and cost strictly less
+    alpha = set(EF.stick_alphabet(32))
+    for _k, plan in deduped:
+        assert tuple(plan[1:3]) in EF.stick_alphabet(64) and tuple(plan[4:6]) in alpha
+
+
+def _iter_fan2_bytes(**kw):
+    """`iter_fan2` on the raw byte grid -- the pre-s84 alphabet, for the equality gate above."""
+    real = EF.stick_alphabet
+    EF.stick_alphabet = EF.stick_grid
+    try:
+        return list(EF.iter_fan2(**kw))
+    finally:
+        EF.stick_alphabet = real
+
+
+def test_scoping_the_key_set_per_family_reports_the_same_pass():
+    """`dedup_scope='family'` is a memory budget, not a different search: it re-evaluates the few
+    endpoints two prefixes share, and because the near-misses carry identity and are deduped on the
+    draw, the reported population is identical to a globally deduped pass."""
+    kw = dict(base_frames=(0,), s1_stride=64, j1=(2, 4), s2_stride=16, j2max=4)
+    bands = EF.BandTable(SEED, path=None)
+    quals = EF.qualified(SEED, path=None)
+    g = EF.stream_search(EF.iter_fan2(**kw), quals=quals, bands=bands, family_of=EF.family_of_plan)
+    f = EF.stream_search(EF.iter_fan2(**kw), quals=quals, bands=bands, family_of=EF.family_of_plan,
+                         dedup_scope='family')
+    assert f['n_families'] == g['n_families'] > 1
+    assert f['n_near'] == g['n_near'] and f['near'] == g['near']
+    assert f['expected_hits'] == g['expected_hits']
+    assert [h['entry'] for h in f['hits']] == [h['entry'] for h in g['hits']]
+    assert f['n_candidates'] >= g['n_candidates']     # the shared endpoints, counted once per family
+
+
+def test_confirm_hits_puts_the_confirmed_frame_minimal_plan_first(monkeypatch):
+    """The A-press replay is what turns a swept hit into a result, so its report must rank by that
+    first and by the objective second.
+
+    Frame-minimality is the objective (`[[tetrapush-frame-minimal]]`), but a shorter plan that does
+    not actually roll is not a shorter plan -- an unconfirmed hit never outranks a confirmed one."""
+    def plan(n0, *seg):
+        return dict(plan=[n0] + list(seg))
+    hits = [plan(0, 1, 1, 9), plan(5, 1, 1, 2), plan(0, 1, 1, 3), plan(0, 1, 1, 4)]
+    ok = {9: False, 2: False, 3: True, 4: True}      # keyed by the plan's hold length
+    monkeypatch.setattr(ES, 'confirm_entry',
+                        lambda h, **kw: dict(all_ok=ok[h['plan'][3]], ok={}, measured={}))
+    rows = EF.confirm_hits(hits)
+    assert [r['hit']['plan'] for r in rows] == [[0, 1, 1, 3], [0, 1, 1, 4],
+                                                [5, 1, 1, 2], [0, 1, 1, 9]]
+    assert [r['confirm']['all_ok'] for r in rows] == [True, True, False, False]
+    assert EF.confirm_hits([]) == []
+
+
+def test_a_finer_alphabet_contains_the_coarser_one():
+    """A wider pass must CONTAIN the narrower pass it is meant to beat -- the standing steer
+    (`[[search-space-contains-human]]`), applied to the collapsed alphabet.
+
+    Byte-grid containment is trivial (stride 4 divides 32); what has to hold after collapsing is
+    containment of the DRAWS, because the representative for a class can shift when a finer stride
+    offers an earlier or more interior member of it. The drawn physics is what must be a superset,
+    not the bytes."""
+    for coarse, fine in ((32, 8), (8, 4), (4, 1)):
+        c = {EF._decoded(*p) for p in EF.stick_alphabet(coarse)}
+        f = {EF._decoded(*p) for p in EF.stick_alphabet(fine)}
+        assert c < f, (coarse, fine, len(c), len(f))
+
+
+def test_genuine_hits_are_counted_in_draws_like_near_misses_are():
+    """A hit is a draw too, and the wide pass proved it matters: 118 genuine SCORINGS were 23 draws,
+    one entry reached by 95 different prefixes.
+
+    `hit_draws` keeps one representative per draw, frame-minimal first (frames are the objective,
+    `[[tetrapush-frame-minimal]]`), and keeps the rest available -- they are alternative deliveries
+    of an entry, and `confirm_entry` rejects some of them."""
+    def hit(walk, lean, facing, plan, resid=1e-5):
+        return dict(walk=list(walk), m351C=lean, facing=facing, thrust=15,
+                    nspeed=ES.ROLL_NSPEED, plan=list(plan), resid=resid)
+    one_entry_three_prefixes = [hit((1.0, 2.0), 900, 40820, [0, 9, 9, 6]),
+                                hit((1.0, 2.0), 900, 40820, [0, 9, 9, 2, 3, 3, 1]),
+                                hit((1.0, 2.0), 900, 40820, [5, 9, 9, 4])]
+    got = EF.hit_draws(one_entry_three_prefixes)
+    assert len(got) == 1 and got[0]['plan'] == [0, 9, 9, 2, 3, 3, 1]      # 3 frames, the fewest
+    other = hit((1.0, 3.0), 900, 40820, [0, 9, 9, 1])
+    two = EF.hit_draws(one_entry_three_prefixes + [other])
+    assert len(two) == 2 and two[0]['plan'] == [0, 9, 9, 1]               # frame-minimal first
+    assert EF.hit_draws([]) == []
