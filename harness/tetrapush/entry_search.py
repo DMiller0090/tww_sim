@@ -95,8 +95,21 @@ are productive and both sit at the cap, the rest are barren along their whole lo
 every facing in the circle, and an uncapped pass returns the same near-misses as a capped one gap for
 gap. The reason is geometric -- a shorter roll never reaches the wall brace that pins `old`, or
 reaches it with Tetra already out of Co range on the cut frame (zero push, no leverage from any entry).
-The lever that IS still priced nonzero is the camera: 32 BAM of productive facings against four
-reachable aims.
+
+WHAT SESSION 83 CHANGED: the aim alphabet's resolution is the CONSOLE SINE TABLE CELL, 16 BAM, and
+that closes the camera axis too. `cM_ssin_s16` is ``jmaSinTable[(u16)angle >> 4]`` with no
+interpolation, so every facing in one cell bakes a bit-identical schedule at a bit-identical entry
+(`aim_cell`). The "32 BAM productive window against four reachable aims = 8x" read BAM where the
+physics reads cells: the window is TWO cells (2551, 2552), the frozen csangle's four aims already
+reach BOTH, and a csangle slew can add exactly ZERO configurations. Measured end to end before the
+diagnosis: scoring the whole window instead of the frozen aims turned 6 near-misses into 48 at
+exactly 8.00x -- and all 48 were three candidates counted sixteen times, at bit-identical residuals.
+The camera's only remaining reach is the WALK's direction cells (88.2% covered frozen, 94.2% over all
+16 offsets), i.e. ~1.07x candidates, which is the candidate axis and not a configuration one.
+
+So every configuration axis is now closed by measurement -- aim (2 cells), thrust (15, plus ULP
+tickets at 14), momentum (the cap), camera (nothing) -- and the only axis left is CANDIDATES: the
+two-segment fan, `entry_fan.iter_fan2`.
 
     python -m harness.tetrapush.entry_search verdict   # the fork measurement (A is dead)
     python -m harness.tetrapush.entry_search window    # the acceptance window off the 288 coords
@@ -148,6 +161,11 @@ CSANGLE = 34325
 WALK_CAP = 17.0
 #: Facings worth aiming at: the seam gap's angular window, widened enough to hold the whole alphabet.
 AIM_WINDOW = (40400, 41300)
+#: BAM per console sine-table cell -- the aim alphabet's real resolution, not 1 BAM. See `aim_cell`.
+SIN_CELL_BAM = 16
+#: The cells the productive facing window resolves to (40816..40831, 40832..40847), MEASURED off
+#: session 81's 1-BAM sweep of 40400..41300. A thing to check a camera claim against, not a test.
+PRODUCTIVE_CELLS = (2551, 2552)
 #: Thrust steps that still dispatch a CUT out of this roll schedule -- each bakes its own locus.
 THRUSTS = (13, 14, 15)
 #: Tetra leaves stt 3 and walks past this, so a walk frame beyond it has not got her pinned any more.
@@ -407,6 +425,35 @@ def aim_alphabet(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=0.
     return sorted(out)
 
 
+def aim_cell(facing):
+    """The console sine-table cell a roll facing resolves to -- **the aim alphabet's real atom**.
+
+    `cM_ssin_s16`/`cM_scos_s16` are JMASSin/JMASCos: ``jmaTable[(u16)angle >> 4]``, 4096 entries with
+    no interpolation. Every term the facing reaches in a roll goes through them -- the per-frame
+    travel `dx`/`dz`, the cut lunge's rotation, the Co pose chain, and `roll_entry`'s own 26 u step --
+    so two facings in one cell bake a BIT-IDENTICAL schedule at a BIT-IDENTICAL entry and are ONE
+    draw. Gated `test_the_aim_alphabet_resolves_to_the_sine_table_cell`.
+
+    What is NOT cell-quantized: the entry FRAME's own MOVE, which compares raw s16 angles, so two
+    aims in a cell can differ in whether the walk brakes before the roll dispatches (`roll_entry`).
+    That changes the momentum, not the locus -- and `confirm_entry` is what reads it back."""
+    return (int(facing) & 0xFFFF) >> 4
+
+
+def aim_cells(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=0.0):
+    """`aim_alphabet` collapsed onto its real atoms: ``[(facing, bytes, [sibling bytes...])]``, one
+    entry per sine-table cell.
+
+    The 81 aims in `AIM_WINDOW` are 49 draws, and the 4 inside the productive window are 2.
+    Qualifying or scoring per AIM instead of per cell multiplies the evaluations, and -- worse --
+    reports each near-miss once per aim, which is how a lever that adds no cell prices at 8x
+    (session 83; the camera)."""
+    by = {}
+    for f, byts in aim_alphabet(csangle, lo, hi, msd_min):
+        by.setdefault(aim_cell(f), []).append((f, byts))
+    return [(v[0][0], v[0][1], [list(b) for _, b in v]) for _, v in sorted(by.items())]
+
+
 def zero_the_resid(tetra, facing, thrust, lean, start, iters=40, tol=1e-6, nspeed=None):
     """Newton the entry along the residual gradient to `resid ~ 0`. Returns (entry, resid, grad).
 
@@ -494,13 +541,18 @@ def qualify(tetra, ref_entry, facings=None, thrusts=THRUSTS, lean=0, csangle=CSA
 
     Qualification is measured at ONE (lean, nspeed) and is only a filter for that slice: the
     productive facing window MOVES with the momentum (session 82), so an uncapped pass must qualify
-    per nspeed or not qualify at all."""
-    aims = aim_alphabet(csangle) if facings is None else [(f, None) for f in facings]
+    per nspeed or not qualify at all.
+
+    The alphabet path qualifies one configuration per sine-table CELL (`aim_cells`) and carries the
+    sibling aim bytes that reach it, because a cell is the draw. An EXPLICIT ``facings`` list is
+    taken verbatim -- that is how the window was measured at 1 BAM in the first place."""
+    aims = aim_cells(csangle) if facings is None else [(f, None, []) for f in facings]
     out = []
-    for i, (fac, byts) in enumerate(aims):
+    for i, (fac, byts, sib) in enumerate(aims):
         for thrust in thrusts:
             b = configuration_band(tetra, fac, thrust, lean, ref_entry, nspeed=nspeed)
             b.update(facing=fac, thrust=thrust, aim=list(byts) if byts else None, lean=lean,
+                     cell=aim_cell(fac), aims=sib,
                      nspeed=(ROLL_NSPEED if nspeed is None else nspeed))
             out.append(b)
         if progress and (i + 1) % 20 == 0:
@@ -900,8 +952,8 @@ def _cmd_search(argv):
     fan = walk_fan(base_frames=tuple(range(7)), stride=stride, jmax=jmax, progress=True)
     print("FAN: %d distinct (endpoint, lean)" % len(fan))
     r = search(candidates=fan, progress=True)
-    print("\n%d candidates x %d aims x %d thrusts over %d lean groups, %.0f s"
-          % (r['n_candidates'], r['n_aims'], r['n_thrusts'], r['n_leans'], r['seconds']))
+    print("\n%d candidates x %d configurations (cell x thrust) over %d lean groups, %.0f s"
+          % (r['n_candidates'], r['n_configurations'], r['n_leans'], r['seconds']))
     print("  near-zero (gap < 5e-3): %d      GENUINE: %d" % (r['n_near'], len(r['hits'])))
     for h in r['hits'][:20]:
         print("  n0=%d hold (%3d,%3d) x%d  aim %s facing %5d thrust %2d  entry (%r,%r) resid %+.3e"

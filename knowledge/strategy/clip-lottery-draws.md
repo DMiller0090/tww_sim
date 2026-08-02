@@ -44,6 +44,32 @@ Cost is not the excuse it used to be: with the compiled context evaluated analyt
 simulated, one band costs ~14 ms, so a whole fan's worth of leans is a one-off minute and cached
 afterwards.
 
+## Count draws in the unit the PHYSICS quantizes to, not the one you swept in
+
+A configuration axis is only as fine as the arithmetic downstream of it. Console maths is full of
+table lookups with the low bits thrown away - `cM_ssin_s16` is `jmaSinTable[(u16)angle >> 4]`, 4096
+entries, no interpolation ([model/fp-faithfulness.md](../model/fp-faithfulness.md)) - so an angular
+axis swept at 1 BAM is really being swept at **16**, and fifteen out of every sixteen "configurations"
+are bit-identical copies of their neighbour.
+
+That is not a rounding detail; it silently multiplies a lever. On the Tetra corner the productive
+facing window measured 32 BAM wide with only four aims reachable at the frozen camera, which read as
+"the C-stick is worth 8x more usable configurations". Priced end to end, it returned exactly 8.00x -
+6 near-misses became 48 - and every one of the 48 was **three candidates counted sixteen times, at
+bit-identical residuals**. The window is two table cells, the frozen camera already reached both, and
+the axis is worth nothing ([history/entry-search-s81-camera-lever.md](../history/entry-search-s81-camera-lever.md)).
+
+Two tells, both of which were visible before the diagnosis:
+
+- **a suspiciously integral multiplier.** Real yield ratios are ragged; exactly 8.00x, or exactly the
+  ratio of the two configuration counts, means you are counting copies.
+- **repeated measurements.** Near-miss residuals that agree to four significant figures are one draw
+  reported many times. Print the IDENTITY of what you counted - which candidate, which configuration -
+  before believing the count.
+
+The fix is cheap and worth doing to every axis before it is priced: collapse the alphabet onto the
+quantum the code actually reads, and let the search evaluate one configuration per quantum.
+
 ## More candidates is not more draws if they are somewhere else
 
 Extending the same fan's hold length until it stopped yielding new endpoints took it from 43596 to
@@ -51,6 +77,29 @@ Extending the same fan's hold length until it stopped yielding new endpoints too
 are longer walks, and a longer walk goes *past* the locus. Density near the target is the only thing
 that counts, so measure the yield where the target is; a saturation curve on the raw candidate count
 will happily tell you the fan is still paying when it is not.
+
+Plot the residual DISTRIBUTION once and this stops being a surprise. At the live configuration 91% of
+that fan (39705 of 43596) piles up in one clump at |resid| 0.1..0.5 and seventeen candidates reach
+below 5e-3, of which three carry a live lean - and those three ARE the pass's near-misses. The cloud
+runs roughly *parallel* to the locus rather than crossing it, which is why every one-segment pass from
+14529 to 391446 candidates, a 27x range, returns **the same three, gap for gap.**
+
+## When the fine knob is saturated, widen the PREFIX
+
+Ask which part of a plan the near-locus candidates actually vary, because a fan usually has a coarse
+knob and a fine one and only one of them is still paying.
+
+Here the three closest candidates all come from the same shape: a base prefix plus **one** delivered
+frame, differing only in that frame's stick byte - and that byte grid is already enumerated
+exhaustively. The fine knob is finished. Worse, it is quantized: one frame of stick at the walk cap
+moves the endpoint ~4e-3 u per direction cell against a band 1.95e-4 u wide, so the last frame can
+never resolve into the band. What varies the sub-cell offset is the **prefix** - so the yield should
+scale with the number of distinct prefixes, not with candidates.
+
+Measured, it does: 32 prefix families -> 3 near-misses, 192 -> **13**, with the best gap improving
+8.14e-4 -> 2.79e-4, while the one-segment pass's 27x candidate range moved neither. That is the
+difference between an axis and a bigger pass, and it is the same question as the prune audit below,
+asked about the plan's shape instead of its bounds.
 
 ## The prunes are where the missing draws are hiding
 

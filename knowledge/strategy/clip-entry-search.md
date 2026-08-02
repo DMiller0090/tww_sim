@@ -5,16 +5,18 @@ do when that actor is already placed and I cannot move her - can I solve for Lin
 instead? Which quantity is the razor, and what precision does hitting it need? Why does the
 perpendicular half of a placement miss decide a clip that a nearest-sample distance says is 0.4 u
 away?
-**Status:** validated offline (sessions 79-81) on the flooded-Hyrule Tetra corner: the acceptance
+**Status:** validated offline (sessions 79-83) on the flooded-Hyrule Tetra corner: the acceptance
 window is measured off a live-anchored 288-sample list, the entry locus re-derives that list's own
 endpoint, and the roll the sweep scores is gated bit-identical to a real A-press roll out of a walk.
 Gated in [`tests/test_entry_search.py`](../../tests/test_entry_search.py) +
 [`tests/test_entry_fan.py`](../../tests/test_entry_fan.py). No hit has been DELIVERED yet (no DTM
-confirm). **How to size such a search honestly - what one draw is, and which of a fan's prunes are
-assumptions rather than physics - is [clip-lottery-draws.md](clip-lottery-draws.md); read it before
-buying more candidates.** Premises this page carried in sessions 79-80 were overturned by measurement
-and now live in [history/entry-search-s79-superseded.md](../history/entry-search-s79-superseded.md)
-and [history/entry-search-s80-superseded.md](../history/entry-search-s80-superseded.md).
+confirm). **How to size such a search honestly is
+[clip-lottery-draws.md](clip-lottery-draws.md); read it before buying more candidates.** What one
+costs is [clip-search-budget.md](clip-search-budget.md). Premises this page carried in sessions 79-81
+were overturned by measurement
+and now live in [history/entry-search-s79-superseded.md](../history/entry-search-s79-superseded.md),
+[history/entry-search-s80-superseded.md](../history/entry-search-s80-superseded.md) and
+[history/entry-search-s81-camera-lever.md](../history/entry-search-s81-camera-lever.md).
 **Source:** `harness/tetrapush/entry_search.py`, `harness/tetrapush/entry_fan.py`,
 `harness/tetrapush/roll_fidelity.py`, `harness/rollstab/turnaround.py`,
 `harness/rollstab/geometry_tetra.genuine_clip`, `tww_sim/core/_shovec.ShoveCtx`. Constants:
@@ -101,15 +103,12 @@ there**: `P(a near-zero candidate is genuine) ~ window / local spacing`. Measure
 facing, over the candidates that actually reach near zero** - not over "the N closest by |resid|",
 which are clustered and give an answer that is too good.
 
-Everything about *counting* those draws honestly - why a near-miss at the wrong configuration is not a
-draw at all, why 1.6x the candidates can buy zero extra near-misses, and which of a fan's prunes are
-hiding whole locus families - is [clip-lottery-draws.md](clip-lottery-draws.md). Get that right first:
+Counting those draws honestly is [clip-lottery-draws.md](clip-lottery-draws.md) - get it right first;
 on this corner it moved the same pass's expected yield by 12x, downward.
 
-Do not assume the loci are all equally productive. Scanning 281 facings instead of 81 bought only 1.1x
-the near-zero yield for 3.5x the work, because only the aims whose locus threads the candidate cloud
-produce anything. Scan wide once, cheaply, to find the productive band; then spend the budget on
-candidates.
+Do not assume the loci are all equally productive: only the aims whose locus threads the candidate
+cloud produce anything, so scan wide once, cheaply, to find the productive band, then spend the budget
+on candidates.
 
 And **rank the signed distance to the window, not |resid|**. The window is asymmetric because its sign
 is which side of the gap the ray passes on, so |resid| scores a blocked-side near-miss as highly as a
@@ -130,58 +129,48 @@ by measurement, not convention: feeding the pre-entry values mismatches the pose
 while the post-entry values reproduce a real A-press roll bit-for-bit.
 
 That step is the roll's own momentum, `clamp(1.5 * speedF + 0.5, 5, 26)` off the **walk endpoint's**
-speed - 26 only because the cap saturates the clamp, and measured bit-for-bit against a real A-press
-out of a decelerating walk at five sub-cap momenta. A sub-cap roll bakes the same schedule with
-`dx`/`dz` scaled and nothing else. Whether those extra loci are worth searching is a separate question
-with its own answer ([clip-lottery-draws.md](clip-lottery-draws.md)); here it was no.
+speed - 26 only because the cap saturates the clamp, measured bit-for-bit against a real A-press out
+of a decelerating walk at five sub-cap momenta. A sub-cap roll bakes the same schedule with `dx`/`dz`
+scaled and nothing else; whether those extra loci are worth searching is a separate question with its
+own answer ([clip-lottery-draws.md](clip-lottery-draws.md)) - here it was no. And the step is taken
+**along the aim**, which is what makes an aim its own candidate as well as its own locus.
 
-The consequence is larger than the correction. That step is taken **along the aim**, so an aim is not
-just its own locus - it is its own candidate. Sweeping aims moves the entry and the target together.
-
-## Three multipliers on the lottery, and where the budget actually goes
+## The multipliers, and the UNIT they have to be counted in
 
 The figure of merit is candidates x **independent loci**. A locus is independent whenever the baked cut
-schedule changes, so:
+schedule changes - and the schedule changes in the units the console's maths quantizes to, which are
+coarser than the ones you are sweeping in.
 
-- **the aim.** The roll needs no stick magnitude - it takes its whole speed from the walk cap and
-  `_roll_init` snaps facing to the latched target whatever the deflection - so the alphabet is the full
-  decoded-angle grid, not the saturated octagon boundary. On the Tetra corner that is **81** facings in
-  the seam window rather than 6. Fire each one and read the facing back before believing it.
+- **the aim, whose atom is the console sine-table CELL - 16 BAM, not 1.** `cM_ssin_s16` is JMASSin,
+  `jmaSinTable[(u16)angle >> 4]`, 4096 entries with no interpolation
+  ([model/fp-faithfulness.md](../model/fp-faithfulness.md)), and *every* term a roll facing reaches
+  goes through it: the per-frame travel, the cut lunge's rotation, the Co pose chain, and the entry
+  step. Two facings in one cell bake a bit-identical schedule at a bit-identical entry and are ONE
+  draw. So sweep the alphabet - the roll needs no stick magnitude, it takes its whole speed from the
+  walk cap and `_roll_init` snaps facing to the latched target whatever the deflection, so the
+  alphabet is the full decoded-angle grid rather than the saturated octagon boundary - and then
+  **collapse it onto cells before counting**. On the Tetra corner 81 realizable aims are 49 cells.
+  Fire each one and read the facing back before believing it.
 - **the thrust step.** The B edge can dispatch the cut at more than one roll frame (13/14/15 here).
   Each lands the cut on a different step and reads a completely different residual at the same entry,
   so each is its own draw.
-- **the camera**, which shifts the whole alphabet by moving `csangle`. On this corner that is the
-  biggest of the three and it is measurable: sweeping facing directly at 1 BAM shows the productive
-  window is **32 consecutive facings** wide (and there is exactly one such window in the whole seam
-  range), while the frozen camera's alphabet lands only **four** aims inside it. The gap between those
-  two numbers is what the C-stick is worth - and it costs no frames, because the C-stick is a free
-  channel during the walk-in and `csangle` is position-independent there, so one measured stream serves
-  every candidate in a fan.
+- **the camera is NOT one**, though it was counted as the biggest of the three for two sessions
+  ([history/entry-search-s81-camera-lever.md](../history/entry-search-s81-camera-lever.md)). Moving
+  `csangle` shifts the whole alphabet, which looks like a way to reach the aims a frozen camera misses
+  at zero frame cost (the C-stick is a free channel during the walk-in and `csangle` is
+  position-independent there, so one measured stream serves a whole fan). But it can only reach a new
+  **cell**, and here the frozen camera's four aims already covered both cells the productive window
+  contains - which is why that window is 32 BAM wide and worth two draws. Priced end to end it read
+  exactly 8.00x, and every extra near-miss was an existing one re-counted.
 
-The budget is **not** the size of the alphabet - it is the cost of compiling one context per
-`(facing, lean, thrust)`. Simulating that roll to read its schedule back is the expensive part (22 ms
-here) and it is unnecessary: the schedule is a pure function of those parameters. Speed is the
-constant roll momentum and travel equals facing on every frame including the cut entry, the animation
-frame control is a fixed accumulation, the lean decays deterministically, the Co chain is a direct
-evaluation on (facing, frame, lean), and the cut lunge is a constant root translate rotated by the
-facing. Evaluating it directly instead of simulating it ran **~110x** faster, 0-ULP identical, and that
-is what made 243 loci affordable - and, applied to the Newton solve inside the band measurement, took
-qualifying those 243 from 269 s to 4 s.
+An aim is still worth firing at full byte resolution, for a different reason: it is not only its own
+locus, it is its own *candidate*, because the entry step is taken along it. And the entry FRAME is not
+cell-quantized - it compares raw s16 angles - so two aims in one cell can differ in whether the walk
+brakes before the roll dispatches. Same locus, different momentum.
 
-Even analytic, a context is not free, and everything expensive in it is the compiled *world* - mesh,
-planes, precomputed wall-correction slices - none of which depends on the roll. Once the configuration
-key grows past what a fan reuses (the lean already; the momentum decisively), swap only the baked
-schedule on a kept context, gated by sweeping it against one BUILT at that configuration. 10x here.
-
-Once the context build is analytic, the fan itself is the cost, and it can move to the native fleet -
-but usually not from the run's own start. A stripped search engine (no wired camera / look / neck
-models) will not reproduce a wired replay of the setup that got you here; on this corner it diverges 19
-frames in, on `facing`, because a lock-on re-aim falls back to the target's feet. Replay the setup in
-the WIRED engine and **graft** the mid-walk state into the native core instead. Grafting is the whole
-job: a core seeded for a run's start resets the mid-walk physics scalars (stick want-angle, chase
-target, stick magnitude, direction, roll frame control, the previous frame's L), and restoring those -
-plus the delay-1 controller buffer - is what makes the transplant bit-exact. Gate it by re-running the
-Python fan's own output key-for-key: here that was 43596 candidates in 17 s against 1444 s, identical.
+What a search of this shape COSTS - why the context build and not the alphabet is the budget, when
+to stop rebuilding a context and swap only its schedule, and what it takes to move the fan onto a
+native fleet - is [clip-search-budget.md](clip-search-budget.md).
 
 ## One parameter that is easy to leave out
 

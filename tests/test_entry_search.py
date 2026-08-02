@@ -398,6 +398,79 @@ def test_the_aim_alphabet_is_the_whole_decoded_grid_not_its_octagon_boundary():
         assert TR.main_stick_decode(*byts)[1] < 1.0 or f in saturated
 
 
+def _sched_bits(facing, lean=0, thrust=15, nspeed=None):
+    """Everything the facing reaches in a baked roll, as a comparable tuple."""
+    s = ES.fast_schedule(facing, lean, thrust, nspeed=nspeed)
+    return (tuple(s['dx']), tuple(s['dz']), tuple(s['cutx']), tuple(s['cutz']), s['nroot'],
+            tuple(tuple(r) for r in s['chx']), tuple(tuple(r) for r in s['chz']))
+
+
+def test_the_aim_alphabet_resolves_to_the_sine_table_cell():
+    """THE AIM'S REAL RESOLUTION IS 16 BAM, NOT 1. `cM_ssin_s16` is JMASSin --
+    ``jmaSinTable[(u16)angle >> 4]``, 4096 entries, no interpolation -- and every term a facing
+    reaches goes through it, so one cell is ONE draw, bit-for-bit: the same travel, the same cut
+    rotation, the same Co pose chain, and the same 26 u entry step."""
+    cell = ES.PRODUCTIVE_CELLS[0]
+    lo = cell * ES.SIN_CELL_BAM
+    base, ent = _sched_bits(lo), ES.roll_entry((0.0, 0.0), lo)
+    for f in range(lo, lo + ES.SIN_CELL_BAM):
+        assert ES.aim_cell(f) == cell
+        assert _sched_bits(f) == base                              # 0-ULP, not a tolerance
+        assert ES.roll_entry((0.0, 0.0), f) == ent
+        assert (ML.cM_ssin_s16(f), ML.cM_scos_s16(f)) == (ML.cM_ssin_s16(lo), ML.cM_scos_s16(lo))
+    nxt = lo + ES.SIN_CELL_BAM
+    assert ES.aim_cell(nxt) == cell + 1
+    assert _sched_bits(nxt) != base and ES.roll_entry((0.0, 0.0), nxt) != ent
+    # and the alphabet collapses onto those atoms, siblings kept for `confirm_entry`
+    aims, cells = ES.aim_alphabet(), ES.aim_cells()
+    assert len(aims) == 81 and len(cells) == 49
+    assert sum(len(sib) for _, _, sib in cells) == len(aims)
+    assert len({ES.aim_cell(f) for f, _, _ in cells}) == len(cells)
+
+
+def test_the_camera_cannot_add_an_aim_cell():
+    """THE CAMERA AXIS, PRICED AT ZERO (session 83). The productive facing window is 32 BAM wide and
+    the frozen csangle reaches four aims inside it -- which read as '8x more usable configurations'
+    only in BAM. In cells the window is TWO, the frozen camera already reaches BOTH, and no csangle
+    offset can add one. Scoring per aim instead of per cell is what inflated it: the four aims are
+    two draws, and their residuals are bit-identical within a cell."""
+    lo, hi = ES.PRODUCTIVE_CELLS[0] * ES.SIN_CELL_BAM, (ES.PRODUCTIVE_CELLS[-1] + 1) * ES.SIN_CELL_BAM - 1
+
+    def in_window(cs):
+        return {ES.aim_cell(f) for f, _ in ES.aim_alphabet(cs) if lo <= f <= hi}
+
+    frozen = in_window(ES.CSANGLE)
+    assert frozen == set(ES.PRODUCTIVE_CELLS)              # already every cell the window contains
+    for d in range(ES.SIN_CELL_BAM):
+        assert in_window(ES.CSANGLE + d) <= frozen         # a slew can only re-index, never add
+    # the same two cells, reached by four aims -- one draw each, bit-identical
+    aims = sorted(f for f, _ in ES.aim_alphabet(ES.CSANGLE) if lo <= f <= hi)
+    assert len(aims) == 4
+    e = _ref_entry()
+    per_cell = {}
+    for f in aims:
+        ctx, sch, resid = ES.build_fast(f, 0, 15)
+        o = ctx.sweep_par([(SEED['tetra'][0], SEED['tetra'][1], *ES.roll_entry(e, f))], 0)[0]
+        per_cell.setdefault(ES.aim_cell(f), []).append(resid(o))
+    assert len(per_cell) == 2
+    for rs in per_cell.values():
+        assert len(rs) == 2 and rs[0] == rs[1]             # the same draw, counted twice
+
+
+def test_the_cameras_only_remaining_reach_is_the_walk_and_it_is_a_few_percent():
+    """Where a csangle slew still does something: the WALK. A held stick's world direction is
+    ``decoded + 0x8000 + csangle``, quantized to the same cell, and the decoded grid is not uniform,
+    so a few cells are unreachable at one camera and reachable at another. It is a candidate axis
+    worth ~7%, not a configuration axis -- and s81 measured 1.6x candidates buying zero draws."""
+    angs = [a for a, _ in TR.reachable_stick_fan(msd_min=0.0)]
+    frozen = {((a + 0x8000 + ES.CSANGLE) & 0xFFFF) >> 4 for a in angs}
+    union = set(frozen)
+    for d in range(ES.SIN_CELL_BAM):
+        union |= {((a + 0x8000 + ES.CSANGLE + d) & 0xFFFF) >> 4 for a in angs}
+    assert len(frozen) < 4096                              # the grid does NOT cover every direction
+    assert 1.0 < len(union) / len(frozen) < 1.2            # and the slew is a few percent, not 8x
+
+
 def test_each_thrust_step_bakes_its_own_locus():
     """13/14/15 all dispatch a CUT, land it on a different step, and read a different residual at one
     entry -- three independent draws of the same lottery, not one."""

@@ -224,6 +224,7 @@ deliberately unported.
 | `roll_fidelity.py` | **THE GATE THAT SAYS THE SWEEP IS SCORING THE RIGHT ROLL** (session 80). `walk_then_roll` performs a REAL from-rest walk + A-press turnaround roll + UP+B in the WALLED coupled engine and bakes the same nine tables `extract_schedule_at` does, so the reseed can be diffed per frame against the thing it stands in for. It decides three questions at once: which frame's position and lean the ctx wants (the END of the entry frame -- the pre-entry reading mismatches `chx/chz`), whether the reseed's cold anim/pose state matters (it does not, all nine bit-identical), and whether the armed crash latch matters (a real roll ARMS `_roll_m3570` and does contact the wall mid-roll, but the bonk cone never lines up before the B edge -- 0 of 246 entry x facing rolls differ). Also the honest way to enumerate aims: fire the roll and read the facing back, never trust a commanded one. Gated `tests/test_entry_search.py`. |
 | `entry_search.{fast_schedule,roll_entry,aim_alphabet,qualify}` | **THE SESSION-80 SEARCH ENGINE.** `fast_schedule` drops the 22 ms simulated ctx build for a 0.19 ms analytic one, 0-ULP identical over facing x lean x thrust -- the ctx build, not the alphabet, was the whole budget. `roll_entry`/`lean_at_roll` convert a walk endpoint into the entry the game hands you (one 26 u roll step along the AIM, one lean decay tick), both bit-exact; s79 fed the walk endpoint straight in. `aim_alphabet` is 81 wide, not 6 -- the msd 1.0 floor was not physical. And `qualify`/`configuration_band` is the one that matters: of 243 (facing, thrust) configurations only **6** admit a genuine locus, **169** have no leverage at all (grad < 1e-3 -- Tetra out of Co range on the cut frame), and each productive one has its OWN acceptance band, narrower than and offset from the fixture window that is their union. |
 | `entry_fan.py` | **THE FAN ON THE NATIVE FLEET, AND THE HONEST DRAW COUNT (session 81).** `graft` transplants the WIRED Python `FreeRun`'s mid-walk state into a `LandCore` -- required because the stripped native config does NOT reproduce the wired replay of the console log (it diverges at log frame 19 on `facing`, the proc-9 re-aim falling back to Tetra's feet), and `LandCore.setup` resets the mid-walk scalars `CARRY` restores. `iter_fan`/`fleet_fan` are `entry_search.walk_fan` on `CourtyardFleet.run_par`: **43596 candidates in 17 s against 1444 s, key AND value bit-identical** to the cached s80 pass (write order is part of the contract -- the reference collapses ~5.5M writes onto 43596 keys, last writer wins). `iter_fan2` adds TWO-SEGMENT holds off the first segment's own junction cores. `BandTable` is the correction that matters: the acceptance band is a function of the **lean** too, so a candidate at a dead lean is not a near-miss -- **83% of the widest pass's draws are dead**, its 72 near-misses are 6, and E[hits] is 0.02 not 0.23. `stream_search` scores a fan stream batch-by-batch against each candidate's OWN band. **Session 82** put the roll's MOMENTUM in that key (`iter_fan(cap=None)` keeps sub-cap endpoints, keyed by their own speedF) and INVERTED the band strategy: with the momentum in the key a band costs 70x the group evaluation it would save, so every draw is evaluated and a band is measured only for the near-zero tail (18 bands over a 43653-candidate pass). CLI `{gate,fan,fan2,search1,search2}`, `search1 <jmax> <nbase> <stride> [uncapped]`. Gated `tests/test_entry_fan.py` (14 + 1 slow). |
+| `entry_search.{aim_cell,aim_cells,SIN_CELL_BAM,PRODUCTIVE_CELLS}` | **THE AIM ALPHABET'S REAL ATOM (session 83): the console sine-table CELL, 16 BAM.** `cM_ssin_s16` is `jmaSinTable[(u16)angle >> 4]` with no interpolation, and every term a roll facing reaches goes through it -- travel, cut rotation, Co pose chain, and `roll_entry`'s own 26 u step -- so two facings in one cell bake a bit-identical schedule at a bit-identical entry and are ONE draw. `aim_cells` collapses the 81-aim alphabet onto its 49 atoms (siblings kept, because `confirm_entry` delivers BYTES and the entry FRAME is not cell-quantized); `qualify` runs one configuration per cell, taking `qualified()` from 6 to 3 and the reference pass from "6 near-misses" to the honest 3. This is what closed the camera axis: the productive window is cells 2551/2552 and the frozen csangle reaches both. Gated `tests/test_entry_search.py` (3 new). |
 | `entry_search.{roll_nspeed,CtxPool,locus_scan}` | **THE MOMENTUM AXIS (session 82) -- generalized, gated, and measured DEAD.** `roll_nspeed` is `_roll_init`'s clamp off `LandState`'s own constants (`ROLL_NSPEED` is DERIVED from it at the cap, not written down); it threads through `fast_schedule`/`roll_entry`/`build_fast`/`configuration_band`/`qualify`, and `turnaround.extract_schedule_at(nspeed=)` lets the simulated reference follow. `CtxPool` keeps one compiled ctx per (facing, thrust) and swaps only Link's baked schedule via the new `ShoveCtx.set_link_schedule` (1.52 ms -> 0.16 ms), which is what makes a per-candidate configuration key affordable. `locus_scan` is the STRONG form of "is this configuration barren" -- march ALONG the locus re-projecting onto resid 0 at every station, because a one-point band cannot declare a curve dead. The verdict: 2 of 181 momenta productive (both at the cap), every sub-cap one barren along its whole locus and at every facing in the full circle, and an uncapped pass finds the SAME near-misses as a capped one gap for gap. |
 | `fixtures/courtyard_entry_locus_s79.json` | **THE ENTRY LOCUS** -- 1735 genuine roll entries for Tetra pinned at her console-measured herd endpoint, at facing 40835 / m351C 0, plus the acceptance window, the fork verdict, the gradient, the m351C sensitivity table and the reachability rows. One thin curve 104 u long; **856 inside the 230 u follow bar** = the usable target, nearest 49.7 u from where the escape leaves Link. DERIVED, not measured -- regenerable by `python -m harness.tetrapush.entry_search locus` (~250 s), pinned so the gates do not pay the sweep. |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). Session 19: extracts **poll index 2** of each 4-poll frame group -- the poll the game actually latches (live-pinned via the camera oracle on the window's two non-uniform groups); regen with no capture preserves the baked live rows. |
@@ -1663,6 +1664,53 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE CAMERA AXIS IS DEAD TOO, AND THE REASON RETIRES A WHOLE CLASS OF COUNTING ERROR:
+            THE AIM ALPHABET'S ATOM IS THE CONSOLE SINE-TABLE CELL (16 BAM), SO s81's "32-BAM
+            PRODUCTIVE WINDOW AGAINST FOUR REACHABLE AIMS = 8x" IS **TWO CELLS THE FROZEN CAMERA
+            ALREADY REACHES BOTH OF**. PRICED END TO END IT READ EXACTLY 8.00x -- AND ALL 48 OF ITS
+            NEAR-MISSES WERE **THREE CANDIDATES COUNTED SIXTEEN TIMES** AT BIT-IDENTICAL RESIDUALS.
+            WITH EVERY CONFIGURATION AXIS NOW CLOSED, THE ONE LIVE LEVER IS THE TWO-SEGMENT FAN, AND
+            IT IS PRICED NONZERO: **6x THE S1 FAMILIES -> 4.3x THE NEAR-MISSES** (session 83).** The
+            handoff ordered the camera axis and said to price it first. Pricing it is what killed it.
+            - **THE PRICE, MEASURED BEFORE THE DIAGNOSIS.** Scoring the cached 43596-candidate fan
+              against the whole productive window instead of the frozen aims: 6 near-misses -> 48,
+              E[hits] 0.019 -> 0.154, exactly **8.00x**. Then the near-misses were printed WITH THEIR
+              IDENTITY and all 48 were three candidates, sixteen times each, `resid` bit-identical.
+            - **THE CAUSE, one line of console maths.** `cM_ssin_s16` is JMASSin --
+              `jmaSinTable[(u16)angle >> 4]`, 4096 entries, NO interpolation
+              (`knowledge/model/fp-faithfulness.md`, one page away the whole time) -- and every term a
+              roll facing reaches goes through it: the per-frame travel, the cut lunge's rotation, the
+              Co pose chain, and `roll_entry`'s own 26 u step. So a facing's low 4 bits reach NOTHING.
+              The 32-BAM window is cells **2551** (40816..40831, thrust 15, the only band with real
+              width) and **2552** (40832..40847, width 0, ULP tickets) -- which is also why the s81
+              sweep's two halves had different thrusts and identical widths within each half. The
+              frozen csangle's four aims are 40820/40826 (cell 2551) and 40834/40841 (cell 2552):
+              **both cells, already.** A csangle slew can re-index which stick byte lands in a cell;
+              it cannot add one. Gated `test_the_camera_cannot_add_an_aim_cell`.
+            - **THE CAMERA'S ONLY REMAINING REACH IS THE WALK, and it is ~7%.** A held stick's world
+              direction is quantized to the same cell and the decoded grid is not uniform: 3612 of
+              4096 direction cells at the frozen camera, 3858 over all 16 offsets. That is a CANDIDATE
+              axis worth 1.07x, not a configuration axis -- and s81 already measured 1.6x candidates
+              buying zero draws.
+            - **ENCODED, so the search stops counting copies.** `entry_search.aim_cell` /
+              `aim_cells` / `SIN_CELL_BAM` / `PRODUCTIVE_CELLS`; `qualify` runs one configuration per
+              CELL and carries the sibling aim bytes for `confirm_entry`; `entry_fan.qualified`
+              refuses a pre-cell cache. `qualified()` drops **6 -> 3** configurations (one usable,
+              two ULP tickets) and the reference pass's honest read is **3 near-misses / E[hits]
+              0.0096** -- half of what s81 and s82 reported, because 40820 and 40826 are one draw.
+            - **AND THE REAL CONSTRAINT, found by looking at where the candidates ARE.** At the live
+              configuration 91% of the fan (39705 of 43596) piles up at |resid| 0.1..0.5 and only 17
+              reach below 5e-3 -- of which **3** carry a live lean, which ARE the pass's three
+              near-misses; 34.5% of candidates carry a lean with any band at all. Every
+              ONE-SEGMENT pass from 14529 to 391446 candidates (27x) returns the SAME three
+              near-misses gap for gap, because the closest family is `n0=5` + ONE delivered frame and
+              that frame's byte alphabet is already exhaustive -- the fine knob is saturated. What
+              varies the sub-cell offset is the PREFIX, so near-misses should scale with S1 FAMILIES.
+              Measured: 32 families -> 3, **192 families -> 13**, best gap 8.14e-4 -> **2.79e-4**
+              (`_generated/s83_search2_a32.out`, 272599 candidates, 220 s). At that rate E[hits] ~ 1
+              wants ~313 near-misses, i.e. ~50x the families, ~3 h at the measured 1.15 s/family.
+            - **NEXT: the two-segment pass at S1 stride 4-8, widened j1, more bases** -- the only axis
+              left and the only one still priced nonzero. Every hit still owes `confirm_entry`.
       - [~] **THE MOMENTUM AXIS IS GENERALIZED, GATED -- AND MEASURED DEAD. THE s81 "BIGGEST
             UNTOUCHED LEVER" (3x THE CANDIDATES OVER 4146 ROLL SCHEDULES) BUYS **ZERO**: AN
             UNCAPPED FAN REACHES 42807 DISTINCT MOMENTA OF WHICH **4** ARE PRODUCTIVE, AND THE
@@ -1741,6 +1789,8 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               measured stream serves a whole fan. Slew it in the base prefix (measure the stream once
               in the wired run, inject it into the fleet schedule, which already carries a per-frame
               csangle column). Two-segment holds after that. Every hit still owes `confirm_entry`.
+              **Session 83 priced it at ZERO: 32 BAM is two sine-table cells and the frozen camera
+              already reaches both. See the box above.**
       - [~] **THE FAN IS NATIVE AND GATED (43596 CANDIDATES IN 17 s AGAINST 1444, KEY-FOR-KEY
             BIT-IDENTICAL) -- AND THE THROUGHPUT'S FIRST FINDING IS THAT THE FAN WAS NEVER THE
             BINDING CONSTRAINT: THE ACCEPTANCE BAND IS A FUNCTION OF THE **LEAN**, SO **83% OF THE

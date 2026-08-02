@@ -89,6 +89,7 @@ you can triage in one glance.
 - **How do we plan and validate a roll-stab SEAM CLIP (dust acceptance, live calibration, the knobs)?** → [strategy/seam-clip-solver.md](strategy/seam-clip-solver.md)
 - **The pushed actor is already placed and I can't move her - can I solve for Link's roll ENTRY instead? Which quantity is the razor / why does the PERPENDICULAR half of a placement miss decide it?** → [strategy/clip-entry-search.md](strategy/clip-entry-search.md)
 - **My razor search returns "N near-misses, 0 genuine" - is it too small or aimed at nothing? What counts as ONE draw / why did 1.6x the candidates buy zero extra near-misses / which of my fan's prunes are physics?** → [strategy/clip-lottery-draws.md](strategy/clip-lottery-draws.md)
+- **My entry sweep is too slow for the resolution the razor needs - what is eating the time? Do I have to SIMULATE the roll to score it / when does a compiled context stop being reusable / how do I move the fan onto the native fleet?** → [strategy/clip-search-budget.md](strategy/clip-search-budget.md)
 - **Which partial stick magnitudes are live-valid in a land plan / why NEVER emit Y 192–254?** → [mechanics/precise-stop.md](mechanics/precise-stop.md). NB: this live-valid *stick-input* band is a different thing from the sim's [`Y171` partial-magnitude *regime*](model/land-sim.md#partial-magnitude-regime-y171-msd052) - don't conflate "partial stick" with "partial regime".
 
 ### Model - engine (core)
@@ -117,6 +118,7 @@ you can triage in one glance.
 - **Why run a search's fidelity gate BEFORE the search / how did a clip search end up aimed at a roll nobody performs?** → [history/entry-search-s79-superseded.md](history/entry-search-s79-superseded.md)
 - **Why audit a search's own accounting before scaling its biggest cost / how did "the fan is the only budget" turn out to be wrong by 12x?** → [history/entry-search-s80-superseded.md](history/entry-search-s80-superseded.md)
 - **I proved a prune was my own assumption, not physics - why isn't removing it a lever? Why price an axis before promoting it?** → [history/entry-search-s81-momentum-lever.md](history/entry-search-s81-momentum-lever.md)
+- **My axis priced at exactly 8x - why is a perfectly integral multiplier a warning sign? How did sweeping a facing at 1 BAM measure the same configuration sixteen times?** → [history/entry-search-s81-camera-lever.md](history/entry-search-s81-camera-lever.md)
 
 ## Page template (for contributors)
 

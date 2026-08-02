@@ -261,17 +261,22 @@ def qualified(seed=None, csangle=ES.CSANGLE, thrusts=ES.THRUSTS, path=QUAL_CACHE
 
     Note what a zero-width band means: every genuine sample along the locus read the SAME `resid`, so
     the target is one f32 value rather than an interval. Those configurations are lottery tickets at
-    ULP odds; the ones worth spending candidates on are the ones with real width."""
+    ULP odds; the ones worth spending candidates on are the ones with real width.
+
+    One configuration per sine-table CELL since session 83 (`entry_search.aim_cells`) -- aims inside
+    one cell are the same draw, and counting them separately is what let the camera price at 8x. A
+    cache written before that is refused rather than silently re-used."""
     if not refresh and path and os.path.exists(path):
         d = json.load(open(path))
-        if d['csangle'] == csangle and tuple(d['thrusts']) == tuple(thrusts):
+        if d.get('cells') and d['csangle'] == csangle and tuple(d['thrusts']) == tuple(thrusts):
             return d['quals']
     seed = seed or ES.console_seed()
     quals = [q for q in ES.qualify(seed['tetra'], ref_entry(seed), thrusts=thrusts,
                                    csangle=csangle) if q['productive']]
     if path:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        json.dump(dict(csangle=csangle, thrusts=list(thrusts), quals=quals), open(path, 'w'))
+        json.dump(dict(csangle=csangle, thrusts=list(thrusts), cells=True, quals=quals),
+                  open(path, 'w'))
     return quals
 
 
