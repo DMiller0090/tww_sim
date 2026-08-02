@@ -216,6 +216,11 @@ def read_link(D):
                 speedF=struct.unpack('>f', D.read_bytes(h, m, la + 0x254, 4))[0],
                 facing=struct.unpack('>H', D.read_bytes(h, m, la + 0x20E, 2))[0],
                 travel=struct.unpack('>H', D.read_bytes(h, m, la + 0x206, 2))[0],
+                # the entry search's third gate: a ShoveCtx is only valid for the lean it was built
+                # at (`entry_search`), so a roll-entry confirm owes m351C beside position and facing.
+                m351C=struct.unpack('>H', D.read_bytes(h, m, la + 0x351C, 2))[0],
+                shape_z=struct.unpack('>H', D.read_bytes(h, m, la + 0x210, 2))[0],
+                nspeed=struct.unpack('>f', D.read_bytes(h, m, la + 0x35BC, 4))[0],
                 proc=struct.unpack('>i', D.read_bytes(h, m, lp + 0x3100, 4))[0])
 
 

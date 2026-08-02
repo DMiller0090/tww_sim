@@ -1,0 +1,962 @@
+{
+ "source": "harness/tetrapush/deliver.py truncate-and-read on the spliced boot movie (_notes/s86_{compose,deliver}.py), session 86, 2026-08-02.",
+ "immutable": "LOCKED clean-DTM console capture. For a fixed input log the console is ground truth and never moves: a disagreement is the SIM's to fix, never this file's (tests/dolphin/README.md#locked-tests-are-immutable-hard-rule).",
+ "method": "The composite the entry search had never put on console: the s78-confirmed 78-frame herd log, then the frame-minimal confirmed entry plan, then a REAL A-press. Each sample is one ~30 s delivery of log[:n]; PauseMovie halts at plan frame n-1 and both actors are read there. n=78 is the control (the last frame courtyard_plan_s73_console.json already measured); n=79..86 are the entry frames.",
+ "hit": {
+  "entry": [
+   -1530.337890625,
+   -780.5377807617188
+  ],
+  "walk": [
+   -1512.2086181640625,
+   -761.9009399414062
+  ],
+  "m351C_walk": 64345,
+  "m351C": 64761,
+  "facing": 40820,
+  "aim": [
+   85,
+   182
+  ],
+  "thrust": 15,
+  "b_step": 17,
+  "resid": 6.552969155575833e-05,
+  "push": [
+   -0.7366989254951477,
+   -0.1721021682024002
+  ],
+  "nspeed": 26.0,
+  "gap": 0.0,
+  "band": [
+   4.3154663607830166e-05,
+   7.520348255504795e-05
+  ],
+  "plan": [
+   0,
+   200,
+   144,
+   1,
+   195,
+   164,
+   3
+  ],
+  "walkable": true
+ },
+ "offline_confirm": {
+  "measured": {
+   "entry": [
+    -1530.337890625,
+    -780.5377807617188
+   ],
+   "facing": 40820,
+   "m351C": 64761,
+   "walk": [
+    -1512.2086181640625,
+    -761.9009399414062
+   ],
+   "speedF": 17.0,
+   "nspeed": 26.0,
+   "procs": [
+    6,
+    6,
+    30,
+    30,
+    30
+   ]
+  },
+  "predicted": {
+   "entry": [
+    -1530.337890625,
+    -780.5377807617188
+   ],
+   "facing": 40820,
+   "m351C": 64761,
+   "walk": [
+    -1512.2086181640625,
+    -761.9009399414062
+   ],
+   "nspeed": 26.0
+  },
+  "ok": {
+   "rolled": true,
+   "walk_matches": true,
+   "nspeed": true,
+   "facing": true,
+   "lean": true,
+   "entry": true
+  },
+  "all_ok": true
+ },
+ "plan": {
+  "herd_fixture": "fixtures/courtyard_plan_s73_console.json",
+  "hits": "_generated/s81/hits_seg2_a2_j1-2_s1_j6_b2_confirmed.json",
+  "n_console": 78,
+  "entry_frames": 8,
+  "entry_i": 83,
+  "entry_n": 84,
+  "note": "`log` is the DELIVERABLE composite; every byte is interior, so the DTM 255->254 / 0->1 calibration rewrites nothing and the delivered replay is bit-identical to the authored one (gated). The roll ENTRY is plan frame entry_i, read at N=entry_n."
+ },
+ "log": [
+  {
+   "stickX": 193,
+   "stickY": 243,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 165,
+   "stickY": 196,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 90,
+   "stickY": 252,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 150,
+   "stickY": 203,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 108,
+   "stickY": 205,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 172,
+   "stickY": 191,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 176,
+   "stickY": 247,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 176,
+   "stickY": 247,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 195,
+   "stickY": 14,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 77,
+   "stickY": 3,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 241,
+   "stickY": 59,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 241,
+   "stickY": 59,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 241,
+   "stickY": 59,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 200,
+   "stickY": 144,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 195,
+   "stickY": 164,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 195,
+   "stickY": 164,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 195,
+   "stickY": 164,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 85,
+   "stickY": 182,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  }
+ ],
+ "samples": [
+  {
+   "n": 78,
+   "link": {
+    "x": -1589.0355224609375,
+    "z": -791.1503295898438,
+    "facing": 7715,
+    "travel": 7715,
+    "proc": 6,
+    "speedF": 17.0,
+    "m351C": 65345,
+    "shape_z": 65440,
+    "nspeed": 17.0
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 79,
+   "link": {
+    "x": -1576.4393310546875,
+    "z": -779.7338256835938,
+    "facing": 8709,
+    "travel": 8709,
+    "proc": 6,
+    "speedF": 17.0,
+    "m351C": 65145,
+    "shape_z": 65340,
+    "nspeed": 17.0
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 80,
+   "link": {
+    "x": -1562.0074462890625,
+    "z": -770.749267578125,
+    "facing": 10591,
+    "travel": 10591,
+    "proc": 6,
+    "speedF": 17.0,
+    "m351C": 64945,
+    "shape_z": 65240,
+    "nspeed": 17.0
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 81,
+   "link": {
+    "x": -1545.9749755859375,
+    "z": -765.0958862304688,
+    "facing": 12861,
+    "travel": 12861,
+    "proc": 6,
+    "speedF": 17.0,
+    "m351C": 64745,
+    "shape_z": 65140,
+    "nspeed": 17.0
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 82,
+   "link": {
+    "x": -1529.2034912109375,
+    "z": -762.318115234375,
+    "facing": 14677,
+    "travel": 14677,
+    "proc": 6,
+    "speedF": 17.0,
+    "m351C": 64545,
+    "shape_z": 65040,
+    "nspeed": 17.0
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 83,
+   "link": {
+    "x": -1512.2086181640625,
+    "z": -761.9009399414062,
+    "facing": 16130,
+    "travel": 16130,
+    "proc": 6,
+    "speedF": 17.0,
+    "m351C": 64345,
+    "shape_z": 64940,
+    "nspeed": 17.0
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 84,
+   "link": {
+    "x": -1530.337890625,
+    "z": -780.5377807617188,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 30,
+    "speedF": 26.0,
+    "m351C": 64761,
+    "shape_z": 65148,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 85,
+   "link": {
+    "x": -1548.4671630859375,
+    "z": -799.1746215820312,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 30,
+    "speedF": 26.0,
+    "m351C": 65032,
+    "shape_z": 65284,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  },
+  {
+   "n": 86,
+   "link": {
+    "x": -1566.596435546875,
+    "z": -817.8114624023438,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 30,
+    "speedF": 26.0,
+    "m351C": 65208,
+    "shape_z": 65372,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1629.101806640625,
+    "z": -893.7962036132812,
+    "stt": 3
+   }
+  }
+ ]
+}

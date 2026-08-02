@@ -1,0 +1,1175 @@
+{
+ "source": "harness/tetrapush/deliver.py truncate-and-read on the spliced boot movie (_notes/s86_{clip,curve,walled_freerun}.py), session 86, 2026-08-02.",
+ "immutable": "LOCKED clean-DTM console capture. For a fixed input log the console is ground truth and never moves: a disagreement is the SIM's to fix, never this file's.",
+ "method": "The entry confirm (courtyard_entry_s86_console.json) is extended to the WHOLE clip: the same log, then the roll held out to the thrust. `log[b_log]` is the UP+B; the cut dispatches the next frame (the DTM is a delay-1 input stream). Each sample is one ~30 s delivery of log[:n], read at the PauseMovie halt on plan frame n-1.",
+ "verdict": "THE CONSOLE DID NOT CLIP. Link's pre-cut brace point is BIT-IDENTICAL to the walled engine's `old` and the cut dispatches on the predicted frame at the predicted facing, but the lunge does not thread the seam: Link ends 0.16 u from `old` where the prediction puts him 49.97 u away, through the gap. The razor's remaining input is the cut-frame PUSH, i.e. Tetra's position at that frame -- and the clip roll plows her ~100 u into the courtyard back wall, where the console braces her at z = -940.25561523 = the wall plane -990.255615 plus her 50 u radius. `tetra_ulp` prices what that costs: ONE f32 ULP of her x (1.221e-4 u) flips the verdict, so `genuine` differs between ADJACENT representable positions of her -- and the best model of her cut-frame position is 0.15 u, about 1200 ULP, off the console read.",
+ "hit": {
+  "entry": [
+   -1530.337890625,
+   -780.5377807617188
+  ],
+  "walk": [
+   -1512.2086181640625,
+   -761.9009399414062
+  ],
+  "m351C_walk": 64345,
+  "m351C": 64761,
+  "facing": 40820,
+  "aim": [
+   85,
+   182
+  ],
+  "thrust": 15,
+  "b_step": 17,
+  "resid": 6.552969155575833e-05,
+  "push": [
+   -0.7366989254951477,
+   -0.1721021682024002
+  ],
+  "nspeed": 26.0,
+  "gap": 0.0,
+  "band": [
+   4.3154663607830166e-05,
+   7.520348255504795e-05
+  ],
+  "plan": [
+   0,
+   200,
+   144,
+   1,
+   195,
+   164,
+   3
+  ],
+  "walkable": true
+ },
+ "plan": {
+  "entry_fixture": "fixtures/courtyard_entry_s86_console.json",
+  "entry_i": 83,
+  "b_log": 100,
+  "cut_i": 101,
+  "frames": 107
+ },
+ "prediction": {
+  "genuine": true,
+  "old": [
+   -1692.3143310546875,
+   -955.0763549804688
+  ],
+  "new": [
+   -1727.3033447265625,
+   -990.5955200195312
+  ],
+  "push": [
+   -0.7366989254951477,
+   -0.1721021682024002
+  ],
+  "resid": 6.552969155575833e-05,
+  "window": [
+   -2.514753171067118e-06,
+   0.00011341984685842771
+  ],
+  "cut_step": 17,
+  "engine": "entry_search.build_fast -> ShoveCtx.sweep_par, the engine the 49 confirmed entries were scored `genuine` by"
+ },
+ "tetra_wall": {
+  "plane_z": -990.255615,
+  "radius": 50.0,
+  "brace_z": -940.255615,
+  "note": "Tetra's BG WallCorrect against the courtyard back wall. `npc_zl1` models it and the rollstab coupled engine applies it; the courtyard `from_f0` tracks her as a bare XZ plow point with no BG collision, so it drives her 53 u THROUGH this wall by plan frame 100."
+ },
+ "sensitivity": [
+  {
+   "d_tetra": 0.0,
+   "resid": 6.552969155575833e-05,
+   "genuine": true,
+   "push": [
+    -0.7366989254951477,
+    -0.1721021682024002
+   ]
+  },
+  {
+   "d_tetra": 1e-05,
+   "resid": 6.552969155575833e-05,
+   "genuine": true,
+   "push": [
+    -0.7366989254951477,
+    -0.1721021682024002
+   ]
+  },
+  {
+   "d_tetra": 0.0001,
+   "resid": 1.0011310099292495e-05,
+   "genuine": false,
+   "push": [
+    -0.7365952730178833,
+    -0.17207682132720947
+   ]
+  },
+  {
+   "d_tetra": 0.001,
+   "resid": -0.0002865244030771895,
+   "genuine": false,
+   "push": [
+    -0.736042857170105,
+    -0.17194266617298126
+   ]
+  },
+  {
+   "d_tetra": 0.01,
+   "resid": -0.003570924323018601,
+   "genuine": false,
+   "push": [
+    -0.7299259901046753,
+    -0.1704578846693039
+   ]
+  },
+  {
+   "d_tetra": 0.05,
+   "resid": -0.017347035117113562,
+   "genuine": false,
+   "push": [
+    -0.7042865753173828,
+    -0.16423654556274414
+   ]
+  },
+  {
+   "d_tetra": 0.15,
+   "resid": -0.049696475003686236,
+   "genuine": false,
+   "push": [
+    -0.6441978216171265,
+    -0.14967775344848633
+   ]
+  },
+  {
+   "d_tetra": 0.5,
+   "resid": -0.1867442926568517,
+   "genuine": false,
+   "push": [
+    -0.39266952872276306,
+    -0.0900152400135994
+   ]
+  }
+ ],
+ "tetra_ulp": {
+  "x": -1629.101806640625,
+  "x_plus_1ulp": -1629.1016845703125,
+  "ulp": 0.0001220703125,
+  "resid": 1.0011310099292495e-05,
+  "genuine": false,
+  "note": "One f32 ULP of Tetra's x is 1.221e-4 u and it flips the verdict, so `genuine` changes between ADJACENT representable positions of her. That is why the 1e-5 row above reads identical to 0: it rounds to the same f32."
+ },
+ "log": [
+  {
+   "stickX": 193,
+   "stickY": 243,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 165,
+   "stickY": 196,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 90,
+   "stickY": 252,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 150,
+   "stickY": 203,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 144,
+   "stickY": 108,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 113,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 108,
+   "stickY": 205,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 172,
+   "stickY": 191,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 0,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 255,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 110,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 176,
+   "stickY": 247,
+   "buttons": 64,
+   "triggerL": 255,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 176,
+   "stickY": 247,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 195,
+   "stickY": 14,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 77,
+   "stickY": 3,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 241,
+   "stickY": 59,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 241,
+   "stickY": 59,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 241,
+   "stickY": 59,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 200,
+   "stickY": 144,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 195,
+   "stickY": 164,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 195,
+   "stickY": 164,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 195,
+   "stickY": 164,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 85,
+   "stickY": 182,
+   "buttons": 256,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 254,
+   "buttons": 512,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  },
+  {
+   "stickX": 128,
+   "stickY": 128,
+   "buttons": 0,
+   "triggerL": 0,
+   "substickX": 128,
+   "substickY": 0
+  }
+ ],
+ "samples": [
+  {
+   "n": 88,
+   "i": 87,
+   "link": {
+    "x": -1594.7607421875,
+    "z": -844.2655639648438,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 30,
+    "speedF": 26.0,
+    "m351C": 65396,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1637.196044921875,
+    "z": -904.6157836914062,
+    "stt": 3
+   }
+  },
+  {
+   "n": 90,
+   "i": 89,
+   "link": {
+    "x": -1615.1324462890625,
+    "z": -854.6819458007812,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 30,
+    "speedF": 26.0,
+    "m351C": 65476,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1653.0828857421875,
+    "z": -931.4730834960938,
+    "stt": 3
+   }
+  },
+  {
+   "n": 92,
+   "i": 91,
+   "link": {
+    "x": -1647.1416015625,
+    "z": -876.3634643554688,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 30,
+    "speedF": 26.0,
+    "m351C": 65510,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1657.332275390625,
+    "z": -940.255615234375,
+    "stt": 3
+   }
+  },
+  {
+   "n": 94,
+   "i": 93,
+   "link": {
+    "x": -1686.578857421875,
+    "z": -889.2164306640625,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 30,
+    "speedF": 26.0,
+    "m351C": 65524,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1654.153564453125,
+    "z": -940.255615234375,
+    "stt": 3
+   }
+  },
+  {
+   "n": 99,
+   "i": 98,
+   "link": {
+    "x": -1692.3416748046875,
+    "z": -952.3067626953125,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 30,
+    "speedF": 26.0,
+    "m351C": 65534,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1619.893798828125,
+    "z": -940.255615234375,
+    "stt": 3
+   }
+  },
+  {
+   "n": 100,
+   "i": 99,
+   "link": {
+    "x": -1692.314453125,
+    "z": -955.068359375,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 30,
+    "speedF": 26.0,
+    "m351C": 0,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1619.1124267578125,
+    "z": -940.1284790039062,
+    "stt": 3
+   }
+  },
+  {
+   "n": 101,
+   "i": 100,
+   "link": {
+    "x": -1692.3143310546875,
+    "z": -955.0763549804688,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 30,
+    "speedF": 26.0,
+    "m351C": 0,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1619.1124267578125,
+    "z": -940.1284790039062,
+    "stt": 3
+   }
+  },
+  {
+   "n": 102,
+   "i": 101,
+   "link": {
+    "x": -1692.31591796875,
+    "z": -954.91357421875,
+    "facing": 40820,
+    "travel": 40820,
+    "proc": 66,
+    "speedF": 26.0,
+    "m351C": 0,
+    "nspeed": 26.0
+   },
+   "tetra": {
+    "x": -1618.4404296875,
+    "z": -939.9720458984375,
+    "stt": 3
+   }
+  }
+ ]
+}

@@ -214,7 +214,7 @@ deliberately unported.
 
 | File | What |
 |------|------|
-| `deliver.py` | **THE TIER-2 LIVE DELIVERY (session 54)** -- author a computed plan onto console and read the endpoint. `build_boot_movie` SPLICES the plan onto the recorded BOOT movie (game-frames 0..F0 byte-identical, tail = `log[i]` -> F0+1+i, `bFromSaveState=0`); **both savestate-anchor routes are dead** (see `## Plan / status` s54). `tick_mode='extend'` is mandatory (the recorded tickCount truncates the tail; the maxed 0xFFFF... reads as signed -1 = s53's State::Load crash). `play_spliced` issues ONLY `playmovie` + `savestate load 1` -- the subset-state shortcut that skips the ~9.5-min boot replay (~8 s/run); any pause/resume/advance of ours makes Dolphin re-pause. `deliver_plan` = author+play+read; **`divergence_curve` = TRUNCATE-AND-READ** (author the first N frames, PauseMovie halts at plan frame N-1, so one plain run samples that frame for BOTH actors -- a per-frame sim-vs-console curve with no stepping). Gated `tests/test_tetrapush_deliver.py` (6 offline: round-trip + prefix byte-identity, latched-input equality vs the recording, L/A/B + cal-clamp encoding, the tick_mode invariants incl. the maxed-value crash pin, truncation alignment). |
+| `deliver.py` | **THE TIER-2 LIVE DELIVERY (session 54)** -- author a computed plan onto console and read the endpoint. `build_boot_movie` SPLICES the plan onto the recorded BOOT movie (game-frames 0..F0 byte-identical, tail = `log[i]` -> F0+1+i, `bFromSaveState=0`); **both savestate-anchor routes are dead** (see `## Plan / status` s54). `tick_mode='extend'` is mandatory (the recorded tickCount truncates the tail; the maxed 0xFFFF... reads as signed -1 = s53's State::Load crash). `play_spliced` issues ONLY `playmovie` + `savestate load 1` -- the subset-state shortcut that skips the ~9.5-min boot replay (~8 s/run); any pause/resume/advance of ours makes Dolphin re-pause. `deliver_plan` = author+play+read; **`divergence_curve` = TRUNCATE-AND-READ** (author the first N frames, PauseMovie halts at plan frame N-1, so one plain run samples that frame for BOTH actors -- a per-frame sim-vs-console curve with no stepping). Gated `tests/test_tetrapush_deliver.py` (6 offline: round-trip + prefix byte-identity, latched-input equality vs the recording, L/A/B + cal-clamp encoding, the tick_mode invariants incl. the maxed-value crash pin, truncation alignment). **Session 86** added `m351C`, `shape_z` and `nspeed` to `read_link`: a roll-entry confirm owes the two a `ShoveCtx` is keyed on (the lean it was built at and the momentum its schedule was baked at), not just position and facing. |
 | `find_tetra.py` | Locate Tetra (Zl1, id 429) live via the DMC walk, `_execute` breakpoint, `r3`. Session-stable (recomputes the REL base). **`tetra_scan` (session 54) = the breakpoint-FREE locator** (one MEM1 block + `field_0x84F == 5` on the courtyard floor Y): required for any endpoint read off a HALTED movie, where the `_execute` bp cannot trap and silently yields nothing. |
 | `capture_push.py` | Load slot 2, locate Tetra, single-step the movie N frames, log both actors + FULL pad to a fixture. The (scalar) GROUND TRUTH -- single-stepped, so `+-1` on edges. Now also logs `nspeed` (mNormalSpeed). Subcommand **`capture_push seed`** = a DETERMINISTIC single read of the complete f0 state (no single-step jitter) -> `fixtures/courtyard_push_seed.json`. |
 | `fixtures/courtyard_push_seed.json` | The complete STATE-2 seed (f0): pos/travel/facing/speedF + the HIDDEN **mNormalSpeed** (`link.nspeed`) the cyl/dtm fixtures never logged, plus mDirection/m34E6/csangle + the attention state, for provenance. Deterministic single read (jitter-free). The from-f0 replay's `seed_nspeed` source AND the planner's initial condition (session 12). Session 16 added **`old_pose`** -- the live `m_old_fdata` per-joint post-morf pre-twist store (quat x,y,z,w + transform, all 42 joints) + morf counters, the `replay(..., seed_old_pose=)` source (at THIS seed it equals the pure-dash warmup; general-correctness for any f0 with live morf residue). |
@@ -227,6 +227,8 @@ deliberately unported.
 | `entry_score.py` | **THE SCORING HALF OF THE FAN (session 85 split; the code is s81-84's, unchanged).** Everything that turns a candidate stream into a counted population: `qualified`/`BandTable` (the per-(facing, thrust, lean, momentum) acceptance band), `stream_search` (batch-by-batch scoring, `family_of_plan` pricing, `dedup_scope`), the counting vocabulary `draw_key`/`dedupe_near`/`hit_draws`/`distinct_near`/`lottery`, and `confirm_hits`. It is one module because every headline number a pass prints has been wrong once, always by counting COPIES as discoveries -- s81's lean-0 bands, s83's camera at 8.00x (48 near-misses that were 3 candidates x16), s84's 118 genuine scorings that were 23 draws. `entry_fan` re-exports the lot. |
 | `entry_search.{aim_cell,aim_cells,SIN_CELL_BAM,PRODUCTIVE_CELLS}` | **THE AIM ALPHABET'S REAL ATOM (session 83): the console sine-table CELL, 16 BAM.** `cM_ssin_s16` is `jmaSinTable[(u16)angle >> 4]` with no interpolation, and every term a roll facing reaches goes through it -- travel, cut rotation, Co pose chain, and `roll_entry`'s own 26 u step -- so two facings in one cell bake a bit-identical schedule at a bit-identical entry and are ONE draw. `aim_cells` collapses the 81-aim alphabet onto its 49 atoms (siblings kept, because `confirm_entry` delivers BYTES and the entry FRAME is not cell-quantized); `qualify` runs one configuration per cell, taking `qualified()` from 6 to 3 and the reference pass from "6 near-misses" to the honest 3. This is what closed the camera axis: the productive window is cells 2551/2552 and the frozen csangle reaches both. Gated `tests/test_entry_search.py` (3 new). |
 | `entry_search.{roll_nspeed,CtxPool,locus_scan}` | **THE MOMENTUM AXIS (session 82) -- generalized, gated, and measured DEAD.** `roll_nspeed` is `_roll_init`'s clamp off `LandState`'s own constants (`ROLL_NSPEED` is DERIVED from it at the cap, not written down); it threads through `fast_schedule`/`roll_entry`/`build_fast`/`configuration_band`/`qualify`, and `turnaround.extract_schedule_at(nspeed=)` lets the simulated reference follow. `CtxPool` keeps one compiled ctx per (facing, thrust) and swaps only Link's baked schedule via the new `ShoveCtx.set_link_schedule` (1.52 ms -> 0.16 ms), which is what makes a per-candidate configuration key affordable. `locus_scan` is the STRONG form of "is this configuration barren" -- march ALONG the locus re-projecting onto resid 0 at every station, because a one-point band cannot declare a curve dead. The verdict: 2 of 181 momenta productive (both at the cap), every sub-cap one barren along its whole locus and at every facing in the full circle, and an uncapped pass finds the SAME near-misses as a capped one gap for gap. |
+| `fixtures/courtyard_entry_s86_console.json` | **THE ENTRY HANDOVER, ON CONSOLE (session 86; LOCKED).** The s78 herd log plus the frame-minimal confirmed entry plan and a real A-press, delivered as one 86-frame movie and truncate-and-read at nine frames (n=78 the control, n=79..86 the entry). All nine 0-ULP on Link x/z/`proc`/`facing`/`travel`/`speedF`/`m351C`/`nspeed` and on Tetra x/z, who stays stt 3 and bit-frozen -- so the console rolls from the entry the walled engine scored, exactly. Gate `tests/test_entry_console.py` (24). |
+| `fixtures/courtyard_clip_s86_console.json` | **THE CLIP ATTEMPT, ON CONSOLE (session 86; LOCKED).** The same log extended to the thrust. Carries the eight console samples across the roll, the `ShoveCtx` prediction it is being judged against (`genuine`, `old`, `new`, `push`, the window), the measured Tetra wall brace (plane -990.255615 + R 50 = -940.255615) and the `tetra_ulp` price: **one f32 step of her x flips `genuine`**. The console did NOT clip. Gate `tests/test_clip_console.py` (8 + 7 xfail(strict) on a contiguous open suffix). |
 | `fixtures/courtyard_entry_locus_s79.json` | **THE ENTRY LOCUS** -- 1735 genuine roll entries for Tetra pinned at her console-measured herd endpoint, at facing 40835 / m351C 0, plus the acceptance window, the fork verdict, the gradient, the m351C sensitivity table and the reachability rows. One thin curve 104 u long; **856 inside the 230 u follow bar** = the usable target, nearest 49.7 u from where the escape leaves Link. DERIVED, not measured -- regenerable by `python -m harness.tetrapush.entry_search locus` (~250 s), pinned so the gates do not pay the sweep. |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). Session 19: extracts **poll index 2** of each 4-poll frame group -- the poll the game actually latches (live-pinned via the camera oracle on the window's two non-uniform groups); regen with no capture preserves the baked live rows. |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
@@ -1665,6 +1667,58 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE COMPOSITE IS ON CONSOLE, AND IT SPLIT IN TWO: THE HANDOVER IS PERFECT AND THE CLIP
+            DID NOT HAPPEN. THE ENTRY, THE 17-FRAME ROLL AND EVERY WALL BRACE REPLAY **BIT-EXACT**
+            ON THE REAL GAME -- LINK'S PRE-CUT POINT IS `ShoveCtx`'s OWN `old` TO THE BIT -- AND THEN
+            THE LUNGE DOES NOT THREAD THE SEAM. THE UNPRICED TERM IS **TETRA AT THE CUT FRAME**: THE
+            CLIP ROLL PLOWS HER ~100 u INTO THE BACK WALL, AND **ONE f32 ULP OF HER FLIPS `genuine`**
+            (session 86).** The handoff called the console confirm the only unpaid risk left. Paying
+            it bought both the confirmation the entry search wanted and the reason its verdict
+            column cannot be trusted yet.
+            - **THE ENTRY CONFIRM -- 9 of 9 samples 0-ULP** (`fixtures/courtyard_entry_s86_console.
+              json`, gate `tests/test_entry_console.py`, 24 tests). The frame-minimal deliverable hit
+              of the 49 -- plan `[0,200,144,1,195,164,3]`, aim `[85,182]`, 4 walk frames -- appended
+              to the s78 console log and delivered as one 86-frame movie. n=78 is the control (the
+              frame `courtyard_plan_s73_console.json` already measured); n=79..86 are the entry
+              frames. Every one is bit-exact on Link x/z, `proc`, `facing`, `travel`, `speedF`,
+              **`m351C` and `nspeed`** -- the two a `ShoveCtx` is keyed on, read live for the first
+              time (`deliver.read_link` now carries them) -- and on Tetra x/z, who stays stt 3 and
+              **bit-frozen every frame**, which is the premise the whole entry search rests on. So
+              the console rolls from the entry the walled engine was scored at, exactly.
+            - **THE CLIP -- IT DID NOT.** Extending the same log to the thrust (UP+B on plan frame
+              100, the cut dispatching on 101) puts the console 0.16 u from `old` where the
+              prediction puts it **49.97 u away, through the gap**. Everything up to the cut is
+              right: `old` is bit-identical to `ShoveCtx`'s, and the cut fires on the predicted
+              frame at the predicted facing and roll phase. `fixtures/courtyard_clip_s86_console.
+              json` + `tests/test_clip_console.py` (8 console samples; the model gaps `xfail(strict)`
+              on a contiguous suffix, so closing one XPASSes and fails the suite).
+            - **THE PER-FRAME DIFF NAMED IT, AND IT NAMED TETRA FIRST.** Link is 0-ULP through plan
+              frame 89 and **Tetra diverges at 91 while Link is still exact**. Her console z pins at
+              **-940.25561523** for five frames = the back-wall plane **-990.255615** plus her **R
+              50** -- a WallCorrect brace, read straight off the mesh. The rollstab coupled engine
+              reproduces that pin exactly; the courtyard `from_f0` carries her as a bare XZ plow
+              point with NO BG collision and drives her **53 u through the wall** by the cut frame.
+            - **AND THE PRICE OF HER IS ONE ULP.** The entry search priced the precision it needs in
+              the variable it SWEEPS (~1e-4 u of entry) and never priced the other terms of the same
+              residual. Perturbing her: **one f32 step of her x, 1.221e-4 u, takes `genuine` True ->
+              False**. The razor is thinner than her own storage grid, and the best model of her
+              cut-frame position is **0.15 u (~1200 ULP)** off the console read -- so the verdict is
+              not wrong so much as UNDECIDABLE at current fidelity, for all 49 and not just this
+              one. New KB page `knowledge/strategy/razor-prices-every-term.md`; the wall brace is a
+              console-measured upgrade on `knowledge/mechanics/tetra-follow.md`.
+            - **ALSO ESTABLISHED, cheaply:** the whole composite runs in ONE engine now -- the wired
+              delay-1 `FreeRun` with `TA.WALLS` attached to `link._walls` -- which removes the
+              schedule-step-vs-plan-frame mapping that cost this session a live run, and attaching
+              those walls leaves **every console-confirmed frame byte-identical**, i.e. the herd
+              provably never touches a wall (`objective` rule 4, asserted since s60, now measured).
+              The delivered composite is also clean of the `dtm_make` extreme clamp on every byte.
+            - **NEXT: TETRA THROUGH THE CLIP ROLL, to the standard the herd got.** Give her the
+              `npc_zl1` `CrrPos` pass in the courtyard tracking (the xfail frontier is exactly that),
+              then close the residual 0.15 u at the cut frame -- her z is already within 0.03 u and
+              braced, so the error is in the SLIDE along the wall, i.e. the push magnitude during the
+              roll. Only then does `genuine` mean anything, and the 49 are re-scored rather than
+              re-searched. Widening the fan is now certainly the wrong move: it buys more tickets in
+              a currency whose value is unmeasured.
       - [~] **A CANDIDATE IS A PROMISE, AND AUDITING THE ONES THE FAN MAKES TOOK THE CONFIRM RATE TO
             100%: THE PROC PRUNE IS IN, AND THE WIDE PASS RETURNS **49 DISTINCT ENTRIES, ALL 49
             CONFIRMED BY A REAL A-PRESS AND ALL 49 DTM-DELIVERABLE** (against session 84's 23 draws /

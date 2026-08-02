@@ -76,6 +76,16 @@ corner `+x` wall (x = −1727, normal +x) she ejects to the exact live XZ (`capt
 `fixtures/hyrule_tetra_wallcorrect.json`, `tests/test_tetra_follow.py`). The `move_jmp` gap hop
 (over a ledge) is still unmodelled (no gate exercises it; the corner floor is flat).
 
+**The clip roll DOES wedge her, and the console confirms the brace to the bit** (session 86). A real
+delivery of the Courtyard entry plan plows her ~100 u into the back wall, where her z pins at
+**−940.25561523 for five straight frames = the wall plane −990.255615 plus her R 50**. The rollstab
+coupled engine (`CcCoupledStepper(walls_tetra=)`) reproduces that pin exactly; the **courtyard
+`from_f0` tracking does not apply the pass at all** - it carries her as a bare XZ plow point, so it
+drives her **53 u through this wall** by the cut frame, and every Link quantity downstream of the
+push goes with her. Locked as `fixtures/courtyard_clip_s86_console.json`
+(`tests/test_clip_console.py`, the open frontier). What that costs the clip verdict is priced in
+[../strategy/razor-prices-every-term.md](../strategy/razor-prices-every-term.md).
+
 ## Lock-on / talk / speak region (planner AVOID)
 
 Tetra's `attention_info` (`createInit`) sets `flags = LOCKON_TALK | ACTION_SPEAK` and
