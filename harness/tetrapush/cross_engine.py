@@ -21,6 +21,15 @@ A 1-ULP divergence before the cut can still end in a bit-identical cut frame, so
 `worst_ulp` and `cut_ok` separately and `deliverable` demands both. Do not read "the engines agree at
 the razor" as "the engines agree".
 
+SESSION 90: THIS FILTER NOW REJECTS NOTHING, and that is a result rather than a reason to delete it.
+Session 89 traced every rejection to two implementations of Link's Co centre; session 90 delivered a
+blocked candidate to console (49.8582 u against 0.1534 u -- the console cannot land between them) and
+it clipped, on `body_cyl`, to the bit. The root cause sat one level under the seam: the two ports were
+sampling `rollf` at two different f32 FRAMES, because `FrameCtrl` held `enter_roll`'s Python double
+`1.1` where `J3DFrameCtrl::mRate` is f32. Fixed at that boundary, the ports agree bit-for-bit and all
+four rejections deliver -- so a filter that starts rejecting again means something has REGRESSED, and
+`tests/test_cross_engine.py` asserts the empty class every run. See `tests/test_centre_seam.py`.
+
 Promoted from session 88's `_notes/s88_{clip,agree}.py`; the composite path is unchanged.
 """
 import math

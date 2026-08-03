@@ -798,8 +798,9 @@ def test_the_session_89_pass_is_the_same_population_reached_by_an_aim_that_ROLLS
 
     So session 88's "36 of the 55 cannot roll" was a property of the PINNED ROW, not of the
     candidates. Re-represented, **0 of 81 scorings carry an unrollable aim** (against 57), all 55
-    draws confirm, and the frame floor returns to 4. The only survivors that are really lost are the
-    4 the cross-engine gate rejects, which are the Co-centre seam (`test_centre_seam.py`)."""
+    draws confirm, and the frame floor returns to 4. The 4 that the cross-engine gate still rejected
+    here were the Co-centre seam, and session 90's console run settled it -- so this file is the
+    pass as the PRE-FIX engine filtered it, and the current list is the one below."""
     s89 = json.load(open(_fx('courtyard_entry_s89_hits.json')))
     assert s89['n_hits'] == 51 and s89['frame_floor'] == 4
     assert len(s89['dropped']) == 0, "every candidate now rolls; nothing dies at the A-press"
@@ -818,3 +819,29 @@ def test_the_session_89_pass_is_the_same_population_reached_by_an_aim_that_ROLLS
             == {key(r) for r in rows} | {key(r) for r in s89['rejected']})
     assert {ES.aim_cell(r['facing']) for r in rows} == {2551, 2552}
     assert ES.aim_cell(40834) == ES.aim_cell(40841) == 2552
+
+
+def test_the_session_90_list_is_the_whole_pass_because_the_seam_closed():
+    """**THE CURRENT CANDIDATE LIST.** Session 90 delivered one of the four cross-engine rejections
+    to console and it clipped, which settled the Co-centre seam -- and the root cause turned out to
+    be a ULP of ANIM FRAME (`FrameCtrl` holding `enter_roll`'s Python double `1.1` where
+    `J3DFrameCtrl::mRate` is f32), not a wrong centre. See `test_centre_seam.py`.
+
+    So the same pass, re-confirmed on the fixed engine, loses NOBODY: the s89 rows plus the four it
+    rejected are exactly the s90 rows. The candidate list a delivery indexes is this one; the s89
+    file above stays as the record of what the seam cost while it was open."""
+    s89 = json.load(open(_fx('courtyard_entry_s89_hits.json')))
+    s90 = json.load(open(_fx('courtyard_entry_s90_hits.json')))
+    assert s90['n_hits'] == 55 and s90['frame_floor'] == 4
+    assert len(s90['rejected']) == 0 and len(s90['dropped']) == 0
+
+    key = lambda r: (tuple(r['plan']), r['thrust'], r['m351C'], tuple(r['entry']))
+    assert ({key(r) for r in s90['rows']}
+            == {key(r) for r in s89['rows']} | {key(r) for r in s89['rejected']})
+    for r in s90['rows']:
+        assert main_stick_decode(*r['aim'])[1] > float(LandState.ATTACK_MSD_MIN), r['plan']
+        assert r['confirmed'] and r['deliverable'] and r['cross_engine']['deliverable']
+        assert r['cross_engine']['worst_ulp'] == 0 and r['cross_engine']['cut_ok'], r['plan']
+    # ranked frame-minimal first, so row 0 is what a delivery script picks up
+    assert [r['frames'] for r in s90['rows']] == sorted(r['frames'] for r in s90['rows'])
+    assert s90['rows'][0]['frames'] == 4

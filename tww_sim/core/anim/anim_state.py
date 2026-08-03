@@ -123,13 +123,24 @@ class FrameCtrl:
         return c
 
     def set(self, attribute, start, end, rate, frame):
-        """daPy_lk_c::setFrameCtrl (12938): loop = start if rate>=0 else end."""
+        """daPy_lk_c::setFrameCtrl (12938): loop = start if rate>=0 else end.
+
+        Every float member is **f32**, because `J3DFrameCtrl`'s are (`mFrame`/`mRate`/`mStart`/
+        `mEnd`/`mLoopFrame`), and `update()`'s `mFrame += mRate` is a single-precision add. Rounding
+        here rather than trusting callers is not defensive style, it is the fix for a real console
+        divergence (session 90): `enter_roll` passed the literal `1.1`, a Python DOUBLE fractionally
+        below `f32(1.1)`, and at roll frame 2.2 -> 3.3 the true f32 sum is an exact tie -- so the
+        double's head start broke the tie DOWN to 3.299999952316284 where the hardware rounds
+        half-to-even UP to 3.3000001907348633. One ULP of anim frame, 3 ULP of root translate, and a
+        Co centre that moved Tetra by a ULP and lost a seam clip. `LandState.roll_frame` accumulates
+        the same anim frame from an f32 `ROLL_RATE` and got it right, which is how the two disagreed
+        at all. See `knowledge/mechanics/link-co-centre.md`."""
         self.attribute = attribute
-        self.end = float(end)
-        self.rate = float(rate)
-        self.start = float(start)
-        self.frame = float(frame)
-        self.loop = float(start) if rate >= 0.0 else float(end)
+        self.end = fp.f32(end)
+        self.rate = fp.f32(rate)
+        self.start = fp.f32(start)
+        self.frame = fp.f32(frame)
+        self.loop = self.start if self.rate >= 0.0 else self.end
 
     def update(self):
         """J3DFrameCtrl::update: mFrame += mRate then wrap/clamp per attribute (f32 throughout)."""
@@ -182,8 +193,8 @@ class UnderAnimState:
         # different leg pose -> different toe. See knowledge/model/anim-engine.md.
         self._dash = 'dashs' if sword else 'dash'
         self._walk = 'walks' if sword else 'walk'
-        self.fc0.frame = float(move0_frame)
-        self.fc0.end = float(ANIM_META[move0_anim][0])
+        self.fc0.frame = fp.f32(move0_frame)          # f32 members, as in set() -- see FrameCtrl.set
+        self.fc0.end = fp.f32(ANIM_META[move0_anim][0])
         self.fc0.attribute = ANIM_META[move0_anim][1]
 
     def clone(self):

@@ -122,7 +122,7 @@ engines that had never been compared to each other.
    and what the two engines do differently there: session 88's four rejections were one seam - two
    different ports of Link's Co centre, agreeing to 1-2 ULP - and swapping one engine onto the other's
    port made all four agree at once
-   ([../mechanics/link-co-centre.md](../mechanics/link-co-centre.md#the-two-engines-and-the-1-2-ulp-between-them)).
+   ([../mechanics/link-co-centre.md](../mechanics/link-co-centre.md#the-two-ports-and-what-was-actually-between-them)).
    The corollary for rule 6: **a cross-engine gate is only evidence on frames where the engines CAN
    differ.** Both console captures ran on candidates where the two ports agree, so the gate was
    green and blind for two sessions. Pick the diffing candidate on purpose, and when no capture can
@@ -136,6 +136,16 @@ engines that had never been compared to each other.
     the pass two configurations whose aim was the very byte pair the console had refused. **A re-run
     that reproduces the previous run exactly is a RESULT, not a relief:** diff the populations before
     reading the yield, and if nothing moved, find out what the run actually consumed.
+11. **A code seam can be a SYMPTOM: ask what each side is given before asking which side is right**
+    (session 90). Rule 9's named seam was two ports of the Co centre, and the obvious next move was to
+    delete the loser. The console run said `body_cyl` - and neither port was wrong. They were being
+    handed **different anim frames**, one ULP apart, because a frame ctrl held a Python `double` rate
+    where the hardware field is f32 ([../model/anim-frame-is-f32.md](../model/anim-frame-is-f32.md)).
+    Two corollaries. **Design the run so it cannot come back ambiguous:** with every capture blind to
+    the question, the move was not a better argument but a candidate where the two answers are 49.97 u
+    apart instead of 1 ULP - clip against no clip. And **a small measured cost is not evidence the
+    cause is small**: "4 candidates, zero frames" was one f32 tie in the shared anim engine, and the
+    same duplicate-accumulator shape can sit under anything.
 
 ## See also
 

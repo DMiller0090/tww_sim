@@ -101,6 +101,7 @@ you can triage in one glance.
 - **Why f32/ctypes / op-order / `_F32_PI` / `cM_rad2s` truncation / the baked cos+sin tables / which matrix-quat ops are FMA-fused?** → [model/fp-faithfulness.md](model/fp-faithfulness.md)
 - **How does the J3D anim runtime work / the 42-joint skeleton / Hermite keyframes / world-space foot FK / `PSMTXQuat` / how does the toe become `speedF`?** → [model/anim-engine.md](model/anim-engine.md)
 - **Why must the euler→quat half-angle be sign-extended / why isn't a negated quaternion bit-equivalent?** → [model/euler-quat-signed-half.md](model/euler-quat-signed-half.md)
+- **Why must an anim frame ctrl's rate be f32 / how can two rates that "are 1.1" advance to different frames / why does one ULP of anim frame matter?** → [model/anim-frame-is-f32.md](model/anim-frame-is-f32.md)
 - **Which position/lean is the model POSED from (before or after `posMove`) / why does a proc-init frame draw upright / why do ULPs of base matter?** → [model/draw-base.md](model/draw-base.md)
 - **Does a drawn sword change the walk anims (WALKS/DASHS) / which anims does `getAnmData` swap / why can that move `speedF`?** → [model/equipped-anim-set.md](model/equipped-anim-set.md)
 - **Does the anim keep running while Link is STOPPED / why is a re-walk's first step tiny / when does a stop reset the walk phase / what does low health change?** → [model/wait-stop-pose.md](model/wait-stop-pose.md)
@@ -126,6 +127,7 @@ you can triage in one glance.
 - **My axis priced at exactly 8x - why is a perfectly integral multiplier a warning sign? How did sweeping a facing at 1 BAM measure the same configuration sixteen times?** → [history/entry-search-s81-camera-lever.md](history/entry-search-s81-camera-lever.md)
 - **My model is live-gated 0 ULP and still wrong - how? Why record the REGIME a capture covers next to the claim it proves?** → [history/co-centre-body-chn-twist.md](history/co-centre-body-chn-twist.md)
 - **I widened my search's input alphabet on a measurement and the console refused a third of it - why can a gate on the model prove nothing about a DISPATCH? What does a containment check actually promise?** → [history/aim-alphabet-whole-grid.md](history/aim-alphabet-whole-grid.md)
+- **Two implementations of one quantity disagree and every capture I have is blind to it - how do I design the run that decides? Why can a code seam be a symptom rather than the bug?** → [history/co-centre-two-ports.md](history/co-centre-two-ports.md)
 
 ## Page template (for contributors)
 

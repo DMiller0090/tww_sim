@@ -16,6 +16,11 @@ What this file pins:
   * Off by default. `cross_engine=False` must leave the rows and the ranking byte-identical to what
     every existing caller and gate expects.
 
+SESSION 90 CLOSED THE DISAGREEMENT THIS FILTER MEASURES, and the file is kept rather than deleted
+because a filter that currently rejects nothing is exactly the one that quietly stops working. The
+rejections are re-run every time and must now all AGREE (`test_the_blocked_class_is_empty_now...`);
+the seam itself and the console run that settled it live in `tests/test_centre_seam.py`.
+
 Offline: replays a locked log on the wired `FreeRun` plus one `ShoveCtx` build per hit, no Dolphin.
 """
 import json
@@ -72,15 +77,21 @@ def test_every_pinned_survivor_still_agrees(k, seed):
     assert r['worst_ulp'] == 0 and r['cut_ok']
 
 
-def test_the_blocked_rejections_are_reproduced_and_named(seed):
-    """The expensive class, RE-MEASURED rather than trusted: `ShoveCtx` lunges ~50 u through the seam
-    and the composite does not move Link at all. `blocked` has to separate these from a candidate
-    that merely diverges, because they are the ones worth a diagnosis -- a few ULP of Tetra is the
-    scale the verdict flips at, so whichever engine is wrong is wrong for the population.
+def test_the_blocked_class_is_empty_now_and_the_console_is_why(seed):
+    """The class this filter was built to catch NO LONGER EXISTS, and that is the assertion.
 
-    The rejected rows carry only a summary, so the candidates are recovered from the session-87 pass
-    they came from; asserting the summary against itself would gate nothing."""
-    rej = [r for r in HITS['rejected'] if r['cross_engine']['composite_moved'] < 1.0]
+    Session 88 recorded candidates where `ShoveCtx` lunged ~50 u through the seam and the composite
+    refused to move Link at all, and session 89 traced every one of them to two implementations of
+    Link's Co centre disagreeing by 1-2 ULP. Session 90 delivered one of them (49.8582 u against
+    0.1534 u -- 49.9665 u apart, so the console could not land between them) and the root cause turned
+    out to sit one level under the seam: the two ports were sampling `rollf` at two different f32
+    frames, because `FrameCtrl` held `enter_roll`'s Python double `1.1` where `J3DFrameCtrl::mRate`
+    is f32. With that fixed the ports agree bit-for-bit and every historical rejection delivers.
+
+    So this re-runs the four and demands the OPPOSITE of what it demanded before. `blocked` stays in
+    the module as the classifier for a future candidate; what is gated here is that no candidate we
+    have ever seen is one."""
+    rej = HITS['rejected']
     assert rej, "the fixture must carry the class this test is about"
     src = json.load(open(_fx('courtyard_entry_s87_hits.json')))['rows']
     for row in rej:
@@ -88,12 +99,12 @@ def test_the_blocked_rejections_are_reproduced_and_named(seed):
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             r = XE.agree(hit, seed=seed)
-        assert XE.blocked(r), row['plan']
-        assert not r['deliverable'] and r['genuine'] and r['handover_ok']
-        assert r['predicted_lunge'] > XE.CLIP_LUNGE_MIN and r['composite_moved'] < 1.0
-        # and the fixture's recorded summary is what a re-run still measures
-        assert r['composite_moved'] == pytest.approx(row['cross_engine']['composite_moved'], abs=1e-9)
+        assert not XE.blocked(r), row['plan']
+        assert r['deliverable'] and r['genuine'] and r['handover_ok'] and r['cut_ok'], row['plan']
+        assert r['worst_ulp'] == 0, row['plan']
+        # the lunge `ShoveCtx` always predicted is now the one the composite actually takes
         assert r['predicted_lunge'] == pytest.approx(row['cross_engine']['predicted_lunge'], abs=1e-9)
+        assert r['composite_moved'] == pytest.approx(r['predicted_lunge'], abs=1e-9)
 
 
 def test_a_pre_cut_divergence_can_still_end_in_an_identical_cut_frame():
