@@ -522,10 +522,12 @@ def locus_scan(tetra, facing, thrust, lean, ref_entry, nspeed=None, span=70.0, s
     ctx, sch, resid = build_fast(facing, lean, thrust, nspeed=nspeed)
     p, r, grad = zero_the_resid(tetra, facing, thrust, lean, ref_entry, nspeed=nspeed)
     if grad < 1e-3:
-        return dict(stations=0, live=0, walkable=0, reason='no leverage at the seed')
+        return dict(stations=0, live=0, walkable=0, live_at=[], walkable_at=[],
+                    reason='no leverage at the seed')
     g = entry_gradient(tetra, p, facing=facing, m351c=lean, thrust=thrust, nspeed=nspeed)
     tx_, tz_ = -g['gz'] / g['grad'], g['gx'] / g['grad']       # along the locus, not across it
     live = walk = stations = 0
+    live_at, walk_at = [], []
     s = -span
     while s <= span:
         q = (p[0] + s * tx_, p[1] + s * tz_)
@@ -540,12 +542,18 @@ def locus_scan(tetra, facing, thrust, lean, ref_entry, nspeed=None, span=70.0, s
                 q[1] + (2.0 * i / (n - 1) - 1.0) * half * uz) for i in range(n)]
         if any(o[0] for o in ctx.sweep_par(pts, 0)):
             live += 1
-            walk += 1 if TA.is_walkable(q[0], q[1]) else 0
-    return dict(stations=stations, live=live, walkable=walk, reason='')
+            live_at.append((q[0], q[1]))
+            if TA.is_walkable(q[0], q[1]):
+                walk += 1
+                walk_at.append((q[0], q[1]))
+    # The live stations are returned, not just counted: `qualify` needs somewhere to RE-SEED a band,
+    # and "live somewhere on the locus" is not a band. Session 90 -- see `qualify`.
+    return dict(stations=stations, live=live, walkable=walk, live_at=live_at,
+                walkable_at=walk_at, reason='')
 
 
 def qualify(tetra, ref_entry, facings=None, thrusts=THRUSTS, lean=0, csangle=CSANGLE,
-            progress=False, nspeed=None):
+            progress=False, nspeed=None, escalate=True):
     """Which (facing, thrust) admit a genuine entry locus at all, and where each one's band sits.
     Spending candidates on the rest buys nothing -- it is the cheapest 4x in the search.
 
@@ -555,12 +563,30 @@ def qualify(tetra, ref_entry, facings=None, thrusts=THRUSTS, lean=0, csangle=CSA
 
     The alphabet path qualifies one configuration per sine-table CELL (`aim_cells`) and carries the
     sibling aim bytes that reach it, because a cell is the draw. An EXPLICIT ``facings`` list is
-    taken verbatim -- that is how the window was measured at 1 BAM in the first place."""
+    taken verbatim -- that is how the window was measured at 1 BAM in the first place.
+
+    **A NEGATIVE IS ESCALATED TO `locus_scan` BEFORE IT IS BELIEVED** (``escalate``, session 90).
+    `configuration_band` sweeps across the locus at ONE station, so a configuration whose genuine dust
+    has slid along the curve reads barren -- and this function's negative is what scopes the whole
+    pass. Measured: cell 2553 (facings 40848..40863) reads barren here and has **20 walkable live
+    stations** under the strong form, so every pass from session 81 to 89 silently excluded the
+    righter half of the seam's facing window. On a negative this now marches the locus and, if it
+    finds a live station, RE-SEEDS the band there and returns it with ``escalated=True``. Costs the
+    strong form only on configurations that were about to be thrown away."""
     aims = aim_cells(csangle) if facings is None else [(f, None, []) for f in facings]
     out = []
     for i, (fac, byts, sib) in enumerate(aims):
         for thrust in thrusts:
             b = configuration_band(tetra, fac, thrust, lean, ref_entry, nspeed=nspeed)
+            if not b['productive'] and escalate:
+                sc = locus_scan(tetra, fac, thrust, lean, ref_entry, nspeed=nspeed)
+                for q in (sc['walkable_at'] + sc['live_at']):     # prefer a station Link can stand on
+                    b2 = configuration_band(tetra, fac, thrust, lean, q, nspeed=nspeed)
+                    if b2['productive']:
+                        b, b2['escalated'] = b2, True
+                        b['escalated'] = True
+                        break
+            b.setdefault('escalated', False)
             b.update(facing=fac, thrust=thrust, aim=list(byts) if byts else None, lean=lean,
                      cell=aim_cell(fac), aims=sib,
                      nspeed=(ROLL_NSPEED if nspeed is None else nspeed))

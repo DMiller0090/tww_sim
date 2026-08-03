@@ -58,7 +58,8 @@ def ref_entry(seed=None):
                                               h['entry'][1] - seed['link'][1]))['entry'])
 
 
-def qualified(seed=None, csangle=ES.CSANGLE, thrusts=ES.THRUSTS, path=QUAL_CACHE, refresh=False):
+def qualified(seed=None, csangle=ES.CSANGLE, thrusts=ES.THRUSTS, path=QUAL_CACHE, refresh=False,
+              escalate=True):
     """The productive (facing, thrust) configurations at this camera, with each one's OWN acceptance
     band -- `entry_search.qualify` filtered, cached to json (4 s to recompute since `entry_gradient`
     went analytic + cached).
@@ -77,20 +78,26 @@ def qualified(seed=None, csangle=ES.CSANGLE, thrusts=ES.THRUSTS, path=QUAL_CACHE
     and the s89 re-run came back BIT-IDENTICAL to the pass before it, because the key validated
     `cells`/`csangle`/`thrusts` and not the gate: 2 of the 3 cached configurations carried aim
     `[95,168]`, msd 0.5705 -- the exact aim of the delivery that sheathed the sword. `msd_min` is in
-    the key now. A cache written before either change is refused rather than silently re-used."""
+    the key now. A cache written before either change is refused rather than silently re-used.
+
+    ``escalate`` is in the key for the same reason (session 90): `ES.qualify` now argues a NEGATIVE
+    from `locus_scan` rather than from `configuration_band`'s single station, which takes this set from
+    3 configurations to 9 -- including facing 40850 (cell 2553), whose band is the WIDEST of them at
+    5.19e-05. A pass handed the pre-escalation cache would re-run the narrow window and look like a
+    confirmation."""
     msd_min = float(LandState.ATTACK_MSD_MIN)
     if not refresh and path and os.path.exists(path):
         d = json.load(open(path))
         if (d.get('cells') and d['csangle'] == csangle and tuple(d['thrusts']) == tuple(thrusts)
-                and d.get('msd_min') == msd_min):
+                and d.get('msd_min') == msd_min and d.get('escalate') == bool(escalate)):
             return d['quals']
     seed = seed or ES.console_seed()
     quals = [q for q in ES.qualify(seed['tetra'], ref_entry(seed), thrusts=thrusts,
-                                   csangle=csangle) if q['productive']]
+                                   csangle=csangle, escalate=escalate) if q['productive']]
     if path:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         json.dump(dict(csangle=csangle, thrusts=list(thrusts), cells=True, msd_min=msd_min,
-                       quals=quals), open(path, 'w'))
+                       escalate=bool(escalate), quals=quals), open(path, 'w'))
     return quals
 
 

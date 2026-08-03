@@ -40,6 +40,18 @@ from harness.tetrapush import entry_search as ES
 from harness.tetrapush import two_roll as TR
 
 SEED = ES.console_seed()
+
+#: Seven tests want the SAME productive set; qualification is ~45x costlier since it argues a negative
+#: from `locus_scan` (`entry_search.qualify`), so compute it once. Never pass ``escalate=False``.
+_QUALS = []
+
+
+def productive_quals():
+    if not _QUALS:
+        _QUALS.append(EF.qualified(SEED, path=None))
+    return _QUALS[0]
+
+
 HOLD = dict(SEED['log'][-1], buttons=0)
 TRG = int(HOLD.get('triggerL', 0))
 
@@ -170,7 +182,7 @@ def test_most_of_the_draws_sit_at_a_dead_lean():
     lean with no usable band. This is the number that turned s80's 72 near-misses into 6."""
     bands = EF.BandTable(SEED, path=None)
     fan = EF.fleet_fan(base_frames=(0,), stride=32, jmax=5)
-    quals = EF.qualified(SEED, path=None)
+    quals = productive_quals()
     live = dead = 0
     for k in fan:
         lean = ES.lean_at_roll(k[2])
@@ -270,7 +282,7 @@ def test_dropping_the_cap_multiplies_the_draws_and_buys_no_near_misses():
     `test_the_current_candidate_list_still_scores_and_confirms`); it is the coarse one-segment
     population that thinned."""
     kw = dict(base_frames=tuple(range(7)), stride=4, jmax=12)
-    bands, quals = EF.BandTable(SEED, path=None), EF.qualified(SEED, path=None)
+    bands, quals = EF.BandTable(SEED, path=None), productive_quals()
     capped = EF.stream_search(EF.iter_fan(cap=ES.WALK_CAP, **kw), quals=quals, bands=bands)
     uncapped = EF.stream_search(EF.iter_fan(cap=None, **kw), quals=quals, bands=bands)
     assert uncapped['n_candidates'] > 2.5 * capped['n_candidates']
@@ -335,7 +347,7 @@ def test_the_streaming_search_reproduces_a_materialised_one():
     and the packed-key dedup are memory plumbing, not a change of answer."""
     kw = dict(base_frames=(0,), stride=32, jmax=4)
     bands = EF.BandTable(SEED, path=None)
-    quals = EF.qualified(SEED, path=None)
+    quals = productive_quals()
     a = EF.stream_search(EF.iter_fan(**kw), quals=quals, bands=bands, batch=10 ** 9)
     b = EF.stream_search(EF.iter_fan(**kw), quals=quals, bands=bands, batch=97)
     assert a['n_candidates'] == b['n_candidates'] > 0
@@ -357,7 +369,7 @@ def test_the_family_price_is_counted_and_does_not_change_the_answer():
     number that made every wide one-segment pass look like it was still buying draws."""
     kw = dict(base_frames=(0,), s1_stride=64, j1=(2, 4), s2_stride=32, j2max=3)
     bands = EF.BandTable(SEED, path=None)
-    quals = EF.qualified(SEED, path=None)
+    quals = productive_quals()
     plain = EF.stream_search(EF.iter_fan2(**kw), quals=quals, bands=bands, batch=997)
     priced = EF.stream_search(EF.iter_fan2(**kw), quals=quals, bands=bands, batch=997,
                               family_of=EF.family_of_plan)
@@ -411,7 +423,7 @@ def test_the_near_misses_are_reported_with_their_identity():
     """The gaps and their identities are the same population in the same order -- so a suspicious
     multiplier can be audited from the pass's own output instead of a re-run."""
     kw = dict(base_frames=(0,), s1_stride=64, j1=(2, 4), s2_stride=32, j2max=3)
-    r = EF.stream_search(EF.iter_fan2(**kw), quals=EF.qualified(SEED, path=None),
+    r = EF.stream_search(EF.iter_fan2(**kw), quals=productive_quals(),
                          bands=EF.BandTable(SEED, path=None), family_of=EF.family_of_plan)
     assert [d['gap'] for d in r['near_detail']] == r['near']
     assert r['n_near_candidates'] <= r['n_near']
@@ -508,7 +520,7 @@ def test_scoping_the_key_set_per_family_reports_the_same_pass():
     draw, the reported population is identical to a globally deduped pass."""
     kw = dict(base_frames=(0,), s1_stride=64, j1=(2, 4), s2_stride=16, j2max=4)
     bands = EF.BandTable(SEED, path=None)
-    quals = EF.qualified(SEED, path=None)
+    quals = productive_quals()
     g = EF.stream_search(EF.iter_fan2(**kw), quals=quals, bands=bands, family_of=EF.family_of_plan)
     f = EF.stream_search(EF.iter_fan2(**kw), quals=quals, bands=bands, family_of=EF.family_of_plan,
                          dedup_scope='family')
@@ -640,7 +652,7 @@ def test_a_coarser_pass_is_read_out_of_the_finer_one_it_is_contained_in():
     the sub-grid must be a subset, must shrink as the stride grows, and the full pass must agree with
     `subgrid_rate` at stride 1."""
     kw = dict(base_frames=(0,), s1_stride=8, j1=(2,), s2_stride=16, j2max=4)
-    r = EF.stream_search(EF.iter_fan2(**kw), quals=EF.qualified(SEED, path=None),
+    r = EF.stream_search(EF.iter_fan2(**kw), quals=productive_quals(),
                          bands=EF.BandTable(SEED, path=None), family_of=EF.family_of_plan)
     assert r['n_families'] > 1 and r['near_families'], "no draws -- the readout would be vacuous"
     assert sum(n for _f, n in r['near_families']) == r['n_near']
