@@ -688,8 +688,132 @@ def test_entry_fan_still_re_exports_the_scoring_half():
     from harness.tetrapush import entry_score as EC
     for name in ('stream_search', 'BandTable', 'qualified', 'ref_entry', 'family_of_plan',
                  'draw_key', 'hit_draws', 'dedupe_near', 'lottery', 'distinct_near',
-                 'confirm_hits', 'MIN_BAND', 'BAND_PROBE', 'QUAL_CACHE', 'BAND_CACHE'):
+                 'confirm_hits', 'MIN_BAND', 'BAND_PROBE', 'QUAL_CACHE', 'BAND_CACHE',
+                 'facing_window', 'parse_cell_spec', 'cell_scope', 'select_quals'):
         assert getattr(EF, name) is getattr(EC, name), name
+
+
+# ------------------------------------------------------- scoping a pass by cell (session 93)
+
+def test_a_cell_spec_is_the_measured_window_not_a_typed_list():
+    """``lobe2`` has to MEAN the measured lobe, so a re-scan moves every selector with it.
+
+    The s92 handoff named the second lobe's aimable cells by hand -- "2561, 2562, 2564, 2567-2570,
+    2572, 2573" -- and a hardcoded list is exactly what goes stale when the window's right edge moves
+    (the handoff itself flags that the scan stopped at 2575 while the qualification reached 2581). So
+    the named forms resolve out of `fixtures/courtyard_facing_window_s92.json`, and ``right`` is
+    defined against the DELIVERED cell rather than a number anyone chose."""
+    w = EF.facing_window()
+    lo, hi = w['lobes'][1]
+    assert EF.parse_cell_spec('lobe2') == tuple(range(lo, hi + 1))
+    assert EF.parse_cell_spec('lobe1') == tuple(range(*[w['lobes'][0][0], w['lobes'][0][1] + 1]))
+    # `right` runs from one cell past the delivered clip's to the AIM ALPHABET's edge, not the scan's:
+    # the s92 scan stopped at 2575 while its own qualification reached 2581 (`parse_cell_spec`).
+    right = EF.parse_cell_spec('right')
+    assert min(right) == w['delivered']['cell'] + 1
+    assert max(right) == ES.AIM_WINDOW[1] >> 4 > w['scanned'][1]
+    assert w['delivered']['cell'] not in right
+    quals = productive_quals()
+    assert max(EF.cell_scope(quals, right)['kept']) > w['scanned'][1], \
+        "the productive set reaches past the scanned window; `right` must too"
+    assert EF.parse_cell_spec('2561,2562') == (2561, 2562)
+    assert EF.parse_cell_spec('2564-2566') == (2564, 2565, 2566)
+    assert EF.parse_cell_spec('2561, 2564-2566, lobe1') == \
+        tuple(sorted(set((2561, 2564, 2565, 2566)) | set(EF.parse_cell_spec('lobe1'))))
+
+
+def test_the_cell_scope_says_which_cells_it_missed_and_which_kind_of_miss_it_was():
+    """A cell absent from the productive set is absent for one of TWO reasons, and they are different
+    facts about the search rather than one shortfall.
+
+    **Not aimable at this camera:** `qualified` only ever qualifies `aim_cells(csangle)`, so a cell no
+    A-press aim resolves to at the frozen csangle was never offered a qualification. That is the camera
+    lever session 92 re-opened -- s83 priced a slew at exactly zero against a 2-cell window, and five
+    cells of the real window are in this class. **Barren:** the cell was qualified and nothing genuine
+    was found, which is what the measured dead gap is. Conflating them would read a camera limit as a
+    geometric negative."""
+    quals = productive_quals()
+    w = EF.facing_window()
+    aimable = {ES.aim_cell(f) for f, _b, _s in ES.aim_cells(ES.CSANGLE)}
+
+    sc = EF.cell_scope(quals, EF.parse_cell_spec('lobe2'))
+    assert sc['kept'] and sc['not_aimable'] and not sc['barren']
+    for c in sc['not_aimable']:
+        assert c not in aimable, c            # a camera miss, not a barren cell
+    for c in sc['kept']:
+        assert c in aimable
+
+    # the measured DEAD GAP is the other kind: aimable cells that qualified and found nothing
+    gap = EF.cell_scope(quals, range(w['dead_gap'][0], w['dead_gap'][1] + 1))
+    assert not gap['kept'], "the dead gap must not be in the productive set"
+    assert gap['barren'], "and its aimable cells are barren, not unaimable"
+    assert set(gap['barren']) <= aimable
+
+
+def test_narrowing_a_pass_never_silently_returns_an_empty_scope():
+    """The scope a pass ran is part of its result, and an empty one is an ERROR.
+
+    This thread has paid for a silently-narrowed scope twice -- session 89 re-ran the old aim alphabet
+    from a cache key that did not cover the ATTACK gate, and sessions 81-91 ran a 2-cell facing window
+    because a negative had been argued from one seed entry. Both looked like completed passes.
+    `[[search-space-contains-human]]`: state the range, then check it."""
+    quals = productive_quals()
+    assert len(EF.select_quals(quals, cells=(2561, 2562))) == 2
+    assert len(EF.select_quals(quals)) == len(quals)          # no scope == every configuration
+    with pytest.raises(ValueError):
+        EF.select_quals(quals, cells=(9999,))
+    with pytest.raises(ValueError):
+        EF.select_quals(quals, cells=EF.parse_cell_spec(str(EF.facing_window()['dead_gap'][0])))
+    with pytest.raises(ValueError):
+        EF.select_quals(quals, thrusts=(99,))
+
+
+def test_the_frame_cap_drops_exactly_the_plans_the_objective_would_reject():
+    """``frames=`` is the objective as a PRUNE, not a ranking.
+
+    `iter_fan2`'s shape arguments bound the fan but not the plan LENGTH, so a bounded pass spends most
+    of its evaluation on plans Dereck would refuse outright -- the herd must lose ZERO frames
+    (`[[tetrapush-frame-minimal]]`; session 91's own note is "do not bring him a 5-frame plan"). The
+    cap must be order-preserving, since a family-major stream is what bounds `stream_search`'s
+    memory, and `None` must be the identity so every pass through session 91 still means what it did."""
+    kw = dict(base_frames=(0, 1), s1_stride=64, j1=(1, 2), s2_stride=32, j2max=3)
+    full = list(EF.iter_fan2(**kw))
+    assert {EF.plan_frames(p) for _k, p in full} - {2, 3, 4} , "this fan must span past the floor"
+    cap4 = list(EF.capped(EF.iter_fan2(**kw), 4))
+    assert cap4 == [kv for kv in full if EF.plan_frames(kv[1]) <= 4]     # order preserved
+    assert cap4 and len(cap4) < len(full)
+    assert max(EF.plan_frames(p) for _k, p in cap4) <= 4
+    assert list(EF.capped(EF.iter_fan2(**kw), None)) == full             # None is the identity
+    assert EF.plan_frames([0, 208, 110, 2, 169, 192, 2]) == 4            # the delivered clip's plan
+    assert EF.plan_frames([3, 9, 9, 6]) == 9                             # one segment: n0 + j
+
+
+def test_a_scoped_pass_is_the_unscoped_pass_restricted_to_those_cells():
+    """**THE CONTRACT THE WHOLE SCOPING RESTS ON: it may change the COST and never an ANSWER.**
+
+    Session 92's productive set is 40 configurations where every pass before it ran 6, and evaluation
+    is per candidate per configuration -- so a pass at the cells the objective wants is the only
+    affordable one. That is a budget decision, and it is only legitimate if the hits and near-misses
+    it reports at those cells are bit-for-bit the ones the whole-set pass reports there. Same gate
+    shape as the fan-equality one: the cheap path has to reproduce the reference exactly."""
+    kw = dict(base_frames=(0,), s1_stride=64, j1=(2,), s2_stride=32, j2max=2)
+    cells = (2551, 2552)
+    quals = productive_quals()
+    sub = EF.select_quals(quals, cells=cells)
+    assert 0 < len(sub) < len(quals)
+    bands = EF.BandTable(SEED, path=None)
+    wide = EF.stream_search(EF.iter_fan2(**kw), quals=quals, bands=bands, batch=997)
+    narrow = EF.stream_search(EF.iter_fan2(**kw), quals=sub, bands=bands, batch=997)
+
+    assert narrow['n_candidates'] == wide['n_candidates'] > 0     # the same fan, scored less widely
+    assert narrow['n_evaluations'] == wide['n_evaluations'] * len(sub) // len(quals)
+    pick = lambda r: sorted((h['facing'], h['thrust'], tuple(h['entry']), tuple(h['plan']))
+                            for h in r['hits'] if ES.aim_cell(h['facing']) in cells)
+    assert pick(narrow) == pick(wide)
+    nearby = lambda r: sorted((g, i['facing'], i['thrust'], tuple(i['entry']))
+                              for g, i in [(d['gap'], d) for d in r['near_detail']]
+                              if ES.aim_cell(i['facing']) in cells)
+    assert nearby(narrow) == nearby(wide)
 
 
 def test_the_one_segment_fan_keeps_its_unpruned_contract():

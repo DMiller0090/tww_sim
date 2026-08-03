@@ -3,15 +3,20 @@
 **Answers:** The clip lands and Link goes out of bounds - now the DIRECTION he leaves in is worth
 frames. Which quantity is the exit angle, and how finely can it be set? Can I steer where Link cuts
 from? How wide is the facing window really, and what does it take to argue that a facing is dead?
-**Status:** validated offline (session 92) on the flooded-Hyrule Tetra corner, against the
+**Status:** validated offline (sessions 92-93) on the flooded-Hyrule Tetra corner, against the
 console-delivered clip in [`fixtures/courtyard_clip_s90_console.json`](../../fixtures/courtyard_clip_s90_console.json):
-the cut-position pinning, the cell quantum and the two-lobe window are measured, and the recovered
-second lobe is `ShoveCtx` dust that has NOT been cross-engine confirmed or delivered. Gated in
-[`tests/test_entry_search.py`](../../tests/test_entry_search.py).
+the cut-position pinning, the cell quantum, the two-lobe window and the per-budget frame cost are
+measured. The second lobe is `ShoveCtx` dust that has NOT been cross-engine confirmed or delivered, and
+session 93 measured that **no plan at the frame floor reaches it** - so at the objective's own budget the
+axis is the first lobe. Gated in [`tests/test_entry_search.py`](../../tests/test_entry_search.py) and
+[`tests/test_entry_reach.py`](../../tests/test_entry_reach.py).
 **Source:** [`harness/tetrapush/entry_search.py`](../../harness/tetrapush/entry_search.py)
-(`curve_seeds`/`curve_scan`, `aim_cell`, `resid_fn`);
+(`curve_seeds`/`curve_scan`, `aim_cell`, `resid_fn`) and
+[`harness/tetrapush/entry_reach.py`](../../harness/tetrapush/entry_reach.py) (the reachable cloud);
 [`fixtures/courtyard_facing_window_s92.json`](../../fixtures/courtyard_facing_window_s92.json) is the
-measured window.
+measured window and
+[`fixtures/courtyard_walk_hull_s93.json`](../../fixtures/courtyard_walk_hull_s93.json) the measured
+reach.
 
 A seam clip is usually asked one question - does Link go out of bounds - and the answer is a yes or a
 no. Once he is out, a second question can be worth frames: **which way is he travelling?** On the
@@ -80,15 +85,86 @@ edge is past where this table stops.
 
 Two things fall out of it:
 
-- **the axis is worth an order of magnitude more than a contiguous reading gives.** Off the delivered
-  cell, +1 cell (+0.088 deg) is all the first lobe offers. The best cell that is *aimable at the frozen
-  camera, carries a real band, and sits near the delivered entry* is **cell 2562: +160 BAM
-  (+0.879 deg), band 9.24e-05, nearest station 21.0 u away** - and its band is **wider** than the
-  delivered cell's own 6.28e-05, so it is not even a trade against difficulty. Cell 2561 is the near
-  alternative (+144 BAM, band 8.60e-05, 13.9 u).
+- **the window is much wider than any contiguous reading gives**, and the cells in the second lobe are
+  not even a trade against difficulty on their own terms: cell 2562 (+160 BAM, +0.879 deg) carries a
+  band of 9.24e-05, **wider** than the delivered cell's own 6.28e-05, and cell 2561 (+144 BAM) 8.60e-05.
+  What the window does *not* say is which of them a plan can reach - see
+  [the frame cost](#what-a-cell-costs-in-frames) below, which is where most of this width goes.
 - **the lunge grows to the right** (49.74 u at the delivered cell to 50.31 u at +288 BAM). "A longer
   lunge buys angle" is not a second lever to price separately; it is this same geometry, since a ray
   rotating away from the pinned position needs more length to still reach the vertex.
+
+## What a cell costs in FRAMES
+
+The window says which cells *can* clip. It does not say which ones a plan can *get to*, and on this
+corner that is where the axis actually lives. The entry has to be walked to inside the frame budget, and
+the budget is the whole constraint: the movement to clip out of bounds must cost **zero** frames against
+the delivered plan, because the exit angle only buys about one downstream.
+
+**A station is not reachable because it is near.** The stations above were found by sweeping
+`reach_radius` - the walk cap times the frame budget plus the roll's own 26 u entry step, 94 u, as a
+square box. That is the right conservative place to hunt a level curve and it is *not* the reachable set:
+Link arrives at the speed cap on a fixed heading, so four held-stick frames reach a small curved cloud
+whose bounding box is a fraction of that box's area. Measure the cloud instead - the fan already
+enumerates it, so its convex hull is a few lines ([`harness/tetrapush/entry_reach.py`](../../harness/tetrapush/entry_reach.py)),
+and keep the test asymmetric: a hull taken off a coarse stick alphabet proves *outside* and only
+suggests inside.
+
+Measured per frame budget, as the closest any candidate gets to the residual zero (the acceptance band
+is ~1e-4 wide, so a budget is only interesting once this is comparable):
+
+| cell | +BAM | <=4 frames | <=5 | <=6 | <=7 |
+|---|---|---|---|---|---|
+| 2552 (delivered) | 0 | 1.3e-03 | 1.3e-03 | 9.1e-05 | 9.1e-05 |
+| 2553 | +9 | 1.1e-02 | 2.3e-05 | 2.3e-05 | 2.3e-05 |
+| 2561 | +149 | **0.354** | 2.6e-03 | 8.9e-04 | 2.6e-05 |
+| 2562 | +154 | **0.430** | 2.2e-03 | 9.6e-04 | 4.9e-05 |
+| 2570 | +284 | **1.038, one sign** | 6.2e-02 | 4.7e-03 | 4.7e-03 |
+| 2581 | +455 | **1.873, one sign** | 1.0e-01 | 3.4e-03 | 2.6e-03 |
+
+Read the bold column: at the frame floor the second lobe is **not reachable**. Those approaches are 71x
+to 375x outside the ~5e-3 probe a search calls a near-miss, and for cells 2570 and right the residual
+does not even change sign over the cloud. A frame-capped pass over all nine aimable second-lobe cells -
+**779130 candidates, 7.01 M evaluations** - returned **0 genuine, 0 near, 0 dead-tail**. Each extra frame
+buys about an order of magnitude of approach, so the lobe becomes a live lottery at 5-7 frames: three
+frames for +0.85 deg, when the budget is zero frames for ~1.
+
+Be careful what a sign census licenses. `resid`'s gradient is ~1.2 per unit and the cloud is ~60 u
+across, so it spans +-70 in there; "both signs appear" (cells 2561/2562, 2.7% negative) says a boundary is
+inside the sampled set, **not** that a zero a plan can land on is.
+
+**Rule out the density explanation by measuring it, not by arguing it.** Ask the same question at two fan
+densities - 157291 candidates and 2888346, an 18.4x buy. Cells 2561/2562 come back **bit-identical**
+(0.35417 and 0.430095, the same f64, at the same argmin entry in both fans) while cell 2553 sharpens
+**37x** on exactly that extra density, to **4.45e-05** - inside its own band width. A fan that resolves
+one cell by 37x and another by nothing is not short of resolution at the second one.
+
+And the reach measurement agrees without being told: asked which of the 40 productive configurations have
+a station a 4-frame plan can put the entry on, the hull answers **cells 2551 and 2552 only** - exactly
+where the whole 55-candidate console-delivered population sits, arrived at from walk endpoints and a
+frame budget with no residual in sight. The 4-frame cloud is 447581 endpoints in a 58.6 x 63.8 u bounding
+box, about **11%** of the area of the 188 u box `reach_radius` implies, and all four corners of that
+bounding box are outside the hull - the cloud is a curved sliver, not a filled square.
+
+Read the signed distances before trusting a verdict, though, because they say how marginal it is
+(+ inside): the three delivered-cell stations sit **+1.6 to +1.8 u** inside, the second lobe **-10 to
+-95 u** outside, and the cell next door **only -2.26 u**. The far verdict is not marginal; the near one
+is inside the hull's own resolution, since it was swept at a coarse stride and a finer alphabet grows the
+hull. A station is also one point on a curve, so "this station is out of reach" is never "this cell is".
+
+So the axis at the floor is the **first lobe**, and its open question is cell 2553 (+9 BAM, the nearest cell
+right of the delivered one). A pass there is *not* short of candidates - it puts **180**
+inside the probe - but every one lands at a lean whose band has no usable width, so the target is a
+single f32 value. That is the same situation the delivered cell was in at its own lean (width 0.0, 20
+genuine samples) and it was won by population, so the next lever is the **lean**: the band is jagged in
+`m351C`, the qualification runs at lean 0, and the fan carries ~1040 distinct entry leans. Measure the
+band across the leans the fan actually arrives on, and aim at (lean, cell) pairs rather than at cells.
+
+So the honest statement of the axis at the floor is the **first lobe**, and the open question there is
+cell 2553 (+9 BAM, the nearest cell right of the delivered one) - which no pass has landed a
+plan on either, the whole delivered 55-candidate population sitting at cells 2551/2552. The superseded
+pricing is in
+[../history/exit-angle-priced-without-its-frame-cost.md](../history/exit-angle-priced-without-its-frame-cost.md).
 
 ## The camera axis REOPENS when the window is wide
 
@@ -119,6 +195,8 @@ migrated claims are in
 
 - [clip-entry-search.md](clip-entry-search.md) - the residual, the acceptance window, and the
   wall-braced `old` this page leans on.
+- [../history/exit-angle-priced-without-its-frame-cost.md](../history/exit-angle-priced-without-its-frame-cost.md) -
+  the second lobe priced as available before its frame cost was measured.
 - [clip-lottery-draws.md](clip-lottery-draws.md) - counting draws honestly; the cell is the atom there
   too.
 - [razor-prices-every-term.md](razor-prices-every-term.md) - rule 12 is this page's rule in its general

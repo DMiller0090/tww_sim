@@ -33,6 +33,7 @@ from tww_sim.land.land import LandState
 
 QUAL_CACHE = os.path.join(_rb, '_generated', 's81', 'qualified.json')
 BAND_CACHE = os.path.join(_rb, '_generated', 's81', 'bands.json')
+WINDOW_FIXTURE = os.path.join(_rb, 'fixtures', 'courtyard_facing_window_s92.json')
 
 #: A band narrower than this is a single f32 `resid` value, not an interval -- a ULP-odds lottery
 #: ticket. Candidates are still counted against it but it is not what a pass is aimed at.
@@ -107,6 +108,98 @@ def qualified(seed=None, csangle=ES.CSANGLE, thrusts=ES.THRUSTS, path=QUAL_CACHE
         json.dump(dict(csangle=csangle, thrusts=list(thrusts), cells=True, msd_min=msd_min,
                        escalate=bool(escalate), curve=bool(curve), quals=quals), open(path, 'w'))
     return quals
+
+
+def facing_window(path=WINDOW_FIXTURE):
+    """The measured facing-cell window (`fixtures/courtyard_facing_window_s92.json`): the two lobes,
+    the dead gap between them, the range that was scanned, and the delivered clip's own cell.
+
+    Loaded rather than restated so a cell spec means what the MEASUREMENT means -- "the second lobe"
+    is `lobes[1]`, and if a later scan moves that edge every selector moves with it."""
+    return json.load(open(path))
+
+
+def parse_cell_spec(spec, window=None):
+    """A pass's cell scope, from a spec string -- ``"2561,2562,2564-2570"``, ``"lobe2"``, ``"right"``,
+    or any comma-separated mix of those. Returns a sorted tuple of sine-table cells.
+
+    The named forms are DERIVED, not listed here: ``lobeN`` is that lobe's measured span in
+    `facing_window`, and ``right`` is every cell strictly right of the delivered clip's own -- the
+    objective's own direction (`knowledge/strategy/clip-exit-angle.md`) -- so asking for it does not
+    mean retyping numbers a re-scan could move.
+
+    ``right`` runs out to the AIM ALPHABET's edge rather than the window scan's, because those two
+    differ and the wider one is the honest bound: the session-92 curve scan stopped at cell 2575 while
+    the qualification it fed reached **2581** (+455 BAM). Bounding this by ``scanned`` would silently
+    drop six qualified cells that are further right than anything the window fixture names. Cells with
+    no productive configuration are then dropped by `select_quals`, and `cell_scope` says which."""
+    w = window or facing_window()
+    out = set()
+    for item in str(spec).replace(' ', '').split(','):
+        if not item:
+            continue
+        if item.startswith('lobe'):
+            lo, hi = w['lobes'][int(item[4:]) - 1]
+            out |= set(range(int(lo), int(hi) + 1))
+        elif item == 'right':
+            out |= set(range(int(w['delivered']['cell']) + 1, (ES.AIM_WINDOW[1] >> 4) + 1))
+        elif '-' in item.lstrip('-'):
+            lo, hi = item.split('-')
+            out |= set(range(int(lo), int(hi) + 1))
+        else:
+            out.add(int(item))
+    return tuple(sorted(out))
+
+
+def cell_scope(quals, cells, csangle=ES.CSANGLE):
+    """What a requested cell scope actually reaches, and WHY each cell it does not reach is missing.
+
+    A cell can be absent from the productive set for two different reasons, and they are two different
+    facts. **Not aimable at this camera:** `qualified` runs over `aim_cells(csangle)`, so a cell no
+    A-press aim resolves to at the frozen csangle was never offered a qualification -- that is the
+    CAMERA lever session 92 re-opened (s83 priced a slew at zero against a 2-cell window, and cells
+    2550/2560/2563/2565/2566 of the real window are exactly this class). **Barren:** the cell WAS
+    qualified and nothing genuine was found on its locus -- the dead gap 2554-2559 is this.
+
+    Returns dict(kept, not_aimable, barren). Reported rather than swallowed, because the scope a pass
+    ran is part of its result: `[[search-space-contains-human]]`, and sessions 81-91 ran a 2-cell
+    window without any pass ever saying so."""
+    want = set(int(c) for c in cells)
+    have = {ES.aim_cell(q['facing']) for q in quals}
+    aimable = {ES.aim_cell(f) for f, _b, _s in ES.aim_cells(csangle)}
+    return dict(kept=sorted(want & have),
+                not_aimable=sorted(c for c in want - have if c not in aimable),
+                barren=sorted(c for c in want - have if c in aimable))
+
+
+def select_quals(quals, cells=None, thrusts=None):
+    """The productive set NARROWED to the configurations a pass is actually AIMED at.
+
+    `stream_search` costs one evaluation per candidate per configuration, so the scope is a budget
+    decision: session 92 took the productive set from 6 configurations to 40, which is ~6.7x the
+    evaluation of every pass before it. Running an s89-shaped pass at 40 is most of a day; running it
+    at the cells the objective wants is hours. This is the knob for that -- see
+    `entry_fan._cmd_search2`.
+
+    Cells the set does not carry are DROPPED, and `cell_scope` is what says which and why -- a caller
+    that narrows a pass owes the reader that report, since a pass silently scoped to fewer
+    configurations than asked for is the failure this thread has paid for twice (session 89's cache key
+    that did not cover the ATTACK gate; the 2-cell window of sessions 81-91). An EMPTY selection is an
+    error rather than an empty pass."""
+    keep = list(quals)
+    if cells is not None:
+        want = set(int(c) for c in cells)
+        keep = [q for q in keep if ES.aim_cell(q['facing']) in want]
+        if not keep:
+            raise ValueError(
+                "no productive configuration at cells %s -- the set covers %s"
+                % (sorted(want), sorted({ES.aim_cell(q['facing']) for q in quals})))
+    if thrusts is not None:
+        want_t = set(int(t) for t in thrusts)
+        keep = [q for q in keep if int(q['thrust']) in want_t]
+        if not keep:
+            raise ValueError("no configuration at thrusts %s" % (sorted(want_t),))
+    return keep
 
 
 class BandTable:

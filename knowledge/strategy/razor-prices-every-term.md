@@ -164,6 +164,27 @@ engines that had never been compared to each other.
     priced at zero against a 2-cell window and is a live lever against a 22-cell one, so re-derive what
     a closed axis reaches whenever the thing it was closed against changes size.
 
+13. **A POSITIVE is only as available as the BUDGET it was found under - an existence result inside a
+    generous bound is not a reachable one** (session 93, and it is rule 12 in a mirror). Rule 12's fix
+    was to stop arguing negatives over too small a set; the very same session then priced a prize over
+    one that was too big. The recovered facing cells were found by sweeping a `reach_radius` box - four
+    walk frames at the cap plus the roll's entry step, 94 u square - which is the right conservative
+    place to look for a level curve and is **not the reachable set**: the actor enters on a fixed
+    heading at the speed cap, so four held-stick frames reach a small curved cloud whose bounding box is
+    a fraction of that area. The stations were 13-21 u from the delivered entry, which read as near, and
+    a frame-capped pass over all of them returned **0 genuine, 0 near, 0 dead-tail from 7.0 M
+    evaluations** - the emptiest result the search has produced, because at that budget the residual
+    stays 71x to 375x outside the probe a near-miss is counted at - and past a certain cell it never
+    changes sign at all. Buying 18x the candidates moved the closest approach by *bit-identical* zero,
+    which is how you separate "too sparse" from "aimed at empty space" without arguing about it.
+    Two corollaries. **Measure the reachable set, do not bound it:** the fan already enumerates it, so
+    its convex hull is a few lines and turns "is this reachable" from an argument into a test - and keep
+    the test ASYMMETRIC, since a hull off a coarse alphabet proves OUTSIDE and only suggests inside.
+    And **price a lever in the objective's own currency before believing it**: "+160 BAM at a wider
+    band" and "+160 BAM for three extra frames" are the same measurement and opposite answers when the
+    constraint is that the movement must cost nothing
+    ([../history/exit-angle-priced-without-its-frame-cost.md](../history/exit-angle-priced-without-its-frame-cost.md)).
+
 ## See also
 
 - [clip-exit-angle.md](clip-exit-angle.md) - rule 12's own corner, and the objective term it was

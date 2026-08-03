@@ -1679,7 +1679,99 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
-      - [~] **THE EXIT-ANGLE AXIS IS REAL AND IT IS ~10x WHAT SESSION 91 COULD SEE -- BECAUSE THE
+      - [~] **THE SECOND LOBE IS NOT REACHABLE AT THE FRAME FLOOR, AND THE AXIS SESSION 92 PRICED AT
+            ~10x WAS PRICED OVER A 94 u BOX THAT IS NOT THE REACHABLE SET (session 93).** The handoff
+            asked whether a frame-floor plan lands on cell 2561/2562's locus. It does not, nothing at
+            the right does, and the reason is a claim argued over the wrong set again -- this time a
+            POSITIVE over one too big, in the same session that fixed a negative over one too small.
+            - **THE PASS RAN TO COMPLETION AND IS THE EMPTIEST THIS SEARCH HAS PRODUCED.** The whole
+              aimable second lobe (9 configurations, cells 2561/2562/2564/2567-2570/2572/2573), frame-
+              capped at the delivered floor of 4: **779130 candidates, 2.89 M streamed, 7.01 M
+              evaluations, 1012 prefix families, 494 s -> 0 genuine, 0 near, 0 dead-tail.** Not one
+              candidate came within `BAND_PROBE` (5e-3) of any right cell's residual zero.
+            - **WHY, AND IT IS NOT DENSITY.** `stream_search` drops everything past the probe, so it
+              cannot say whether a pass missed by a ULP or by twenty units -- measure that instead: the
+              closest a 4-frame candidate gets is **0.354 at cell 2561, rising monotonically with the
+              facing offset to 1.873 at cell 2581**, i.e. **71x to 375x outside the probe**, at a
+              `grad == 0` entry. For cells **2570 and right the residual does not even change sign**
+              over the whole cloud (0 of 46495 samples on the other side). Careful what the signs
+              license, though: `resid`'s gradient is ~1.2/u over a ~60 u cloud so it spans +-70 there,
+              and "both signs present" (2561/2562, 2.7% negative) says a boundary is in the sampled set,
+              NOT that a zero a plan can land on is.
+            - **THE DENSITY EXPLANATION IS RULED OUT BY A CONTROLLED COMPARISON.** Same question, two fan
+              densities at the floor -- 157291 candidates and 2888346, an **18.4x** buy. Cells 2561/2562
+              come back **bit-identical** (0.35417 / 0.430095, the same f64, at the same argmin entry in
+              both fans) while cell 2553 sharpens **37x** on exactly that extra density (1.64e-03 ->
+              **4.45e-05**, inside its own band width). A fan that resolves one cell 37x and another by
+              nothing is not short of resolution at the second. LOCKED
+              `fixtures/courtyard_frame_price_s93.json`; gate `tests/test_entry_reach.py`.
+            - **AND THE HULL AGREES WITHOUT BEING TOLD -- the second witness.** It knows nothing about
+              residuals; it is walk endpoints and a frame budget. Asked which of the 40 productive
+              configurations have a station a 4-frame plan can put the entry on, it answers **cells 2551
+              and 2552 ONLY** -- exactly and independently where the entire 55-candidate console-delivered
+              population sits. The 4-frame cloud is **447581 endpoints in a 58.6 x 63.8 u bbox against
+              the 188 u box `reach_radius` implies (~11% of its area)**, and all four bbox corners are
+              outside the hull, so the cloud is genuinely curved rather than box-filling.
+            - **THE SIGNED DISTANCES, because they say how marginal the verdict is** (+ inside): the three
+              delivered-cell stations read **+1.61 / +1.80 / +1.83 u**, the second lobe **-10 to -95 u**,
+              and cell **2553 only -2.26 u** (thrust 14). So the second lobe is not a marginal call, but
+              **2553's is inside the hull's own resolution** -- it was swept at s1/s2 stride 8, and a finer
+              alphabet grows the hull. Do NOT read the hull as calling 2553 unreachable; its own pass
+              (180 candidates inside the probe) shows the fan does reach near that locus, and a station is
+              one point on a curve. That asymmetry is the module's stated contract, not a caveat added
+              afterwards.
+            - **CELL 2553 (+9 BAM) WAS RUN TOO, and it is a ULP lottery this pass did not win:** the same
+              779130 candidates, 1.56 M evaluations, **180 dead-tail, 0 near, 0 genuine**. So unlike the
+              second lobe (0 dead-tail from 7.01 M evals) candidates DO reach its residual zero -- 180 of
+              them inside `BAND_PROBE` -- but every one sits at a lean whose band has no usable width, so
+              the target there is a single f32 value. Which is also true of the delivered cell 2552 at
+              its own lean 64761 (width 0.0, 20 genuine samples), and that one was won by population.
+            - **THE FRAME PRICE OF THE AXIS, per budget** (closest approach; the band is ~1e-4 wide):
+              cell 2552 delivered 1.3e-03 at 4 frames; **2561** 0.354 / 2.6e-03 / 8.9e-04 / 2.6e-05 at
+              4/5/6/7; **2562** 0.430 / 2.2e-03 / 9.6e-04 / 4.9e-05; **2570** one-sign / 6.2e-02 /
+              4.7e-03; **2581** one-sign / 1.0e-01 / 3.4e-03. Roughly an order of magnitude of approach
+              per extra frame, so the lobe becomes a live lottery at 5-7 frames -- **three frames for
+              +0.85 deg, against a budget of zero frames for ~1** (`[[tetrapush-frame-minimal]]`).
+              `_notes/s93_frame_price.json`, `_notes/s93_reach_probe*.json`.
+            - **THE ROOT CAUSE: `reach_radius` is a RADIUS and it was used as the SET.** `curve_seeds`
+              sweeps a 94 u square box (`WALK_CAP * REACH_FRAMES + ROLL_NSPEED`) around `ref_entry` --
+              the right conservative place to hunt a level curve, and not where a plan can put the
+              entry. Link arrives at the speedF 17 cap on a fixed heading, so four held-stick frames
+              reach a small curved cloud. NEW `harness/tetrapush/entry_reach.py` measures it instead:
+              the fan already enumerates the cloud, so its convex hull is thirty lines of stdlib
+              (`hull`/`contains`/`walk_cloud`/`reachable`/`reachable_quals`), and ONE facing-independent
+              hull serves every configuration because `roll_entry` is a pure translation in the walk
+              position. **The test is deliberately ASYMMETRIC** -- a hull off a coarse alphabet proves
+              OUTSIDE and only suggests inside, so only the negative is used to prune. LOCKED
+              `fixtures/courtyard_walk_hull_s93.json`; gate `tests/test_entry_reach.py`, whose licence
+              assertion is that the hull CONTAINS the console-delivered clip's own entry.
+            - **THE PASS CAN NOW BE SCOPED, which is what made a targeted pass affordable at all.**
+              `search2` had no way to pick configurations and the s92 set is 40 of them (~6.7x the
+              evaluation of every pass before it): `cells=` takes `lobe2` / `right` / `2561,2562` /
+              `2564-2570` (`entry_score.parse_cell_spec`, resolved out of the measured window fixture so
+              a re-scan moves every selector with it), and `frames=` caps the plan length, which is the
+              objective as a prune rather than a ranking (`capped`; `j1`/`j2max`/`nbase` bound the
+              fan's shape but not its plan LENGTH, so a bounded pass spent most of its evaluation on
+              plans Dereck refuses outright). `cell_scope` reports what a spec missed AND which of the
+              two kinds of miss it was -- not aimable at this camera (the camera lever) versus
+              qualified and barren (the dead gap) -- because those are different facts. Gated
+              `tests/test_entry_fan.py`, including the contract that scoping changes the COST and never
+              an ANSWER.
+            - **KB:** [`strategy/clip-exit-angle.md`](../../knowledge/strategy/clip-exit-angle.md) gains
+              the frame-cost section and its status is corrected; the overturned pricing is MIGRATED to
+              [`history/exit-angle-priced-without-its-frame-cost.md`](../../knowledge/history/exit-angle-priced-without-its-frame-cost.md);
+              razor rule **13** (a positive is only as available as the budget it was found under --
+              measure the reachable set, do not bound it; price a lever in the objective's own currency).
+            - **WHAT IS STILL OPEN: cell 2553, as a LEAN problem rather than a candidate problem.** +9
+              BAM is the whole axis at the floor and the pass above shows the fan reaches its residual
+              zero; what it lacks is a usable band AT THE LEANS IT ARRIVES ON. So the next lever is the
+              one the s92 handoff listed second and nobody has pulled: the band is jagged in `m351C`, the
+              qualification runs at lean 0, and the 4-frame fan carries ~1040 distinct entry leans (the
+              commonest being 65281 with 202 k candidates, then 6, 65151, 65021, 65411, and the delivered
+              64761 with 95 k). Measure cell 2553's band ACROSS those leans, then aim the pass at the
+              (lean, cell) pairs that have real width instead of at cells. `_notes/s93_lean_band.py` is
+              that measurement for cells 2561/2562 already -- point it at 2553 and rank by candidate mass.
+      - [x] **THE EXIT-ANGLE AXIS IS REAL AND IT IS ~10x WHAT SESSION 91 COULD SEE -- BECAUSE THE
             SEAM'S FACING WINDOW IS **TWO LOBES**, AND HALF OF IT HAD BEEN OUT OF SCOPE FOR ELEVEN
             SESSIONS BEHIND A NEGATIVE ARGUED FROM ONE SEED ENTRY (session 92).** The handoff asked for
             the clip map's rightward candidates to be verified against `ShoveCtx`. They were, the lead
@@ -1763,6 +1855,11 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               scope up with no flag (it defaults `quals` to `qualified`), but **40 configurations is
               ~6.7x the evaluation of 6** -- so pass a SUBSET (the lobe's aimable cells) rather than
               running an s89-shaped pass wider; `search2` has no `facings` argument yet.
+            - **SUPERSEDED IN PART BY SESSION 93 (the box above): the window measurements all stand,
+              the PRICING does not.** That pass ran -- 779130 candidates, 7.01 M evaluations at the nine
+              aimable second-lobe cells, 0 genuine / 0 near / 0 dead-tail -- because these stations were
+              found by sweeping the `reach_radius` BOX, which is not the set a plan at the frame floor
+              can reach. At that budget the axis is the first lobe, and the second costs three frames.
       - [x] **THE CONSOLE SETTLED THE Co-CENTRE SEAM -- AND NEITHER PORT WAS WRONG. IT WAS ONE ULP OF
             ANIM FRAME, BECAUSE A FRAME CTRL HELD A PYTHON `double` RATE WHERE `J3DFrameCtrl::mRate`
             IS f32. THE POPULATION GOES 51 -> **55 OF 55** AT FRAME FLOOR 4 (session 90).** The

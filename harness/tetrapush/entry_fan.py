@@ -48,7 +48,7 @@ The SCORING half -- bands, `stream_search`, and the whole draw-counting vocabula
     python -m harness.tetrapush.entry_fan fan [stride jmax nbase]
     python -m harness.tetrapush.entry_fan fan2 [s1_stride j1 s2_stride j2max]
     python -m harness.tetrapush.entry_fan search1 [jmax nbase stride [uncapped]]
-    python -m harness.tetrapush.entry_fan search2 [s1_stride j1 s2_stride j2max nbase]
+    python -m harness.tetrapush.entry_fan search2 [s1_stride j1 s2_stride j2max nbase [cells]]
     python -m harness.tetrapush.entry_fan confirm <hits json | tag> [xengine]  # the A-press replay
 """
 import json
@@ -330,12 +330,34 @@ def fleet_fan2(**kw):
     return dict(iter_fan2(**kw))
 
 
+def plan_frames(plan):
+    """A plan's total DELIVERED walk frames: the base hold plus every segment's own hold. The
+    objective's unit, and what `stream_search` ranks its hits by."""
+    return plan[0] + sum(plan[3::3])
+
+
+def capped(pairs, frames=None):
+    """A fan stream with plans over ``frames`` walk frames dropped -- the objective as a PRUNE.
+
+    `iter_fan2`'s shape arguments bound the fan but not the plan length (``j1=1,2 j2max=3 nbase=2``
+    spans 2 to 6 frames), and a plan longer than the delivered floor is worth nothing whatever it
+    clips: Dereck's constraint is that the herd loses ZERO frames (`[[tetrapush-frame-minimal]]`).
+    Dropping them here saves the evaluation rather than sorting them to the bottom afterwards.
+
+    Order-preserving, so a family-major stream stays family-major and `dedup_scope='family'` still
+    bounds memory at one family."""
+    if frames is None:
+        return pairs
+    return ((k, p) for k, p in pairs if plan_frames(p) <= frames)
+
+
 # --------------------------------------------------------- the streaming eval
 # It lives in `entry_score` since session 85 (this module was 880 lines and fan-vs-scoring is the
 # clean seam). Re-exported name for name, so every caller and every gate keeps its import path.
 
 from harness.tetrapush.entry_score import (          # noqa: E402,F401
-    QUAL_CACHE, BAND_CACHE, MIN_BAND, BAND_PROBE, BandTable, ref_entry, qualified,
+    QUAL_CACHE, BAND_CACHE, WINDOW_FIXTURE, MIN_BAND, BAND_PROBE, BandTable, ref_entry, qualified,
+    facing_window, parse_cell_spec, cell_scope, select_quals,
     family_of_plan, stream_search, draw_key, hit_draws, dedupe_near, lottery, distinct_near,
     near_families, subgrid_rate, confirm_hits, rescore, _f32_bits, _marginal, _expected_hits)
 
@@ -444,9 +466,12 @@ def _report(r, tag, extra=None):
                  if r['marginal_near_per_family'] is not None else "-"))
     print("  best gaps: %s" % ["%.3e" % g for g in r['near'][:8]])
     for h in hit_draws(r['hits'])[:25]:
-        print("  plan %s  facing %5d thrust %2d  entry (%r,%r) m351C %5d  resid %+.3e"
-              % (h['plan'], h['facing'], h['thrust'], h['entry'][0], h['entry'][1],
-                 h['m351C'], h['resid']))
+        # the CELL is printed beside the facing because it is the exit-angle atom and the objective's
+        # own unit -- rightmost cell wins, but only at the frame floor (clip-exit-angle.md)
+        print("  plan %s  frames %d  cell %4d facing %5d thrust %2d  entry (%r,%r) m351C %5d"
+              "  resid %+.3e"
+              % (h['plan'], plan_frames(h['plan']), ES.aim_cell(h['facing']),
+                 h['facing'], h['thrust'], h['entry'][0], h['entry'][1], h['m351C'], h['resid']))
     out = os.path.join(_rb, '_generated', 's81', 'hits_%s.json' % tag)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     json.dump(dict(tag=tag, extra=extra or {}, **r), open(out, 'w'), indent=1)
@@ -473,23 +498,59 @@ def _cmd_search2(argv):
     """The two-segment pass: S1 x j1 junctions, each re-fanned with a stride-1 S2.
 
     PRICED IN FAMILIES (`family_of_plan`), because that is the unit this axis pays in: the report
-    carries near/family cumulative AND marginal, and the marginal rate is the stop signal."""
+    carries near/family cumulative AND marginal, and the marginal rate is the stop signal.
+
+    Two trailing ``name=value`` tokens SCOPE the pass, and both are the objective written as a prune:
+
+    ``cells=`` the configurations (`entry_score.parse_cell_spec`): ``lobe2``, ``right``,
+    ``2561,2562``, ``2564-2570``, or a mix. Session 92's productive set is 40 configurations where
+    every pass before it ran 6, and evaluation is per candidate per configuration -- so a wide pass at
+    the whole set is most of a day, while the cells the objective wants
+    (`knowledge/strategy/clip-exit-angle.md`: as far to Link's right as the seam allows) are a few.
+
+    ``frames=`` the plan-length cap. ``j1``/``j2max``/``nbase`` bound the fan's shape but not its
+    plan LENGTH -- ``j1=1,2 j2max=3 nbase=2`` spans 2 to 6 frames -- and a plan over the floor is
+    worth nothing here whatever it clips (`[[tetrapush-frame-minimal]]`: the herd must lose ZERO
+    frames, so session 91's own note is "do not bring him a 5-frame plan"). Capping the stream drops
+    those before they are evaluated instead of ranking them afterwards.
+
+    Both default to off, which is every pass through session 91."""
     warnings.simplefilter('ignore')
-    s1_stride = int(argv[0]) if argv else 32
-    j1 = tuple(int(x) for x in argv[1].split(',')) if len(argv) > 1 else (2, 4, 6)
-    s2_stride = int(argv[2]) if len(argv) > 2 else 1
-    j2max = int(argv[3]) if len(argv) > 3 else 6
-    nbase = int(argv[4]) if len(argv) > 4 else 2
+    pos = [a for a in argv if '=' not in a]
+    opt = dict(a.split('=', 1) for a in argv if '=' in a)
+    s1_stride = int(pos[0]) if pos else 32
+    j1 = tuple(int(x) for x in pos[1].split(',')) if len(pos) > 1 else (2, 4, 6)
+    s2_stride = int(pos[2]) if len(pos) > 2 else 1
+    j2max = int(pos[3]) if len(pos) > 3 else 6
+    nbase = int(pos[4]) if len(pos) > 4 else 2
+    spec = opt.get('cells')
+    frames = int(opt['frames']) if 'frames' in opt else None
     kw = dict(base_frames=tuple(range(nbase)), s1_stride=s1_stride, j1=j1,
               s2_stride=s2_stride, j2max=j2max)
-    print("S1 alphabet %d draws (of %d byte pairs at stride %d), S2 %d (of %d at stride %d)"
+    quals = qualified()
+    if spec is not None:
+        cells = parse_cell_spec(spec)
+        sc = cell_scope(quals, cells)
+        quals = select_quals(quals, cells=cells)
+        print("cell scope %r -> %d of %d configurations at cells %s"
+              % (spec, len(quals), len(qualified()), sc['kept']))
+        if sc['not_aimable']:
+            print("  NOT AIMABLE at csangle %d (the camera lever, not a barren cell): %s"
+                  % (ES.CSANGLE, sc['not_aimable']))
+        if sc['barren']:
+            print("  qualified and barren: %s" % (sc['barren'],))
+    print("S1 alphabet %d draws (of %d byte pairs at stride %d), S2 %d (of %d at stride %d)%s"
           % (len(stick_alphabet(s1_stride)), len(stick_grid(s1_stride)), s1_stride,
-             len(stick_alphabet(s2_stride)), len(stick_grid(s2_stride)), s2_stride))
-    r = stream_search(iter_fan2(progress=True, **kw), progress=True, family_of=family_of_plan,
-                      dedup_scope='family')
-    _report(r, 'seg2_a%d_j%s_s%d_j%d_b%d'
-            % (s1_stride, '-'.join(str(j) for j in j1), s2_stride, j2max, nbase),
-            dict(kw, j1=list(j1), base_frames=list(kw['base_frames'])))
+             len(stick_alphabet(s2_stride)), len(stick_grid(s2_stride)), s2_stride,
+             ("   plans capped at %d frames" % frames) if frames else ""))
+    r = stream_search(capped(iter_fan2(progress=True, **kw), frames), quals=quals, progress=True,
+                      family_of=family_of_plan, dedup_scope='family')
+    _report(r, 'seg2_a%d_j%s_s%d_j%d_b%d%s%s'
+            % (s1_stride, '-'.join(str(j) for j in j1), s2_stride, j2max, nbase,
+               ('_c%s' % spec.replace(',', '.')) if spec else '',
+               ('_f%d' % frames) if frames else ''),
+            dict(kw, j1=list(j1), base_frames=list(kw['base_frames']), cell_spec=spec,
+                 cells=list(parse_cell_spec(spec)) if spec else None, max_frames=frames))
 
 
 
