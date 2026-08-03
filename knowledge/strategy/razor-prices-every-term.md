@@ -185,8 +185,30 @@ engines that had never been compared to each other.
     constraint is that the movement must cost nothing
     ([../history/exit-angle-priced-without-its-frame-cost.md](../history/exit-angle-priced-without-its-frame-cost.md)).
 
+14. **A fix to the SCOPE does not reach the RANKING - re-ask it of every consumer that shares the
+    machinery** (session 94). Rules 12 and 13 are about the set a claim is argued over; this is what
+    happens when the set gets fixed and the scoring does not. The escalations of sessions 90 and 92 went
+    into the *qualification*, which decides which configurations a pass covers. The per-lean acceptance
+    band that decides dead-tail-versus-near-miss is a **different call to the same solver**, and it kept
+    its single Newton seed for thirteen sessions afterwards - long enough to report `no genuine on the
+    residual zero` for the configuration of the clip that had been **delivered to console and worked**.
+    Nothing looked broken, because a dead band is silent by construction: `genuine` comes from the sweep,
+    so no clip is ever suppressed; the pass simply reports zero near-misses and zero expected hits for a
+    configuration that has both, which reads exactly like "stop buying density here". Measured, the same
+    779130 candidates go from "180 dead-tail, 0 near, E[hits] 0.000" to **34 near-misses at E[hits]
+    0.079**, and one cell from 0 of its 24 heaviest leans usable to 20 of 24
+    ([clip-band-per-lean.md](clip-band-per-lean.md)).
+    Two corollaries. **Gate a scoring against something you have already delivered:** the console clip's
+    own configuration is a free oracle for the ranking, and it had never been asked - a scoring that
+    calls the known-good input dead is broken before any of its other verdicts are worth reading. And
+    **an artifact that caches the old answers will serve them past the patch**, so a cached negative that
+    cannot say which form it was argued under has to be dropped rather than trusted - 10360 of 15968 rows
+    here.
+
 ## See also
 
+- [clip-band-per-lean.md](clip-band-per-lean.md) - rule 14's own mechanism: the seed ladder, and why a
+  zero-width band is odds rather than a wall.
 - [clip-exit-angle.md](clip-exit-angle.md) - rule 12's own corner, and the objective term it was
   hiding.
 - [clip-entry-search.md](clip-entry-search.md) - the search whose window this is, and the

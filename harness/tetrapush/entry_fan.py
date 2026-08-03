@@ -442,8 +442,10 @@ def _report(r, tag, extra=None):
           " configurations [%.0f s]"
           % (tag, r['n_candidates'], r.get('dedup_scope', 'global'), r['n_streamed'],
              r['n_evaluations'], r['n_configurations'], r['seconds']))
-    print("  near-zero draws at a DEAD configuration (no band at any entry): %d   bands measured %d"
-          % (r['n_dead_lean'], r['n_bands_measured']))
+    print("  near-zero draws at a DEAD configuration (no band the ladder could find): %d   bands"
+          " measured %d, of which %d past the global ref and %d needed the strong form"
+          % (r['n_dead_lean'], r['n_bands_measured'], r.get('n_bands_escalated', -1),
+             r.get('n_bands_strong', -1)))
     print("  near-miss (gap < %g): %d  (%d DISTINCT candidates)   E[hits] this pass %.3f"
           "  (%.3f at the lean-0 widths, the pre-s84 estimate)"
           % (r['near_gap'], r['n_near'], r.get('n_near_candidates', -1), r['expected_hits'],
@@ -514,7 +516,16 @@ def _cmd_search2(argv):
     frames, so session 91's own note is "do not bring him a 5-frame plan"). Capping the stream drops
     those before they are evaluated instead of ranking them afterwards.
 
-    Both default to off, which is every pass through session 91."""
+    ``leans=`` the ENTRY-LEAN scope (`entry_lean.parse_lean_spec`): ``paying:2553``, ``top8``, or a
+    lean list. ``thrusts=`` narrows the same way inside a cell. Both are cost knobs and weak ones on a
+    frame-floor pass -- the FAN generation dominates it and a lean filter runs downstream of the
+    stepping, so they save evaluation only; they pay when the configuration count is large. Neither is a
+    claim about what it drops: the delivered console clip's own lean has zero band width (`entry_lean`).
+
+    All default to off, which is every pass through session 91."""
+    # deferred: `entry_lean` sits ABOVE this module (its census drives `iter_fan2`), so the CLI reaches
+    # up rather than the fan reaching sideways
+    from harness.tetrapush import entry_lean as EL
     warnings.simplefilter('ignore')
     pos = [a for a in argv if '=' not in a]
     opt = dict(a.split('=', 1) for a in argv if '=' in a)
@@ -525,32 +536,44 @@ def _cmd_search2(argv):
     nbase = int(pos[4]) if len(pos) > 4 else 2
     spec = opt.get('cells')
     frames = int(opt['frames']) if 'frames' in opt else None
+    thrusts = tuple(int(x) for x in opt['thrusts'].split(',')) if 'thrusts' in opt else None
+    leans = EL.parse_lean_spec(opt['leans']) if 'leans' in opt else None
     kw = dict(base_frames=tuple(range(nbase)), s1_stride=s1_stride, j1=j1,
               s2_stride=s2_stride, j2max=j2max)
     quals = qualified()
-    if spec is not None:
-        cells = parse_cell_spec(spec)
-        sc = cell_scope(quals, cells)
-        quals = select_quals(quals, cells=cells)
-        print("cell scope %r -> %d of %d configurations at cells %s"
-              % (spec, len(quals), len(qualified()), sc['kept']))
-        if sc['not_aimable']:
+    if spec is not None or thrusts is not None:
+        cells = parse_cell_spec(spec) if spec is not None else None
+        if cells is not None:
+            sc = cell_scope(quals, cells)
+        quals = select_quals(quals, cells=cells, thrusts=thrusts)
+        print("scope cells=%r thrusts=%r -> %d of %d configurations at cells %s"
+              % (spec, thrusts, len(quals), len(qualified()),
+                 sorted({ES.aim_cell(q['facing']) for q in quals})))
+        if cells is not None and sc['not_aimable']:
             print("  NOT AIMABLE at csangle %d (the camera lever, not a barren cell): %s"
                   % (ES.CSANGLE, sc['not_aimable']))
-        if sc['barren']:
+        if cells is not None and sc['barren']:
             print("  qualified and barren: %s" % (sc['barren'],))
+    if leans:
+        print("lean scope %r -> %d entry leans %s"
+              % (opt['leans'], len(leans), list(leans[:12]) + (['...'] if len(leans) > 12 else [])))
     print("S1 alphabet %d draws (of %d byte pairs at stride %d), S2 %d (of %d at stride %d)%s"
           % (len(stick_alphabet(s1_stride)), len(stick_grid(s1_stride)), s1_stride,
              len(stick_alphabet(s2_stride)), len(stick_grid(s2_stride)), s2_stride,
              ("   plans capped at %d frames" % frames) if frames else ""))
-    r = stream_search(capped(iter_fan2(progress=True, **kw), frames), quals=quals, progress=True,
+    stream = EL.select_by_lean(capped(iter_fan2(progress=True, **kw), frames), leans)
+    r = stream_search(stream, quals=quals, progress=True,
                       family_of=family_of_plan, dedup_scope='family')
-    _report(r, 'seg2_a%d_j%s_s%d_j%d_b%d%s%s'
+    _report(r, 'seg2_a%d_j%s_s%d_j%d_b%d%s%s%s%s'
             % (s1_stride, '-'.join(str(j) for j in j1), s2_stride, j2max, nbase,
                ('_c%s' % spec.replace(',', '.')) if spec else '',
-               ('_f%d' % frames) if frames else ''),
+               ('_f%d' % frames) if frames else '',
+               ('_t%s' % '.'.join(str(t) for t in thrusts)) if thrusts else '',
+               ('_l%s' % opt['leans'].replace(',', '.').replace(':', '')) if leans else ''),
             dict(kw, j1=list(j1), base_frames=list(kw['base_frames']), cell_spec=spec,
-                 cells=list(parse_cell_spec(spec)) if spec else None, max_frames=frames))
+                 cells=list(parse_cell_spec(spec)) if spec else None, max_frames=frames,
+                 thrusts=list(thrusts) if thrusts else None,
+                 lean_spec=opt.get('leans'), leans=list(leans) if leans else None))
 
 
 

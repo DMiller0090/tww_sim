@@ -1679,6 +1679,91 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **CELL 2553 WAS NEVER A LEAN PROBLEM -- THE ACCEPTANCE BAND WAS A NEGATIVE ARGUED FROM ONE
+            NEWTON SEED, AND THE SAME TABLE CALLED THE CONSOLE-DELIVERED CLIP'S OWN CONFIGURATION DEAD
+            (session 94).** The handoff asked for cell 2553's band across the leans the fan arrives on,
+            expecting to aim the pass at (lean, cell) pairs. The measurement says the leans were never
+            the problem: it is the s90/s92 single-station defect one level down, in the RANKING instead
+            of the scope, and it had survived both fixes untouched.
+            - **THE TELL, and it needs no argument.** `configuration_band` Newtons the entry onto the
+              residual zero FROM A SEED, and `BandTable` handed it one seed for every key -- the single
+              global `ref_entry`. Ask that table for the band at the configuration of the clip that was
+              DELIVERED TO CONSOLE AND WORKED (facing 40841, thrust 15, lean 64761,
+              `fixtures/courtyard_clip_s90_console.json`) and it answers `no genuine on the residual
+              zero`. A ranking whose input says the known-good input has no band is broken before any
+              of its other verdicts are worth reading (`[[search-space-contains-human]]`).
+            - **WHAT IT COST, MEASURED THREE WAYS.** Cell 2553 / thrust 15 goes from **0 of its 24
+              heaviest fan leans usable to 20 of 24**; **10360 of the 15968 rows** in the band cache were
+              negatives of the one-seed kind (that is the unaudited cache the s89-s93 handoffs kept
+              flagging -- audited now); and re-running session 93's own pass over the **identical 779130
+              candidates** turns "180 dead-tail, 0 near, E[hits] 0.000" into **34 near-misses at E[hits]
+              0.079**. So cell 2553 -- +9 BAM, the whole exit-angle axis at the floor -- is a live,
+              PRICED lottery where the pass had reported a dead cell. Nothing was ever suppressed: a
+              band never vetoes a `genuine` (that comes from the sweep), which is exactly why a wrong
+              one is silent and reads as "stop buying density here".
+            - **THE LADDER** (`BandTable._measure`): the global ref, then the configuration's OWN
+              qualified station, then `locus_scan`/`curve_scan` seeded from it. No single cheap seed
+              dominates -- over those 24 leans the global ref wins 19/24 at cell 2551 and 0/24 at 2553,
+              the qual station 17 and 11 -- so it is a ladder and not a better default. Every seed is
+              FIXED per key on purpose: a first cut also carried the last station that had paid for the
+              same (facing, thrust), which is free and converts keys but makes the answer depend on the
+              order the keys were REQUESTED, so two passes over one scope disagree and any single-key
+              gate is flaky. Rungs 1-2 cost ~30 ms and 3-4 ~2-6 s, and a pass measures a band only for
+              its near-zero tail, so the bill tracks the tail and not the candidate count.
+            - **AND THE CACHE CANNOT OUTLIVE THE FIX.** A cached row that is NOT productive and does not
+              record that it was escalated is dropped on load and re-measured; a productive one is kept
+              whatever rung found it. Saves are versioned (`version: 2`) so the distinction is legible
+              from the file.
+            - **THRUST 14 IS THE GENUINELY DEAD ONE**, which is worth pinning because the s93 handoff
+              pointed here at thrust 14 (the fine probe's 4.45e-05 closest approach is there): at cell
+              2553 it is barren at every one of the 24 leans even escalated, while every near-miss the
+              re-run found is **thrust 15**. Closest approach and band width are different quantities.
+            - **THE (lean, cell) AIMING THE HANDOFF ASKED FOR IS BUILT AND IS A WEAK KNOB, honestly
+              reported as one.** NEW `harness/tetrapush/entry_lean.py` (`census`/`bands_at`/`rank`/
+              `parse_lean_spec`/`select_by_lean`) + `search2 leans=paying:2553 thrusts=15`. But the FAN
+              generation dominates a frame-floor pass and a lean filter runs downstream of the stepping,
+              so it saves evaluation and not wall clock -- it pays when the configuration count is large
+              (s92's 40 configurations are ~6.7x the evaluation of 6). And
+              it is never a claim about what it drops: **the delivered clip converted at a band of width
+              0.0** (20 genuine samples at one f32), so width RANKS and must never filter.
+            - **WHERE THE DRAWS ACTUALLY COME FROM** (the re-run's own census): all 34 near-misses are
+              thrust 15, all are 4-FRAME shapes -- 23 at `(n0 0, j1 2, j2 2)` and 11 at `(1, 2, 1)`,
+              none from a 2- or 3-frame plan -- and 17 of 34 sit at the delivered lean 64761.
+            - **AND A FAMILY IS A BUDGET UNIT ONLY INSIDE ONE PLAN SHAPE -- the density buy measured
+              that the hard way.** Widening `j1=2, nbase=2` to `j1=1,2, nbase=3` at stride 2 went 1012 ->
+              **10036 families, a 9.9x buy, for 1.9x the near-misses** (65, E[hits] 0.160) because the
+              cumulative rate fell 5.2x: `j1=2` pays **0.032/family** (stable at stride 4 AND stride 2),
+              `(n0 1, j1 1)` 0.0025, and `(0, 1, *)`/`(2, 1, *)` -- 5542 families -- pay **exactly zero**.
+              So the same clock at stride 1 on `j1=2` alone buys FEWER families and more draws. KB
+              [`strategy/clip-search-budget.md`](../../knowledge/strategy/clip-search-budget.md)
+              gains `## A FAMILY is a budget unit only inside one plan SHAPE`; report the rate per shape,
+              never pooled, and price a shape before widening into it.
+            - **THE STRIDE-1 PASS AT THE PAYING SHAPE RAN, AND IT SAYS THE FAMILY AXIS IS EXHAUSTED
+              HERE.** `search2 1 2 1 2 2 cells=2553 frames=4`: 3213312 candidates / 4162 families /
+              6.43 M evaluations / 866 s -> **83 near-misses, E[hits] 0.194, 0 genuine**. The best
+              approach is **3.287248e-04 -- BIT-IDENTICAL to the stride-2 pass's, at the SAME entry**
+              (reached by a different prefix), against a band width of 2.6066e-05 at that lean, so it is
+              12.6x short and 2.4x the candidates moved it by exactly zero. That is s93's own controlled
+              comparison, applied to this axis and giving the same verdict. Two more numbers say the
+              same: the marginal rate inside the pass falls to **0.0087/family against 0.0199
+              cumulative**, and family count grows at ~45% of alphabet growth (alphabet 1x/2.7x/9.2x ->
+              families 1012/1713/4162) because a finer alphabet mostly adds decode classes that do not
+              hold the speedF cap.
+            - **SO CELL 2553 IS LIVE, PRICED, AND NOT CONVERTIBLE ON THIS AXIS: ~E[hits] 0.2 per
+              exhaustive frame-floor pass.** The lever left is the one s92 re-opened -- the CAMERA. At
+              the frozen csangle 34325 **exactly ONE aim reaches cell 2553** (1 each for 2551/2552; 60
+              aims across the window, most cells 1-3), and a slew shifts the whole alphabet, so it moves
+              both WHICH cells are aimable and how many aims reach each. s83 priced the camera at zero
+              against a 2-cell window; rule 12's corollary is that a closure expires when its premise
+              moves, and the window is now 22 live cells / 40 productive configurations.
+            - LOCKED `fixtures/courtyard_lean_bands_s94.json`; gates `tests/test_entry_lean.py`
+              (incl. the console clip reproduced GENUINE through `stream_search` at its own entry and
+              residual, 0-ULP, with an escalated band); KB
+              [`strategy/clip-band-per-lean.md`](../../knowledge/strategy/clip-band-per-lean.md) + razor
+              rule **14** (a fix to the SCOPE does not reach the RANKING -- re-ask it of every consumer
+              that shares the machinery, and gate a scoring against something you have already
+              delivered); the overturned dead-share MIGRATED to
+              [`history/band-dead-share-from-one-seed.md`](../../knowledge/history/band-dead-share-from-one-seed.md).
       - [~] **THE SECOND LOBE IS NOT REACHABLE AT THE FRAME FLOOR, AND THE AXIS SESSION 92 PRICED AT
             ~10x WAS PRICED OVER A 94 u BOX THAT IS NOT THE REACHABLE SET (session 93).** The handoff
             asked whether a frame-floor plan lands on cell 2561/2562's locus. It does not, nothing at
@@ -1762,6 +1847,11 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               [`history/exit-angle-priced-without-its-frame-cost.md`](../../knowledge/history/exit-angle-priced-without-its-frame-cost.md);
               razor rule **13** (a positive is only as available as the budget it was found under --
               measure the reachable set, do not bound it; price a lever in the objective's own currency).
+            - **SUPERSEDED BY SESSION 94 (the box above) on cell 2553 ONLY: the second-lobe negative and
+              the frame pricing all stand, the "no usable width at the leans it arrives on" does not.**
+              Those 180 dead-tail readings came from a band table that Newtoned every key from one seed;
+              with the ladder the same cell reads 20 of 24 heaviest leans usable and the same 779130
+              candidates report 34 near-misses at E[hits] 0.079. It was the ranking's seed, not the lean.
             - **WHAT IS STILL OPEN: cell 2553, as a LEAN problem rather than a candidate problem.** +9
               BAM is the whole axis at the floor and the pass above shows the fan reaches its residual
               zero; what it lacks is a usable band AT THE LEANS IT ARRIVES ON. So the next lever is the

@@ -36,19 +36,25 @@ On the Tetra corner the acceptance band turned out to be a function of the roll'
 as its facing and thrust step. Measured at one (facing, thrust), sweeping the lean:
 
 - lean 0 and +6 carry the full band (3.2e-5 of residual);
-- +136 carries a narrower one, +266 collapses to a single f32 value;
-- and a large share of leans - including most of what a real walk-in arrives at - have **nothing
-  genuine at any entry on the locus at all.**
+- +136 carries a narrower one, +266 collapses to a single f32 value.
 
-It is jagged, not signed: 448 of 556 finely-sampled leans admit something, but only about 40% of those
-have a real interval rather than one f32 value. A fan's candidates carry whatever lean their own turn
-history left them (~2000 distinct values over 43596 candidates here), so **83% of that pass's draws
-were dead** - and its 72 "near-misses" were 6. That is the difference between "10x too small" and
-"250x too small", and it is invisible until the band is measured per (facing, thrust, lean).
+It is jagged, not signed - at a fixed configuration the widths across a fan's own leans run from 0.0 to
+~5.9e-5 with no monotone structure - and a fan's candidates carry whatever lean their turn history left
+them (~2000 distinct values over 43596 candidates here). So a pass priced at one configuration's lean-0
+band is priced at a band none of its draws is standing in, which is why `BandTable` is keyed per
+(facing, thrust, lean, momentum).
+
+**How MUCH of a pass is dead is a separate question, and it needs the whole locus:** "nothing genuine at
+any entry" is a Newton solve, and through session 93 every one of them ran from a single global seed -
+reporting dead about the *station* and recording it about the configuration. The honest re-measure moved
+one cell from 0 of its 24 heaviest leans usable to 20 of 24 and turned a pass's "180 dead-tail, 0 near,
+E[hits] 0.000" into 34 near-misses at E[hits] 0.079 over identical candidates
+([clip-band-per-lean.md](clip-band-per-lean.md), superseding
+[history/band-dead-share-from-one-seed.md](../history/band-dead-share-from-one-seed.md)).
 
 Cost is not the excuse it used to be: with the compiled context evaluated analytically instead of
-simulated, one band costs ~14 ms, so a whole fan's worth of leans is a one-off minute and cached
-afterwards.
+simulated, one band costs ~14 ms at the cheap rungs, so a whole fan's worth of leans is a one-off minute
+and cached afterwards.
 
 ## Count draws in the unit the PHYSICS quantizes to, not the one you swept in
 
@@ -201,7 +207,12 @@ negative is a resolution bug, not a finding.
 And the march is still not the strong form, because it starts from ONE seed: it returns nothing at all
 when that seed has no leverage, having sampled the locus nowhere. Seed off the residual-zero curve's own
 sign changes instead - one vectorized sweep of the reachable box - or the negative is about the seed
-([clip-exit-angle.md](clip-exit-angle.md#the-rule-this-corner-paid-for)).
+([clip-exit-angle.md](clip-exit-angle.md#the-rule-this-corner-paid-for)). **Then ask the same question of
+the band the RANKING uses, because it does not inherit the fix:** that escalation lives in the
+qualification, which sets a pass's *scope*, while the per-lean band deciding dead-tail-versus-near-miss
+is a different call to the same solver - and it kept its single seed for thirteen sessions afterwards,
+long enough to call the console-delivered clip's own configuration dead
+([clip-band-per-lean.md](clip-band-per-lean.md)).
 
 ## Two facts that kill a local descent before it starts
 
@@ -225,8 +236,10 @@ identical path. Always perturb the alphabet the physics reads.
 
 Before concluding a razor search is too small:
 
-1. measure the band at the candidate's OWN configuration - every axis of it, lean included;
-2. count draws, not candidates, and report the dead share;
+1. measure the band at the candidate's OWN configuration - every axis of it, lean included - and off a
+   seed LADDER, not one reference point ([clip-band-per-lean.md](clip-band-per-lean.md));
+2. count draws, not candidates, and report the dead share - and check it against a configuration you
+   have already delivered, since a dead band is silent;
 3. check the near-miss yield against candidate count, not the count alone;
 4. audit each prune for whether it encodes physics or an assumption in your own schedule - then
    **price** the axis it hides before spending a session on it, with a control in the same sweep;

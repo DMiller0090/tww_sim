@@ -219,14 +219,48 @@ class BandTable:
     momentum joined the key in session 82 (`entry_search.roll_nspeed`: a sub-cap walk rolls slower and
     bakes a different schedule), and an uncapped fan carries nearly one nspeed per candidate, so a
     table keyed that finely serves each entry once. That is why `stream_search` measures bands only
-    for the near-zero tail instead of eagerly per group."""
+    for the near-zero tail instead of eagerly per group.
 
-    def __init__(self, seed=None, path=BAND_CACHE, ref=None):
+    **AND EVERY NEGATIVE IN IT WAS ARGUED FROM ONE STATION UNTIL SESSION 94.** `configuration_band`
+    Newtons the entry to the residual zero from a SEED, and this table handed it one seed for every
+    key -- the single global `ref_entry`. That is exactly the failure fixed at the qualification twice
+    (s90 `escalate` -> `locus_scan`; s92 `curve` -> `curve_scan`) and never fixed one level down at the
+    band, and the locus MOVES with the lean, so a seed that is on the curve at lean 0 can be off it
+    entirely at lean 64761. Audited: **10360 of the 15968 cached entries were negatives of this kind**,
+    and at cell 2553 / thrust 15 the old seeding reads 0 of the 24 heaviest fan leans productive where
+    the ladder below reads 11, nine of them with a usable width. A dead band is not a veto on a genuine
+    hit (`stream_search` reports those from `o[0]`), but it silences the whole NEAR-MISS population --
+    which is the only thing `lottery` is computed from, hence the only thing that says whether a cell
+    is worth buying density at. Session 93 concluded cell 2553 had "no usable width at the leans it
+    arrives on" off 180 candidates this table had called dead.
+
+    So `get` now walks a ladder, cheapest first, and records which rung paid (``seed``/``escalated``):
+    the global ref, then the configuration's OWN qualified station, then the strong forms
+    `locus_scan`/`curve_scan` seeded from that station. No single cheap seed dominates -- measured over
+    those 24 leans the global ref wins 19/24 at cell 2551 and 0/24 at 2553, the qual station 17 and 11
+    -- which is why this is a ladder and not a better default. The band it reports is therefore the
+    first station that HAS one: a lower bound on the configuration's best band at that lean, never an
+    upper one.
+
+    THE LADDER IS DELIBERATELY ORDER-INDEPENDENT. A first cut also carried the last station that had
+    paid for the same (facing, thrust) at any lean, which is free and does convert keys -- but it makes
+    the answer a function of the order the keys were REQUESTED, so two passes over the same scope can
+    report different widths and a gate on any one key is flaky. Every seed here is fixed per key."""
+
+    def __init__(self, seed=None, path=BAND_CACHE, ref=None, quals=None, escalate=True, curve=True):
         self.seed = seed or ES.console_seed()
         self.ref = ref or ref_entry(self.seed)
         self.path = path
+        self.escalate = bool(escalate)
+        self.curve = bool(curve)
         self.tab = {}
         self.n_measured = 0
+        self.n_escalated = 0
+        # split, because rung 2 is ~30 ms and rungs 3-4 are ~2-6 s: "escalated" alone hides the bill
+        self.n_strong = 0
+        # the ladder's second rung and the escalation's base: each configuration's own qualified station
+        self.qual_entry = {(int(q['facing']) & 0xFFFF, int(q['thrust'])): tuple(q['entry'])
+                           for q in (quals or []) if q.get('entry')}
         if path and os.path.exists(path):
             try:
                 raw = json.load(open(path))
@@ -234,20 +268,56 @@ class BandTable:
                 # a pure memo, so a damaged cache costs a re-measure and never an answer (see `save`)
                 warnings.warn("BandTable: ignoring an unreadable cache at %s (%s)" % (path, e))
                 raw = {}
-            for k, v in raw.items():
+            for k, v in (raw.get('bands', raw) if isinstance(raw, dict) else {}).items():
+                if k == 'version':
+                    continue
                 p = tuple(int(x) for x in k.split(','))
+                if not v['productive'] and not v.get('escalated'):
+                    continue          # a negative from ONE station (above) -- re-measure it instead
                 # a 3-field key predates the momentum axis: it was measured at the walk cap
                 self.tab[p if len(p) > 3 else p + (_f32_bits(ES.ROLL_NSPEED),)] = v
+
+    def _cheap_seeds(self, facing, thrust):
+        """The ladder's free rungs, in a FIXED order and deduped: the global ref, then this
+        configuration's own qualified station."""
+        out = [('ref', tuple(self.ref))]
+        qe = self.qual_entry.get((facing, thrust))
+        if qe is not None and tuple(qe) != out[0][1]:
+            out.append(('qual', tuple(qe)))
+        return out
+
+    def _measure(self, facing, thrust, lean, nsp):
+        """One key, off the ladder. Escalates to the strong forms only once every cheap seed failed,
+        which is what keeps a pass's band bill proportional to its near-zero tail."""
+        tetra = self.seed['tetra']
+        seeds = self._cheap_seeds(facing, thrust)
+        b, last = None, 'ref'
+        for kind, s in seeds:
+            b, last = ES.configuration_band(tetra, facing, thrust, lean, s, nspeed=nsp), kind
+            if b['productive']:
+                return dict(b, escalated=(kind != 'ref'), seed=kind)
+        if not self.escalate:
+            return dict(b, escalated=(last != 'ref'), seed=last)
+        base = seeds[-1][1]
+        sc = ES.locus_scan(tetra, facing, thrust, lean, base, nspeed=nsp)
+        if not (sc['walkable_at'] or sc['live_at']) and self.curve:
+            sc = ES.curve_scan(tetra, facing, thrust, lean, base, nspeed=nsp)
+        for q in (sc['walkable_at'] + sc['live_at']):      # prefer a station Link can stand on
+            b2 = ES.configuration_band(tetra, facing, thrust, lean, q, nspeed=nsp)
+            if b2['productive']:
+                return dict(b2, escalated=True, seed='curve')
+        return dict(b, escalated=True, seed='exhausted', n_seeds=sc.get('n_seeds'))
 
     def get(self, facing, thrust, lean, nspeed=None):
         nsp = ES.ROLL_NSPEED if nspeed is None else nspeed
         key = (int(facing) & 0xFFFF, int(thrust), int(lean) & 0xFFFF, _f32_bits(nsp))
         b = self.tab.get(key)
         if b is None:
-            b = ES.configuration_band(self.seed['tetra'], key[0], key[1], key[2], self.ref,
-                                      nspeed=nsp)
+            b = self._measure(key[0], key[1], key[2], nsp)
             self.tab[key] = b
             self.n_measured += 1
+            self.n_escalated += bool(b.get('escalated'))
+            self.n_strong += b.get('seed') in ('curve', 'exhausted')
         return b
 
     def usable(self, facing, thrust, lean, nspeed=None, min_width=MIN_BAND):
@@ -268,7 +338,8 @@ class BandTable:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         tmp = '%s.%d.tmp' % (self.path, os.getpid())
         with open(tmp, 'w') as fh:
-            json.dump({'%d,%d,%d,%d' % k: v for k, v in self.tab.items()}, fh)
+            json.dump(dict(version=2,
+                           bands={'%d,%d,%d,%d' % k: v for k, v in self.tab.items()}), fh)
         os.replace(tmp, self.path)
 
 
@@ -321,7 +392,9 @@ def stream_search(pairs, seed=None, quals=None, batch=250000, keep=40, near_gap=
     before anything is reported, so `n_near`, `near` and `lottery` read the same either way."""
     seed = seed or ES.console_seed()
     quals = quals if quals is not None else qualified(seed)
-    bands = bands if bands is not None else BandTable(seed)
+    # the quals are HANDED to the table because each carries its configuration's own station, which is
+    # the ladder's second rung and the one the global ref cannot supply (`BandTable`)
+    bands = bands if bands is not None else BandTable(seed, quals=quals)
     pool = ES.CtxPool()
     tx, tz = seed['tetra']
     seen = set()
@@ -418,7 +491,8 @@ def stream_search(pairs, seed=None, quals=None, batch=250000, keep=40, near_gap=
     return dict(hits=walkable, n_hits_raw=len(hits), n_hit_draws=len(hit_draws(walkable)),
                 n_candidates=n_uniq, n_streamed=n_raw,
                 n_evaluations=n_eval, n_dead_lean=n_dead, n_configurations=len(quals),
-                n_bands_measured=bands.n_measured, n_near=len(near),
+                n_bands_measured=bands.n_measured, n_bands_escalated=bands.n_escalated,
+                n_bands_strong=bands.n_strong, n_near=len(near),
                 near=gaps[:keep], near_gap=near_gap, seconds=time.time() - t0,
                 expected_hits=lottery(near, near_gap),
                 expected_hits_lean0=_expected_hits(gaps, widths, near_gap),

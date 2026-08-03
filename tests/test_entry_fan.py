@@ -159,14 +159,21 @@ def test_the_acceptance_band_is_per_lean_not_just_per_configuration():
     was missing the `body_chn` twist, which is a function of the lean, so the lean axis is exactly
     where the old engine was most wrong). The structure is unchanged and the productive widths are
     the same to the bit; which negative leans die, and how, moved -- s81's three examples are in
-    `knowledge/history/`."""
-    bands = EF.BandTable(SEED, path=None)
+    `knowledge/history/`.
+
+    **The DEAD half of it is a one-seed reading** (session 94), so it is asserted against the
+    non-escalating table on purpose: `no leverage` means the Newton solve found no gradient AT THE SEED
+    it was given, and the ladder is what turns that into a statement about the configuration
+    (`test_entry_lean.py`, `knowledge/strategy/clip-band-per-lean.md`). The live widths below are
+    unaffected -- they are found at rung 1."""
+    bands = EF.BandTable(SEED, path=None, escalate=False)
     live = bands.get(FACING, THRUST, 0)
     assert live['productive'] and live['width'] > 3e-5
     assert bands.get(FACING, THRUST, 6)['width'] == pytest.approx(live['width'], abs=0.0)
     narrow = bands.get(FACING, THRUST, 266)
     assert narrow['productive'] and 0.0 < narrow['width'] < live['width']
-    # -1234: the roll leaves Tetra out of Co range on the cut frame, so no entry moves the razor.
+    # -1234: at THIS seed the roll leaves Tetra out of Co range on the cut frame, so nothing moves the
+    # razor there. A property of the seed, not of the lean -- hence `escalate=False` above.
     b = bands.get(FACING, THRUST, 64302)
     assert not b['productive'] and b['n_genuine'] == 0
     assert b['reason'] == 'no leverage' and b['grad'] == 0.0
@@ -182,22 +189,43 @@ def test_the_bands_locus_moves_with_the_lean():
     assert 0.01 < d < 1.0, d
 
 
-def test_most_of_the_draws_sit_at_a_dead_lean():
-    """The honest recount, on a small fan: the majority of (candidate x configuration) draws are at a
-    lean with no usable band. This is the number that turned s80's 72 near-misses into 6."""
-    bands = EF.BandTable(SEED, path=None)
+def test_the_dead_share_is_a_property_of_the_seed_not_of_the_lean():
+    """THE s81 RECOUNT AND ITS s94 CORRECTION, as one measurement.
+
+    s81 counted the majority of (candidate x configuration) draws as sitting at a lean with no usable
+    band -- the number that turned s80's 72 near-misses into 6 -- and that reading is reproduced here
+    against the one-seed table. But "no usable band" was a Newton solve from a single global station,
+    so the ladder is asked the same question on the same draws: the dead share has to come DOWN, and
+    strictly, because a rung that finds a band cannot lose one
+    (`knowledge/history/band-dead-share-from-one-seed.md`).
+
+    Kept small on purpose -- the point is the comparison, not the absolute share."""
     fan = EF.fleet_fan(base_frames=(0,), stride=32, jmax=5)
     quals = productive_quals()
-    live = dead = 0
-    for k in fan:
-        lean = ES.lean_at_roll(k[2])
+    leans = sorted({ES.lean_at_roll(k[2]) for k in fan})
+    one = EF.BandTable(SEED, path=None, escalate=False)
+    ladder = EF.BandTable(SEED, path=None, quals=quals)
+
+    counts = {}
+    for name, tab in (('one', one), ('ladder', ladder)):
+        live = dead = 0
+        for lean in leans:
+            n = sum(1 for k in fan if ES.lean_at_roll(k[2]) == lean)
+            for q in quals:
+                if tab.usable(q['facing'], q['thrust'], lean):
+                    live += n
+                else:
+                    dead += n
+        counts[name] = (live, dead)
+        assert live + dead == len(fan) * len(quals)
+
+    assert counts['one'][1] > counts['one'][0], counts['one']      # the s81 reading, reproduced
+    assert counts['ladder'][1] < counts['one'][1], counts          # and the ladder recovers draws
+    # monotone per key: the ladder can only ever add a band, never remove one
+    for lean in leans:
         for q in quals:
-            if bands.usable(q['facing'], q['thrust'], lean):
-                live += 1
-            else:
-                dead += 1
-    assert live + dead == len(fan) * len(quals)
-    assert dead > live, (live, dead)
+            if one.usable(q['facing'], q['thrust'], lean):
+                assert ladder.usable(q['facing'], q['thrust'], lean), (q['facing'], q['thrust'], lean)
 
 
 # ----------------------------------------------------- the productive facing window vs the alphabet
@@ -208,16 +236,17 @@ def test_the_productive_facing_window_is_wider_than_the_aims_that_reach_it():
     and the frozen csangle reaches exactly four aims inside it. That gap is the camera lever: the
     C-stick shifts the whole alphabet, and each facing bakes its own locus.
 
-    **This is a `BandTable` fact, not the window** (session 92). `BandTable` is `configuration_band` at
-    ONE `ref` entry, which is what the search ranks a candidate's neighbourhood by -- and it is exactly
-    the reading that hid the second lobe (cells 2560-2575), so 40860 being "outside it" below means
-    "no band at this seed", NOT "cannot clip". The window is
-    `knowledge/strategy/clip-exit-angle.md` + `fixtures/courtyard_facing_window_s92.json`."""
-    bands = EF.BandTable(SEED, path=None)
+    **This is a one-seed `BandTable` fact, not the window** (session 92), which is why the table below
+    is built with `escalate=False`: `configuration_band` at ONE `ref` entry is exactly the reading that
+    hid the second lobe (cells 2560-2575), so 40860 being "outside it" means "no band at this seed" and
+    NOT "cannot clip". The window is `knowledge/strategy/clip-exit-angle.md` +
+    `fixtures/courtyard_facing_window_s92.json`; what the ladder makes of the same question is
+    `knowledge/strategy/clip-band-per-lean.md`."""
+    bands = EF.BandTable(SEED, path=None, escalate=False)
     for facing in (40816, 40824, 40832, 40840, 40847):
         b = bands.get(facing, THRUST, 0)
         assert b['productive'], facing
-    for facing in (40800, 40860):                  # outside it, nothing is productive
+    for facing in (40800, 40860):                  # nothing productive AT THIS SEED
         assert not bands.get(facing, THRUST, 0)['productive'], facing
     # Session 88 halved this: two of the four aims were representatives too shallow to dispatch a roll
     # (`test_attack_threshold.py`), and facing 40834 has no deep member at all.

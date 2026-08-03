@@ -4,9 +4,10 @@
 eating the time? Do I have to simulate the roll to score it? When does a compiled context stop being
 reusable, and what do I do then? Can the sweep move onto the native fleet, and why won't it run from
 the run's own start? Why is the fan re-walking paths it already walked, and what do I do when the
-pass runs out of RAM before it runs out of clock?
-**Status:** validated offline (sessions 80-84) on the flooded-Hyrule Tetra corner; every figure below
-is a measured before/after on that search. Gated in
+pass runs out of RAM before it runs out of clock? I bought 10x the prefix families and got 1.9x the
+draws - what did I widen into?
+**Status:** validated offline (sessions 80-84, extended session 94 with the per-shape draw rate) on the
+flooded-Hyrule Tetra corner; every figure below is a measured before/after on that search. Gated in
 [`tests/test_entry_search.py`](../../tests/test_entry_search.py) +
 [`tests/test_entry_fan.py`](../../tests/test_entry_fan.py). Companion to
 [clip-entry-search.md](clip-entry-search.md) (the method) and
@@ -109,6 +110,32 @@ where the key set is all of its memory. Nothing is double-counted as long as the
 identity and are deduped on the draw before anything is reported
 ([clip-lottery-draws.md](clip-lottery-draws.md)), which makes the reported population identical to a
 globally deduped pass. The pass is then as wide as the clock allows rather than as wide as RAM allows.
+
+## A FAMILY is a budget unit only inside one plan SHAPE
+
+Draws scale with prefix families rather than with candidates, so "buy more families" is the natural way
+to spend a bigger clock. It is only true within a fixed plan shape. Measured at the frame floor on this
+corner, near-misses per family by the plan's own `(base frames, first hold)`:
+
+| shape | families | rate |
+|---|---|---|
+| `j1 = 2` (the delivered shape's own) | 1713 | **0.032 / family** |
+| `(n0 1, j1 1)` | 2781 | 0.0025 / family |
+| `(n0 0, j1 1)` and `(n0 2, j1 1)` | 5542 | **0** |
+
+So a pass widened from `j1=2, nbase=2` to `j1=1,2, nbase=3` went from 1012 families to 10036 - a 9.9x
+buy - for **1.9x the near-misses**, because 5542 of the new families are shapes that have never produced
+a draw and the cumulative rate fell 5.2x. The same clock spent at stride 1 on `j1=2` alone buys *fewer*
+families and more draws. Two consequences:
+
+- **Report the rate per shape, not per pass.** A pooled `near/family` over shape-mixed families is an
+  average over populations with rates differing by more than 10x, and it moves when the mix moves rather
+  than when the search does. The `subgrid_rate` readout inherits this: it reads a coarser pass out of a
+  finer one honestly, but only if both are the same shape.
+- **Price a shape before widening into it, the same way an axis gets priced.** One pass per shape is
+  cheap and the answer is stable across strides here (0.032/family at both stride 4 and stride 2), so
+  the exclusion is then a *measurement* rather than an assumption
+  ([razor-prices-every-term.md](razor-prices-every-term.md#the-rules) rule 13).
 
 ## What the throughput is worth, and what it is not
 
