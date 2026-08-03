@@ -94,6 +94,10 @@ The corollary is a trap worth knowing: **at an entry where the actor is out of C
 frame, no knob moves anything.** Probe lines through such a point read a dead-constant residual, which
 looks like "the entry has no leverage" when it actually means "there is no push to modulate here."
 
+And the trap has a second half that cost eleven sessions: that reading is about the **entry**, so it
+must never be recorded as a verdict on the configuration. Scope a facing out only after seeding off its
+residual-zero curve - [clip-exit-angle.md](clip-exit-angle.md#the-rule-this-corner-paid-for).
+
 ## Precision, and why it is a density problem
 
 The precision a search must hit is `window / |grad resid|`. On the Tetra corner that is
@@ -154,14 +158,16 @@ coarser than the ones you are sweeping in.
 - **the thrust step.** The B edge can dispatch the cut at more than one roll frame (13/14/15 here).
   Each lands the cut on a different step and reads a completely different residual at the same entry,
   so each is its own draw.
-- **the camera is NOT one**, though it was counted as the biggest of the three for two sessions
-  ([history/entry-search-s81-camera-lever.md](../history/entry-search-s81-camera-lever.md)). Moving
-  `csangle` shifts the whole alphabet, which looks like a way to reach the aims a frozen camera misses
-  at zero frame cost (the C-stick is a free channel during the walk-in and `csangle` is
-  position-independent there, so one measured stream serves a whole fan). But it can only reach a new
-  **cell**, and here the frozen camera's four aims already covered both cells the productive window
-  contains - which is why that window is 32 BAM wide and worth two draws. Priced end to end it read
-  exactly 8.00x, and every extra near-miss was an existing one re-counted.
+- **the camera is not one either, for as long as the window stays narrow.** Moving `csangle` shifts the
+  whole alphabet, which looks like a way to reach the aims a frozen camera misses at zero frame cost
+  (the C-stick is a free channel during the walk-in and `csangle` is position-independent there, so one
+  measured stream serves a whole fan). But it can only reach a new **cell**, so against a two-cell
+  window the frozen aims already cover it and the lever prices at exactly zero - measured end to end as
+  8.00x that was every near-miss re-counted
+  ([history/entry-search-s81-camera-lever.md](../history/entry-search-s81-camera-lever.md)). **That
+  closure expires with its premise:** the window on this corner is really 22 live cells in two lobes, and
+  several live cells are unreachable frozen, so the camera is a live lever again -
+  [clip-exit-angle.md](clip-exit-angle.md#the-camera-axis-reopens-when-the-window-is-wide).
 
 An aim is still worth firing at full byte resolution, for a different reason: it is not only its own
 locus, it is its own *candidate*, because the entry step is taken along it. And the entry FRAME is not

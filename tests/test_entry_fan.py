@@ -14,8 +14,11 @@ for measurements the Python fan could not afford. Three of them change what the 
      bands at lean 0 and `search` scored every candidate against them; ~83% of those draws sit at a
      lean where NOTHING is genuine at any entry, which is most of what "near-zero, 0 genuine" was
      counting. Honestly recounted, the widest one-segment pass is E[hits] 0.02, not 0.23.
-  3. **the productive facing window is 32 BAM wide and the frozen camera reaches 4 aims in it.** The
-     "3 distinct productive facings" of s80 was the spread of the aim SAMPLES, not the window.
+  3. **`BandTable` reports 32 BAM of productive facings and the frozen camera reaches 4 aims in it.**
+     The "3 distinct productive facings" of s80 was the spread of the aim SAMPLES, not even that.
+     Session 92: that 32 BAM is a `configuration_band`-at-one-`ref` reading and NOT the window, which is
+     22 live cells in two lobes (`knowledge/strategy/clip-exit-angle.md`). It is still the right thing to
+     RANK a candidate's neighbourhood by, and it is still never a veto on a genuine hit.
 
 Plus two structural facts the descent probe walked into: an appended aim is BUFFERED (`INPUT_DELAY`),
 so a one-frame aim change cannot move the endpoint, and when it does act it drops Link off the
@@ -41,14 +44,16 @@ from harness.tetrapush import two_roll as TR
 
 SEED = ES.console_seed()
 
-#: Seven tests want the SAME productive set; qualification is ~45x costlier since it argues a negative
-#: from `locus_scan` (`entry_search.qualify`), so compute it once. Never pass ``escalate=False``.
+#: PINNED because measuring it costs 624 s (`entry_search.curve_scan`); spot-checked by
+#: `test_the_pinned_qualification_still_measures_the_same_way` so it cannot rot.
 _QUALS = []
 
 
 def productive_quals():
+    """The productive set, off the fixture. Never "speed this up" with ``escalate=False`` or
+    ``curve=False`` -- those are the two readings that hid half the seam's facing window."""
     if not _QUALS:
-        _QUALS.append(EF.qualified(SEED, path=None))
+        _QUALS.append(json.load(open(_fx('courtyard_qualified_s92.json')))['quals'])
     return _QUALS[0]
 
 
@@ -199,9 +204,15 @@ def test_most_of_the_draws_sit_at_a_dead_lean():
 
 def test_the_productive_facing_window_is_wider_than_the_aims_that_reach_it():
     """s80 read "3 distinct productive facings" off the aim alphabet, which samples facing space every
-    ~12 BAM. Swept directly, the window is 32 BAM of CONSECUTIVE productive facings at thrust 15 --
+    ~12 BAM. Swept directly, `BandTable` reports 32 BAM of CONSECUTIVE productive facings at thrust 15 --
     and the frozen csangle reaches exactly four aims inside it. That gap is the camera lever: the
-    C-stick shifts the whole alphabet, and each facing bakes its own locus."""
+    C-stick shifts the whole alphabet, and each facing bakes its own locus.
+
+    **This is a `BandTable` fact, not the window** (session 92). `BandTable` is `configuration_band` at
+    ONE `ref` entry, which is what the search ranks a candidate's neighbourhood by -- and it is exactly
+    the reading that hid the second lobe (cells 2560-2575), so 40860 being "outside it" below means
+    "no band at this seed", NOT "cannot clip". The window is
+    `knowledge/strategy/clip-exit-angle.md` + `fixtures/courtyard_facing_window_s92.json`."""
     bands = EF.BandTable(SEED, path=None)
     for facing in (40816, 40824, 40832, 40840, 40847):
         b = bands.get(facing, THRUST, 0)
@@ -857,3 +868,28 @@ def test_the_session_90_list_is_the_whole_pass_because_the_seam_closed():
     # ranked frame-minimal first, so row 0 is what a delivery script picks up
     assert [r['frames'] for r in s90['rows']] == sorted(r['frames'] for r in s90['rows'])
     assert s90['rows'][0]['frames'] == 4
+
+
+def test_the_pinned_qualification_still_measures_the_same_way():
+    """The productive set is PINNED (624 s to measure), so it has to be spot-checked or it rots.
+
+    Re-measure two configurations for real: one the fixture calls productive at a right-lobe cell -- the
+    class that only exists because a negative is argued from the residual-zero curve now (session 92) --
+    and one facing in the measured DEAD GAP, which must still read dead. Also pins the fixture's own
+    provenance: a set measured with `escalate=False`/`curve=False`, or before the ATTACK gate, is the
+    reading that hid half the facing window and must never be what these gates consume."""
+    fx = json.load(open(_fx('courtyard_qualified_s92.json')))
+    assert fx['escalate'] is True and fx['curve'] is True
+    assert fx['msd_min'] == fx['attack_msd_min'] == float(LandState.ATTACK_MSD_MIN)
+    assert fx['csangle'] == ES.CSANGLE and tuple(fx['thrusts']) == tuple(ES.THRUSTS)
+    quals = fx['quals']
+    assert len(quals) > 6, "the pre-session-92 weak form found 6; this must be the wide set"
+
+    right = max((q for q in quals), key=lambda q: q['cell'])
+    assert right['cell'] > ES.aim_cell(40841), "the set must reach past the delivered cell"
+    live = ES.qualify(SEED['tetra'], EF.ref_entry(SEED), facings=[right['facing']],
+                      thrusts=(right['thrust'],), lean=right['lean'])
+    assert len(live) == 1 and live[0]['productive'], right['facing']
+
+    dead = ES.qualify(SEED['tetra'], EF.ref_entry(SEED), facings=[40898], thrusts=(15,))
+    assert not dead[0]['productive'], "cell 2556 is in the measured dead gap"

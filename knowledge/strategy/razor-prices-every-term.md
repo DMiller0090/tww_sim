@@ -147,8 +147,27 @@ engines that had never been compared to each other.
     cause is small**: "4 candidates, zero frames" was one f32 tie in the shared anim engine, and the
     same duplicate-accumulator shape can sit under anything.
 
+12. **A NEGATIVE is only as strong as the set it was argued over - and "I marched further" is not the
+    same as "I started somewhere else"** (session 92). Rule 9's seam and rule 11's tie were both found
+    by widening the *evidence*; this is the failure mode of narrowing it. The scope of an entire search
+    rested on a per-configuration verdict that read `no leverage`, which means "the pushed actor is out
+    of Co range on the cut frame" - **from the one seed it was asked at**. Leverage is a property of the
+    ENTRY, so the verdict was about the seed and was recorded about the configuration, and the strong
+    form that session 90 built (march ALONG the locus, not across it at one station) inherited the flaw
+    intact: it returns nothing at all when its single seed has no gradient, having sampled the locus
+    nowhere. Eleven sessions of passes therefore excluded **half the seam's facing window**, and with it
+    the entire objective term Dereck opened - measured at +9 BAM when it was worth +336
+    ([../history/entry-search-one-seed-negative.md](../history/entry-search-one-seed-negative.md)).
+    Two corollaries. **Find your seeds from the structure, not from convenience:** the target is a level
+    curve, so seed off its own sign changes over the reachable box - one vectorized sweep, and it is
+    cheaper than the march it feeds. And **a closure expires when its premise moves**: the camera was
+    priced at zero against a 2-cell window and is a live lever against a 22-cell one, so re-derive what
+    a closed axis reaches whenever the thing it was closed against changes size.
+
 ## See also
 
+- [clip-exit-angle.md](clip-exit-angle.md) - rule 12's own corner, and the objective term it was
+  hiding.
 - [clip-entry-search.md](clip-entry-search.md) - the search whose window this is, and the
   entry-precision figure that was priced correctly.
 - [clip-lottery-draws.md](clip-lottery-draws.md) - the other way a razor search overstates itself:

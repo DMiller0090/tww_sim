@@ -1,0 +1,783 @@
+{
+ "source": "harness/tetrapush/entry_search.curve_scan, session 92",
+ "note": "A MODEL OUTPUT, not a console capture. THE SEAM'S FACING-CELL WINDOW, measured with the curve-seeded strong form: which sine-table cells admit genuine dust at all, at the lean and thrust of the console-delivered clip, over entries inside the reachable box. The window is TWO LOBES with a dead gap -- and every pass from session 81 to 91 saw only the first, because a `no leverage at the seed` reading from one ref_entry was recorded as a verdict on the configuration. Regenerate with entry_search.curve_scan per cell (see knowledge/strategy/clip-exit-angle.md); ~30 s per cell.",
+ "tetra": [
+  -1629.101806640625,
+  -893.7962036132812
+ ],
+ "ref_entry": [
+  -1531.178466796875,
+  -781.7215576171875
+ ],
+ "lean": 64761,
+ "thrust": 15,
+ "nspeed": 26.0,
+ "csangle": 34325,
+ "delivered": {
+  "cell": 2552,
+  "facing": 40841,
+  "plan": [
+   0,
+   208,
+   110,
+   2,
+   169,
+   192,
+   2
+  ],
+  "aim": [
+   82,
+   186
+  ],
+  "lunge": 49.736814026712636,
+  "console": "fixtures/courtyard_clip_s90_console.json"
+ },
+ "cell_bam": 16,
+ "cell_deg": 0.087890625,
+ "lobes": [
+  [
+   2548,
+   2553
+  ],
+  [
+   2560,
+   2573
+  ]
+ ],
+ "dead_gap": [
+  2554,
+  2559
+ ],
+ "scanned": [
+  2548,
+  2575
+ ],
+ "rows": [
+  {
+   "cell": 2548,
+   "facing": 40770,
+   "travel_deg": 223.94532570268436,
+   "bam_vs_delivered": -64,
+   "deg_vs_delivered": -0.3515625,
+   "n_curve_seeds": 50,
+   "stations": 289,
+   "live": 3,
+   "walkable": 3,
+   "widest_band": 3.159960338574266e-05,
+   "nearest_station_dist": 107.05613627614377,
+   "nearest_station": [
+    -1467.6686710197025,
+    -695.5384841356847
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40769,
+    [
+     86,
+     181
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2549,
+   "facing": 40786,
+   "travel_deg": 224.03321529414785,
+   "bam_vs_delivered": -48,
+   "deg_vs_delivered": -0.263671875,
+   "n_curve_seeds": 48,
+   "stations": 212,
+   "live": 4,
+   "walkable": 4,
+   "widest_band": 6.245070317246337e-05,
+   "nearest_station_dist": 98.9646268866148,
+   "nearest_station": [
+    -1473.684975168466,
+    -701.1703577801835
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40795,
+    [
+     83,
+     185
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2550,
+   "facing": 40802,
+   "travel_deg": 224.12110743364923,
+   "bam_vs_delivered": -32,
+   "deg_vs_delivered": -0.17578125,
+   "n_curve_seeds": 48,
+   "stations": 292,
+   "live": 24,
+   "walkable": 24,
+   "widest_band": 6.181639390749467e-05,
+   "nearest_station_dist": 66.92549585629854,
+   "nearest_station": [
+    -1490.8194874867513,
+    -728.3345293738357
+   ],
+   "aimable_frozen": false,
+   "aim_frozen": null,
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2551,
+   "facing": 40818,
+   "travel_deg": 224.20899750093574,
+   "bam_vs_delivered": -16,
+   "deg_vs_delivered": -0.087890625,
+   "n_curve_seeds": 49,
+   "stations": 323,
+   "live": 79,
+   "walkable": 79,
+   "widest_band": 6.213254225276437e-05,
+   "nearest_station_dist": 0.7406889276065517,
+   "nearest_station": [
+    -1531.6455695000066,
+    -782.2963925084442
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40820,
+    [
+     85,
+     182
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2552,
+   "facing": 40834,
+   "travel_deg": 224.29688814892734,
+   "bam_vs_delivered": 0,
+   "deg_vs_delivered": 0.0,
+   "n_curve_seeds": 51,
+   "stations": 264,
+   "live": 101,
+   "walkable": 101,
+   "widest_band": 6.283050091677116e-05,
+   "nearest_station_dist": 1.2493051128782298,
+   "nearest_station": [
+    -1530.3912077015084,
+    -780.7515130914949
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40841,
+    [
+     82,
+     186
+    ]
+   ],
+   "sample_lunge": 49.736814026712636,
+   "sample_entry": [
+    -1530.3911678992692,
+    -780.751543353381
+   ]
+  },
+  {
+   "cell": 2553,
+   "facing": 40850,
+   "travel_deg": 224.38477713467122,
+   "bam_vs_delivered": 16,
+   "deg_vs_delivered": 0.087890625,
+   "n_curve_seeds": 49,
+   "stations": 209,
+   "live": 77,
+   "walkable": 77,
+   "widest_band": 6.290000173108744e-05,
+   "nearest_station_dist": 22.697888079023983,
+   "nearest_station": [
+    -1517.2346954363497,
+    -763.8116340134059
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40850,
+    [
+     87,
+     179
+    ]
+   ],
+   "sample_lunge": 49.61631406497451,
+   "sample_entry": [
+    -1517.234065385898,
+    -763.8121430678511
+   ]
+  },
+  {
+   "cell": 2554,
+   "facing": 40866,
+   "travel_deg": 224.47266949630057,
+   "bam_vs_delivered": 32,
+   "deg_vs_delivered": 0.17578125,
+   "n_curve_seeds": 49,
+   "stations": 181,
+   "live": 0,
+   "walkable": 0,
+   "widest_band": 0.0,
+   "nearest_station_dist": null,
+   "nearest_station": null,
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40869,
+    [
+     84,
+     183
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2555,
+   "facing": 40882,
+   "travel_deg": 224.56056061315638,
+   "bam_vs_delivered": 48,
+   "deg_vs_delivered": 0.263671875,
+   "n_curve_seeds": 48,
+   "stations": 54,
+   "live": 0,
+   "walkable": 0,
+   "widest_band": 0.0,
+   "nearest_station_dist": null,
+   "nearest_station": null,
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40884,
+    [
+     81,
+     187
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2556,
+   "facing": 40898,
+   "travel_deg": 224.64845069390702,
+   "bam_vs_delivered": 64,
+   "deg_vs_delivered": 0.3515625,
+   "n_curve_seeds": 49,
+   "stations": 54,
+   "live": 0,
+   "walkable": 0,
+   "widest_band": 0.0,
+   "nearest_station_dist": null,
+   "nearest_station": null,
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40901,
+    [
+     86,
+     180
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2557,
+   "facing": 40914,
+   "travel_deg": 224.7363399472354,
+   "bam_vs_delivered": 80,
+   "deg_vs_delivered": 0.439453125,
+   "n_curve_seeds": 43,
+   "stations": 270,
+   "live": 0,
+   "walkable": 0,
+   "widest_band": 0.0,
+   "nearest_station_dist": null,
+   "nearest_station": null,
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40914,
+    [
+     83,
+     184
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2558,
+   "facing": 40930,
+   "travel_deg": 224.82423100406965,
+   "bam_vs_delivered": 96,
+   "deg_vs_delivered": 0.52734375,
+   "n_curve_seeds": 46,
+   "stations": 333,
+   "live": 0,
+   "walkable": 0,
+   "widest_band": 0.0,
+   "nearest_station_dist": null,
+   "nearest_station": null,
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40939,
+    [
+     88,
+     177
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2559,
+   "facing": 40946,
+   "travel_deg": 224.91212405461843,
+   "bam_vs_delivered": 112,
+   "deg_vs_delivered": 0.615234375,
+   "n_curve_seeds": 45,
+   "stations": 190,
+   "live": 0,
+   "walkable": 0,
+   "widest_band": 0.0,
+   "nearest_station_dist": null,
+   "nearest_station": null,
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40949,
+    [
+     85,
+     181
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2560,
+   "facing": 40962,
+   "travel_deg": 225.00001448902069,
+   "bam_vs_delivered": 128,
+   "deg_vs_delivered": 0.703125,
+   "n_curve_seeds": 45,
+   "stations": 333,
+   "live": 17,
+   "walkable": 17,
+   "widest_band": 0.0001042807035663593,
+   "nearest_station_dist": 47.97336776060013,
+   "nearest_station": [
+    -1487.2104367084337,
+    -762.5315512483583
+   ],
+   "aimable_frozen": false,
+   "aim_frozen": null,
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2561,
+   "facing": 40978,
+   "travel_deg": 225.087904923389,
+   "bam_vs_delivered": 144,
+   "deg_vs_delivered": 0.791015625,
+   "n_curve_seeds": 45,
+   "stations": 236,
+   "live": 27,
+   "walkable": 27,
+   "widest_band": 8.596311225516602e-05,
+   "nearest_station_dist": 13.90996178963878,
+   "nearest_station": [
+    -1521.2127838097967,
+    -791.4257937844636
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40990,
+    [
+     87,
+     178
+    ]
+   ],
+   "sample_lunge": 49.66398619234428,
+   "sample_entry": [
+    -1521.2127041918243,
+    -791.4258835674156
+   ]
+  },
+  {
+   "cell": 2562,
+   "facing": 40994,
+   "travel_deg": 225.17579797383453,
+   "bam_vs_delivered": 160,
+   "deg_vs_delivered": 0.87890625,
+   "n_curve_seeds": 44,
+   "stations": 318,
+   "live": 10,
+   "walkable": 10,
+   "widest_band": 9.2374842252427e-05,
+   "nearest_station_dist": 21.007411731536916,
+   "nearest_station": [
+    -1510.1714858191776,
+    -781.5870293265722
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    40995,
+    [
+     84,
+     182
+    ]
+   ],
+   "sample_lunge": 49.76957595283663,
+   "sample_entry": [
+    -1510.171335530154,
+    -781.5871899914699
+   ]
+  },
+  {
+   "cell": 2563,
+   "facing": 41010,
+   "travel_deg": 225.26368660457416,
+   "bam_vs_delivered": 176,
+   "deg_vs_delivered": 0.966796875,
+   "n_curve_seeds": 44,
+   "stations": 310,
+   "live": 10,
+   "walkable": 10,
+   "widest_band": 6.543874133823352e-05,
+   "nearest_station_dist": 54.926856574585,
+   "nearest_station": [
+    -1558.56779270493,
+    -829.3323168998053
+   ],
+   "aimable_frozen": false,
+   "aim_frozen": null,
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2564,
+   "facing": 41026,
+   "travel_deg": 225.35157828358808,
+   "bam_vs_delivered": 192,
+   "deg_vs_delivered": 1.0546875,
+   "n_curve_seeds": 44,
+   "stations": 305,
+   "live": 5,
+   "walkable": 5,
+   "widest_band": 0.0,
+   "nearest_station_dist": 51.360368291559475,
+   "nearest_station": [
+    -1484.3818150296038,
+    -760.5564728212936
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    41037,
+    [
+     29,
+     254
+    ]
+   ],
+   "sample_lunge": 49.97955246667196,
+   "sample_entry": [
+    -1484.3816639560719,
+    -760.5566720116245
+   ]
+  },
+  {
+   "cell": 2565,
+   "facing": 41042,
+   "travel_deg": 225.4394683640316,
+   "bam_vs_delivered": 208,
+   "deg_vs_delivered": 1.142578125,
+   "n_curve_seeds": 44,
+   "stations": 331,
+   "live": 6,
+   "walkable": 6,
+   "widest_band": 1.3544443330697051e-05,
+   "nearest_station_dist": 38.763137619711635,
+   "nearest_station": [
+    -1494.6451849951434,
+    -768.7639282460422
+   ],
+   "aimable_frozen": false,
+   "aim_frozen": null,
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2566,
+   "facing": 41058,
+   "travel_deg": 225.52735948051227,
+   "bam_vs_delivered": 224,
+   "deg_vs_delivered": 1.23046875,
+   "n_curve_seeds": 44,
+   "stations": 349,
+   "live": 12,
+   "walkable": 12,
+   "widest_band": 1.552666095079784e-05,
+   "nearest_station_dist": 19.351957416686403,
+   "nearest_station": [
+    -1511.9690500648608,
+    -784.0660329685306
+   ],
+   "aimable_frozen": false,
+   "aim_frozen": null,
+   "sample_lunge": 50.213947274341486,
+   "sample_entry": [
+    -1511.8361173767466,
+    -783.944572374467
+   ]
+  },
+  {
+   "cell": 2567,
+   "facing": 41074,
+   "travel_deg": 225.61525184169852,
+   "bam_vs_delivered": 240,
+   "deg_vs_delivered": 1.318359375,
+   "n_curve_seeds": 44,
+   "stations": 294,
+   "live": 3,
+   "walkable": 3,
+   "widest_band": 0.0,
+   "nearest_station_dist": 22.754102483318267,
+   "nearest_station": [
+    -1533.1277375632103,
+    -804.3920124714876
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    41078,
+    [
+     82,
+     184
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2568,
+   "facing": 41090,
+   "travel_deg": 225.70314082693136,
+   "bam_vs_delivered": 256,
+   "deg_vs_delivered": 1.40625,
+   "n_curve_seeds": 42,
+   "stations": 308,
+   "live": 1,
+   "walkable": 1,
+   "widest_band": 0.0,
+   "nearest_station_dist": 91.48568322154959,
+   "nearest_station": [
+    -1450.4938443803662,
+    -738.5982235621874
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    41088,
+    [
+     88,
+     176
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2569,
+   "facing": 41106,
+   "travel_deg": 225.79103147434392,
+   "bam_vs_delivered": 272,
+   "deg_vs_delivered": 1.494140625,
+   "n_curve_seeds": 42,
+   "stations": 288,
+   "live": 1,
+   "walkable": 1,
+   "widest_band": 0.0,
+   "nearest_station_dist": 103.54270239787547,
+   "nearest_station": [
+    -1439.6293097469054,
+    -733.3496332881409
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    41116,
+    [
+     81,
+     185
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2570,
+   "facing": 41122,
+   "travel_deg": 225.87892154098222,
+   "bam_vs_delivered": 288,
+   "deg_vs_delivered": 1.58203125,
+   "n_curve_seeds": 43,
+   "stations": 322,
+   "live": 4,
+   "walkable": 4,
+   "widest_band": 0.0,
+   "nearest_station_dist": 55.86283409962175,
+   "nearest_station": [
+    -1480.1943814652707,
+    -758.8900163520527
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    41125,
+    [
+     84,
+     181
+    ]
+   ],
+   "sample_lunge": 50.31019446546743,
+   "sample_entry": [
+    -1480.1943938806637,
+    -758.8900006721925
+   ]
+  },
+  {
+   "cell": 2571,
+   "facing": 41138,
+   "travel_deg": 225.9668136797674,
+   "bam_vs_delivered": 304,
+   "deg_vs_delivered": 1.669921875,
+   "n_curve_seeds": 43,
+   "stations": 358,
+   "live": 4,
+   "walkable": 4,
+   "widest_band": 0.0,
+   "nearest_station_dist": 76.61073002705925,
+   "nearest_station": [
+    -1462.8402310787387,
+    -747.0936859787024
+   ],
+   "aimable_frozen": false,
+   "aim_frozen": null,
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2572,
+   "facing": 41154,
+   "travel_deg": 226.05470572932435,
+   "bam_vs_delivered": 320,
+   "deg_vs_delivered": 1.7578125,
+   "n_curve_seeds": 42,
+   "stations": 305,
+   "live": 1,
+   "walkable": 1,
+   "widest_band": 0.0,
+   "nearest_station_dist": 77.78276395645265,
+   "nearest_station": [
+    -1461.7526925593709,
+    -746.6470620366615
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    41153,
+    [
+     80,
+     186
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2573,
+   "facing": 41170,
+   "travel_deg": 226.14259535072995,
+   "bam_vs_delivered": 336,
+   "deg_vs_delivered": 1.845703125,
+   "n_curve_seeds": 41,
+   "stations": 199,
+   "live": 1,
+   "walkable": 1,
+   "widest_band": 0.0,
+   "nearest_station_dist": 91.44517132228273,
+   "nearest_station": [
+    -1450.047915762976,
+    -739.5308827340153
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    41179,
+    [
+     86,
+     178
+    ]
+   ],
+   "sample_lunge": 50.16387428628011,
+   "sample_entry": [
+    -1450.0478506122238,
+    -739.5309835079182
+   ]
+  },
+  {
+   "cell": 2574,
+   "facing": 41186,
+   "travel_deg": 226.23046577896227,
+   "bam_vs_delivered": 352,
+   "deg_vs_delivered": 1.93359375,
+   "n_curve_seeds": 40,
+   "stations": 301,
+   "live": 1,
+   "walkable": 1,
+   "widest_band": 0.0,
+   "nearest_station_dist": 99.97313988550154,
+   "nearest_station": [
+    -1442.5393798357904,
+    -735.4858467296998
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    41188,
+    [
+     24,
+     255
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  },
+  {
+   "cell": 2575,
+   "facing": 41202,
+   "travel_deg": 226.31835626310007,
+   "bam_vs_delivered": 368,
+   "deg_vs_delivered": 2.021484375,
+   "n_curve_seeds": 42,
+   "stations": 375,
+   "live": 2,
+   "walkable": 2,
+   "widest_band": 0.0,
+   "nearest_station_dist": 77.2941311497037,
+   "nearest_station": [
+    -1461.8396311646118,
+    -747.5673692451945
+   ],
+   "aimable_frozen": true,
+   "aim_frozen": [
+    41202,
+    [
+     82,
+     183
+    ]
+   ],
+   "sample_lunge": null,
+   "sample_entry": null
+  }
+ ]
+}

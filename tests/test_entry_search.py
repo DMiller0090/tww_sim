@@ -32,7 +32,9 @@ import pytest
 
 from tww_sim.core import mathlib as ML
 from harness.rollstab import fast_shove as FS
+from harness.rollstab import geometry_tetra as GT
 from harness.rollstab import turnaround as TA
+from harness.tetrapush import cross_engine as XE
 from harness.tetrapush import entry_search as ES
 from harness.tetrapush import roll_fidelity as RF
 from harness.tetrapush import seeds as SD
@@ -47,6 +49,11 @@ def _fx(name):
 LOCUS = json.load(open(_fx('courtyard_entry_locus_s79.json')))
 SEED = ES.console_seed()
 PLACEMENTS = SD.load_placements()[0]
+
+
+def _s90_frame_minimal():
+    """Row 0 of the current candidate list -- the 4-frame walk-up session 90 delivered to console."""
+    return json.load(open(_fx('courtyard_entry_s90_hits.json')))['rows'][0]
 
 
 def _bits(v):
@@ -434,14 +441,20 @@ def test_the_aim_alphabet_resolves_to_the_sine_table_cell():
     assert len({ES.aim_cell(f) for f, _, _ in cells}) == len(cells)
 
 
-def test_the_camera_cannot_add_an_aim_cell():
-    """THE CAMERA AXIS, PRICED AT ZERO (session 83). The productive facing window is 32 BAM wide and
-    the frozen csangle reaches TWO aims inside it -- one per cell. In cells the window is TWO, the
-    frozen camera already reaches BOTH, and no csangle offset can add one.
+def test_the_camera_cannot_add_an_aim_cell_inside_the_weak_form_window():
+    """THE CAMERA AXIS, PRICED AT ZERO (session 83) -- **AND THE PRICE EXPIRES WITH ITS PREMISE.**
 
-    Session 88 halved the aim count without changing the conclusion: two of the four aims that used
-    to reach the window were representatives too shallow to dispatch a roll, so the "four aims are
-    two draws" arithmetic is now "two aims, two draws". The camera still cannot add a cell."""
+    Across `PRODUCTIVE_CELLS`, which is the 32 BAM the weak form reported, the frozen csangle already
+    reaches every cell the range contains and no offset can add one, so the lever really is worth zero
+    THERE. Session 88 halved the aim count without changing that: two of the four aims were
+    representatives too shallow to dispatch a roll, so "four aims, two draws" became "two aims, two
+    draws".
+
+    What session 92 changed is the RANGE, not this arithmetic: the real window is 22 live cells in two lobes
+    (`curve_scan`, `fixtures/courtyard_facing_window_s92.json`), several live cells are NOT aimable
+    frozen, and one of those is the rightmost with a workable band -- so the camera is a live lever
+    again. This test is kept scoped to `PRODUCTIVE_CELLS` on purpose: it is the historical marker's own
+    arithmetic, and the name says so."""
     lo, hi = ES.PRODUCTIVE_CELLS[0] * ES.SIN_CELL_BAM, (ES.PRODUCTIVE_CELLS[-1] + 1) * ES.SIN_CELL_BAM - 1
 
     def in_window(cs):
@@ -514,19 +527,31 @@ def test_the_acceptance_band_is_per_configuration_not_the_fixture_window():
     assert b['width'] <= w['width']
 
 
-def test_most_configurations_have_no_locus_at_all_and_the_reason_is_leverage():
-    """The '81 aims x 3 thrusts = 243 draws' multiplier is mostly ILLUSORY: the aims are all
-    realizable and every one fires the roll, but the clip lives in a ~21 BAM facing window. Two
-    thirds of the configurations have no leverage whatever -- grad ~ 0, which is the measurable form
-    of 'the pushed actor is out of Co range on the cut frame, so no knob moves the razor here'."""
-    quals = ES.qualify(SEED['tetra'], _ref_entry(), facings=[40773, 40820, 40834, 40925, 41037],
-                       thrusts=(14, 15))
-    prod = [q for q in quals if q['productive']]
+def test_no_leverage_is_a_property_of_the_seed_entry_not_of_the_configuration():
+    """WHAT "MOST CONFIGURATIONS HAVE NO LOCUS" ACTUALLY MEANT (corrected, session 92).
+
+    Measured from ONE `ref_entry`, two thirds of the configurations read `grad ~ 0` -- the measurable
+    form of "the pushed actor is out of Co range on the cut frame, so no knob moves the razor". That
+    reading was taken as a property of the CONFIGURATION and became the search's scope: a ~21 BAM
+    productive facing window, cells 2551-2552.
+
+    It is a property of the ENTRY. `resid` crosses zero somewhere in the reachable box for every cell
+    in the seam's window, and seeded off its own curve the same configuration has walkable live
+    stations. So the no-leverage reading survives here as a fact about this seed, and the productive
+    facings reach well outside the old window -- see
+    [../knowledge/history/entry-search-one-seed-negative.md]."""
+    ref = _ref_entry()
+    facings = [40773, 40820, 40834, 40925, 41037]
+    weak = ES.qualify(SEED['tetra'], ref, facings=facings, thrusts=(14, 15), escalate=False)
+    assert sum(1 for q in weak if q['productive']) < len(weak) / 2
+    assert any(q['reason'] == 'no leverage' and q['grad'] < 1e-3
+               for q in weak if not q['productive'])
+
+    strong = ES.qualify(SEED['tetra'], ref, facings=facings, thrusts=(14, 15))
+    prod = [q for q in strong if q['productive']]
     assert prod, "the tabulated facing must still qualify"
-    assert len(prod) < len(quals) / 2
-    assert all(40800 <= q['facing'] <= 40860 for q in prod)   # the productive band is narrow
-    dead = [q for q in quals if not q['productive']]
-    assert any(q['reason'] == 'no leverage' and q['grad'] < 1e-3 for q in dead)
+    assert len(prod) > sum(1 for q in weak if q['productive'])
+    assert any(q['facing'] > 40860 for q in prod), "the window is not the old 21 BAM band"
 
 
 @pytest.mark.slow
@@ -599,3 +624,154 @@ def test_the_locus_regenerates_from_a_small_box():
     assert hits
     known = set((round(h['entry'][0], 6), round(h['entry'][1], 6)) for h in LOCUS['hits'])
     assert any((round(h['entry'][0], 6), round(h['entry'][1], 6)) in known for h in hits)
+
+
+# ------------------------------------- the exit angle: the cell is the atom, and the cut is PINNED
+
+def test_the_exit_direction_is_quantized_to_the_sine_table_cell():
+    """WHY THE EXIT ANGLE IS COUNTED IN CELLS (Dereck's session-91 objective term). What carries Link
+    downstream out of the clip is `travel` -- equal to `facing` through the roll -- and every use of it
+    goes through `cM_ssin_s16`/`cM_scos_s16`, which are `jmaTable[(u16)angle >> 4]` with no
+    interpolation. So two facings in one 16 BAM cell leave Link on a BIT-IDENTICAL heading, and the
+    exit angle has a hard 0.087891 deg quantum. Asking for "the rightmost facing" is asking for the
+    rightmost CELL."""
+    for cell in (2552, 2553, 2561):
+        base = (ML.cM_ssin_s16(cell << 4), ML.cM_scos_s16(cell << 4))
+        for k in range(16):
+            f = (cell << 4) + k
+            assert (ML.cM_ssin_s16(f), ML.cM_scos_s16(f)) == base
+            assert _bits(ML.cM_ssin_s16(f)) == _bits(base[0])
+        nxt = (ML.cM_ssin_s16((cell + 1) << 4), ML.cM_scos_s16((cell + 1) << 4))
+        assert nxt != base
+    step = math.degrees(math.atan2(*(ML.cM_ssin_s16(2553 << 4), ML.cM_scos_s16(2553 << 4)))) \
+        - math.degrees(math.atan2(*(ML.cM_ssin_s16(2552 << 4), ML.cM_scos_s16(2552 << 4))))
+    assert step == pytest.approx(16 / 65536 * 360, rel=1e-3)
+
+
+def test_the_entry_does_not_move_links_cut_position_it_is_the_wall_brace():
+    """THE CLIP MAP'S PREMISE, FALSIFIED (session 92). `_generated/viz/tetra_clip_map.json` sweeps
+    `old` -- Link's position at the CUT -- and session 91 read its spread as a steering wheel worth
+    +126 BAM if Link cut from 0.44 u away. He cannot: the roll drives him into the corner and
+    `CrrPos` pins him at exactly `WALL_R` from wall A, an attractor with a 30 u basin. Slide the entry
+    a whole roll step and `old` does not move one f32 ULP.
+
+    What the entry DOES move is the cut-frame PUSH (Tetra is plowed differently on the way in), and
+    that is the only term with leverage on the razor -- which is why `resid` slides smoothly while
+    `old` stays frozen."""
+    hit = _s90_frame_minimal()
+    e = (hit['entry'][0], hit['entry'][1])
+    ctx, sch, resid = ES.build_fast(hit['facing'], hit['m351C'], hit['thrust'], e,
+                                    nspeed=hit['nspeed'])
+    sx, cz = ML.cM_ssin_s16(hit['facing']), ML.cM_scos_s16(hit['facing'])
+    ts = [-1.0, -0.5, -0.1, 0.0, 0.1, 0.5, 1.0]
+    rows = ctx.sweep_par([(SEED['tetra'][0], SEED['tetra'][1], e[0] + t * sx, e[1] + t * cz)
+                          for t in ts], 0)
+    olds = set((_bits(o[1]), _bits(o[2])) for o in rows)
+    assert len(olds) == 1, "the cut position is the wall brace, not a free variable"
+    resids = [resid(o) for o in rows]
+    assert resids == sorted(resids, reverse=True)       # smooth in the entry, through the PUSH alone
+    assert abs(resids[0] - resids[-1]) > 1e-2           # and it really does move the razor
+
+    for o in rows:                                     # and the pinned point IS wall A's 35.0 brace
+        assert abs(GT.wA.pla.func((o[1], GT.LINK_Y, o[2]))) == pytest.approx(35.0, abs=1e-3)
+
+
+# ----------------------------------- a NEGATIVE about a configuration is argued from the WHOLE curve
+
+def test_the_escalation_recovers_the_cell_one_station_reads_barren():
+    """THE GATE SESSION 91 OWED. `configuration_band` sweeps ACROSS the locus at ONE station, so a
+    configuration whose genuine dust has slid ALONG the curve reads barren. Cell 2553 (facings
+    40848..40863) is exactly that: barren here, and richly live under `locus_scan` -- so every pass
+    from session 81 to 89 silently excluded the righter third of the seam's own facing window."""
+    ref = _ref_entry()
+    b = ES.configuration_band(SEED['tetra'], 40850, 15, 0, ref)
+    assert not b['productive'] and b['reason'] == 'no genuine on the residual zero'
+    sc = ES.locus_scan(SEED['tetra'], 40850, 15, 0, ref)
+    assert sc['live'] > 0 and sc['walkable'] > 0
+    re_seeded = ES.configuration_band(SEED['tetra'], 40850, 15, 0, sc['walkable_at'][0])
+    assert re_seeded['productive']
+
+
+def test_the_second_lobe_needs_the_curve_to_find_its_own_seeds():
+    """THE SAME TRAP ONE LEVEL DEEPER (session 92), and it was hiding the whole exit-angle axis.
+
+    `locus_scan` is the strong form, but it MARCHES from one Newton solve at `ref_entry` and returns
+    nothing at all when THAT point has no leverage -- having sampled the locus nowhere. Leverage is a
+    property of the ENTRY (whether the plowed Tetra is still in Co range on the cut frame), so a
+    righter facing, whose roll leaves her behind from this seed, reads `no leverage at the seed` and is
+    dropped. `curve_scan` seeds off the residual-zero curve's own crossings instead.
+
+    Cell 2561 is +144 BAM of exit angle over the delivered clip (`courtyard_clip_s90_console.json`)
+    and reads barren under BOTH weaker forms."""
+    ref = _ref_entry()
+    for facing in (40978, 40994):
+        b = ES.configuration_band(SEED['tetra'], facing, 15, 0, ref)
+        ls = ES.locus_scan(SEED['tetra'], facing, 15, 0, ref)
+        assert not b['productive'] and b['reason'] == 'no leverage'
+        assert ls['reason'] == 'no leverage at the seed' and ls['stations'] == 0
+        cs = ES.curve_scan(SEED['tetra'], facing, 15, 0, ref)
+        assert cs['n_seeds'] > 0 and cs['stations'] > 0
+        assert cs['live'] > 0 and cs['walkable'] > 0
+        assert ES.configuration_band(SEED['tetra'], facing, 15, 0, cs['walkable_at'][0])['productive']
+
+
+def test_the_recovered_dust_is_a_real_clip_and_not_the_refusal_shape():
+    """A `genuine` verdict is only worth spending a delivery on if Link actually goes THROUGH the seam:
+    session 88's expensive rejection class is `ShoveCtx` scoring ~49.9 u where the composite refuses to
+    move him at all (~0.15 u). Every recovered second-lobe station lunges the real distance, and the
+    lunge GROWS to the right -- which is session 91's "the lunge buys angle", falling out of the same
+    geometry rather than being a second lever."""
+    ref = _ref_entry()
+    lunges = {}
+    for facing in (40834, 40978, 41058):
+        cs = ES.curve_scan(SEED['tetra'], facing, 15, 0, ref)
+        stations = cs['walkable_at'] or cs['live_at']
+        assert stations, "facing %d must have live dust to check" % facing
+        best = 0.0
+        for st in stations:
+            g = ES.entry_gradient(SEED['tetra'], st, facing=facing, m351c=0, thrust=15)
+            if g['grad'] == 0.0:
+                continue
+            ux, uz = g['gx'] / g['grad'], g['gz'] / g['grad']
+            pts = [(st[0] + (2.0 * i / 2000 - 1.0) * 0.02 * ux,
+                    st[1] + (2.0 * i / 2000 - 1.0) * 0.02 * uz) for i in range(2001)]
+            ctx, _sch, _r = ES.build_fast(facing, 0, 15, ref)
+            for o in ctx.sweep_par([(SEED['tetra'][0], SEED['tetra'][1], p[0], p[1]) for p in pts], 0):
+                if o[0]:
+                    best = max(best, math.hypot(o[3] - o[1], o[4] - o[2]))
+            if best > XE.CLIP_LUNGE_MIN:
+                break
+        lunges[facing] = best
+        assert best > XE.CLIP_LUNGE_MIN, "facing %d: lunge %.4f is the refusal shape" % (facing, best)
+    assert lunges[41058] > lunges[40834]
+
+
+def test_the_facing_window_fixture_is_two_lobes_with_a_dead_gap():
+    """THE MEASURED WINDOW, pinned so the two-lobe shape cannot silently narrow back to one (session
+    92). The fixture is a MODEL output and cheap to re-derive per cell, so this checks its structure
+    against the claims the strategy page makes AND re-measures one cell from each side of the gap so it
+    cannot rot: the dead gap has to stay dead and the second lobe has to stay live."""
+    fx = json.load(open(_fx('courtyard_facing_window_s92.json')))
+    rows = {r['cell']: r for r in fx['rows']}
+    assert fx['delivered']['cell'] == ES.aim_cell(_s90_frame_minimal()['facing'])
+    assert fx['cell_bam'] == ES.SIN_CELL_BAM
+
+    for lo, hi in fx['lobes']:
+        assert all(rows[c]['live'] > 0 for c in range(lo, hi + 1)), "lobe %d-%d" % (lo, hi)
+    for c in range(fx['dead_gap'][0], fx['dead_gap'][1] + 1):
+        assert rows[c]['live'] == 0 and rows[c]['n_curve_seeds'] > 20   # a covered curve, no dust
+    assert fx['delivered']['cell'] in range(fx['lobes'][0][0], fx['lobes'][0][1] + 1)
+
+    right = max(c for c, r in rows.items() if r['live'] > 0)
+    assert (right - fx['delivered']['cell']) * 16 >= 144            # the axis, in BAM to the right
+    for r in fx['rows']:
+        if r['sample_lunge'] is not None:
+            assert r['sample_lunge'] > XE.CLIP_LUNGE_MIN            # never the refusal shape
+
+    ref = tuple(fx['ref_entry'])
+    dead = ES.curve_scan(SEED['tetra'], rows[fx['dead_gap'][0]]['facing'], fx['thrust'],
+                         fx['lean'], ref, nspeed=fx['nspeed'])
+    live = ES.curve_scan(SEED['tetra'], rows[fx['lobes'][1][0] + 1]['facing'], fx['thrust'],
+                         fx['lean'], ref, nspeed=fx['nspeed'])
+    assert dead['n_seeds'] > 20 and dead['live'] == 0
+    assert live['live'] > 0 and live['walkable'] > 0

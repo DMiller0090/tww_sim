@@ -62,8 +62,15 @@ That is not a rounding detail; it silently multiplies a lever. On the Tetra corn
 facing window measured 32 BAM wide with only four aims reachable at the frozen camera, which read as
 "the C-stick is worth 8x more usable configurations". Priced end to end, it returned exactly 8.00x -
 6 near-misses became 48 - and every one of the 48 was **three candidates counted sixteen times, at
-bit-identical residuals**. The window is two table cells, the frozen camera already reached both, and
-the axis is worth nothing ([history/entry-search-s81-camera-lever.md](../history/entry-search-s81-camera-lever.md)).
+bit-identical residuals**. That 32 BAM range is two table cells, the frozen camera already reached
+both, and inside it the axis is worth nothing
+([history/entry-search-s81-camera-lever.md](../history/entry-search-s81-camera-lever.md)).
+
+The cell arithmetic is the durable half of that; the RANGE was not. The 32 BAM was a window measured
+one seed at a time, and the seam's real window is 22 live cells - so the camera lever came back, because it
+decides which cells are aimable at all ([clip-exit-angle.md](clip-exit-angle.md#the-camera-axis-reopens-when-the-window-is-wide)).
+**Collapse an angular axis onto cells before counting it, and re-price a closed lever whenever the
+window it was closed against changes size.**
 
 Two tells, both of which were visible before the diagnosis:
 
@@ -188,8 +195,13 @@ the curve bends, and sweep across at each. It costs a couple of seconds per conf
 
 Always run the live configuration as a control in the same call. The first full-circle sweep above was
 run at 64-BAM steps and reported zero productive facings *at the cap*, which is only because the cap's
-own window is 32 BAM wide and the stride stepped over it. A negative result whose control also reads
+own window read 32 BAM wide and the stride stepped over it. A negative result whose control also reads
 negative is a resolution bug, not a finding.
+
+And the march is still not the strong form, because it starts from ONE seed: it returns nothing at all
+when that seed has no leverage, having sampled the locus nowhere. Seed off the residual-zero curve's own
+sign changes instead - one vectorized sweep of the reachable box - or the negative is about the seed
+([clip-exit-angle.md](clip-exit-angle.md#the-rule-this-corner-paid-for)).
 
 ## Two facts that kill a local descent before it starts
 

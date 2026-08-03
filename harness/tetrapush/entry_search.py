@@ -111,9 +111,22 @@ exactly 8.00x -- and all 48 were three candidates counted sixteen times, at bit-
 The camera's only remaining reach is the WALK's direction cells (88.2% covered frozen, 94.2% over all
 16 offsets), i.e. ~1.07x candidates, which is the candidate axis and not a configuration one.
 
-So every configuration axis is now closed by measurement -- aim (2 cells), thrust (15, plus ULP
-tickets at 14), momentum (the cap), camera (nothing) -- and the only axis left is CANDIDATES: the
-two-segment fan, `entry_fan.iter_fan2`.
+WHAT SESSION 92 CHANGED, and it re-opens two of the axes above: **the productive facing window is not
+2 cells, it is 26 in TWO LOBES, and the reason it read narrow is that every negative was argued from one
+seed ENTRY.** `locus_scan` marches the locus but seeds at a single `ref_entry` and returns 0 stations
+when that point reads `grad < 1e-3` -- having sampled the locus nowhere -- and "no leverage" is a
+property of the ENTRY (is the plowed Tetra still in Co range on the cut frame), not of the
+configuration. `curve_seeds`/`curve_scan` seed off the residual-zero curve's own sign changes over the
+reachable box instead. Measured: cells 2548-2553, a dead gap 2554-2559, then a second lobe 2560-2575
+carrying real clips (lunge 49.7-50.3 u) at walkable entries; re-qualifying takes the pass's productive
+set from **6 to 40 configurations**. Consequences: the CAMERA axis is live again (it decides which cells
+are aimable, and several live ones are not aimable frozen -- s83's zero pricing was correct against a
+2-cell window and expires with it), and the exit ANGLE becomes steerable, which is the objective term
+Dereck opened in session 91 -- see `knowledge/strategy/clip-exit-angle.md`. So `PRODUCTIVE_CELLS` below
+records the WEAK-form answer and is kept only as the historical marker it is.
+
+The remaining closed axes are thrust (15, plus ULP tickets at 14) and momentum (the cap); the biggest
+axis is still CANDIDATES: the two-segment fan, `entry_fan.iter_fan2`.
 
     python -m harness.tetrapush.entry_search verdict   # the fork measurement (A is dead)
     python -m harness.tetrapush.entry_search window    # the acceptance window off the 288 coords
@@ -167,11 +180,17 @@ WALK_CAP = 17.0
 AIM_WINDOW = (40400, 41300)
 #: BAM per console sine-table cell -- the aim alphabet's real resolution, not 1 BAM. See `aim_cell`.
 SIN_CELL_BAM = 16
-#: The cells the productive facing window resolves to (40816..40831, 40832..40847), MEASURED off
-#: session 81's 1-BAM sweep of 40400..41300. A thing to check a camera claim against, not a test.
+#: **A HISTORICAL MARKER, NOT THE WINDOW** -- session 81's 1-BAM sweep, every negative of it argued from
+#: one seed entry. The real window is `fixtures/courtyard_facing_window_s92.json`; see `curve_scan`.
 PRODUCTIVE_CELLS = (2551, 2552)
 #: Thrust steps that still dispatch a CUT out of this roll schedule -- each bakes its own locus.
 THRUSTS = (13, 14, 15)
+#: Walk frames the entry box of `curve_seeds` must cover. The frame floor a delivered plan reached
+#: (session 90's 4-frame clip), so the box is "everywhere a plan at the floor can put the entry".
+REACH_FRAMES = 4
+#: Level-curve seed spacing, and the span each seed is then marched (`curve_scan`) -- so the marches
+#: tile the curve rather than re-walking one another.
+SEED_SEP = 12.0
 #: Tetra leaves stt 3 and walks past this, so a walk frame beyond it has not got her pinned any more.
 FOLLOW_BAR = 230.0
 
@@ -454,10 +473,11 @@ def aim_cells(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=None)
     """`aim_alphabet` collapsed onto its real atoms: ``[(facing, bytes, [sibling bytes...])]``, one
     entry per sine-table cell.
 
-    The 81 aims in `AIM_WINDOW` are 49 draws, and the 4 inside the productive window are 2.
-    Qualifying or scoring per AIM instead of per cell multiplies the evaluations, and -- worse --
-    reports each near-miss once per aim, which is how a lever that adds no cell prices at 8x
-    (session 83; the camera)."""
+    The 81 aims in `AIM_WINDOW` are 49 draws, and the 4 inside `PRODUCTIVE_CELLS` are 2. Qualifying or
+    scoring per AIM instead of per cell multiplies the evaluations, and -- worse -- reports each
+    near-miss once per aim, which is how a lever that adds no cell prices at 8x (session 83; the
+    camera). That lever is live again over the REAL window, which is 22 live cells rather than 2
+    (`curve_scan`) -- the cell arithmetic here is unaffected, only the range it was applied to."""
     by = {}
     for f, byts in aim_alphabet(csangle, lo, hi, msd_min):
         by.setdefault(aim_cell(f), []).append((f, byts))
@@ -552,8 +572,83 @@ def locus_scan(tetra, facing, thrust, lean, ref_entry, nspeed=None, span=70.0, s
                 walkable_at=walk_at, reason='')
 
 
+def reach_radius(frames=REACH_FRAMES):
+    """The entry box a plan of ``frames`` walk frames can put Link's roll entry inside -- DERIVED, not
+    chosen: `frames` frames at the walk cap plus the roll's own entry step (`roll_entry`)."""
+    return f32(WALK_CAP * int(frames)) + ROLL_NSPEED
+
+
+def curve_seeds(tetra, facing, thrust, lean, centre, nspeed=None, radius=None, step=3.0,
+                sep=SEED_SEP, frames=REACH_FRAMES):
+    """Seeds ON this configuration's residual-zero curve, taken from the curve's OWN crossings.
+
+    `locus_scan` is the strong form of "is anything genuine along the locus" -- but it MARCHES from one
+    Newton solve at `ref_entry`, and returns `no leverage at the seed` when that point has grad ~ 0,
+    which drops the configuration having sampled the locus nowhere. **Leverage is a property of the
+    ENTRY, not of the configuration**: it is whether the plowed Tetra is still inside Co range on the
+    cut frame, and from a given seed a righter facing's roll simply leaves her behind. So the negative
+    was still resting on ONE station, one level up from the station session 90 fixed.
+
+    Measured cost of that (session 92): facings 40962 and 40978 -- **cells 2560 and 2561, +128 and
+    +144 BAM of exit angle over the delivered clip** -- each carry genuine dust at a WALKABLE entry
+    inside the follow bar, nearest 48.0 u and 13.9 u from the delivered entry, and BOTH read
+    `no leverage at the seed` from `ref_entry`. That is the whole exit-angle axis Dereck opened in
+    session 91, and every pass from session 81 on had it out of scope
+    (`fixtures/courtyard_facing_window_s92.json`; knowledge/strategy/clip-exit-angle.md).
+
+    `resid` is smooth in the entry and changes SIGN across the locus, so every adjacent grid pair with
+    opposite signs brackets a point on the curve -- and a `ShoveCtx` sweep is vectorized, so sweeping
+    the whole box costs one call. Seeds are deduped at ``sep`` so neighbouring marches overlap instead
+    of re-walking each other. The box is the REACHABLE entry set (`reach_radius`), because a seed Link
+    cannot walk to in the frame budget is not a seed."""
+    radius = reach_radius(frames) if radius is None else radius
+    ctx, sch, resid = build_fast(facing, lean, thrust, centre, nspeed=nspeed)
+    m = int(2.0 * radius / step) + 1
+    grid = [[(centre[0] - radius + i * step, centre[1] - radius + j * step) for j in range(m)]
+            for i in range(m)]
+    flat = [p for col in grid for p in col]
+    rs = [resid(o) for o in ctx.sweep_par([(tetra[0], tetra[1], p[0], p[1]) for p in flat], 0)]
+    picked = []
+    for i in range(m):
+        for j in range(m):
+            r0 = rs[i * m + j]
+            if not ((j + 1 < m and r0 * rs[i * m + j + 1] < 0.0)
+                    or (i + 1 < m and r0 * rs[(i + 1) * m + j] < 0.0)):
+                continue
+            p = grid[i][j]
+            if all(math.hypot(p[0] - q[0], p[1] - q[1]) > sep for q in picked):
+                picked.append(p)
+    return picked
+
+
+def curve_scan(tetra, facing, thrust, lean, centre, nspeed=None, radius=None, step=3.0,
+               sep=SEED_SEP, frames=REACH_FRAMES, half=0.02, n=2001):
+    """`locus_scan` from EVERY seed on the level curve (`curve_seeds`) -- the form a NEGATIVE about a
+    whole configuration has to be argued from.
+
+    Each seed is marched only ``sep`` either way, since the seeds already tile the curve at that
+    spacing; the cost is therefore the curve's length inside the reachable box and not the seed count.
+    Returns `locus_scan`'s shape plus ``n_seeds``, so a caller can tell "no dust on a curve I covered"
+    (a negative) from "no curve in the box" (0 seeds -- not a negative about the configuration)."""
+    seeds = curve_seeds(tetra, facing, thrust, lean, centre, nspeed=nspeed, radius=radius,
+                        step=step, sep=sep, frames=frames)
+    tot = dict(stations=0, live=0, walkable=0, live_at=[], walkable_at=[], reason='',
+               n_seeds=len(seeds))
+    if not seeds:
+        tot['reason'] = 'no residual zero inside the reachable box'
+        return tot
+    for s in seeds:
+        sc = locus_scan(tetra, facing, thrust, lean, s, nspeed=nspeed, span=sep, step=2.0,
+                        half=half, n=n)
+        for k in ('stations', 'live', 'walkable'):
+            tot[k] += sc[k]
+        tot['live_at'] += sc['live_at']
+        tot['walkable_at'] += sc['walkable_at']
+    return tot
+
+
 def qualify(tetra, ref_entry, facings=None, thrusts=THRUSTS, lean=0, csangle=CSANGLE,
-            progress=False, nspeed=None, escalate=True):
+            progress=False, nspeed=None, escalate=True, curve=True):
     """Which (facing, thrust) admit a genuine entry locus at all, and where each one's band sits.
     Spending candidates on the rest buys nothing -- it is the cheapest 4x in the search.
 
@@ -572,7 +667,16 @@ def qualify(tetra, ref_entry, facings=None, thrusts=THRUSTS, lean=0, csangle=CSA
     stations** under the strong form, so every pass from session 81 to 89 silently excluded the
     righter half of the seam's facing window. On a negative this now marches the locus and, if it
     finds a live station, RE-SEEDS the band there and returns it with ``escalated=True``. Costs the
-    strong form only on configurations that were about to be thrown away."""
+    strong form only on configurations that were about to be thrown away.
+
+    **AND THE MARCH ITSELF STARTED FROM ONE STATION** (``curve``, session 92). `locus_scan` seeds at
+    `ref_entry` and returns nothing at all when THAT point has no leverage, so a configuration whose
+    locus lives elsewhere in the reachable box was dropped without the locus being sampled once. The
+    ladder now ends at `curve_scan`, which seeds off the residual-zero curve's own crossings. Measured:
+    cells **2560 and 2561** (facings 40962/40978, **+128/+144 BAM of exit angle**) both read
+    `no leverage at the seed` and both carry genuine dust at a walkable entry inside the follow bar --
+    the exit-angle axis of session 91's new objective term. Cheapest form first, so this runs only on
+    what the two weaker forms already threw away."""
     aims = aim_cells(csangle) if facings is None else [(f, None, []) for f in facings]
     out = []
     for i, (fac, byts, sib) in enumerate(aims):
@@ -580,6 +684,8 @@ def qualify(tetra, ref_entry, facings=None, thrusts=THRUSTS, lean=0, csangle=CSA
             b = configuration_band(tetra, fac, thrust, lean, ref_entry, nspeed=nspeed)
             if not b['productive'] and escalate:
                 sc = locus_scan(tetra, fac, thrust, lean, ref_entry, nspeed=nspeed)
+                if not (sc['walkable_at'] or sc['live_at']) and curve:
+                    sc = curve_scan(tetra, fac, thrust, lean, ref_entry, nspeed=nspeed)
                 for q in (sc['walkable_at'] + sc['live_at']):     # prefer a station Link can stand on
                     b2 = configuration_band(tetra, fac, thrust, lean, q, nspeed=nspeed)
                     if b2['productive']:

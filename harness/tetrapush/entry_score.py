@@ -59,7 +59,7 @@ def ref_entry(seed=None):
 
 
 def qualified(seed=None, csangle=ES.CSANGLE, thrusts=ES.THRUSTS, path=QUAL_CACHE, refresh=False,
-              escalate=True):
+              escalate=True, curve=True):
     """The productive (facing, thrust) configurations at this camera, with each one's OWN acceptance
     band -- `entry_search.qualify` filtered, cached to json (4 s to recompute since `entry_gradient`
     went analytic + cached).
@@ -84,20 +84,28 @@ def qualified(seed=None, csangle=ES.CSANGLE, thrusts=ES.THRUSTS, path=QUAL_CACHE
     from `locus_scan` rather than from `configuration_band`'s single station, which takes this set from
     3 configurations to 9 -- including facing 40850 (cell 2553), whose band is the WIDEST of them at
     5.19e-05. A pass handed the pre-escalation cache would re-run the narrow window and look like a
-    confirmation."""
+    confirmation.
+
+    ``curve`` is the same trap one level deeper (session 92) and is keyed for the same reason:
+    `locus_scan` MARCHES the locus but seeds at one `ref_entry`, and returns nothing when that point has
+    no leverage -- so the whole SECOND LOBE of the seam's facing window (cells 2560-2573, up to +336 BAM
+    of exit angle) was out of scope for every pass since session 81. `ES.curve_scan` seeds off the
+    residual-zero curve instead. A cache written before it is refused rather than silently re-used."""
     msd_min = float(LandState.ATTACK_MSD_MIN)
     if not refresh and path and os.path.exists(path):
         d = json.load(open(path))
         if (d.get('cells') and d['csangle'] == csangle and tuple(d['thrusts']) == tuple(thrusts)
-                and d.get('msd_min') == msd_min and d.get('escalate') == bool(escalate)):
+                and d.get('msd_min') == msd_min and d.get('escalate') == bool(escalate)
+                and d.get('curve') == bool(curve)):
             return d['quals']
     seed = seed or ES.console_seed()
     quals = [q for q in ES.qualify(seed['tetra'], ref_entry(seed), thrusts=thrusts,
-                                   csangle=csangle, escalate=escalate) if q['productive']]
+                                   csangle=csangle, escalate=escalate, curve=curve)
+             if q['productive']]
     if path:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         json.dump(dict(csangle=csangle, thrusts=list(thrusts), cells=True, msd_min=msd_min,
-                       escalate=bool(escalate), quals=quals), open(path, 'w'))
+                       escalate=bool(escalate), curve=bool(curve), quals=quals), open(path, 'w'))
     return quals
 
 
@@ -260,7 +268,9 @@ def stream_search(pairs, seed=None, quals=None, batch=250000, keep=40, near_gap=
                                          walkable=bool(TA.is_walkable(k[0], k[1])
                                                        and TA.is_walkable(e[0], e[1]))))
                     elif band is None:
-                        n_dead += 1               # nothing genuine here, at any entry
+                        # no usable band AT `bands.ref` -- NOT "nothing genuine at any entry"
+                        # (`ES.curve_scan`). Only a label: a band ranks a hit, never vetoes one.
+                        n_dead += 1
                     elif ES.window_gap(r, band) < near_gap:
                         # WITH ITS IDENTITY, so the count can be audited (`distinct_near`)
                         near.append((ES.window_gap(r, band),

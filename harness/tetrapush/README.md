@@ -225,7 +225,7 @@ deliberately unported.
 | `entry_search.{fast_schedule,roll_entry,aim_alphabet,qualify}` | **THE SESSION-80 SEARCH ENGINE.** `fast_schedule` drops the 22 ms simulated ctx build for a 0.19 ms analytic one, 0-ULP identical over facing x lean x thrust -- the ctx build, not the alphabet, was the whole budget. `roll_entry`/`lean_at_roll` convert a walk endpoint into the entry the game hands you (one 26 u roll step along the AIM, one lean decay tick), both bit-exact; s79 fed the walk endpoint straight in. `aim_alphabet` is 81 wide, not 6 -- the msd 1.0 floor was not physical. And `qualify`/`configuration_band` is the one that matters: of 243 (facing, thrust) configurations only **6** admit a genuine locus, **169** have no leverage at all (grad < 1e-3 -- Tetra out of Co range on the cut frame), and each productive one has its OWN acceptance band, narrower than and offset from the fixture window that is their union. |
 | `entry_fan.py` | **THE FAN ON THE NATIVE FLEET, AND THE HONEST DRAW COUNT (session 81).** `graft` transplants the WIRED Python `FreeRun`'s mid-walk state into a `LandCore` -- required because the stripped native config does NOT reproduce the wired replay of the console log (it diverges at log frame 19 on `facing`, the proc-9 re-aim falling back to Tetra's feet), and `LandCore.setup` resets the mid-walk scalars `CARRY` restores. `iter_fan`/`fleet_fan` are `entry_search.walk_fan` on `CourtyardFleet.run_par`: **43596 candidates in 17 s against 1444 s, key AND value bit-identical** to the cached s80 pass (write order is part of the contract -- the reference collapses ~5.5M writes onto 43596 keys, last writer wins). `iter_fan2` adds TWO-SEGMENT holds off the first segment's own junction cores. `BandTable` is the correction that matters: the acceptance band is a function of the **lean** too, so a candidate at a dead lean is not a near-miss -- **83% of the widest pass's draws are dead**, its 72 near-misses are 6, and E[hits] is 0.02 not 0.23. `stream_search` scores a fan stream batch-by-batch against each candidate's OWN band. **Session 82** put the roll's MOMENTUM in that key (`iter_fan(cap=None)` keeps sub-cap endpoints, keyed by their own speedF) and INVERTED the band strategy: with the momentum in the key a band costs 70x the group evaluation it would save, so every draw is evaluated and a band is measured only for the near-zero tail (18 bands over a 43653-candidate pass). **Session 84** collapsed the fan's own HELD-STICK alphabet and made a pass auditable and unbounded: `stick_alphabet` keys the byte grid by what the physics reads (`main_stick_decode`'s `(angle, msd)`) -- **65536 byte pairs are 11405 draws**, one class holding 1944, so a byte-grid fan spends 5.75 frames per frame of new physics; both segments of `iter_fan2` now run the decoded alphabet, preferring an interior representative so `dtm_make`'s 0->1/255->254 cannot rewrite it. `family_of_plan` + `_marginal` price a pass in PREFIX FAMILIES with a per-batch `trace` (the marginal rate is the stop signal, the cumulative one is not); near-misses carry their identity, `dedupe_near`/`draw_key` collapse them onto the DRAW, and `lottery` sums each draw's OWN band instead of the count x a lean-0 width. `dedup_scope='family'` bounds the key set at one family -- the memory ceiling, once the fan got cheap -- with the draw dedup keeping the reported population identical. `confirm_hits`/`confirm` is the A-press replay every hit owes, ranked confirmed-first then frame-minimal. **Session 85** added the THIRD prune, the one the confirm step asked for: `_is_rollable` keeps an endpoint only if the A-press that follows it can actually dispatch the roll (`land.ROLL_FROM` = MOVE/ATN_MOVE -- the endpoint's own `state` IS the A frame's dispatch proc, since the aim is delivered on the endpoint frame and acted on the next), which is exactly why s84's three unconfirmed draws all read `procs [24, 24, 6, 6, 6]`, proc 24 being `MOVE_TURN`. On by default in `iter_fan2` and deliberately OFF in `iter_fan`, whose key-AND-value equality with `walk_fan` is a contract. It drops ~7% of endpoints and saves no fleet time -- a validity filter, not a budget one -- and is gated against a real A-press in BOTH directions. The same session SPLIT the scoring half out to `entry_score.py` (this module was 880 lines) with a name-for-name re-export, so `entry_fan.stream_search` and the rest still resolve. CLI `{gate,fan,fan2,search1,search2,confirm}`, `search1 <jmax> <nbase> <stride> [uncapped]`, `search2 <s1_stride> <j1> <s2_stride> <j2max> <nbase>`. Gated `tests/test_entry_fan.py` (28 + 1 slow). |
 | `entry_score.py` | **THE SCORING HALF OF THE FAN (session 85 split; the code is s81-84's, unchanged).** Everything that turns a candidate stream into a counted population: `qualified`/`BandTable` (the per-(facing, thrust, lean, momentum) acceptance band), `stream_search` (batch-by-batch scoring, `family_of_plan` pricing, `dedup_scope`), the counting vocabulary `draw_key`/`dedupe_near`/`hit_draws`/`distinct_near`/`lottery`, and `confirm_hits`. It is one module because every headline number a pass prints has been wrong once, always by counting COPIES as discoveries -- s81's lean-0 bands, s83's camera at 8.00x (48 near-misses that were 3 candidates x16), s84's 118 genuine scorings that were 23 draws. `entry_fan` re-exports the lot. |
-| `entry_search.{aim_cell,aim_cells,SIN_CELL_BAM,PRODUCTIVE_CELLS}` | **THE AIM ALPHABET'S REAL ATOM (session 83): the console sine-table CELL, 16 BAM.** `cM_ssin_s16` is `jmaSinTable[(u16)angle >> 4]` with no interpolation, and every term a roll facing reaches goes through it -- travel, cut rotation, Co pose chain, and `roll_entry`'s own 26 u step -- so two facings in one cell bake a bit-identical schedule at a bit-identical entry and are ONE draw. `aim_cells` collapses the 81-aim alphabet onto its 49 atoms (siblings kept, because `confirm_entry` delivers BYTES and the entry FRAME is not cell-quantized); `qualify` runs one configuration per cell, taking `qualified()` from 6 to 3 and the reference pass from "6 near-misses" to the honest 3. This is what closed the camera axis: the productive window is cells 2551/2552 and the frozen csangle reaches both. Gated `tests/test_entry_search.py` (3 new). |
+| `entry_search.{aim_cell,aim_cells,SIN_CELL_BAM,PRODUCTIVE_CELLS}` | **THE AIM ALPHABET'S REAL ATOM (session 83): the console sine-table CELL, 16 BAM.** `cM_ssin_s16` is `jmaSinTable[(u16)angle >> 4]` with no interpolation, and every term a roll facing reaches goes through it -- travel, cut rotation, Co pose chain, and `roll_entry`'s own 26 u step -- so two facings in one cell bake a bit-identical schedule at a bit-identical entry and are ONE draw. `aim_cells` collapses the 81-aim alphabet onto its 49 atoms (siblings kept, because `confirm_entry` delivers BYTES and the entry FRAME is not cell-quantized); `qualify` runs one configuration per cell, taking `qualified()` from 6 to 3 and the reference pass from "6 near-misses" to the honest 3. It also read as closing the camera axis -- the productive window looked like cells 2551/2552, which the frozen csangle reaches both of. **Session 92: `PRODUCTIVE_CELLS` is a HISTORICAL MARKER, not the window** (it was measured one seed at a time); the real window is 22 LIVE cells in two lobes (`curve_scan`, `fixtures/courtyard_facing_window_s92.json`), so the camera axis is live again -- several live cells are not aimable frozen. The CELL-is-the-atom half is unaffected and still current. Gated `tests/test_entry_search.py`. |
 | `entry_search.{roll_nspeed,CtxPool,locus_scan}` | **THE MOMENTUM AXIS (session 82) -- generalized, gated, and measured DEAD.** `roll_nspeed` is `_roll_init`'s clamp off `LandState`'s own constants (`ROLL_NSPEED` is DERIVED from it at the cap, not written down); it threads through `fast_schedule`/`roll_entry`/`build_fast`/`configuration_band`/`qualify`, and `turnaround.extract_schedule_at(nspeed=)` lets the simulated reference follow. `CtxPool` keeps one compiled ctx per (facing, thrust) and swaps only Link's baked schedule via the new `ShoveCtx.set_link_schedule` (1.52 ms -> 0.16 ms), which is what makes a per-candidate configuration key affordable. `locus_scan` is the STRONG form of "is this configuration barren" -- march ALONG the locus re-projecting onto resid 0 at every station, because a one-point band cannot declare a curve dead. The verdict: 2 of 181 momenta productive (both at the cap), every sub-cap one barren along its whole locus and at every facing in the full circle, and an uncapped pass finds the SAME near-misses as a capped one gap for gap. |
 | `fixtures/courtyard_entry_s86_console.json` | **THE ENTRY HANDOVER, ON CONSOLE (session 86; LOCKED).** The s78 herd log plus the frame-minimal confirmed entry plan and a real A-press, delivered as one 86-frame movie and truncate-and-read at nine frames (n=78 the control, n=79..86 the entry). All nine 0-ULP on Link x/z/`proc`/`facing`/`travel`/`speedF`/`m351C`/`nspeed` and on Tetra x/z, who stays stt 3 and bit-frozen -- so the console rolls from the entry the walled engine scored, exactly. Gate `tests/test_entry_console.py` (24). |
 | `fixtures/courtyard_clip_s86_console.json` | **THE CLIP ATTEMPT, ON CONSOLE (session 86; LOCKED).** The same log extended to the thrust. Carries the eight console samples across the roll, the `ShoveCtx` prediction it is being judged against (`genuine`, `old`, `new`, `push`, the window), the measured Tetra wall brace (plane -990.255615 + R 50 = -940.255615) and the `tetra_ulp` price: **one f32 step of her x flips `genuine`**. The console did NOT clip. Gate `tests/test_clip_console.py` (8 + 7 xfail(strict) on a contiguous open suffix). |
@@ -1679,6 +1679,90 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE EXIT-ANGLE AXIS IS REAL AND IT IS ~10x WHAT SESSION 91 COULD SEE -- BECAUSE THE
+            SEAM'S FACING WINDOW IS **TWO LOBES**, AND HALF OF IT HAD BEEN OUT OF SCOPE FOR ELEVEN
+            SESSIONS BEHIND A NEGATIVE ARGUED FROM ONE SEED ENTRY (session 92).** The handoff asked for
+            the clip map's rightward candidates to be verified against `ShoveCtx`. They were, the lead
+            died, and the axis it was pointing at turned out to be somewhere else entirely.
+            - **THE MAP LEAD IS DEAD, both halves of it.** Its `aim` column **is** the rounded bearing
+              to the seam vertex -- computed at our own `old` it reads **40882** against the map's
+              40881 -- so the join session 91 flagged never existed. And Link's cut position is not a
+              steering wheel at all: **`CrrPos` pins `old` at exactly `WALL_R` from wall A and the brace
+              has a 30 u basin.** Slide the entry ±30 u along the roll direction and `old` does not move
+              one f32 ULP; ±1 u and all seven samples are the same bit-identical point; and the whole
+              55-candidate deliverable population (4 plan lengths, 2 cells, every entry) holds **3
+              distinct cut positions inside 0.035 u**. A map row 0.25 u away is geometry no roll into
+              this corner can occupy. Gated `test_the_entry_does_not_move_links_cut_position_it_is_the_
+              wall_brace`.
+            - **WHAT THE ENTRY *DOES* MOVE IS THE PUSH, AND THAT IS THE WHOLE MECHANISM.** `resid`
+              slides smoothly (~0.03 u per u of entry) while `old` stays bit-frozen, and the push
+              **rotates** with the facing -- (-0.597,-0.138) at the delivered cell against
+              (-0.119,-0.506) at +144 BAM -- supplying exactly the offset that puts a righter facing's
+              ray back on the vertex. Which is also why **the lunge grows to the right** (49.74 ->
+              50.31 u): session 91's "the lunge buys angle" is this same geometry, not a second lever.
+            - **THE VARIABLE IS `travel`, AND ITS ATOM IS THE SINE-TABLE CELL.** `cM_ssin_s16` is
+              `jmaTable[angle >> 4]`, so every facing in a 16 BAM cell leaves Link on a BIT-IDENTICAL
+              heading: the exit angle has a hard **0.087891 deg** quantum and "the rightmost facing" is
+              a category error -- ask for the rightmost CELL. Session 91 had the right variable (the
+              cut ray is nailed to the seam; `travel` is what carries the fall) and went looking for it
+              in the map's positions. Gated
+              `test_the_exit_direction_is_quantized_to_the_sine_table_cell`.
+            - **THE BUG, AND IT IS THE s90 LESSON ONE LEVEL DEEPER.** `locus_scan` is the strong form,
+              but it MARCHES from one Newton solve at `ref_entry` and returns **0 stations** when that
+              point reads `grad < 1e-3` -- having sampled the locus nowhere. **Leverage is a property of
+              the ENTRY** (is the plowed Tetra still in Co range on the cut frame), so a righter
+              facing, whose roll leaves her behind from a seed picked for a different facing, was
+              scoped out by a verdict about the seed. `curve_seeds`/`curve_scan` seed off the
+              residual-zero curve's OWN sign changes over the reachable box -- one vectorized sweep,
+              cheaper than the march it feeds -- and `curve` is in `qualified`'s cache key (the s89
+              lesson). Gated `test_the_second_lobe_needs_the_curve_to_find_its_own_seeds` +
+              `test_no_leverage_is_a_property_of_the_seed_entry_not_of_the_configuration` (which
+              REPLACES the overturned "most configurations have no locus" claim), and the s91-owed
+              escalation gate landed too (`test_the_escalation_recovers_the_cell_one_station_reads_
+              barren`).
+            - **THE WINDOW, MEASURED (48 curve seeds per cell): TWO LOBES.** Cells **2548-2553** (the
+              one every pass knew about; the delivered clip is 2552), a genuinely **dead gap 2554-2559**
+              (0 live from ~48 seeds each -- a negative worth quoting), then a **second lobe 2560-2575**
+              with dust thinning and most bands collapsing to zero width past 2563. All 8 sampled
+              second-lobe stations are **real clips, lunge 49.66-50.31 u**, at WALKABLE entries inside
+              the follow bar -- never the 0.15 u refusal shape. LOCKED
+              `fixtures/courtyard_facing_window_s92.json`; gate
+              `test_the_facing_window_fixture_is_two_lobes_with_a_dead_gap`.
+            - **THE OTHER PLACE THE WEAK FORM LIVES IS BENIGN, and it was audited rather than assumed.**
+              `BandTable` is `configuration_band` at one `ref` too -- but `stream_search` uses it only to
+              RANK a near-miss, and `genuine` is ground truth that a band never vetoes, so no real hit
+              was ever pruned by it. Only the CLAIMS needed fixing: `n_dead`'s "nothing genuine here, at
+              any entry" and `test_entry_fan.py`'s "the productive facing window is 32 BAM".
+            - **THE PRIZE, AND THE SCOPE IT BUYS.** Re-qualifying the alphabet on the curve seeding
+              takes the pass's productive set **6 -> 40 configurations, 0 lost** (624 s), rightmost cell
+              **2581 = +464 BAM**. The best cell that is *aimable at the frozen camera, carries a real
+              band, and sits near the delivered entry* is **cell 2562: +160 BAM (+0.879 deg), band
+              9.24e-05 -- WIDER than the delivered cell's own 6.28e-05 -- nearest station 21.0 u away**;
+              cell 2561 is the near alternative (+144 BAM, band 8.60e-05, 13.9 u). Against session 91's
+              reachable **+9 BAM**, that is ~10x on the axis Dereck priced at ~1 frame. The set is PINNED
+              (`fixtures/courtyard_qualified_s92.json`) so the suite does not re-measure 624 s every run
+              -- the `courtyard_entry_locus_s79.json` convention -- with a spot-check gate re-measuring
+              one right-lobe configuration and one dead-gap facing against it.
+            - **AND THE CAMERA AXIS REOPENS.** s83 priced `csangle` at exactly zero and closed it --
+              correctly, against a 2-cell window the frozen aims already covered. Against a 22-cell
+              window it is a live lever: cells 2550/2560/2563/2565/2566 are **not aimable frozen**, and
+              one of those is the rightmost cell with a workable band. **A closure expires when its
+              premise moves.** KB: NEW [`strategy/clip-exit-angle.md`](../../knowledge/strategy/clip-exit-angle.md),
+              the overturned claims MIGRATED to
+              [`history/entry-search-one-seed-negative.md`](../../knowledge/history/entry-search-one-seed-negative.md),
+              the s83 camera bullet corrected in place on
+              [`strategy/clip-entry-search.md`](../../knowledge/strategy/clip-entry-search.md), and
+              razor rule **12** (a negative is only as strong as the set it was argued over; "I marched
+              further" is not "I started somewhere else"; find seeds from the STRUCTURE).
+            - **WHAT IS NOT DONE: no plan, and no cross-engine confirm.** Every second-lobe number is
+              `ShoveCtx` dust at an entry, not a candidate -- there is no walk plan that lands on it, so
+              `cross_engine.agree` cannot run and nothing has been near a console. **The open question
+              is whether a FRAME-FLOOR (4-frame) plan exists at cell 2561/2562**, which is the pass the
+              refreshed 40-configuration scope now makes possible and which session 91's bounded pass
+              (stopped at 1056 s, 0 genuine / 40 near) never had in scope. `stream_search` picks the new
+              scope up with no flag (it defaults `quals` to `qualified`), but **40 configurations is
+              ~6.7x the evaluation of 6** -- so pass a SUBSET (the lobe's aimable cells) rather than
+              running an s89-shaped pass wider; `search2` has no `facings` argument yet.
       - [x] **THE CONSOLE SETTLED THE Co-CENTRE SEAM -- AND NEITHER PORT WAS WRONG. IT WAS ONE ULP OF
             ANIM FRAME, BECAUSE A FRAME CTRL HELD A PYTHON `double` RATE WHERE `J3DFrameCtrl::mRate`
             IS f32. THE POPULATION GOES 51 -> **55 OF 55** AT FRAME FLOOR 4 (session 90).** The
