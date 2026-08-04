@@ -1679,8 +1679,79 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE CAMERA AXIS IS A TWO-BYTE CHANNEL, SO ITS SUPPLY IS `bytes^2` AND NOT PATHS -- AND THE
+            CLOSEST APPROACH IS NOW INSIDE ONE BAND WIDTH (session 96).** The handoff ordered the
+            segmented alphabet run at stride 16, "deduped, the dedup is automatic", budgeted at 0.157
+            draws/s. Three of those premises were wrong; the pass that replaced them is cheaper, bigger,
+            and 12x closer.
+            - **THE SHIPPED DEDUP COLLAPSED NOTHING.** `dedupe_cameras` keys on `fan_steps` (6 frames at
+              the bounded shape) and returns **137 of 137, 440 of 440**. The 0.157 draws/s came from
+              grouping on the plan's 4 frames -- a different key, and a LOSSY one (79% of the draws for
+              39% of the clock). Both are one named parameter now (`search(group_steps=)`), and a pass
+              records which key it ran under, as it already did for its cell scope.
+            - **A SWITCH POINT IS NOT A CAMERA.** The 4-frame walk trail is a function of the C-stick
+              bytes on frames **0 and 1** and nothing later -- exact over all 4096 four-byte paths at
+              stride 32, where 3584 disagree with their 1-byte prefix. A second switch point multiplies
+              paths 8x and stepped trails 7.7x and adds **zero** walk clouds (64 -> 64 at stride 32,
+              196 -> 196 at stride 16). So supply is `(deliverable bytes)^2`: **64 / 196 / 709 / 2394 /
+              5300** distinct walk clouds at byte stride 32 / 16 / 8 / 4 / 2. It is also the mechanism
+              behind s95's unexplained "41 of 49 groups report a bit-identical draw set".
+            - **AIMABILITY IS A FREE KNOB, so s95's "64 of 82 aimable" bounded the ENUMERATION, not the
+              axis.** The aim frame sits past the walk channel, so a tail byte moves the aim -- and
+              whether the cell is aimable at all -- while leaving the walk cloud bit-identical. Choose
+              the walk pair first, then search a tail: **0 of 196 clouds dropped** (`walk_cameras`). At
+              stride 16 that is **196 clouds from 196 passes**, against s95's 157 from 440.
+            - **THE SCOPE, PRICED BOTH WAYS -- and the second half is a negative.** Cell 2553's
+              thrust-14 configuration is **3.8% of the draws and 4.5% of E[hits] for 24% of the clock**,
+              so a pass drops it (`thrusts=(15,)`). Adding cell 2551 measures **3.1x the draws for the
+              same clock and is worth ZERO**: 2551 is LEFT of the console-delivered cell 2552 and the
+              objective term is the exit angle as far RIGHT as possible. A rate in the search's own
+              currency read 2.9x on a prize the objective refuses (razor rule 15's third corollary).
+            - **THE PASS: 196 cameras / 1462 s -> 127 DISTINCT draws (816 reported), E[hits] 0.329, 0
+              genuine -- and a closest approach of `8.829e-06` against a band `2.8125e-05` wide.** That
+              is **0.31 band widths**, where session 94's exhausted 3.2 M-candidate frozen pass sat at
+              3.287e-04 (12.6x outside) and session 95's cameras at 1.073e-04 -- **37x and 12x closer**.
+              Draw rate **0.087/s**, 1.13x the seg:32 pass's on 1.07x the clock.
+            - **BUT THE RECORD IS ONE DRAW, NOT A TREND -- CHECKED, AND IT COST NOTHING TO CHECK.** That
+              approach is a single candidate (walk endpoint `(-1511.5211181640625, -760.56689453125)`,
+              lean 65281, nspeed 26, camera `[16, 32, 128]`, plan `[0, 208, 192, 2, 192, 88, 2]`), and it
+              is **invariant**: densifying that camera **41x** (the s94 paying shape, 3.20 M candidates,
+              881 s) moved it by *bit-identical zero*, and **35 neighbouring walk clouds all report the
+              same gap bit for bit** (12 of the 35 reach that very endpoint). So the axis is still a
+              LOTTERY and E[hits] per second is still the number that governs it -- a best-of-population
+              statistic improving 37x is not convergence, and the 7.1% the residual would have to fall is
+              ~2.9e-04 u of entry movement, finer than the endpoint lattice stride-1 density produces.
+            - **WHAT DOES PAY: LOCAL CAMERA NEIGHBOURHOODS.** The 35 clouds within +-8 bytes of the
+              winner returned **31 draws in 245 s = 0.127 draws/s and 0.886 draws/camera**, against
+              0.087/s and 0.648 over the whole alphabet -- a **1.46x** rate. The neighbourhood of a
+              productive cloud is enriched even though its best gap is not better, which makes
+              "densify the CAMERA around the top clouds" the cheapest known way to buy draws here.
+            - **AND THE CAMERA x PAYING-SHAPE PRODUCT IS PRICED AND NOT WORTH BUYING** (the s95 handoff's
+              second item, measured on the winning camera rather than on spread): 0.045 draws/s against
+              the bounded shape's 0.087 -- 41x the candidates for 129x the clock, 8x the draws.
+              The axis DOES thin with camera density too (0.648 draws/camera at stride 16 against 1.11
+              at the coarse held alphabet), so the supply table bounds tickets, not draws.
+            - **TWO DELIVERY BUGS, both fixed, both inert at a frozen camera -- so a camera hit could not
+              have been cashed.** `confirm_entry` did `int(hit['substickX'])`, which RAISES on a sequence
+              camera: every camera pass since s95 could have produced a hit nothing could replay. It now
+              schedules the path frame-for-frame (byte k on replayed frame k, `cam_trail`'s own
+              alignment) and RETURNS the frames it replayed, so a delivery authors the confirmed input
+              instead of rebuilding it (`deliver.build_boot_movie` reads `substickX` per row). And the
+              aim was stamped at the pass's frame CAP rather than the candidate's own plan length: the
+              facing latches against `trail[n + 1]`, so a short-plan hit carried bytes delivering a
+              facing **12 BAM off** (measured). Both invisible frozen (constant trail) and invisible in
+              the s95 numbers (every one of its 540 near-misses came in at the cap).
+            - NEW `entry_camera.walk_channel`/`WALK_CHANNEL`/`walk_cameras`/`plan_frames`,
+              `search(group_steps=, thrusts=)`, the `walk:STEP` byte spec and a thrust argument on the
+              CLI; `entry_search.confirm_entry` schedules a C-stick PATH and returns its frames. Gates
+              `tests/test_entry_camera.py` (**21 + 1 slow**). KB: NEW
+              [`strategy/clip-camera-supply.md`](../../knowledge/strategy/clip-camera-supply.md); razor
+              rule 15 gains a third corollary and its "64 of 82" bound is corrected; the superseded s95
+              recipe MIGRATED to
+              [`history/entry-search-s95-segmented-cameras.md`](../../knowledge/history/entry-search-s95-segmented-cameras.md).
       - [~] **THE CAMERA IS A FREE INPUT CHANNEL INSIDE THE ENTRY PLAN, AND THE HALF OF IT PRICED AT
-            ZERO WAS PRICED OVER A GRID THE FAN CANNOT HOLD (session 95).** The handoff ordered the
+            ZERO WAS PRICED OVER A GRID THE FAN CANNOT HOLD (session 95).** *(Its "spend the axis" item
+            is done in the box above -- and three of the recipe's premises did not survive it.)* The handoff ordered the
             csangle swept and its frame cost taken to Dereck before any pass. **The cost is ZERO and it
             is read off the locked console log rather than argued**, and the axis it opens is not the
             one session 83 closed.

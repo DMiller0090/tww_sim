@@ -36,8 +36,9 @@ main stick (`[[octagon-clamp-decode-bug]]`), so the alphabet is built on bytes 1
     python -m harness.tetrapush.entry_camera cells            # the walk-side grid, per camera
     python -m harness.tetrapush.entry_camera hull [bytes]     # does a camera MOVE the reachable cloud?
     python -m harness.tetrapush.entry_camera probe [cell] [bytes] [frames]
-    python -m harness.tetrapush.entry_camera search [cell] [bytes] [frames] [s1,j1,s2,j2max,nbase]
+    python -m harness.tetrapush.entry_camera search [cell] [bytes] [frames] [s1,j1,s2,j2max,nbase] [thr]
         # bytes: `128,160` | `all` (82 held trails) | `span:N` | `seg:STEP` (the segmented alphabet)
+        #      | `walk:STEP` <- USE THIS: one aimable camera per distinct walk trail (`walk_cameras`)
 """
 import json
 import math
@@ -193,6 +194,72 @@ def segmented_alphabet(cells, frames=4, step=16, switch=None, seed=None, env=Non
     return out
 
 
+#: How many C-stick BYTES the walk-side trail carries -- MEASURED, see `walk_channel`.
+WALK_CHANNEL = 2
+
+
+def walk_channel(frames=4, step=32, seed=None, env=None, sample=400):
+    """The smallest byte prefix that DECIDES the ``frames``-frame walk trail -- measured, not assumed.
+
+    Session 95 enumerated cameras as C-stick PATHS and read the walk supply off the path count, which
+    over-counts badly: a second switch point multiplies the paths 8x and the `fan_steps` trails 7.7x
+    while leaving the distinct 4-frame walk trails **bit-identical** (64 -> 64 at byte stride 32,
+    196 -> 196 at stride 16). The reason is this: the walk trail is a function of the first
+    `WALK_CHANNEL` bytes, so the walk supply is (deliverable bytes)^2 and NOT (bytes)^frames.
+
+    It is also the mechanism behind the session-95 dedup observation that had no explanation -- 41 of 49
+    walk groups reported a bit-identical draw set because those cameras differ only in bytes the walk
+    cannot see -- and behind the lever `walk_cameras` spends: if the walk cannot see the later bytes but
+    the AIM frame can (`aim_frame`), then the two are INDEPENDENT knobs on one channel."""
+    import itertools
+    b = deliverable_bytes(step)
+    seqs = [list(s) for s in itertools.product(b, repeat=int(frames))][:int(sample)]
+    for k in range(1, int(frames) + 1):
+        if all(cam_trail(s, TRAIL_FRAMES, seed=seed, env=env)[:frames]
+               == cam_trail(s[:k], TRAIL_FRAMES, seed=seed, env=env)[:frames] for s in seqs):
+            return k
+    return None
+
+
+def walk_cameras(cells, frames=4, step=16, tail_step=32, seed=None, env=None):
+    """One AIMABLE camera per DISTINCT walk trail -- ``[(seq, trail)]``, the axis's real supply.
+
+    This is the axis session 95 measured, spent the way `walk_channel` says it is shaped. Two facts
+    compose into a lever:
+
+    - the walk trail is decided by the first `WALK_CHANNEL` bytes, so enumerating C-stick paths past
+      that buys **no** new walk cloud -- session 95's segmented alphabets were paying for aim variants
+      it then deduped away;
+    - a later byte moves the trail at `aim_frame` while leaving the walk trail bit-identical, and that
+      index is what decides whether the scope is aimable at all.
+
+    So aimability is a FREE knob, and the 18 of 82 held cameras session 95 had to skip as "not aimable"
+    were not a bound on the axis -- they were an artifact of enumerating held bytes, where one byte has
+    to serve both jobs. Here the walk pair is chosen first and a TAIL byte is then searched for one that
+    keeps ``cells`` aimable, nearest-neutral first, so a walk trail is only dropped when NO tail rescues
+    it. What is dropped is returned as well, never swallowed (`cell_scope`'s discipline)."""
+    want = [int(c) for c in ([cells] if isinstance(cells, int) else cells)]
+    need = max(TRAIL_FRAMES, int(frames) + 2)
+    tails = sorted(deliverable_bytes(tail_step), key=lambda x: abs(x - NEUTRAL))
+    keep, dead = {}, {}
+    for b0 in deliverable_bytes(step):
+        for b1 in deliverable_bytes(step):
+            walk = cam_trail([b0, b1], need, seed=seed, env=env)[:int(frames)]
+            if walk in keep:
+                continue
+            for t in tails:
+                seq = [b0, b1, t]
+                if all(aim_at(c, seq, frames) is not None for c in want):
+                    keep[walk] = seq
+                    dead.pop(walk, None)
+                    break
+            else:
+                dead.setdefault(walk, [b0, b1])
+    return (sorted(([b for b in seq], cam_trail(seq, need, seed=seed, env=env))
+                   for seq in keep.values()),
+            sorted(dead.values()))
+
+
 def fan_steps(**shape):
     """How many frames a fan of this SHAPE actually steps from the arrival.
 
@@ -214,7 +281,14 @@ def dedupe_cameras(subxs, steps, seed=None, env=None):
 
     Eight of the 49 groups did NOT agree, which is exactly why the key is `fan_steps` and not the plan's
     frame cap: the fan steps past the cap, so a camera value after the last walk frame still reaches
-    some candidates. Group on what the fan steps and the equivalence is real."""
+    some candidates. Group on what the fan steps and the equivalence is real.
+
+    ``steps`` IS the budget decision, and the two useful values are far apart (session 96 measured
+    both). At `fan_steps` this is lossless and collapses **nothing** on either segmented alphabet
+    (0 of 137, 0 of 440) -- the fan tells every trail apart, so the "2x cheaper" reading of session 95
+    was never what this function returned. At the plan's own ``frames`` it collapses hard and keeps 79%
+    of the draws for 39% of the clock, rate-positive by 2x, because the cameras it merges differ only in
+    bytes the WALK cannot see (`walk_channel`)."""
     seen, out = set(), []
     for s in subxs:
         t = cam_trail(s, max(TRAIL_FRAMES, int(steps)), seed=seed, env=env)[:int(steps)]
@@ -240,6 +314,14 @@ def reach(frames=4, **kw):
 
 
 # ---------------------------------------------------- the aim side: the camera moves the alphabet too
+
+def plan_frames(plan):
+    """A plan's WALK frames -- its base hold plus every segment's length, the ``n`` `aim_frame` wants.
+
+    `entry_fan`'s plans are ``(n0, sx, sy, j)`` or ``(n0, sx1, sy1, j1, sx2, sy2, j2)``, and a pass's
+    frame CAP is an upper bound on this, not the value: one pass carries plans of several lengths."""
+    return int(plan[0]) + sum(int(j) for j in plan[3::3])
+
 
 def aim_frame(frames):
     """Which trail index the ROLL'S FACING latches against, for a plan of ``frames`` walk frames.
@@ -403,7 +485,7 @@ def probe(cells, subxs=(NEUTRAL,), frames=4, quals=None, seed=None, env=None, fa
 
 
 def search(cells, subxs=(NEUTRAL,), frames=4, seed=None, env=None, fan=None, quals=None,
-           thrusts=None, progress=False, **kw):
+           thrusts=None, group_steps=None, progress=False, **kw):
     """A SCORED frame-floor pass per camera, aggregated -- `entry_fan.stream_search` under each trail.
 
     Every hit and near-miss carries the ``subx`` that produced it, because a camera hit is only
@@ -415,7 +497,12 @@ def search(cells, subxs=(NEUTRAL,), frames=4, seed=None, env=None, fan=None, qua
     A camera that cannot AIM at the scope is skipped rather than scored: the residual is a property of
     the facing cell and so camera-independent, but the bytes that reach that cell are not (`aim_at`),
     and scoring a cell no A-press can deliver at this camera would be the "not aimable" half of
-    `cell_scope` counted as candidates. The skipped cameras are reported, never swallowed."""
+    `cell_scope` counted as candidates. The skipped cameras are reported, never swallowed.
+
+    ``group_steps`` is the camera-dedup key in frames, defaulting to the lossless `fan_steps`. Pass
+    ``WALK_CHANNEL`` (session 96's measured rate-positive setting) to merge cameras the WALK cannot tell
+    apart; the pass reports which key it ran under, since a pass's own dedup key is part of its result
+    exactly as its cell scope is."""
     from harness.tetrapush import entry_fan as EF
     seed = seed or ES.console_seed()
     quals = quals if quals is not None else EF.qualified(seed)
@@ -424,7 +511,8 @@ def search(cells, subxs=(NEUTRAL,), frames=4, seed=None, env=None, fan=None, qua
     scope = EF.cell_scope(quals, want)
     shape = dict(PROBE_FAN, **(fan or {}))
     # cameras a fan of this shape cannot tell apart are ONE pass, not two (`dedupe_cameras`)
-    kept = dedupe_cameras(subxs, fan_steps(**shape), seed=seed, env=env)
+    gsteps = fan_steps(**shape) if group_steps is None else int(group_steps)
+    kept = dedupe_cameras(subxs, gsteps, seed=seed, env=env)
     n_collapsed = len(list(subxs)) - len(kept)
     out, skipped = [], []
     for subx, _trail in kept:
@@ -441,16 +529,22 @@ def search(cells, subxs=(NEUTRAL,), frames=4, seed=None, env=None, fan=None, qua
         res = EF.stream_search(fan_cam(subx, seed=seed, env=env, frames=frames, **shape),
                                seed=seed, quals=live, family_of=EF.family_of_plan,
                                dedup_scope='family', progress=progress, **kw)
+        # the aim belongs to the candidate's own plan length, NOT the pass's cap: the facing latches
+        # against `trail[n + 1]`, and a slewing camera reads a different csangle at each n
         for h in res['hits']:
-            a = aims[ES.aim_cell(h['facing'])]
-            h.update(substickX=b, aim=a['aim'], aim_siblings=a['siblings'],
-                     aim_csangle=a['csangle'])
+            n = plan_frames(h['plan'])
+            a = aim_at(ES.aim_cell(h['facing']), b, n)
+            h.update(substickX=b, plan_frames=n, aim=(a or {}).get('aim'),
+                     aim_siblings=(a or {}).get('siblings'), aim_csangle=(a or {}).get('csangle'),
+                     aim_deliverable=a is not None)
         for nd in res.get('near_detail', []):
             nd['substickX'] = b
+            nd['plan_frames'] = plan_frames(nd['plan']) if nd.get('plan') else None
         res.update(substickX=b, offsets=list(trail_offsets(cam_trail(b))[:frames]),
                    aim_csangle_off=_s16(cam_trail(b)[aim_frame(frames)] - ES.CSANGLE),
                    n_configurations_aimable=len(live), cell_scope=scope, frames=frames,
-                   wall_seconds=time.time() - t0)
+                   thrusts=(None if thrusts is None else sorted(int(t) for t in thrusts)),
+                   group_steps=gsteps, wall_seconds=time.time() - t0)
         out.append(res)
         if progress:
             print("subx %-9s (walk %+5d BAM, aim %+5d): %d cand / %d fam -> %d genuine, %d near,"
@@ -462,8 +556,8 @@ def search(cells, subxs=(NEUTRAL,), frames=4, seed=None, env=None, fan=None, qua
         print("%d of %d cameras skipped: the scope is not aimable at their dispatch csangle"
               % (len(skipped), len(list(subxs))))
     if n_collapsed and progress:
-        print("%d cameras collapsed: a fan stepping %d frames cannot tell their trails apart"
-              % (n_collapsed, fan_steps(**shape)))
+        print("%d cameras collapsed: their trails agree over the %d frames this pass groups on"
+              % (n_collapsed, gsteps))
     for r in out:
         r['n_cameras_skipped'] = len(skipped)
         r['cameras_skipped'] = skipped
@@ -544,7 +638,16 @@ def summarize(passes):
 
 def _bytes_arg(s, frames=4, cells=(2553,)):
     """``"128,160,192"`` | ``"all"`` (the whole deduped held alphabet) | ``"span:N"`` (N bytes spread
-    across it, neutral first) | ``"seg:STEP"`` (the SEGMENTED alphabet at that byte stride)."""
+    across it, neutral first) | ``"seg:STEP"`` (the SEGMENTED alphabet at that byte stride) |
+    ``"walk:STEP"`` (ONE aimable camera per distinct walk trail -- `walk_cameras`, the shape the axis
+    actually has, and the spec to use for a pass)."""
+    if str(s).startswith('walk:'):
+        step = int(str(s).split(':')[1])
+        keep, dead = walk_cameras(cells, frames=frames, step=step)
+        if dead:
+            print("%d walk trails dropped: no tail byte keeps %s aimable"
+                  % (len(dead), sorted(cells)))
+        return [seq for seq, _t in keep]
     if str(s).startswith('seg:'):
         step = int(str(s).split(':')[1])
         return [seq for seq, _t in segmented_alphabet(cells, frames=frames, step=step)]
@@ -619,14 +722,18 @@ def _cmd_search(argv):
     want = EF.parse_cell_spec(cells) if isinstance(cells, str) else cells
     subxs = _bytes_arg(argv[1] if len(argv) > 1 else 'span:8', frames=frames, cells=want)
     fan = None
-    if len(argv) > 3:                       # s1_stride,j1,s2_stride,j2max,nbase -- j1 as `2|3` for a set
+    if len(argv) > 3 and argv[3] != '-':    # s1_stride,j1,s2_stride,j2max,nbase -- j1 as `2|3` for a set
         a = argv[3].split(',')
         fan = dict(s1_stride=int(a[0]), j1=tuple(int(x) for x in a[1].split('|')),
                    s2_stride=int(a[2]), j2max=int(a[3]), base_frames=tuple(range(int(a[4]))))
-    passes = search(cells, subxs, frames=frames, fan=fan, progress=True)
+    # the THRUST scope: session 96 measured cell 2553's thrust-14 configuration at 3.8% of the draws
+    # and 4.5% of E[hits] for 24% of the clock, so a pass says which thrusts it bought
+    thr = tuple(int(x) for x in argv[4].split(',')) if len(argv) > 4 else None
+    passes = search(cells, subxs, frames=frames, fan=fan, thrusts=thr, progress=True)
     s = summarize(passes)
-    tag = '%s_%s' % (str(cells).replace(',', '_'),
-                     (argv[1] if len(argv) > 1 else 'span8').replace(':', ''))
+    tag = '%s_%s%s' % (str(cells).replace(',', '_'),
+                       (argv[1] if len(argv) > 1 else 'span8').replace(':', ''),
+                       '' if thr is None else '_thr%s' % '-'.join(str(t) for t in thr))
     out = os.path.join(_rb, '_generated', 's95', 'search_%s.json' % tag)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     json.dump(dict(cells=cells, frames=frames, summary=s, passes=passes), open(out, 'w'), indent=1,

@@ -214,13 +214,18 @@ engines that had never been compared to each other.
     moves 888 of those 1736 cells onto directions the frozen camera cannot command at all - and the
     correction is worth two orders of magnitude on the closest approach where the priced axis had
     saturated ([clip-camera-axis.md](clip-camera-axis.md)).
-    Two corollaries. **An input channel no constraint is using over the frames you are searching is a
+    Three corollaries. **An input channel no constraint is using over the frames you are searching is a
     free axis:** the price here came off the delivered console log read column by column - `substickX`
     is 128 on every frame of the entry plan, so the slew cannot cost a frame - not from reasoning about
-    what the plan needs. And **a free axis is still bounded somewhere else**: the camera is still ramping
-    when the roll's facing latches (one frame after the press, measured by firing the roll and reading
-    the facing back), so a hard slew moves the aim alphabet too and a camera draw only counts where the
-    target cell stays aimable - 64 of 82 here.
+    what the plan needs. **A channel's supply is set by how many of its frames the CONSUMER reads**
+    (session 96): the walk sees two bytes of the C-stick and the aim sees a later one, so paths past the
+    channel are copies, two consumers reading different frames are independent knobs, and the "64 of 82
+    cameras can aim this cell" bound was the enumeration's, not the axis's
+    ([clip-camera-supply.md](clip-camera-supply.md)). And **price the PRIZE in the objective's currency
+    too, not only the lever:** widening the same pass to cell 2551 measured 3.1x the draws for the same
+    clock and is worth exactly zero, because 2551 is LEFT of the console-delivered cell and the objective
+    term is the exit angle as far right as possible. A rate in the search's own units can read 2.9x on a
+    prize the objective refuses.
 
 ## See also
 

@@ -271,6 +271,91 @@ def test_cameras_a_fan_cannot_tell_apart_are_one_pass():
     assert a == b
 
 
+# --------------------------------------------------- the SHAPE of the axis (session 96)
+
+def test_the_walk_side_channel_carries_exactly_two_bytes():
+    """**THE AXIS'S SUPPLY LAW.** The 4-frame walk trail is a function of the C-stick bytes on entry
+    frames 0 and 1 and of nothing later -- measured over every 4-byte path at stride 32 (4096 of them):
+    0 disagree with their 2-byte prefix, while 3584 disagree with their 1-byte prefix.
+
+    This is why session 95's second switch point bought nothing: it multiplied the C-stick paths 8x and
+    the `fan_steps` trails 7.7x and left the distinct walk trails bit-identical (64 -> 64 at stride 32,
+    196 -> 196 at stride 16). Walk supply is (deliverable bytes)^2, not (bytes)^frames -- and it is also
+    the mechanism behind the s95 observation that had none: 41 of 49 walk groups reported a bit-identical
+    draw set because those cameras differ only in bytes the walk cannot see."""
+    assert EC.walk_channel(frames=4, step=32, sample=200) == EC.WALK_CHANNEL == 2
+
+
+def test_a_tail_byte_moves_the_aim_and_leaves_the_walk_trail_alone():
+    """The DECOUPLING the supply law buys, which is the session-96 lever: a byte after the walk channel
+    changes the trail at `aim_frame` -- and so which cells are aimable -- while leaving the walk trail
+    bit-for-bit. Held bytes cannot do this: one byte has to serve both jobs, which is the whole reason
+    session 95 had to skip 18 of its 82 cameras as "not aimable"."""
+    walk = [128, 160]
+    base = EC.cam_trail(walk, EC.TRAIL_FRAMES)
+    aims = set()
+    for tail in EC.deliverable_bytes(32):
+        t = EC.cam_trail(walk + [tail], EC.TRAIL_FRAMES)
+        assert t[:4] == base[:4], "a tail byte moved the walk trail"
+        aims.add(t[EC.aim_frame(4)])
+    assert len(aims) > 4, "the tail byte does not move the aim frame either -- then it is inert"
+
+
+def test_one_aimable_camera_per_walk_trail_beats_enumerating_paths():
+    """WHAT A PASS SHOULD BUY. `walk_cameras` picks the walk pair first and then searches a TAIL byte
+    that keeps the scope aimable, so every camera it returns is a distinct walk cloud AND deliverable.
+
+    Against session 95's path enumeration at the same byte stride this is strictly better on both terms
+    at once -- more distinct walk clouds from fewer passes -- because the paths it drops were aim
+    variants of clouds already in the list, and the clouds it adds are ones no single held byte could
+    aim. Measured at stride 32: 64 clouds from 64 passes, against 49 clouds from 137."""
+    keep, dead = EC.walk_cameras(2553, frames=4, step=32)
+    assert not dead, "a walk trail no tail byte can aim: %s" % dead[:4]
+    trails = {EC.cam_trail(seq, EC.TRAIL_FRAMES)[:4] for seq, _t in keep}
+    assert len(trails) == len(keep), "two cameras in the list share a walk cloud"
+    for seq, _t in keep:
+        assert EC.aim_at(2553, seq, 4) is not None
+    seg = [s for s, _t in EC.segmented_alphabet(2553, frames=4, step=32)]
+    seg_trails = {EC.cam_trail(s, EC.TRAIL_FRAMES)[:4] for s in seg}
+    assert len(trails) > len(seg_trails)               # more supply...
+    assert len(keep) < len(seg)                        # ...from fewer passes
+
+
+def test_a_pass_reports_the_dedup_key_and_thrust_scope_it_ran_under():
+    """A pass's own budget choices are part of its result, exactly as `cell_scope` is: session 95's
+    "2x cheaper" number came from a dedup key that `dedupe_cameras` was never called with, and no pass
+    output said which key it used. Now every pass carries both knobs."""
+    res = EC.search([2553], [EC.NEUTRAL], frames=4, fan=SMALL_FAN, thrusts=(15,))
+    assert len(res) == 1
+    assert res[0]['group_steps'] == EC.fan_steps(**SMALL_FAN)     # the lossless default
+    assert res[0]['thrusts'] == [15]
+    tight = EC.search([2553], [EC.NEUTRAL], frames=4, fan=SMALL_FAN, thrusts=(15,), group_steps=4)
+    assert tight[0]['group_steps'] == 4
+    # narrowing the thrust scope drops configurations without touching the ones it keeps
+    wide = EC.search([2553], [EC.NEUTRAL], frames=4, fan=SMALL_FAN)
+    assert wide[0]['n_configurations_aimable'] > res[0]['n_configurations_aimable']
+    assert {nd['thrust'] for nd in res[0].get('near_detail', [])} <= {15}
+
+
+def test_the_scope_right_of_the_delivered_cell_is_cell_2553_alone():
+    """THE NEGATIVE THAT KILLED A 2.9x (session 96). Adding cell 2551 to a camera pass costs the same
+    clock as the thrust-14 configuration it replaces and buys 3.1x the draws -- and it is worth NOTHING,
+    because 2551 is LEFT of the console-delivered cell 2552 and the objective term is the exit angle as
+    far RIGHT as possible (`strategy/clip-exit-angle.md`). A rate measured in the search's own currency
+    can read 2.9x on a prize the objective refuses.
+
+    So the scope is not a free knob: right of the delivered cell there is 2553, then a measured-dead
+    2554-2559, then a second lobe no frame-floor plan reaches. Cell 2553 is the whole target."""
+    w = EF.facing_window()
+    assert w['delivered']['cell'] == 2552
+    right = EF.parse_cell_spec('right')
+    assert min(right) == 2553
+    reachable = [c for c in right if c in {ES.aim_cell(q['facing']) for q in EF.qualified()}]
+    assert 2553 in reachable
+    # everything else on the right is the second lobe, which session 93 measured out of frame-floor reach
+    assert all(c >= 2560 for c in reachable if c != 2553)
+
+
 # ------------------------------------------------------------------------- the delivery
 
 @pytest.mark.slow
@@ -296,3 +381,49 @@ def test_a_camera_candidate_confirms_with_a_real_a_press_at_its_own_camera():
                walk=[k[0], k[1]], entry=[entry[0], entry[1]], substickX=subx)
     res = ES.confirm_entry(hit)
     assert res['ok']['rolled'] and res['ok']['walk_matches'], res
+
+
+def test_a_sequence_camera_is_deliverable_frame_for_frame():
+    """THE HIT THIS PASS IS HUNTING HAS TO BE CONFIRMABLE, and until session 96 it was not: the cameras
+    worth searching are 3-byte paths (`walk_cameras`), and `confirm_entry` did ``int(hit['substickX'])``,
+    which raises on a sequence. Every camera pass since session 95 could have produced a hit nothing
+    could replay.
+
+    The fix has to be frame-for-frame, not merely non-crashing: byte k of the path belongs on replayed
+    frame k, the alignment `cam_trail` measures the trail on. So this gate reproduces the whole trail
+    through the replay -- a sequence camera's confirm must land on the walk endpoint the fan predicted
+    (which is decided by the walk channel) AND on the facing (which is decided by the aim frame, a byte
+    the walk cannot see). Holding the first byte throughout passes the first and fails the second.
+
+    Writing it is also what surfaced the second delivery bug: the aim has to be taken at the CANDIDATE's
+    own plan length (`plan_frames`), never at the pass's frame cap. One pass carries several lengths, the
+    facing latches against ``trail[n + 1]``, and at a slewing camera each n reads a different csangle --
+    so a cap-computed aim delivers a facing 12 BAM off for a short plan. Frozen, the trail is constant
+    and nothing shows."""
+    seq = [1, 160, 128]                         # a hard slew, then a distinct tail for the aim frame
+    trail = EC.cam_trail(seq, EC.TRAIL_FRAMES)
+    assert trail[:2] != trail[3:5], "this path does not actually slew -- the gate would prove nothing"
+    cand = next(iter(EC.fan_cam(seq, frames=4, **SMALL_FAN)), None)
+    assert cand is not None
+    k, plan = cand
+    n = EC.plan_frames(plan)
+    aim = EC.aim_at(2553, seq, n)
+    assert aim is not None                      # the camera keeps the scope aimable, or it is no camera
+    # the bug this pins: the cap's aim is a DIFFERENT facing for this plan, though the same cell
+    if n != 4:
+        capped = EC.aim_at(2553, seq, 4)
+        assert capped is not None and capped['facing'] != aim['facing']
+    entry = ES.roll_entry((k[0], k[1]), aim['facing'])
+    hit = dict(plan=list(plan), aim=aim['aim'], facing=aim['facing'], m351C=ES.lean_at_roll(k[2]),
+               walk=[k[0], k[1]], entry=[entry[0], entry[1]], substickX=seq)
+    res = ES.confirm_entry(hit)
+    assert res['ok']['rolled'], res
+    assert res['ok']['walk_matches'], res        # the walk channel, replayed
+    assert res['ok']['facing'], res              # the aim frame, replayed at the right index
+    # and the misalignment this gate exists to catch: one held byte is a DIFFERENT camera
+    held = ES.confirm_entry(dict(hit, substickX=seq[0]))
+    assert not held['all_ok'], "holding the path's first byte reproduced it -- the path is inert"
+    # the confirm hands back the frames it replayed, and they carry the path -- `deliver.build_boot_movie`
+    # reads `substickX` per row, so this is what makes the camera survive the DTM
+    got = [int(r['substickX']) for r in res['frames']]
+    assert got[:len(seq)] == seq and set(got[len(seq):]) <= {seq[-1]}, got

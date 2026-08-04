@@ -7,7 +7,8 @@ deliver, and what does the roll's facing latch against while the camera is still
 **Status:** validated offline (session 95) on the flooded-Hyrule Tetra corner, gated in
 [`tests/test_entry_camera.py`](../../tests/test_entry_camera.py). The entry plan's C-stick is idle on
 every console frame, so a slew there costs **zero frames**; a held byte buys **82 distinct camera
-draws** within -716..+714 BAM, of which **64** keep the target cell aimable. A 64-camera frame-floor
+draws** within -716..+714 BAM, of which **64** keep the target cell aimable (a held-byte figure - see
+[clip-camera-supply.md](clip-camera-supply.md), where the loss goes to zero). A 64-camera frame-floor
 pass at a bounded shape returns **71 distinct near-miss draws, E[hits] 0.19, in 643 s** - session 94's
 exhausted 3.2M-candidate pass at the frozen camera returned E[hits] 0.194 in 866 s, and **96% of these
 draws stand where the frozen fan cannot reach**. What the camera does NOT do is grow the reachable
@@ -105,9 +106,11 @@ Two consequences, and the second is the bound on the whole axis:
 1. the aim bytes a hit must be delivered with are **not** the frozen camera's. At `subx=249` the bytes
    that roll into cell 2551 frozen roll into cell **2640**;
 2. a camera draw only counts if the target cell is still **aimable** at that camera's dispatch csangle.
-   The aim alphabet is ~1 aim per cell in the seam window, so some cameras simply have none: cell 2553
-   survives at **64 of the 82** draws. A pass skips the rest and says so - it is
-   [clip-exit-angle.md](clip-exit-angle.md)'s "not aimable at this camera", one camera at a time.
+   The aim alphabet is ~1 aim per cell in the seam window, so some *held bytes* simply have none: cell
+   2553 survives at **64 of the 82** held draws. A pass skips the rest and says so - it is
+   [clip-exit-angle.md](clip-exit-angle.md)'s "not aimable at this camera", one camera at a time. That
+   skip is not a bound on the axis, though: the aim frame is past the walk channel, so a tail byte buys
+   the aim back without touching the walk cloud ([clip-camera-supply.md](clip-camera-supply.md)).
 
 ## What it buys, counted the way this search has learned to count
 
@@ -135,23 +138,18 @@ Three things that pass says, and the second is the one that matters:
    own diminishing return. Per second the bounded shape is ~3x better, so the axis's budget rule is
    many cheap cameras first.
 
-## More cameras: the C-stick may change mid-plan - but count the ones the fan can tell apart
+## More cameras: how many there are, and what one draw's worth of C-stick is
 
-A held byte draws one ramp; the channel is idle on EVERY frame, so any path is deliverable, and a
-switch at frame k reaches trails no ramp does. A segmented alphabet at byte stride 32 is **137
-cameras** and returned **105 distinct draws, E[hits] 0.273, in 1365 s**.
+The channel is idle on EVERY frame, so any C-stick path is deliverable - but a path is not a camera. The
+4-frame walk trail is a function of the bytes on frames **0 and 1** alone, so the walk supply is
+`(deliverable bytes)^2` (**64 / 196 / 709 / 2394 / 5300** clouds at byte stride 32 / 16 / 8 / 4 / 2) and a
+switch point past the channel adds none of it. Bytes past the channel move the **aim** instead, which
+makes aimability a free knob and turns the "64 of 82 cameras can aim cell 2553" bound above into a
+property of held-byte enumeration rather than of the axis: pick the walk pair first, then a tail byte, and
+**0 of 196** clouds are lost.
 
-It also cost 2.8x more than it needed to, and the reason is the same counting discipline one level
-further out: those 137 cameras carry only **49 distinct walk trails**. A camera that changes only
-AFTER the walk re-aims the same cloud instead of drawing a new one, and **41 of those 49 groups
-reported a bit-identical draw set**. One representative per group buys 83 of the 105 draws in 530 s -
-0.157 draws/s against 0.077.
-
-The equivalence key is the trail prefix the fan actually **steps** (`fan_steps`:
-`max(base_frames) + max(j1) + j2max + 1`), NOT the plan's frame cap - the fan records the endpoint after
-`j + 1` steps and runs the second segment to `j2max`, which is why the other **8 of 49** groups
-genuinely differed. Group on the cap and you throw those away; group on the stepped prefix and the
-equivalence is real (`dedupe_cameras`, and `search` applies it and reports the collapse).
+That is a page of its own - [clip-camera-supply.md](clip-camera-supply.md) - along with the two dedup keys
+a pass can group cameras on and the measured trade between them.
 
 ## What the camera does NOT move: the reachable cloud
 
@@ -176,6 +174,8 @@ closed against an alphabet the fan cannot hold.
 
 ## See also
 
+- [clip-camera-supply.md](clip-camera-supply.md) - how many draws the axis holds, the two-byte walk
+  channel, and why aimability is a free knob.
 - [clip-lottery-draws.md](clip-lottery-draws.md) - what one draw is, and why the camera's bytes are
   deduped onto trails.
 - [clip-search-budget.md](clip-search-budget.md) - the budget frame this sits in: a rate is only

@@ -847,18 +847,32 @@ def confirm_entry(hit, seed=None, env=None):
     ``hit['substickX']`` is the CAMERA axis (session 95): a hit found at a slewing camera is only
     reproducible with the C-stick that slewed it, and this replay runs the WIRED camera -- so it is
     also the end-to-end check on `entry_camera`'s injected trail. Absent or 128 = the frozen camera
-    every hit before session 95 was found at."""
+    every hit before session 95 was found at.
+
+    It may be a per-frame SEQUENCE as well as a held byte, and it has to be: session 96 measured that the
+    walk trail reads only the first two C-stick bytes while the AIM frame reads a later one, so the
+    cameras worth searching are 3-byte paths, not bytes (`entry_camera.walk_cameras`). The schedule here
+    is frame-for-frame the one `cam_trail` measures the trail on -- byte k on replayed frame k, the last
+    value held -- because a byte delivered one frame off is a different camera, and holding a sequence's
+    first byte throughout would replay a camera that never produced the hit."""
     seed = seed or console_seed()
     plan = list(hit['plan'])
     n0 = plan[0]
-    hold = dict(seed['log'][-1], buttons=0,
-                substickX=int(hit.get('substickX', 128)), substickY=0)
-    extra = [hold] * n0
+    cseq = hit.get('substickX', 128)
+    cseq = [int(cseq)] if isinstance(cseq, (int, float)) else [int(b) for b in cseq]
+    base = dict(seed['log'][-1], buttons=0, substickX=cseq[0], substickY=0)
+
+    def hold(k, **kw):
+        """Frame k of the replay, carrying the C-stick byte that frame of the camera path asks for."""
+        return dict(base, substickX=cseq[min(k, len(cseq) - 1)], **kw)
+
+    extra = [hold(k) for k in range(n0)]
     for i in range(1, len(plan), 3):
         sx, sy, j = plan[i:i + 3]
-        extra += [dict(hold, stickX=sx, stickY=sy)] * j
-    extra.append(dict(hold, stickX=hit['aim'][0], stickY=hit['aim'][1], buttons=0x100))
-    extra += [dict(hold, stickX=128, stickY=128)] * 3          # INPUT_DELAY 2, then the entry frame
+        extra += [hold(len(extra) + d, stickX=sx, stickY=sy) for d in range(j)]
+    extra.append(hold(len(extra), stickX=hit['aim'][0], stickY=hit['aim'][1], buttons=0x100))
+    # INPUT_DELAY 2, then the entry frame
+    extra += [hold(len(extra) + d, stickX=128, stickY=128) for d in range(3)]
     run, rows = continue_walk(extra, env=env)
     walk = next((r for r in rows if r['proc'] == FRONT_ROLL), None)
     k = rows.index(walk) if walk else None
@@ -882,7 +896,8 @@ def confirm_entry(hit, seed=None, env=None):
     return dict(measured=got, predicted=dict(entry=hit['entry'], facing=hit['facing'],
                                              m351C=hit['m351C'], walk=hit['walk'],
                                              nspeed=want_nsp),
-                ok=ok, all_ok=all(ok.values()))
+                # so a delivery authors the CONFIRMED input instead of rebuilding the schedule
+                frames=extra, ok=ok, all_ok=all(ok.values()))
 
 
 def acceptance_window(placements=None):
