@@ -1744,7 +1744,7 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             - NEW `entry_camera.walk_channel`/`WALK_CHANNEL`/`walk_cameras`/`plan_frames`,
               `search(group_steps=, thrusts=)`, the `walk:STEP` byte spec and a thrust argument on the
               CLI; `entry_search.confirm_entry` schedules a C-stick PATH and returns its frames. Gates
-              `tests/test_entry_camera.py` (**21 + 1 slow**). KB: NEW
+              `tests/test_entry_camera.py` (**20 + 1 slow**). KB: NEW
               [`strategy/clip-camera-supply.md`](../../knowledge/strategy/clip-camera-supply.md); razor
               rule 15 gains a third corollary and its "64 of 82" bound is corrected; the superseded s95
               recipe MIGRATED to
