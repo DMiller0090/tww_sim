@@ -1707,10 +1707,22 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               itself (**observed/expected 1.00 to 1.18 from 3e-3 down to 1e-4**), so there is no crowding
               near zero to harvest; and the widths are nearly pinned (draws at 2.61e-05/2.81e-05, the
               widest band any lean carries at 2553 is **3.25e-05 = a 1.26x ceiling**). Therefore
-              **E[hits] = 0.0026 x distinct draws, exactly**, a draw costs ~30 s whatever you buy, and
-              **E[hits] 1 is +225 draws ~ 1.9 h** -- not 50 min. The 8.829e-06 record is one order
+              **E[hits] = 0.0026 x distinct draws, exactly**, and **E[hits] 1 is +225 draws** -- ~1.9 h at
+              the best rate any completed pass had shown, and ~5 h at the rate the session's own buy then
+              measured (below). Either way, not the handoff's 50 min. The 8.829e-06 record is one order
               statistic out of 127 uniform draws, which is ~a tenth-of-the-time event: s96's "a record is
               not a trend" now has a distributional proof and not only an invariance check.
+            - **AND THEN THE BUY AT THE TOP-RANKED SHAPE PRICED THE FRONTIER DOWN AGAIN, WHICH IS THE
+              LEDGER EARNING ITS KEEP ONE PASS AFTER BEING BUILT.** Camera `[16,16,128]` (top bounded
+              rank), paying shape, 3.18 M candidates / 861 s -> **40 draws, 10 NEW (25%), 0 genuine**,
+              union E[hits] 0.446 over 172 draws. That is **0.0116 new/s, 2.8x worse than the 0.0329 the
+              shape was ranked by**: densify's 29-of-40 was the FIRST paying-shape pass on this scope, so
+              it measured DENSITY against bounded passes rather than one camera against another. So the
+              frontier is **~0.012 new/s -> E[hits] 1 in ~5 h**, and every shape on this axis is now
+              measured between 0.012 and 0.033 and falling. `_generated/s97/ledger_buy_2553.json`,
+              `_notes/s97_ledger_buy.py`. **Cost note:** a run pays ~1 h of ONE-TIME setup before its
+              first row (`EF.qualified` + `BandTable`, once per process), not per camera -- budget
+              `3600 + 900 x cameras` seconds and never read the first row's wall clock as a rate.
             - **THE FRAME LEVER IS ALREADY CLOSED BY THE OBJECTIVE, IN CODE.** `clip-exit-angle.md`'s
               frame table has cell 2553 reaching 2.3e-05 at <=5 frames against a 2.6e-05 band -- i.e. one
               extra frame would likely just convert. It is not available: `entry_fan.capped` drops plans

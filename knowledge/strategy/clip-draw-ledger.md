@@ -32,11 +32,19 @@ Measured, on three shapes at one scope - cell 2553, thrust 15, the frame floor:
 | the whole camera alphabet, byte stride 16 (196 clouds) | 127 | 127 | 1462 | 0.087 | *opening pass* |
 | a local camera neighbourhood (±8 bytes, stride 2, 35 clouds) | 31 | **6** | 245 | 0.127 | **0.0245** |
 | one camera at the paying plan shape (3.20 M candidates) | 40 | **29** | 880 | 0.045 | **0.0329** |
+| the paying shape at a **second** camera (3.18 M candidates) | 40 | **10** | 861 | 0.046 | **0.0116** |
 
 The published ranking was `0.127 > 0.087 > 0.045`, and the instruction that came out of it was *buy the
 neighbourhood, skip the paying-shape product.* In the currency the estimate is additive in, the order
 **reverses** and the three collapse to within 35% of one another. The pass that was told to be skipped
 is the one to buy.
+
+**And the fourth row is the same lesson landing on the corrected number.** Having ranked the paying shape
+first at 0.0329, buying it at a *second* camera returned 10 new of 40 - **0.0116/s, 2.8x worse**. The 29
+of 40 was never a camera-vs-camera measurement: that pass was the first of its shape on this scope, so
+its newness was *density* against the bounded passes before it. A ledger row is only as general as the
+comparison that produced it, so **the first pass of a new shape over-reports the shape** exactly as the
+first pass into a ledger over-reports the axis - one level further in, and worth expecting.
 
 **A local neighbourhood is enriched in its PARENT's draws.** Neighbouring cameras command ~94% of the
 same walk directions, so they reach the same entries: 25 of those 31 draws are ticket stubs already in
@@ -68,9 +76,9 @@ independently would hold the rate flat. So:
 - **the average rate of a completed sweep is not repeatable.** 0.087 draws/s over 196 cameras ends at
   0.031/s, and that end rate - not the average - is what a next pass costs. Quoting the average is how
   a 50-minute budget turned out to be a two-hour one.
-- **the three shapes agree at the end.** 0.0245, 0.0329, 0.031: whatever you buy on this axis, a new
-  draw costs about 30 s. That is the honest frontier statement, and it is what makes the axis's price
-  legible instead of a per-session argument.
+- **the shapes converge at the end.** 0.0245, 0.0329, 0.031, and 0.0116 once a shape is bought twice:
+  whatever you buy on this axis, a new draw costs **30 to 90 s and rising**. That is the honest frontier
+  statement, and it is what makes the axis's price legible instead of a per-session argument.
 
 ## Check the premise E[hits] rests on - the population tests it for free
 
@@ -95,7 +103,8 @@ time, and is the distributional form of "a record is not a trend"
 Worth pairing with the other factor, so the arithmetic is closed rather than half-open: the band widths
 here are nearly pinned. The draws land at 2.61e-05 and 2.81e-05 and the widest band any lean carries at
 this cell is 3.25e-05, so perfect lean steering is worth **1.26x**. When both factors are measured, a
-frontier is a single number: E[hits] ≈ 0.0026 per draw, draws ≈ 30 s each, E[hits] 1 ≈ 2 h.
+frontier is a single number: E[hits] ≈ 0.0026 per draw, a draw 30-90 s, **E[hits] 1 ≈ 2 to 5 h** - which
+is a budget decision an owner can take, rather than an axis argument a session can lose.
 
 ## The trap: a ledger's opening pass is 100% new by construction
 
@@ -121,7 +130,8 @@ check exactly.
 **Price a pass against the draws you already hold, never against its own population** - and when a new
 shape reports a better rate, the first question is what share of it is new. The corollaries:
 
-- an axis's *end* rate is its price, not its average;
+- an axis's *end* rate is its price, not its average, and a **shape's** first pass over-reports the shape
+  for the same reason a ledger's first pass over-reports the axis;
 - enrichment can be local and still be worthless, because a neighbourhood's enrichment is in its
   parent's draws;
 - a supply count is an upper bound on tickets and says nothing about draws;
