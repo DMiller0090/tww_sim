@@ -1720,9 +1720,9 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               it measured DENSITY against bounded passes rather than one camera against another. So the
               frontier is **~0.012 new/s -> E[hits] 1 in ~5 h**, and every shape on this axis is now
               measured between 0.012 and 0.033 and falling. `_generated/s97/ledger_buy_2553.json`,
-              `_notes/s97_ledger_buy.py`. **Cost note:** a run pays ~1 h of ONE-TIME setup before its
-              first row (`EF.qualified` + `BandTable`, once per process), not per camera -- budget
-              `3600 + 900 x cameras` seconds and never read the first row's wall clock as a rate.
+              `_notes/s97_ledger_buy.py`. **Cost note, measured rather than inferred:** the pass reaches
+              its first row in **862 s against 861 s of search** -- setup is ~1 s, and it runs at **9.5 of
+              12 logical cores**. So budget a run as simply `~880 s x cameras`.
             - **THE FRAME LEVER IS ALREADY CLOSED BY THE OBJECTIVE, IN CODE.** `clip-exit-angle.md`'s
               frame table has cell 2553 reaching 2.3e-05 at <=5 frames against a 2.6e-05 band -- i.e. one
               extra frame would likely just convert. It is not available: `entry_fan.capped` drops plans
