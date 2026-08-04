@@ -1708,28 +1708,33 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               near zero to harvest; and the widths are nearly pinned (draws at 2.61e-05/2.81e-05, the
               widest band any lean carries at 2553 is **3.25e-05 = a 1.26x ceiling**). Therefore
               **E[hits] = 0.0026 x distinct draws, exactly**, so the frontier is a draw count and a clock:
-              **E[hits] 1 needs 385 draws total, ~1.3 h from the 222 now held** at the spread rate the buy
+              **E[hits] 1 needs 385 draws total, ~1.0 h from the 253 now held** at the spread rate the buy
               measured (below) -- not the handoff's 50 min. The 8.829e-06 record is one order
               statistic out of 127 uniform draws, which is ~a tenth-of-the-time event: s96's "a record is
               not a trend" now has a distributional proof and not only an invariance check.
             - **AND THEN THE BUY FOUND WHAT ACTUALLY GOVERNS THE RATE: DISTANCE FROM THE CAMERAS ALREADY
-              BOUGHT.** Three fresh cameras, identical shape and clock (3.18 M candidates, ~864 s each),
-              every one 40 draws and 0 genuine -- and the new share tracks only the BAM distance to the
-              nearest camera already bought: **25% at 78 BAM, 48% at 170, 78% at 266**, with the
-              neighbourhood's **19% at tens of BAM** as the fourth point. **Monotone over four passes**,
-              and it unifies them: neighbouring cameras command nearly the same walk directions, so they
-              reach the same entries. **So the rule is SPREAD, NOT CLUSTER** -- the exact opposite of the
-              handoff's "densify around the winners" -- and a bounded pass's own draw count predicted
-              NOTHING (it ranked the 25% camera above the 78% one). The alternative reading, that what
-              pays is distance from the FROZEN camera, is already contradicted by these points: the
-              170-BAM camera sits nearer centre than the 78-BAM one (-202 against -450) and pays twice as
-              much. Union now **222 draws, E[hits] 0.572**, best gap unchanged; buy aggregate 60 new in
-              2593 s = 0.0231/s, and at the spread rate **E[hits] 1 is +163 draws ~ 1.3 h**.
-              `_generated/s97/ledger_buy_2553.json`, `_notes/s97_ledger_buy.py` (still running two more
-              cameras, both on the far side of the frozen camera; price them with `entry_ledger price`).
+              BOUGHT, AT PURCHASE TIME.** Five fresh cameras, identical shape and clock (3.18 M candidates,
+              ~849 s each), every one **40 draws and 0 genuine** -- and the new share spans **4x**, tracking
+              only the BAM distance to the nearest camera already held: 19% at ~20 BAM (the
+              neighbourhood), 25% at 78, 20% at 84, 48% at 170, **78% at 266**, 57% at 312.
+              **Spearman 0.886 over six passes** -- strongly rank-ordered, not strictly monotone.
+              Neighbouring cameras command nearly the same walk directions, so they reach the same
+              entries. **So the rule is SPREAD, NOT CLUSTER**, the exact opposite of the handoff's
+              "densify around the winners".
+            - **AND IT IS THE LEDGER, NOT THE FROZEN CAMERA -- the last camera settles that.**
+              `[160,240,128]` sits at **+194**, further from the frozen centre than anything else bought,
+              and pays the **LEAST of the five (20%)**, because `[96,224,128]` had just been bought 84 BAM
+              away. Reverse their purchase order and their yields swap: the quantity is a property of the
+              LEDGER at purchase time. And a bounded pass's own draw count predicted NOTHING -- bounded
+              9/8/8/8/8 gave 10/31/19/23/8 new.
+            - **WHERE THAT LEAVES THE AXIS: 253 draws, E[hits] 0.651, 0 genuine, best gap unchanged.**
+              The buy added 91 new draws in 4246 s (0.0214/s aggregate, 0.0096 worst, 0.0356 best), and
+              **E[hits] 1 is +132 draws ~ 1.0 h** at the spread rate. The emptiness is not a tension with
+              the model: 253 draws at E[hits] 0.651 with 0 genuine is Poisson **P(0) = 0.52**, the most
+              likely single outcome. `_generated/s97/ledger_buy_2553.json`, `_notes/s97_ledger_buy.py`.
               **Cost note, measured rather than inferred:** the pass reaches its first row in **862 s
               against 861 s of search** -- setup is ~1 s, at **9.5 of 12 logical cores** -- so budget a
-              run as simply `~880 s x cameras`.
+              run as simply `~860 s x cameras`.
             - **THE FRAME LEVER IS ALREADY CLOSED BY THE OBJECTIVE, IN CODE.** `clip-exit-angle.md`'s
               frame table has cell 2553 reaching 2.3e-05 at <=5 frames against a 2.6e-05 band -- i.e. one
               extra frame would likely just convert. It is not available: `entry_fan.capped` drops plans

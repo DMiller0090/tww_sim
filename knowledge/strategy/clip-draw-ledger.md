@@ -32,49 +32,52 @@ Measured, on three shapes at one scope - cell 2553, thrust 15, the frame floor:
 | the whole camera alphabet, byte stride 16 (196 clouds) | 127 | 127 | 1462 | 0.087 | *opening pass* |
 | a local camera neighbourhood (±8 bytes, stride 2, 35 clouds) | 31 | **6** | 245 | 0.127 | **0.0245** |
 | one camera at the paying plan shape (3.20 M candidates) | 40 | **29** | 880 | 0.045 | **0.0329** |
-| the paying shape at a second camera, 78 BAM out (3.18 M) | 40 | **10** | 861 | 0.046 | **0.0116** |
-| the paying shape at a third camera, 266 BAM out (3.18 M) | 40 | **31** | 871 | 0.046 | **0.0356** |
-| the paying shape at a fourth camera, 170 BAM out (3.18 M) | 40 | **19** | 860 | 0.047 | **0.0221** |
+| the same paying shape at **five** further cameras (3.18 M each) | 200 | **91** | 4246 | 0.047 | **0.0214** |
 
 The published ranking was `0.127 > 0.087 > 0.045`, and the instruction that came out of it was *buy the
 neighbourhood, skip the paying-shape product.* In the currency the estimate is additive in, the order
 **reverses** and the three collapse to within 35% of one another. The pass that was told to be skipped
 is the one to buy.
 
-**The last two rows are the same lesson landing on the corrected number, and then the rule that comes out
-of it.** Having ranked the paying shape first at 0.0329, buying it at a second camera returned 10 new of
-40 - 0.0116/s, 2.8x worse. The 29 of 40 was never a camera-vs-camera measurement: that pass was the first
-of its shape on this scope, so its newness was *density* against the bounded passes before it. A ledger row
-is only as general as the comparison that produced it, so **the first pass of a new shape over-reports the
-shape** exactly as the first pass into a ledger over-reports the axis.
+**The last row is the same lesson landing on the corrected number.** Having ranked the paying shape first
+at 0.0329, buying it at five further cameras pays **0.0214** - and the worst of them 0.0096. The 29 of 40
+was never a camera-vs-camera measurement: that pass was the first of its shape on this scope, so its
+newness was *density* against the bounded passes before it. A ledger row is only as general as the
+comparison that produced it, so **the first pass of a new shape over-reports the shape** exactly as the
+first pass into a ledger over-reports the axis.
 
 ## What actually predicts newness: distance from what you already bought
 
-Three passes at an *identical* shape and clock differ 3x in what they contribute. What separates them is not
-the camera's own merit - it is how far the camera sits from the cameras whose draws are already held,
-measured as the walk BAM offset it delivers against the nearest one already bought:
+Five passes at an *identical* shape and clock - 3.18 M candidates and ~860 s each, 40 draws every time -
+differ **4x** in what they contribute. What separates them is not the camera's own merit: it is how far the
+camera sits from the cameras whose draws were already held **when it was bought**, measured in the walk BAM
+offset it delivers.
 
-| pass | BAM from the nearest bought camera | new share |
+| pass | BAM from the nearest camera already bought | new share |
 |---|---|---|
-| the ±8-byte neighbourhood around a bought camera | tens | **19%** (6/31) |
-| a camera 78 BAM out | 78 | **25%** (10/40) |
-| a camera 170 BAM out | 170 | **48%** (19/40) |
-| a camera 266 BAM out | 266 | **78%** (31/40) |
+| the ±8-byte neighbourhood around a bought camera | ~20 | **19%** (6/31) |
+| `[16,16,128]`, walk −450 | 78 | **25%** (10/40) |
+| `[160,240,128]`, walk +194 | 84 | **20%** (8/40) |
+| `[48,32,128]`, walk −202 | 170 | **48%** (19/40) |
+| `[1,1,128]`, walk −716 | 266 | **78%** (31/40) |
+| `[96,224,128]`, walk +110 | 312 | **57%** (23/40) |
 
-**Monotone across four passes**, and it unifies them: the neighbourhood negative and the buy are one
-phenomenon seen from the input side. Neighbouring cameras command nearly the same walk directions, so they
-reach the same entries; separated cameras command different ones.
+**Spearman ρ = 0.886 over six passes.** Strongly rank-ordered rather than strictly monotone - 312 BAM paid
+less than 266 - which is what a six-point sample of a noisy relation looks like, and the trend is the part
+to spend on. It unifies the neighbourhood negative with the buy: neighbouring cameras command nearly the
+same walk directions, so they reach the same entries, and separated ones command different directions.
 
-So the spending rule on a camera-like axis is **spread, not cluster** - the exact opposite of the
-"densify around the winners" instruction this measurement replaced.
+So the spending rule on a camera-like axis is **spread, not cluster** - the exact opposite of the "densify
+around the winners" instruction this measurement replaced.
 
-The obvious alternative explanation - that what pays is being far from the *frozen* camera rather than far
-from the ledger - is already contradicted by the same four points. The 170-BAM camera sits **nearer** the
-frozen centre than the 78-BAM one (-202 against -450) and pays twice as much, so the ordering follows
-distance-from-the-ledger and not distance-from-centre.
+**It is distance from the ledger and not distance from the frozen camera**, which the last two rows settle
+between them. `[160,240,128]` sits at +194, further from the frozen centre than anything else bought, and
+pays the **least of the five (20%)** - because `[96,224,128]` had just been bought 84 BAM away. Reverse
+their order and their yields would swap. The quantity is a property of the *ledger at purchase time*, not
+of the camera.
 
-And a pass's own prior yield predicts **nothing**: the bounded pass ranked the 25%-new camera *above* the
-78%-new one. Rank candidates by their distance from the ledger.
+And a pass's own prior yield predicts **nothing**: at bounded draw counts of 9, 8, 8, 8, 8 the paying-shape
+newness came in at 10, 31, 19, 23, 8. Rank candidates by their distance from the ledger.
 
 **A local neighbourhood is enriched in its PARENT's draws.** Neighbouring cameras command ~94% of the
 same walk directions, so they reach the same entries: 25 of those 31 draws are ticket stubs already in
@@ -106,10 +109,10 @@ independently would hold the rate flat. So:
 - **the average rate of a completed sweep is not repeatable.** 0.087 draws/s over 196 cameras ends at
   0.031/s, and that end rate - not the average - is what a next pass costs. Quoting the average is how
   a 50-minute budget turned out to be a two-hour one.
-- **the shapes converge, and the spread is the one thing that still moves the rate.** 0.0245, 0.031 and
-  0.0116 clustered against 0.0356 spread: a new draw costs **28 to 86 s**, and the cheap end is reached by
-  placing cameras far from the ledger rather than by any change of shape. That is the honest frontier
-  statement, and it is what makes the axis's price legible instead of a per-session argument.
+- **the shapes converge, and the spread is the one thing that still moves the rate.** Clustered buys pay
+  0.0096-0.0245 against 0.0356 for the best-spread one: a new draw costs **28 to 104 s**, and the cheap end
+  is reached by placing cameras far from the ledger rather than by any change of shape. That is the honest
+  frontier statement, and it is what makes the axis's price legible instead of a per-session argument.
 
 ## Check the premise E[hits] rests on - the population tests it for free
 
@@ -134,9 +137,13 @@ time, and is the distributional form of "a record is not a trend"
 Worth pairing with the other factor, so the arithmetic is closed rather than half-open: the band widths
 here are nearly pinned. The draws land at 2.61e-05 and 2.81e-05 and the widest band any lean carries at
 this cell is 3.25e-05, so perfect lean steering is worth **1.26x**. When both factors are measured, a
-frontier is a single number: E[hits] ≈ 0.0026 per draw, a draw 28-86 s, **E[hits] 1 ≈ 1.3 h from 222 draws
+frontier is a single number: E[hits] ≈ 0.0026 per draw, a draw 28-104 s, **E[hits] 1 ≈ 1.0 h from 253 draws
 at the spread rate** - which is a budget decision an owner can take, rather than an axis argument a
 session can lose.
+
+And the model is not in tension with the search's emptiness, which is worth checking rather than worrying
+about: 253 draws at E[hits] 0.65 with **0 genuine** is a Poisson P(0) of **0.52**. The most likely single
+outcome, not evidence that anything is broken.
 
 ## The trap: a ledger's opening pass is 100% new by construction
 
