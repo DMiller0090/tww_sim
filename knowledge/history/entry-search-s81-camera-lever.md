@@ -48,6 +48,19 @@ not uniform: 3612 of 4096 direction cells (88.2%) are reachable at the frozen ca
 over all 16 offsets. That is ~1.07x on CANDIDATES, an axis session 81 had already measured as buying
 nothing (1.6x candidates, zero extra near-misses).
 
+## What measurement changed AGAIN (session 95): the walk-side half above is wrong
+
+That last paragraph priced the walk side over the **whole stick alphabet** (`msd_min=0`, 7032 decoded
+angles). The fan cannot hold that alphabet: it keeps only endpoints at the speedF cap, so its sticks are
+the cap-magnitude ones - **2280 angles reaching 1736 of 4096 cells, 42.4%**, not 88.2%. Sliding a 42%
+subset is a different lever: a single sine cell of camera moves **888 of 1736** cells onto directions
+the frozen camera cannot command at all, and the union over the reachable slew is the whole circle.
+Measured, that re-draws the entry cloud - closest approach to one cell's residual zero 1.49e-3 frozen
+against 2.9e-5 at +200 BAM on the same bounded fan. Current truth is
+[strategy/clip-camera-axis.md](../strategy/clip-camera-axis.md). The AIM-side half of this page (the
+cell is the atom; a slew re-indexes and cannot add a cell inside the window it was measured over) is
+untouched and still current.
+
 ## The lesson
 
 Sweeping a parameter at finer resolution than the code quantizes it to does not measure a finer

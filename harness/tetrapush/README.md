@@ -1679,9 +1679,79 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE CAMERA IS A FREE INPUT CHANNEL INSIDE THE ENTRY PLAN, AND THE HALF OF IT PRICED AT
+            ZERO WAS PRICED OVER A GRID THE FAN CANNOT HOLD (session 95).** The handoff ordered the
+            csangle swept and its frame cost taken to Dereck before any pass. **The cost is ZERO and it
+            is read off the locked console log rather than argued**, and the axis it opens is not the
+            one session 83 closed.
+            - **THE PRICE, from the fixture's own bytes.** The entry plan runs AFTER the escape atom
+              (`fixtures/courtyard_entry_s86_console.json` rows 78..), and every one of those frames
+              carries `substickX == 128`. The C-stick there is IDLE -- the atom has already fired, so
+              nothing downstream needs the camera frozen -- so a slew inside the entry plan cannot cost
+              a frame. What is bounded is the REACH: a held byte moves csangle **-716..+714 BAM by the
+              4th entry frame**, 1-frame delay, on a fine ladder (byte 96/160 = -5/+4).
+            - **AND THE AXIS IS THE WALK, NOT THE AIM.** s83 was right about the aim side (the schedule
+              is cell-quantized; a slew re-indexes and cannot add a cell). It also priced the WALK side
+              -- 3612 of 4096 direction cells, "1.07x" -- **over the whole stick grid at `msd_min=0`,
+              which the fan cannot hold**: it keeps only endpoints at the speedF cap, so its alphabet is
+              the cap-magnitude one, **2280 angles reaching 1736 of 4096 cells, 42.4%** (gated against a
+              real fan, not argued from the speed law). One sine cell of camera moves **888 of those
+              1736** onto directions the frozen camera cannot command at all; the union over the slew is
+              the whole circle. A different camera is a different discrete ENTRY SET -- exactly what
+              session 94 ran out of.
+            - **MEASURED: 64 CAMERAS, 643 s -> 71 DISTINCT NEAR-MISS DRAWS, E[hits] 0.19, of which 96%
+              STAND WHERE THE FROZEN FAN CANNOT REACH.** Session 94's exhausted 3.2 M-candidate pass at
+              the frozen camera read E[hits] 0.194 in 866 s, so the rate matches at 0.74x the clock --
+              but on a population the frozen camera has no access to, and **without saturating**: each
+              camera is a fresh 10 s draw where more candidates at one camera had stopped paying.
+              Closest approach at cell 2553 on one bounded fan: **1.49e-3 frozen, 2.9e-5 at +200 BAM.**
+            - **COUNTED THE WAY THIS SEARCH HAS LEARNED TO COUNT.** The pass reports **243** near-misses
+              and they are **71 draws**: neighbouring cameras command ~94% of the same directions, so
+              one entry reached at two cameras is ONE draw. `summarize` dedupes ACROSS cameras before
+              summing the lottery -- pooling would have read 0.65 and been the fourth instance of
+              counting copies as discoveries here.
+            - **AND THE BUDGET RULE: MANY CHEAP CAMERAS, NOT DEEPER ONES.** The same camera at a 6.5x
+              wider shape (507 k candidates, 124 s) buys 4.3x the draws for 12x the clock -- the family
+              axis's own diminishing return. Per second the bounded shape is ~3x better.
+            - **MORE CAMERAS EXIST -- THE C-STICK MAY CHANGE MID-PLAN -- AND THEY NEED THE SAME DEDUP.**
+              A segmented alphabet at byte stride 32 is **137 cameras -> 105 distinct draws, E[hits]
+              0.273, 1365 s**. But those 137 carry only **49 distinct walk trails**: a camera that
+              changes only AFTER the walk re-aims the same cloud, and **41 of the 49 groups report a
+              bit-identical draw set**. One representative per group buys 83 of the 105 draws in 530 s
+              (**0.157 draws/s against 0.077**). The key is the trail prefix the fan actually STEPS
+              (`fan_steps` = `max(base_frames) + max(j1) + j2max + 1`), not the plan's frame cap -- the
+              other 8 groups differ precisely because the fan steps past the cap. `dedupe_cameras` is
+              in `search` now and reports the collapse.
+            - **WHAT THE CAMERA DOES NOT MOVE: THE CLOUD.** Hull area across the whole slew changes by
+              **+0.0%** (1686.7 -> 1686.9 u2), bbox not at all, and **0 of 9** second-lobe stations enter
+              the union hull. The re-index happens INSIDE the cloud, so session 93's second-lobe
+              negative survives this axis instead of being reopened by it.
+            - **THE THING THAT COULD HAVE MADE IT A PHANTOM, checked:** the camera is still RAMPING when
+              the roll's facing latches. Measured by firing the roll and reading the facing back, the
+              facing is `decoded_aim + 0x8000 + trail[frames + 1]` (unanimous over cameras spanning
+              -1619..+1420 BAM; the neighbouring indices are 90-460 BAM wrong). So a hard slew moves the
+              aim alphabet too -- at subx 249 the bytes that reach cell 2551 frozen roll into cell
+              **2640** -- and a camera draw only counts where the cell stays aimable: **64 of 82**. A
+              pass skips the rest and says so.
+            - NEW `harness/tetrapush/entry_camera.py` (`cam_trail`, `camera_alphabet`,
+              `segmented_alphabet`, `aim_frame`/`aim_at`, `walk_cells`/`cell_census`, `fan_cam`,
+              `probe`, `search`, `hull_shift`; CLI `reach|alphabet|cells|hull|probe|search`);
+              `entry_fan.iter_fan2(hold=, cs_trail=)` + `_fan_chunk(cs_seq=)` inject the trail per
+              frame; `entry_search.confirm_entry` honours `hit['substickX']`. LOCKED
+              `fixtures/courtyard_cam_trails_s95.json`. Gates `tests/test_entry_camera.py` (13 + 1
+              slow) -- including the trail-vs-WIRED-camera 0-ULP check that pins the injection
+              alignment (frame k decodes against `trail[k]`, which a constant injection cannot see) and
+              the regression that the neutral byte reproduces the default fan key AND value.
+            - **KB:** NEW [`strategy/clip-camera-axis.md`](../../knowledge/strategy/clip-camera-axis.md);
+              razor rule **15** (price a lever against the subset the SEARCH can use, not the one the
+              hardware has; an input channel nothing is using over your frames is a free axis; a free
+              axis is still bounded somewhere else); the overturned walk-side share appended to
+              [`history/entry-search-s81-camera-lever.md`](../../knowledge/history/entry-search-s81-camera-lever.md)
+              (its aim-side half stands); `clip-exit-angle.md` + hub updated.
       - [~] **CELL 2553 WAS NEVER A LEAN PROBLEM -- THE ACCEPTANCE BAND WAS A NEGATIVE ARGUED FROM ONE
             NEWTON SEED, AND THE SAME TABLE CALLED THE CONSOLE-DELIVERED CLIP'S OWN CONFIGURATION DEAD
-            (session 94).** The handoff asked for cell 2553's band across the leans the fan arrives on,
+            (session 94).** *(Its open item -- "the camera is the lever left" -- is measured in the box
+            above: the axis is real, free, and does not saturate; the cell is still unconverted.)* The handoff asked for cell 2553's band across the leans the fan arrives on,
             expecting to aim the pass at (lean, cell) pairs. The measurement says the leans were never
             the problem: it is the s90/s92 single-station defect one level down, in the RANKING instead
             of the scope, and it had survived both fixes untouched.

@@ -176,6 +176,12 @@ priced at **zero** and closed - correctly, against a 2-cell window the frozen ai
 band. Re-derive what the camera reaches whenever the window's width changes; a closure is only as
 current as the window it was measured against.
 
+The camera's bigger reach turned out to be on the **walk** side rather than the aim side, and it is free
+in frames - the entry plan's C-stick is idle on every console frame. See
+[clip-camera-axis.md](clip-camera-axis.md), which also carries the constraint this section's vocabulary
+supplies: a camera draw only counts for a cell that is still **aimable** at that camera's dispatch
+csangle (cell 2553 survives at 64 of 82 camera draws).
+
 ## The rule this corner paid for
 
 A configuration that reads dead may only be dead **from where you asked**. `grad ~ 0` means "the pushed

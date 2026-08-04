@@ -842,11 +842,17 @@ def confirm_entry(hit, seed=None, env=None):
     means the hit is scored at a point Link does not roll from -- the s79 failure, one level down.
 
     A plan is ``(n0, sx, sy, j)`` or, for a two-segment hold, ``(n0, sx1, sy1, j1, sx2, sy2, j2)``:
-    the segments are read off in triples, so the same replay serves both."""
+    the segments are read off in triples, so the same replay serves both.
+
+    ``hit['substickX']`` is the CAMERA axis (session 95): a hit found at a slewing camera is only
+    reproducible with the C-stick that slewed it, and this replay runs the WIRED camera -- so it is
+    also the end-to-end check on `entry_camera`'s injected trail. Absent or 128 = the frozen camera
+    every hit before session 95 was found at."""
     seed = seed or console_seed()
     plan = list(hit['plan'])
     n0 = plan[0]
-    hold = dict(seed['log'][-1], buttons=0)
+    hold = dict(seed['log'][-1], buttons=0,
+                substickX=int(hit.get('substickX', 128)), substickY=0)
     extra = [hold] * n0
     for i in range(1, len(plan), 3):
         sx, sy, j = plan[i:i + 3]

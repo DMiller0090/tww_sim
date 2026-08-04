@@ -200,7 +200,8 @@ def _is_rollable(c):
     return (int(c.state) & 0xFF) in ROLL_FROM
 
 
-def _fan_chunk(base, part, rows, jmax, tx, tz, nthreads, label, cap=ES.WALK_CAP, rollable=False):
+def _fan_chunk(base, part, rows, jmax, tx, tz, nthreads, label, cap=ES.WALK_CAP, rollable=False,
+               cs_seq=None):
     """Run one chunk of held sticks off ``base`` for ``jmax`` frames on the fleet, collecting each
     core's hits in the reference's write order. ``rows`` = the per-core schedule row (one frame, the
     held input); ``label(i, j)`` -> the plan value stored for core ``i`` at step ``j``. ``cap`` is
@@ -208,13 +209,23 @@ def _fan_chunk(base, part, rows, jmax, tx, tz, nthreads, label, cap=ES.WALK_CAP,
     speedF). Returns ``(writes, cores, alive)`` -- ``cores`` are the post-run junction states.
 
     ``rollable`` is the THIRD prune, and it is the one session 84's failures asked for: an endpoint is
-    only a candidate if the A-press that follows it actually rolls. See `_is_rollable`."""
+    only a candidate if the A-press that follows it actually rolls. See `_is_rollable`.
+
+    ``cs_seq`` makes the CAMERA a per-frame input instead of the constant in ``rows`` (session 95):
+    step ``j`` runs at ``cs_seq[j]``, which is what a C-stick held through the entry plan actually
+    delivers (`entry_camera.cam_trail` -- gated 0-ULP against the wired camera). The caller slices it
+    so index 0 is this chunk's FIRST stepped frame. A short sequence is an error rather than a clamp:
+    clamping would hold the camera where the real one keeps ramping."""
     cores = [base.clone(base.pe.clone_state()) for _ in part]
     fleet = N.CourtyardFleet(cores, 1)
     fleet.set_schedule([[r] for r in rows])
+    if cs_seq is not None and len(cs_seq) < jmax + 1:
+        raise ValueError("cs_seq covers %d frames, the chunk steps %d" % (len(cs_seq), jmax + 1))
     writes = [[] for _ in part]
     alive = [True] * len(part)
     for j in range(jmax + 1):
+        if cs_seq is not None:
+            fleet.set_schedule([[tuple(r[:4]) + (int(cs_seq[j]),)] for r in rows])
         fleet.run_par(1, nthreads)
         for i, c in enumerate(cores):
             if not alive[i]:
@@ -273,7 +284,7 @@ def fleet_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, chunk=C
 
 def iter_fan2(seed=None, env=None, base_frames=(3, 4), s1_stride=16, j1=(2, 4, 6),
               s2_stride=1, j2max=6, chunk=CHUNK, nthreads=0, progress=False, csangle=ES.CSANGLE,
-              cap=ES.WALK_CAP, rollable=True):
+              cap=ES.WALK_CAP, rollable=True, hold=None, cs_trail=None):
     """TWO-SEGMENT holds: stick S1 for j1 frames, then S2 for j2 -- the lever left once stride 1 x 7
     bases has saturated the one-segment fan (measured, `_notes/s81_saturation.py`).
 
@@ -289,9 +300,18 @@ def iter_fan2(seed=None, env=None, base_frames=(3, 4), s1_stride=16, j1=(2, 4, 6
 
     ``rollable`` (on by default, session 85) drops endpoints the A-press cannot roll from --
     `_is_rollable`. It is a candidate filter and not a fleet saving: the frames are already stepped
-    when it reads the proc."""
+    when it reads the proc.
+
+    ``hold``/``cs_trail`` are the CAMERA axis (session 95, `entry_camera`): ``hold`` carries the
+    entry plan's C-stick byte into the WIRED base replay, and ``cs_trail`` is the csangle that byte
+    delivers per frame, counted from the arrival, injected into every fleet step. A slewing hold
+    WITHOUT a trail is refused -- it would run the base at one camera and the fan at another, which
+    is nothing a controller can deliver. With ``cs_trail`` the ``csangle`` argument is unused."""
     seed = seed or ES.console_seed()
-    hold = dict(seed['log'][-1], buttons=0)
+    hold = dict(hold or dict(seed['log'][-1], buttons=0))
+    if cs_trail is None and int(hold.get('substickX', 128)) != 128:
+        raise ValueError("a C-stick hold of %s slews the base camera but not the fan's -- pass the"
+                         " matching cs_trail (entry_camera.cam_trail)" % hold.get('substickX'))
     trg = int(hold.get('triggerL', 0))
     tx, tz = seed['tetra']
     s1, s2 = stick_alphabet(s1_stride), stick_alphabet(s2_stride)
@@ -304,6 +324,9 @@ def iter_fan2(seed=None, env=None, base_frames=(3, 4), s1_stride=16, j1=(2, 4, 6
             fl = N.CourtyardFleet([c], 1)
             fl.set_schedule([[(sx1, sy1, 0, trg, csangle)]])
             for j in range(1, max(j1) + 1):
+                if cs_trail is not None:
+                    # this step's absolute index from the arrival is n0 + (j - 1)
+                    fl.set_schedule([[(sx1, sy1, 0, trg, int(cs_trail[n0 + j - 1]))]])
                 fl.run_par(1, nthreads)
                 if j in j1 and (cap is None or c.speedF == cap) \
                         and math.hypot(c.pos_x - tx, c.pos_z - tz) <= ES.FOLLOW_BAR:
@@ -315,7 +338,8 @@ def iter_fan2(seed=None, env=None, base_frames=(3, 4), s1_stride=16, j1=(2, 4, 6
                     writes, _cores, _alive = _fan_chunk(
                         jc, part, rows, j2max, tx, tz, nthreads,
                         lambda i, jj, _n=n0, _p=part, _j=j:
-                        (_n, sx1, sy1, _j, _p[i][0], _p[i][1], jj), cap=cap, rollable=rollable)
+                        (_n, sx1, sy1, _j, _p[i][0], _p[i][1], jj), cap=cap, rollable=rollable,
+                        cs_seq=None if cs_trail is None else cs_trail[n0 + j:])
                     for w in writes:
                         for kv in w:
                             n += 1

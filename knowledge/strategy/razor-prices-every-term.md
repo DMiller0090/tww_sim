@@ -205,8 +205,27 @@ engines that had never been compared to each other.
     cannot say which form it was argued under has to be dropped rather than trusted - 10360 of 15968 rows
     here.
 
+15. **Price a lever against the subset the SEARCH can use, not the one the hardware has - and look for
+    the channels nothing is using** (session 95). Rules 12-14 are about the set a claim is argued over;
+    this is about the set a *price* is computed over. The camera's walk-side reach was dismissed as
+    ~1.07x because it was counted over the whole stick alphabet - 3612 of 4096 direction cells. The fan
+    keeps only endpoints at the speed cap, so it can hold only the cap-magnitude sticks: **1736 of 4096,
+    42.4%**. Sliding a 42% subset is a different lever from nudging an 88% one - one sine cell of camera
+    moves 888 of those 1736 cells onto directions the frozen camera cannot command at all - and the
+    correction is worth two orders of magnitude on the closest approach where the priced axis had
+    saturated ([clip-camera-axis.md](clip-camera-axis.md)).
+    Two corollaries. **An input channel no constraint is using over the frames you are searching is a
+    free axis:** the price here came off the delivered console log read column by column - `substickX`
+    is 128 on every frame of the entry plan, so the slew cannot cost a frame - not from reasoning about
+    what the plan needs. And **a free axis is still bounded somewhere else**: the camera is still ramping
+    when the roll's facing latches (one frame after the press, measured by firing the roll and reading
+    the facing back), so a hard slew moves the aim alphabet too and a camera draw only counts where the
+    target cell stays aimable - 64 of 82 here.
+
 ## See also
 
+- [clip-camera-axis.md](clip-camera-axis.md) - rule 15's own mechanism: the idle channel, the two
+  halves of a camera, and the trail a fan injects.
 - [clip-band-per-lean.md](clip-band-per-lean.md) - rule 14's own mechanism: the seed ladder, and why a
   zero-width band is odds rather than a wall.
 - [clip-exit-angle.md](clip-exit-angle.md) - rule 12's own corner, and the objective term it was
