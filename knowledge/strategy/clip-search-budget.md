@@ -137,29 +137,31 @@ families and more draws. Two consequences:
   the exclusion is then a *measurement* rather than an assumption
   ([razor-prices-every-term.md](razor-prices-every-term.md#the-rules) rule 13).
 
-## The enrichment can be LOCAL - and a record is not a trend
+## A rate is only a rate against the draws already held
 
-Once several axes are priced on one scope, the ranking is what decides the budget, and it is worth
-re-measuring whenever a new axis lands. All three of these are cell 2553 / thrust 15 at the frame floor:
+Once several axes are priced on one scope, the ranking decides the budget - and a rate measured on a
+pass's own population is not the rate a next pass can be bought at. Three shapes on cell 2553 / thrust 15
+at the frame floor reported 0.127 / 0.087 / 0.045 draws per second, and in NEW draws the ranking
+**reverses**: the local neighbourhood that read fastest delivered 6 new draws of 31. Price a pass against
+a ledger of draw identities, and read an axis's *end* rate rather than its average -
+[clip-draw-ledger.md](clip-draw-ledger.md) is that whole measurement, including the saturation curve this
+axis turned out to be on (~4.3 → 0.23 draws per camera).
 
-| where the clock goes | draws/s | draws per camera |
-|---|---|---|
-| a local camera neighbourhood (+-8 bytes, stride 2, 35 clouds) | **0.127** | 0.886 |
-| the whole camera alphabet at byte stride 16 (196 clouds) | 0.087 | 0.648 |
-| one camera at the paying plan shape (3.20 M candidates) | 0.045 | - |
+**The breadth axis thins as it densifies**, which is the part of the older reading that stands: draws per
+camera fell from 1.11 at a coarse held alphabet to 0.648 at stride 16, so a supply count bounds *tickets*,
+not draws, and a finer sweep overlaps the one before it.
 
-Two readings. **The breadth axis thins as it densifies** - draws per camera fell from 1.11 at a coarse
-held alphabet to 0.648 at stride 16 - so a supply count bounds *tickets*, not draws, and a finer sweep
-overlaps the one before it. But **the neighbourhood of a productive draw is enriched** (1.46x the rate),
-so the cheap spend is local density around the winners rather than a finer global stride.
+## A record is not a trend
 
-And the trap that sits right next to this, because the same pass produces both numbers. That pass's best
+The trap that sits right next to this, because the same pass produces both numbers. That pass's best
 approach improved **37x** on the previous record - a gap of 8.829e-06 against a 2.8125e-05 band, the first
 time this search had come inside one band width - which reads exactly like an axis converging. It is not:
 the record is **one draw**, and it is invariant. Densifying its own camera **41x** moved it by
 *bit-identical zero*, and 35 neighbouring clouds all report the same gap bit for bit, 12 of them by
 reaching that same endpoint. A best-of-population statistic improves when you enlarge the population,
-which is what a lottery does by construction.
+which is what a lottery does by construction - and the population's own gap distribution says so
+directly, being uniform to within 6% at the thresholds that matter
+([clip-draw-ledger.md](clip-draw-ledger.md#check-the-premise-ehits-rests-on---the-population-tests-it-for-free)).
 
 So: **before redirecting a budget at a record, ask how many draws it is and whether density moves it.**
 Both checks are one cheap pass, and here they turned "we are converging, chase this candidate" into "the

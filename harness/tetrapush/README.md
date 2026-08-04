@@ -1679,6 +1679,53 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE CAMERA AXIS'S DRAWS ARE MOSTLY COPIES, AND THE THREE-WAY RANKING INVERTS IN THE ONLY
+            CURRENCY E[hits] ADDS OVER (session 97).** The handoff ordered local camera neighbourhoods
+            around the productive clouds, ranked 0.127 draws/s against 0.087 and 0.045, budgeted at
+            E[hits] ~1 in ~50 min. Priced against the draws already held, that ranking is **backwards**
+            and the budget is **2.3x** optimistic. Every measurement in it reproduces; none of them was
+            compared to anything.
+            - **THE NEIGHBOURHOOD RE-DREW ITS PARENT PASS: 6 NEW DRAWS OF 31.** `summarize` dedupes
+              across the cameras INSIDE a pass and explicitly refuses to sum `expected_hits` over them --
+              and then the session summed across passes. The neighbourhood's 0.127/s is a true count of a
+              true population, 25 of whose 31 draws were already in the drawer. Not the centre camera
+              either: drop its rows entirely and the answer is bit-identical (31 draws, 6 new), with only
+              1 of the 35 clouds in the parent's list at all. **Different cameras reach the same
+              entries** -- neighbours command ~94% of the same walk directions.
+            - **SO THE RANKING REVERSES AND COLLAPSES.** In NEW draws per second: camera x paying shape
+              **0.0329** (29 new of 40), whole alphabet's END rate **0.031**, neighbourhood **0.0245**
+              (the pass the handoff said to buy is last; the one it said to skip is first), and the three
+              sit inside 35% of each other rather than spanning 2.8x.
+            - **THE AXIS IS SATURATING, AND THE CURVE WAS FREE.** Accumulate the 196 cameras' draw sets
+              over random orderings: **4.3 draws at the first camera falling to 0.23 over the last
+              quarter, an 18x decay** -- the coupon-collector shape of sampling a population far smaller
+              than the sample count. So the supply table (196/709/2394/5300 clouds) bounds TICKETS with no
+              claim on draws, and a completed sweep's average rate is not repeatable: 0.087/s ends at
+              0.031/s, which is the number a next pass costs.
+            - **AND BOTH FACTORS OF E[hits] ARE NOW MEASURED, WHICH CLOSES THE ARITHMETIC.** The premise
+              `lottery` rests on -- residuals locally uniform across the window -- holds on the population
+              itself (**observed/expected 1.00 to 1.18 from 3e-3 down to 1e-4**), so there is no crowding
+              near zero to harvest; and the widths are nearly pinned (draws at 2.61e-05/2.81e-05, the
+              widest band any lean carries at 2553 is **3.25e-05 = a 1.26x ceiling**). Therefore
+              **E[hits] = 0.0026 x distinct draws, exactly**, a draw costs ~30 s whatever you buy, and
+              **E[hits] 1 is +225 draws ~ 1.9 h** -- not 50 min. The 8.829e-06 record is one order
+              statistic out of 127 uniform draws, which is ~a tenth-of-the-time event: s96's "a record is
+              not a trend" now has a distributional proof and not only an invariance check.
+            - **THE FRAME LEVER IS ALREADY CLOSED BY THE OBJECTIVE, IN CODE.** `clip-exit-angle.md`'s
+              frame table has cell 2553 reaching 2.3e-05 at <=5 frames against a 2.6e-05 band -- i.e. one
+              extra frame would likely just convert. It is not available: `entry_fan.capped` drops plans
+              over the floor citing Dereck's zero-frames constraint, and 2553 IS the whole exit-angle
+              prize at the floor. So the lottery is the route, and its price is the number above.
+            - NEW tracked `harness/tetrapush/entry_ledger.py` (`Ledger`/`novel`/`accumulation`/
+              `uniformity`/`extract`, CLI `price`/`saturate`/`uniform`) + LOCKED
+              `fixtures/courtyard_draw_ledger_s97.json` (the three passes' populations reduced to what
+              `draw_key`/`lottery`/`accumulation` consume -- a pass writes to the gitignored
+              `_generated/`, so the finding was not otherwise re-runnable from a clone); gate
+              `tests/test_entry_ledger.py` (**9**). KB: NEW
+              [`strategy/clip-draw-ledger.md`](../../knowledge/strategy/clip-draw-ledger.md); the
+              overturned ranking MIGRATED to
+              [`history/camera-neighbourhood-enrichment.md`](../../knowledge/history/camera-neighbourhood-enrichment.md)
+              and `clip-search-budget.md`'s section split so the half that stands keeps its own anchor.
       - [~] **THE CAMERA AXIS IS A TWO-BYTE CHANNEL, SO ITS SUPPLY IS `bytes^2` AND NOT PATHS -- AND THE
             CLOSEST APPROACH IS NOW INSIDE ONE BAND WIDTH (session 96).** The handoff ordered the
             segmented alphabet run at stride 16, "deduped, the dedup is automatic", budgeted at 0.157
