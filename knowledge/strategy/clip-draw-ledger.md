@@ -33,7 +33,8 @@ Measured, on three shapes at one scope - cell 2553, thrust 15, the frame floor:
 | a local camera neighbourhood (±8 bytes, stride 2, 35 clouds) | 31 | **6** | 245 | 0.127 | **0.0245** |
 | one camera at the paying plan shape (3.20 M candidates) | 40 | **29** | 880 | 0.045 | **0.0329** |
 | the paying shape at a second camera, 78 BAM out (3.18 M) | 40 | **10** | 861 | 0.046 | **0.0116** |
-| the paying shape at a third camera, 344 BAM out (3.18 M) | 40 | **31** | 871 | 0.046 | **0.0356** |
+| the paying shape at a third camera, 266 BAM out (3.18 M) | 40 | **31** | 871 | 0.046 | **0.0356** |
+| the paying shape at a fourth camera, 170 BAM out (3.18 M) | 40 | **19** | 860 | 0.047 | **0.0221** |
 
 The published ranking was `0.127 > 0.087 > 0.045`, and the instruction that came out of it was *buy the
 neighbourhood, skip the paying-shape product.* In the currency the estimate is additive in, the order
@@ -49,26 +50,31 @@ shape** exactly as the first pass into a ledger over-reports the axis.
 
 ## What actually predicts newness: distance from what you already bought
 
-The third row is 3x the second on an identical shape and clock. What separates them is not the camera's own
-merit - it is how far the camera sits from the cameras whose draws are already held, measured in the walk
-BAM offset the camera delivers:
+Three passes at an *identical* shape and clock differ 3x in what they contribute. What separates them is not
+the camera's own merit - it is how far the camera sits from the cameras whose draws are already held,
+measured as the walk BAM offset it delivers against the nearest one already bought:
 
-| pass | BAM from the already-bought camera | new share |
+| pass | BAM from the nearest bought camera | new share |
 |---|---|---|
-| the ±8-byte neighbourhood around it | tens | **19%** (6/31) |
+| the ±8-byte neighbourhood around a bought camera | tens | **19%** (6/31) |
 | a camera 78 BAM out | 78 | **25%** (10/40) |
-| a camera 344 BAM out | 344 | **78%** (31/40) |
+| a camera 170 BAM out | 170 | **48%** (19/40) |
+| a camera 266 BAM out | 266 | **78%** (31/40) |
 
-Monotone across three passes, and it unifies them: the neighbourhood negative and the buy are one
+**Monotone across four passes**, and it unifies them: the neighbourhood negative and the buy are one
 phenomenon seen from the input side. Neighbouring cameras command nearly the same walk directions, so they
 reach the same entries; separated cameras command different ones.
 
 So the spending rule on a camera-like axis is **spread, not cluster** - the exact opposite of the
-"densify around the winners" instruction this measurement replaced. Two cautions on how far to push it:
-the third camera also sits at the *extreme* of the camera's reach, so "far from what is bought" and "far
-from centre" are not separated by three points; and a bounded pass's own draw count did **not** predict
-newness at all (it ranked the 25% camera above the 78% one). Rank candidate cameras by distance from the
-ledger, not by their own yield.
+"densify around the winners" instruction this measurement replaced.
+
+The obvious alternative explanation - that what pays is being far from the *frozen* camera rather than far
+from the ledger - is already contradicted by the same four points. The 170-BAM camera sits **nearer** the
+frozen centre than the 78-BAM one (-202 against -450) and pays twice as much, so the ordering follows
+distance-from-the-ledger and not distance-from-centre.
+
+And a pass's own prior yield predicts **nothing**: the bounded pass ranked the 25%-new camera *above* the
+78%-new one. Rank candidates by their distance from the ledger.
 
 **A local neighbourhood is enriched in its PARENT's draws.** Neighbouring cameras command ~94% of the
 same walk directions, so they reach the same entries: 25 of those 31 draws are ticket stubs already in
@@ -100,7 +106,7 @@ independently would hold the rate flat. So:
 - **the average rate of a completed sweep is not repeatable.** 0.087 draws/s over 196 cameras ends at
   0.031/s, and that end rate - not the average - is what a next pass costs. Quoting the average is how
   a 50-minute budget turned out to be a two-hour one.
-- **the shapes converge, and the spread is the one thing that still moves the rate.** 0.0245, 0.031,
+- **the shapes converge, and the spread is the one thing that still moves the rate.** 0.0245, 0.031 and
   0.0116 clustered against 0.0356 spread: a new draw costs **28 to 86 s**, and the cheap end is reached by
   placing cameras far from the ledger rather than by any change of shape. That is the honest frontier
   statement, and it is what makes the axis's price legible instead of a per-session argument.
@@ -128,7 +134,7 @@ time, and is the distributional form of "a record is not a trend"
 Worth pairing with the other factor, so the arithmetic is closed rather than half-open: the band widths
 here are nearly pinned. The draws land at 2.61e-05 and 2.81e-05 and the widest band any lean carries at
 this cell is 3.25e-05, so perfect lean steering is worth **1.26x**. When both factors are measured, a
-frontier is a single number: E[hits] ≈ 0.0026 per draw, a draw 28-86 s, **E[hits] 1 ≈ 1.4 h from 203 draws
+frontier is a single number: E[hits] ≈ 0.0026 per draw, a draw 28-86 s, **E[hits] 1 ≈ 1.3 h from 222 draws
 at the spread rate** - which is a budget decision an owner can take, rather than an axis argument a
 session can lose.
 

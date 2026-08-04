@@ -12,8 +12,9 @@ MEASURED, on session 96's own two probes, and it inverts that session's ranking:
 | camera neighbourhood, +-8 stride 2 |   31 |     **6** (19%)           |    245  | 0.127/s  | **0.0245**|
 | camera x paying shape (densify)    |   40 |    **29** (73%)           |    881  | 0.045/s  | **0.0329**|
 | whole walk:16 alphabet, marginal   |  127 |     by construction all   |   1462  | 0.087/s  | **0.031** |
-| same paying shape, 78 BAM away     |   40 |    **10** (25%)           |    861  | 0.046/s  | **0.0116**|
-| same paying shape, 344 BAM away    |   40 |    **31** (78%)           |    871  | 0.046/s  | **0.0356**|
+| same paying shape, 78 BAM away      |  40 |    **10** (25%)           |    861  | 0.046/s  | **0.0116**|
+| same paying shape, 266 BAM away     |  40 |    **31** (78%)           |    871  | 0.046/s  | **0.0356**|
+| same paying shape, 170 BAM away     |  40 |    **19** (48%)           |    860  | 0.047/s  | **0.0221**|
 
 Session 96 ranked the first three 0.127 > 0.087 > 0.045 and told the next session to buy the first and
 skip the second. In the currency E[hits] is actually additive in, the order is REVERSED and the three are
@@ -27,9 +28,9 @@ another. **A shape's first pass over-reports the shape exactly as a ledger's fir
 axis** (`price` refuses to quote the latter; the former is on the reader).
 
 And what separates 0.0116 from 0.0356 on an identical shape and clock is DISTANCE from the cameras already
-bought -- 19% new at tens of BAM, 25% at 78, 78% at 344. So spread the buys and rank candidates by their
-distance from the ledger, not by their own prior yield, which here ranked the 25% camera above the 78% one
-(`knowledge/strategy/clip-draw-ledger.md`).
+bought -- 19% new at tens of BAM, 25% at 78, 48% at 170, 78% at 266, monotone over four passes. So spread
+the buys and rank candidates by their distance from the ledger, not by their own prior yield, which here
+ranked the 25% camera above the 78% one (`knowledge/strategy/clip-draw-ledger.md`).
 
 WHY THE DISTINCTION IS NOT PEDANTIC. E[hits] is a sum over draws (`entry_score.lottery`), so it is
 additive only over draws nothing else has already contributed. Price a second pass on its own
