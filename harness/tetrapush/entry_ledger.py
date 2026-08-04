@@ -12,11 +12,24 @@ MEASURED, on session 96's own two probes, and it inverts that session's ranking:
 | camera neighbourhood, +-8 stride 2 |   31 |     **6** (19%)           |    245  | 0.127/s  | **0.0245**|
 | camera x paying shape (densify)    |   40 |    **29** (73%)           |    881  | 0.045/s  | **0.0329**|
 | whole walk:16 alphabet, marginal   |  127 |     by construction all   |   1462  | 0.087/s  | **0.031** |
+| same paying shape, 78 BAM away     |   40 |    **10** (25%)           |    861  | 0.046/s  | **0.0116**|
+| same paying shape, 344 BAM away    |   40 |    **31** (78%)           |    871  | 0.046/s  | **0.0356**|
 
-Session 96 ranked those 0.127 > 0.087 > 0.045 and told the next session to buy the first and skip the
-third. In the currency E[hits] is actually additive in, the order is REVERSED and the three are within
-35% of each other: a local neighbourhood is enriched in draws because it is enriched in the PARENT'S
-draws. 25 of its 31 are ticket stubs already in the drawer.
+Session 96 ranked the first three 0.127 > 0.087 > 0.045 and told the next session to buy the first and
+skip the second. In the currency E[hits] is actually additive in, the order is REVERSED and the three are
+within 35% of each other: a local neighbourhood is enriched in draws because it is enriched in the
+PARENT'S draws. 25 of its 31 are ticket stubs already in the drawer.
+
+Rows four and five are the same lesson one level in, and then the rule out of it. Having ranked the paying
+shape first at 0.0329, buying it at a SECOND camera pays 0.0116 -- because the 29 of 40 was that shape's
+first pass on this scope, so it measured density against the bounded passes and not one camera against
+another. **A shape's first pass over-reports the shape exactly as a ledger's first pass over-reports the
+axis** (`price` refuses to quote the latter; the former is on the reader).
+
+And what separates 0.0116 from 0.0356 on an identical shape and clock is DISTANCE from the cameras already
+bought -- 19% new at tens of BAM, 25% at 78, 78% at 344. So spread the buys and rank candidates by their
+distance from the ledger, not by their own prior yield, which here ranked the 25% camera above the 78% one
+(`knowledge/strategy/clip-draw-ledger.md`).
 
 WHY THE DISTINCTION IS NOT PEDANTIC. E[hits] is a sum over draws (`entry_score.lottery`), so it is
 additive only over draws nothing else has already contributed. Price a second pass on its own
