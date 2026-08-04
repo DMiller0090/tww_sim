@@ -77,7 +77,9 @@ their order and their yields would swap. The quantity is a property of the *ledg
 of the camera.
 
 And a pass's own prior yield predicts **nothing**: at bounded draw counts of 9, 8, 8, 8, 8 the paying-shape
-newness came in at 10, 31, 19, 23, 8. Rank candidates by their distance from the ledger.
+newness came in at 10, 31, 19, 23, 8. Rank candidates by their distance from the ledger - and because that
+distance is a property of the ledger, ranking once and taking the top N re-clusters the buy anyway. How to
+spend it, and the pool it has to be spent over, is [clip-camera-spread.md](clip-camera-spread.md).
 
 **A local neighbourhood is enriched in its PARENT's draws.** Neighbouring cameras command ~94% of the
 same walk directions, so they reach the same entries: 25 of those 31 draws are ticket stubs already in
@@ -128,22 +130,20 @@ under each gap threshold against what uniformity predicts.
 | 3e-3 | 76 | 76.20 | 1.00 |
 
 It holds. There is no crowding toward zero waiting to be harvested and no avoidance of it making the
-estimate a fiction, so **E[hits] really is proportional to the distinct draw count** and buying draws is
-the only thing that moves it. The one row that is not 1.0 is the single best draw at the deepest
-threshold - which is what one order statistic out of 127 uniform draws looks like about a tenth of the
-time, and is the distributional form of "a record is not a trend"
-([clip-search-budget.md](clip-search-budget.md#a-record-is-not-a-trend)).
+estimate a fiction, so **E[hits] really is proportional to the distinct draw count**. The one row that is
+not 1.0 is the single best draw at the deepest threshold - which is what one order statistic out of 127
+uniform draws looks like about a tenth of the time, and is the distributional form of "a record is not a
+trend" ([clip-search-budget.md](clip-search-budget.md#a-record-is-not-a-trend)).
 
 Worth pairing with the other factor, so the arithmetic is closed rather than half-open: the band widths
 here are nearly pinned. The draws land at 2.61e-05 and 2.81e-05 and the widest band any lean carries at
-this cell is 3.25e-05, so perfect lean steering is worth **1.26x**. When both factors are measured, a
-frontier is a single number: E[hits] ≈ 0.0026 per draw, a draw 28-104 s, **E[hits] 1 ≈ 1.0 h from 253 draws
-at the spread rate** - which is a budget decision an owner can take, rather than an axis argument a
-session can lose.
+this cell is 3.25e-05, so perfect lean steering is worth **1.26x**.
 
-And the model is not in tension with the search's emptiness, which is worth checking rather than worrying
-about: 253 draws at E[hits] 0.65 with **0 genuine** is a Poisson P(0) of **0.52**. The most likely single
-outcome, not evidence that anything is broken.
+**What neither check can tell you is whether the quantity being counted is a clip**, and on this corner
+it is not: each draw is priced by the acceptance band of a station a median 20.9 u away, and the factor
+this page's arithmetic silently sets to 1 - does the draw's own station admit anything genuine at all -
+measures 0 of 100. Read [clip-band-transfer.md](clip-band-transfer.md) before converting any E[hits] on
+this page into an expected number of clips or into an hours budget.
 
 ## The trap: a ledger's opening pass is 100% new by construction
 
@@ -171,6 +171,8 @@ shape reports a better rate, the first question is what share of it is new. The 
 
 - an axis's *end* rate is its price, not its average, and a **shape's** first pass over-reports the shape
   for the same reason a ledger's first pass over-reports the axis;
+- a count being honest is not the same as it being a count of the right thing - price the *event* too
+  ([clip-band-transfer.md](clip-band-transfer.md));
 - what predicts a pass's newness is its **distance from the ledger**, not its own prior yield - so spread
   the buys and rank candidates by that distance;
 - enrichment can be local and still be worthless, because a neighbourhood's enrichment is in its
@@ -180,6 +182,12 @@ shape reports a better rate, the first question is what share of it is new. The 
 
 ## See also
 
+- [clip-band-transfer.md](clip-band-transfer.md) - the level ABOVE this one: the price each counted
+  draw is given, and why E[hits] here is not a count of clips.
+- [clip-camera-spread.md](clip-camera-spread.md) - the other half of the rule: turning "distance from
+  the ledger" into the next buy, re-ranked, over a pool that contains its own extremes.
+- [../history/ehits-priced-as-clips.md](../history/ehits-priced-as-clips.md) - the superseded reading of
+  this page's own arithmetic as an expected clip count and an hours budget.
 - [clip-lottery-draws.md](clip-lottery-draws.md) - what ONE draw is; this page is the same discipline
   one level up, across passes instead of inside one.
 - [clip-search-budget.md](clip-search-budget.md) - rates per plan shape, and why a record is not a trend.

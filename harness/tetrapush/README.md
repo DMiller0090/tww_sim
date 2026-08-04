@@ -1679,6 +1679,55 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE LOTTERY'S E[hits] WAS NEVER A COUNT OF CLIPS -- EACH DRAW IS PRICED BY A BAND
+            MEASURED ~21 u AWAY, AND THE ONE DRAW THAT EVER LANDED IN ITS BAND DID NOT CLIP
+            (session 98).** Dereck authorized the grind (first an hour, then 3+), so the buy ran as
+            ordered and delivered its numbers; what it also delivered is the reason those numbers do
+            not convert. **The axis is not a 1-hour lottery at 63% odds. It is ~90 h.**
+            - **THE BUY, AS ORDERED, AND THE DISTANCE LAW HELD OUT OF SAMPLE.** 14 cameras at the paying
+              shape, `spread_cameras` re-ranked after every pick, 11257 s, clock dead steady (763-859 s,
+              no drift). **197 new draws, union 450, E[hits] 1.0971, 0 genuine.** New share tracked the
+              BAM distance across all 14 points -- **85% at 520 BAM**, 65% at 256, 62% at 128, 35% at 83,
+              **5% at 43** -- so session 97's law extends past the 312 BAM its fit ended at.
+            - **AND THE POOL HAD BEEN MISSING ITS OWN EXTREME THE WHOLE TIME.** `deliverable_bytes` walks
+              ``range(0, 256, step)``, so every strided alphabet stops at byte 240 and `[254,254]`
+              (walk **+714**) had never been a candidate in any pass since s95. Its mirror `[1,1]` (-716)
+              always was -- 0 clamps into 1 -- and was s97's best pass. Bought here at **520 BAM out**, it
+              paid **34 new of 40**, the best pass this axis has produced. `SPREAD_EXTREMES`.
+            - **THEN THE RUN PRINTED `best gap 0.0000e+00` WITH EVERY ROW READING `genuine 0`, AND THAT
+              CONTRADICTION IS THE SESSION.** `window_gap` returns 0.0 only INSIDE the acceptance band,
+              so this is the event `lottery` prices every draw by its probability of reaching -- the
+              first in 450 draws, arriving about when E[hits] 1.0971 predicts. It is **not genuine**,
+              reproduced bit-for-bit (same entry, resid `1.5499e-04` to the ULP, engine flag False).
+            - **THE MECHANISM, MEASURED.** `BandTable` keys a band on (facing, thrust, lean, nspeed) and
+              since s94 may find it via `curve_scan`, which marches ALONG the locus to a station that has
+              dust. That fixed real false negatives -- it is why this cell has a priced population at all
+              -- and it introduced an unstated **transfer assumption**. Sampled over the union:
+              **100 of 100** draws are priced by the `curve` rung, at a station **14.5-26.4 u away**
+              (median 20.9), and **0 of 100** have any genuine dust at their OWN station -- inside a
+              transverse window ~35x the band's own width, so it is a measurement and not resolution.
+              For scale, a 4-frame plan's whole reachable entry cloud is ~59 x 64 u.
+            - **SO E[hits] IS A PRODUCT OF TWO FACTORS AND ONLY ONE WAS EVER COMPUTED**
+              (`P(own station has dust) x P(resid in that station's band)`), the first silently taken as
+              1 and measured at 0 of 100 (95% upper bound ~3%). The 450-draw population is worth
+              **<= ~0.03 expected clips, not 1.10**, E[hits] 1 is **~90 h** rather than ~1, and the six
+              sessions of emptiness were never Poisson luck. **This is the FIFTH level at which this
+              search counted copies as discoveries, and the first at which the count was honest and the
+              EVENT was wrong.**
+            - Gates: NEW `tests/test_band_transfer.py` (**2**, ~0.5 s -- the in-band draw is not genuine
+              0-ULP; its band's station is 14.52 u off while its own is barren) and 4 added to
+              `tests/test_entry_ledger.py` (**13**). NEW tracked `entry_ledger.walk_bam` /
+              `ledger_distance` / `spread_cameras` / `SPREAD_EXTREMES` + CLI `spread`. KB: NEW
+              [`strategy/clip-band-transfer.md`](../../knowledge/strategy/clip-band-transfer.md) and
+              [`strategy/clip-camera-spread.md`](../../knowledge/strategy/clip-camera-spread.md); the
+              overturned "E[hits] is a clip count, so the emptiness is Poisson luck" MIGRATED to
+              [`history/ehits-priced-as-clips.md`](../../knowledge/history/ehits-priced-as-clips.md);
+              `clip-draw-ledger.md` corrected + hub updated (2 new questions).
+            - **OPEN FOR DERECK:** the axis is now priced at ~90 h for E[hits] 1, against a prize
+              (+0.088 deg of exit angle, ~4% of a frame if linear) that is still unpriced per cell. The
+              recommendation is to STOP the camera lottery. If the corner is still wanted, the live
+              question is no longer "buy more draws" but **"is there any entry whose OWN station has
+              dust"** -- a different search, over stations rather than over cameras.
       - [~] **THE CAMERA AXIS'S DRAWS ARE MOSTLY COPIES, AND THE THREE-WAY RANKING INVERTS IN THE ONLY
             CURRENCY E[hits] ADDS OVER (session 97).** The handoff ordered local camera neighbourhoods
             around the productive clouds, ranked 0.127 draws/s against 0.087 and 0.045, budgeted at

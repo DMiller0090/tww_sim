@@ -35,9 +35,12 @@ additive only over draws nothing else has already contributed. Price a second pa
 population and the two E[hits] cannot be added -- which is precisely the sum `summarize` warns about
 one level down (`expected_hits_pooled`) and then commits one level up.
 
+`spread_cameras` is that rule spent: farthest-point on the walk-BAM channel, re-ranked after every pick.
+
     python -m harness.tetrapush.entry_ledger price <pass.json> [<pass.json> ...]
     python -m harness.tetrapush.entry_ledger saturate <pass.json> [trials]
     python -m harness.tetrapush.entry_ledger uniform <pass.json>
+    python -m harness.tetrapush.entry_ledger spread <n> [cell] <b0,b1[,t]> ...
 """
 import json
 import os
@@ -243,6 +246,78 @@ def uniformity(near, near_gap=SC.BAND_PROBE, at=UNIFORM_AT):
                 best_gap=(gaps[0] if gaps else None))
 
 
+# ------------------------------------------------------------------ spending on the measured law
+
+#: Bytes a strided alphabet never emits, so a distance-ranked pool has to add them back --
+#: `knowledge/strategy/clip-camera-spread.md`. `[254, 254]` is the channel's farthest point.
+SPREAD_EXTREMES = (1, 254)
+
+
+def walk_bam(subx, frames=4):
+    """The scalar the distance law is measured in -- the camera's walk trail offset at its LAST frame.
+
+    A camera's whole effect on the walk is the csangle it delivers while Link is walking, and the trail
+    is a ramp, so its endpoint orders the channel: session 97's six passes read -716, -450, -372, -202,
+    +110, +194 here and their newness tracked the spacing at Spearman 0.886
+    (`knowledge/strategy/clip-draw-ledger.md`). Only the first `entry_camera.WALK_CHANNEL` bytes move it.
+
+    `entry_camera` is imported inside the call on purpose: it drags in the whole entry fan, and the rest
+    of this module is arithmetic over a tracked extract that gates in a second."""
+    from harness.tetrapush import entry_camera as EC
+    trail = EC.cam_trail(subx, max(EC.TRAIL_FRAMES, int(frames) + 2))
+    return EC.trail_offsets(trail)[int(frames) - 1]
+
+
+def ledger_distance(bam, bought):
+    """BAM from one camera to the NEAREST already bought -- the measured predictor of its new share.
+
+    Takes scalars, not camera inputs, because a camera input may itself be a bare byte and the two
+    would be indistinguishable. ``bought`` is empty only for an opening pass, which has no distance in
+    the same sense that it has no rate (`Ledger.price`), so that reads as None rather than as infinity."""
+    return min((abs(float(bam) - float(b)) for b in bought), default=None)
+
+
+def spread_cameras(bought, n=1, cell=None, step=16, frames=4, tail_step=32, pool=None):
+    """The next ``n`` cameras to buy: FARTHEST-POINT on the walk-BAM channel, re-ranked after each pick.
+
+    This is the session-97 law spent rather than restated. What predicted a pass's new draws was its
+    distance from the cameras already held AT PURCHASE TIME -- not its own bounded yield, which ranked
+    9/8/8/8/8 against outcomes of 10/31/19/23/8 -- so a buy maximises the minimum distance to the bought
+    set, and every pick joins that set before the next one is chosen. Ranking once at the start would
+    put the whole buy in one place, which is the clustering the law says not to do.
+
+    Returns ``[(seq, bam, distance)]`` in purchase order. ``cell`` filters to cameras that can still aim
+    the scope, searching a TAIL byte nearest-neutral first: the walk pair and the aim byte are
+    independent knobs on one channel (`entry_camera.walk_cameras`), so a walk trail is dropped only when
+    no tail rescues it. Ties break toward the smaller |bam|, so an unreachable-looking extreme is never
+    preferred on a coin flip."""
+    from harness.tetrapush import entry_camera as EC
+    held = [float(b) for b in bought]
+    if pool is None:
+        pool = sorted(set(EC.deliverable_bytes(step)) | set(SPREAD_EXTREMES))
+    cand = {}
+    for b0 in pool:
+        for b1 in pool:
+            cand.setdefault(walk_bam([b0, b1, EC.NEUTRAL], frames), (b0, b1))
+    tails = sorted(EC.deliverable_bytes(tail_step), key=lambda t: abs(t - EC.NEUTRAL))
+    want = None if cell is None else [int(c) for c in ([cell] if isinstance(cell, int) else cell)]
+    out = []
+    while len(out) < int(n) and cand:
+        bam = max(cand, key=lambda k: (ledger_distance(k, held) if held else abs(k), -abs(k)))
+        b0, b1 = cand.pop(bam)
+        seq = None
+        for t in tails:
+            trial = [b0, b1, t]
+            if want is None or all(EC.aim_at(c, trial, frames) is not None for c in want):
+                seq = trial
+                break
+        if seq is None:
+            continue                      # no tail keeps the scope aimable -- not a camera for this cell
+        out.append((seq, bam, ledger_distance(bam, held)))
+        held.append(float(bam))
+    return out
+
+
 # ------------------------------------------------------------------ making the measurement tracked
 
 #: The locked extract every gate reads: the pass populations reduced to what `draw_key`, `lottery` and
@@ -375,6 +450,18 @@ def _cmd_uniform(argv):
                  '%.2f' % r['ratio'] if r['ratio'] else '-'))
 
 
+def _cmd_spread(argv):
+    """``spread <n> [cell] <b0,b1[,t]> ...`` -- the next cameras to buy, given the ones already bought."""
+    n = int(argv.pop(0)) if argv else 4
+    cell = int(argv.pop(0)) if argv and argv[0].isdigit() else None
+    bought = [walk_bam([int(x) for x in a.split(',')]) for a in argv]
+    print("bought: %s" % (', '.join('%+d' % b for b in sorted(bought)) or 'nothing yet'))
+    for seq, bam, dist in spread_cameras(bought, n, cell=cell):
+        print("   %-14s walk %+5d BAM, %s from the ledger"
+              % (','.join(str(b) for b in seq), bam,
+                 '%d BAM' % dist if dist is not None else 'opening pass'))
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     cmd = argv.pop(0) if argv else 'price'
@@ -384,6 +471,8 @@ def main(argv=None):
         _cmd_saturate(argv)
     elif cmd == 'uniform':
         _cmd_uniform(argv)
+    elif cmd == 'spread':
+        _cmd_spread(argv)
     else:
         raise SystemExit(__doc__)
 

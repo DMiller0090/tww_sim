@@ -19,9 +19,13 @@ These gates pin:
 * the PREMISE `lottery` rests on -- residuals locally uniform across the window, which the population
   can test for free and which holds;
 * the TRAP -- a ledger's opening pass is 100% new by construction, so its rate is not one anything can
-  be budgeted at. That is the arithmetic shape of how session 96 got 0.157 draws/s.
+  be budgeted at. That is the arithmetic shape of how session 96 got 0.157 draws/s;
+* the SPENDING RULE the measurement produced (session 98) -- what predicts a pass's newness is its BAM
+  distance from the cameras already bought, so `spread_cameras` is farthest-point and RE-RANKS after
+  every pick, and its candidate pool has to contain the channel's extremes.
 
-Offline, off `fixtures/courtyard_draw_ledger_s97.json`. No Dolphin, no fan, ~1 s.
+Offline, off `fixtures/courtyard_draw_ledger_s97.json`. No Dolphin and no fan; the spread gates run the
+camera model (`entry_camera.cam_trail`) for a few seconds, everything else is arithmetic.
 """
 import json
 import os
@@ -193,6 +197,97 @@ def test_the_band_width_ceiling_is_small_so_there_is_no_width_lever():
     assert len(ded) == 127
     per_draw = SC.lottery(ded, SC.BAND_PROBE) / float(len(ded))
     assert 0.0024 < per_draw < 0.0028
+
+
+# ---------------------------------------------------------- the spending rule (session 98)
+
+#: The cameras the paying shape has run at, in PURCHASE order -- session 96's densify camera and then
+#: session 97's five. The order is the whole content of a distance, so it is load-bearing here.
+BOUGHT = [[16, 32, 128], [16, 16, 128], [1, 1, 128], [48, 32, 128], [96, 224, 128], [160, 240, 128]]
+
+
+def test_the_distance_law_reproduces_from_the_cameras_it_was_measured_on():
+    """The published law is six (distance, new share) points and this pins the distance half of every
+    one of them, off the camera inputs alone.
+
+    `walk_bam` is the trail offset at the LAST walk frame, and the six cameras land at -716, -450,
+    -372, -202, +110, +194; taken in purchase order against the ledger so far they are 78, 266, 170,
+    312, 84 BAM out -- the table in `knowledge/strategy/clip-draw-ledger.md`, whose new shares were
+    25%, 78%, 48%, 57%, 20%.
+
+    The last pair is what makes it a ledger property rather than a camera property: `[160,240,128]` sits
+    furthest from the frozen centre of anything bought and reads the SHORTEST distance, because
+    `[96,224,128]` was bought 84 BAM away one pass earlier."""
+    bams = [EL.walk_bam(c) for c in BOUGHT]
+    assert bams == [-372, -450, -716, -202, 110, 194]
+    dists = [EL.ledger_distance(b, bams[:i]) for i, b in enumerate(bams)]
+    assert dists[0] is None                     # the opening pass has no distance, as it has no rate
+    assert dists[1:] == [78, 266, 170, 312, 84]
+    # a property of the LEDGER, not of the camera: +194 is the outermost of the six and the closest in
+    assert abs(bams[-1]) > abs(bams[-2]) and dists[-1] < dists[-2]
+
+
+def test_the_strided_camera_pool_misses_the_channels_positive_extreme():
+    """WHY THE POOL NEEDS `SPREAD_EXTREMES`, and it is worth a gate because nothing else would notice.
+
+    `entry_camera.deliverable_bytes` walks ``range(0, 256, step)``, so every strided alphabet ends at
+    byte 240 and has never contained 254. The mirror byte 1 IS present -- 0 clamps into it -- so the
+    channel's negative extreme `[1,1]` at walk -716 was buyable and was session 97's best pass at 78%
+    new, while its positive twin `[254,254]` at **+714** was not in any candidate list ever built.
+
+    That is a 520 BAM pick against a best-measured 312, i.e. the farthest point on the whole channel."""
+    from harness.tetrapush import entry_camera as EC
+    assert 254 not in EC.deliverable_bytes(16) and 1 in EC.deliverable_bytes(16)
+    assert EL.walk_bam([254, 254, EC.NEUTRAL]) == 714
+    assert EL.walk_bam([1, 1, EC.NEUTRAL]) == -716
+    bams = [EL.walk_bam(c) for c in BOUGHT]
+    strided = max((EL.walk_bam([b0, b1, EC.NEUTRAL]) for b0 in EC.deliverable_bytes(16)
+                   for b1 in EC.deliverable_bytes(16)),
+                  key=lambda b: EL.ledger_distance(b, bams))
+    assert EL.ledger_distance(strided, bams) < EL.ledger_distance(714, bams)
+    assert EL.ledger_distance(714, bams) == 520
+
+
+def test_spread_is_farthest_point_and_re_ranks_after_every_pick():
+    """The law is a property of the ledger AT PURCHASE TIME, so ranking once and buying the top n is
+    the clustering it says not to do: the four best candidates against a FIXED bought set are four
+    neighbours of one extreme, which is the session-96 neighbourhood again in a different costume.
+
+    `spread_cameras` re-ranks after each pick, so the distances fall as the channel fills -- and every
+    pick is still farther out than the runner-up would have been under the previous ledger."""
+    bams = [EL.walk_bam(c) for c in BOUGHT]
+    picks = EL.spread_cameras(bams, 4, cell=2553)
+    assert len(picks) == 4
+    dists = [d for _s, _b, d in picks]
+    assert dists == sorted(dists, reverse=True)                      # saturation, arriving
+    assert dists[0] == 520                                           # the extreme, once it is in scope
+    # RE-RANKED: each pick is measured against the picks before it, so no two land on one spot
+    got, chosen = list(bams), []
+    for _seq, bam, dist in picks:
+        assert dist == EL.ledger_distance(bam, got)
+        got.append(bam)
+        chosen.append(bam)
+    # so no two picks land on one spot: every pair is at least the last (smallest) distance apart
+    assert min(abs(a - b) for i, a in enumerate(chosen) for b in chosen[i + 1:]) >= dists[-1]
+    # RANK-ONCE would buy one corner four times over. Against the FIXED opening ledger the runners-up
+    # to pick 1 are its neighbours -- taking the top two that way puts them inside a single pick's reach.
+    once = sorted(set(EL.walk_bam([b0, b1, 128]) for b0 in (208, 224, 240, 254)
+                      for b1 in (208, 224, 240, 254)),
+                  key=lambda b: -EL.ledger_distance(b, bams))[:2]
+    assert abs(once[0] - once[1]) < dists[1]
+
+
+def test_a_spread_pick_can_still_aim_the_scope():
+    """A camera that cannot aim the cell is not a draw for it, so the pool is filtered rather than
+    reported -- and the filter searches a TAIL byte nearest-neutral first, because the walk pair and
+    the aim byte are independent knobs on one channel (`entry_camera.walk_cameras`). A walk trail is
+    dropped only when no tail rescues it, which is why the picks are not all neutral-tailed."""
+    from harness.tetrapush import entry_camera as EC
+    picks = EL.spread_cameras([EL.walk_bam(c) for c in BOUGHT], 4, cell=2553)
+    for seq, bam, _d in picks:
+        assert EC.aim_at(2553, seq, 4) is not None
+        assert EL.walk_bam(seq) == bam           # the tail moves the aim frame, never the walk trail
+    assert any(s[2] != EC.NEUTRAL for s, _b, _d in picks)
 
 
 def test_the_extract_is_the_passes_it_was_taken_from():
