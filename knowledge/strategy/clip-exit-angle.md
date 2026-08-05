@@ -26,6 +26,17 @@ objective term while the frame count was already at its floor.
 This page is how to steer it, and what does *not* steer it. The search whose residual and window it
 sits on top of is [clip-entry-search.md](clip-entry-search.md).
 
+> **THE SIGN ON THIS PAGE IS THE OPPOSITE OF THE OBJECTIVE'S (Dereck, session 99).** Every "+BAM" and
+> every "righter" below means an **increasing** facing, and the direction that is worth frames here is a
+> **DECREASING** one - "more to the right should mean a roll facing angle LOWER than the one we currently
+> have at 40841". So read this page's `+BAM` column as *away from* the prize. Sessions 91-99 optimised
+> the increasing side on the strength of this labelling; re-scanned downward, cell **2551 (40820)** carries
+> **220** reachable live stations at the frame floor against the delivered cell's 208
+> ([clip-station-reachability.md](clip-station-reachability.md)), which is where the axis actually lives.
+> The measured *geometry* on this page is unaffected - the window, the cell quantum, the frame table and
+> the reachability results are all sign-free - it is only the labelling of which end is wanted.
+> Superseded reading: [../history/exit-angle-sign.md](../history/exit-angle-sign.md).
+
 ## The variable is `travel`, and its atom is the sine-table CELL
 
 What carries Link away from the seam is not the teleport across it. Measured on the Courtyard clip:

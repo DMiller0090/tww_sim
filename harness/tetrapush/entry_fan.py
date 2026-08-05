@@ -355,9 +355,37 @@ def fleet_fan2(**kw):
 
 
 def plan_frames(plan):
-    """A plan's total DELIVERED walk frames: the base hold plus every segment's own hold. The
-    objective's unit, and what `stream_search` ranks its hits by."""
+    """A plan's total DELIVERED walk frames: the base hold plus every segment's own hold.
+
+    NOT the whole frame cost -- see `plan_cost`. This counts what the WALK spends and is what
+    `stream_search` ranks on and `capped` prunes on, which is why a later thrust has always been free
+    to the ranking."""
     return plan[0] + sum(plan[3::3])
+
+
+#: Earliest thrust `procFrontRoll` will dispatch a cut at -- the decomp gate, derived and gated in
+#: knowledge/mechanics/roll-cut-thrust-floor.md. The stick is NOT in it.
+THRUST_FLOOR = 13
+
+
+def plan_cost(plan, thrust):
+    """THE HONEST FRAME COST of a plan: walk frames + the roll frames spent before the cut dispatches.
+
+    Frames from the state-2 seed to the cut, as the delivery log lays them out (`cross_engine.composite_log`
+    and the console fixture agree): ``a_i = n_console + plan_frames``, ``entry_i = a_i + 1``,
+    ``b_log = entry_i + thrust + 2``, and the cut fires at ``b_log + 1`` -- so the cost is
+    ``plan_frames(plan) + thrust + 4``.
+
+    WHY THIS EXISTS (Dereck, session 99: "we've been pressing b to thrust 2 frames later than what is
+    possible"). `plan_frames` counts the WALK only, so the thrust -- which the search treats as a third
+    draw axis because each step bakes its own locus -- was never charged a frame. The delivered clip is
+    thrust 15 against a floor of `THRUST_FLOOR` 13: **two frames the frame-minimal objective could not
+    see.** A thrust-15 clip and a thrust-13 clip ranked as equal cost.
+
+    Nothing here changes the existing ranking or prune -- that is a scope decision, since re-ranking
+    every pass on this would re-open which candidates a delivery goes to. It gives the number so a
+    ranking CAN."""
+    return plan_frames(plan) + int(thrust) + 4
 
 
 def capped(pairs, frames=None):

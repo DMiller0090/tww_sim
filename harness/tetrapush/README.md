@@ -1679,6 +1679,61 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **DERECK CORRECTED TWO PREMISES AND BOTH WERE LOAD-BEARING: "RIGHT" IS A **LOWER** FACING
+            (the KB has the sign backwards, and it aimed s91-s99), AND THE B THRUST HAS BEEN FIRING **2
+            FRAMES LATE** because the frame-minimal objective never charged for it (session 99, second
+            half).** The exit-angle axis is not where nine sessions looked, and the biggest prize on this
+            corner was never the angle at all.
+            - **THE SIGN.** `clip-exit-angle.md` labels INCREASING facing "+BAM ... as far to Link's RIGHT
+              as possible"; Dereck: *"more to the right should mean a roll angle facing angle LOWER than
+              the one we currently have at 40841."* Re-scanned downward over the measured hull, the low
+              side is the rich one: cell **2551 (40820, 0.115 deg right) = 220 live stations at the frame
+              floor vs the delivered 2552's 208**; 2549 (40795) = 10 at thrust 14; 2525/2532/2533
+              (1.7-2.4 deg) = 1 each, plateau bands. The increasing side never produced one genuine
+              candidate in 98.2 M. Page header now states the inversion; superseded reading MIGRATED to
+              [`history/exit-angle-sign.md`](../../knowledge/history/exit-angle-sign.md).
+            - **A 0.115 deg-RIGHT CLIP IS BUILT AND FULLY CONFIRMED (offline).** Cell 2551, facing 40822,
+              aim `[91,180]`, thrust 15, lean 64793, plan `[0,228,168,2,198,146,2]`, camera
+              `[254,254,128]`, 4 walk frames, entry `(-1529.8834228516,-780.0580444336)`. 7 genuine; all 7
+              pass `confirm_entry` AND cross-engine at **worst_ulp 0** with the composite moving the full
+              49.8582 u. DTM `_generated/s99/tetrapush_2551_frame_floor.dtm`. **Dereck's call: 0.115 deg is
+              indistinguishable from what he has -- not worth a console run.**
+            - **THE 2 FRAMES (the session's real find).** `procFrontRoll` (decomp 6852) dispatches a cut
+              only when `getFrame() > mRoll.field_0x10` (**17.0**); the frame ctrl runs at `field_0x8`
+              (**1.1**) from a start of `field_0xC` (**0.0**, checked in `d_a_player_HIO_data.inc`), so
+              1.1*16 = 17.6 first clears it -> **cut_step 15 = THRUST 13 IS THE FLOOR** and the delivered
+              clip is thrust 15. It hid because `entry_fan.plan_frames` counts WALK HOLDS ONLY while the
+              thrust is modelled as a third DRAW axis -- so a later thrust cost the ranking NOTHING.
+              Honest cost `plan_frames + thrust + 4` = the console fixture's own `cut_i - n_console` (23).
+              NEW `entry_fan.THRUST_FLOOR` + `plan_cost`; **the existing ranking is deliberately UNCHANGED**
+              (re-ranking changes which candidate a delivery targets -- Dereck's call). KB NEW
+              [`mechanics/roll-cut-thrust-floor.md`](../../knowledge/mechanics/roll-cut-thrust-floor.md).
+              **Dereck's stick hypothesis is RULED OUT:** `mStickDistance` appears only in the
+              `getRate()<0.01` branch, never in the gate.
+            - **NEITHER FRAME IS BANKED YET.** thrust 14 at the delivered facing: **0 genuine in 23.1 M**
+              over ~7 independent cameras (cam 4 duplicated cam 1's TRAIL again), so lambda <= 0.43/pass at
+              95%. **Thrust 13 has NO reachable live station at any cell sampled** -- the second frame
+              likely needs Tetra MOVED, the axis Dereck named and which nothing in 99 sessions has searched.
+            - **THE CORNER'S CEILING, VALIDATED TWO WAYS -- so facing ~35000 never comes up again.** Link's
+              brace (the delivered `old` sits at **exactly 35.00003 u** off wall A) plus the 49.74 u max
+              lunge pin the cut start to a **0.65 u pocket** on the diagonal, so the seam vertex bears
+              **224.19-225.25 deg**: that IS the achievable facing window. The independent catalogue
+              `tww-python-scripts/ww/data/seam_clips/Hyrule/Room0__room.csv` (`init->dest`) gives
+              **224.717** for this corner. Facing 35000 = **192.26 deg, 32 deg out = ~30x the window** --
+              impossible here at ANY placement or entry. Nearest ~192 deg exit in the room is **198.0 deg
+              at (-1269.6,-14416.6), 13 400 u away**: a different exit direction is a different SEAM.
+              (That CSV's `angle_deg` is the seam's INTERIOR angle, 90.566 here -- NOT the exit direction.)
+            - **THREE HARNESS BUGS, ALL FIXED.** (1) **`cross_engine.composite_log` never carried
+              `substickX`** -- it built every frame off `seed['log'][-1]`, so a CAMERA-found hit was
+              replayed at the FROZEN camera: `handover_ok` False, ~1e6 ULP, `composite_moved` 0.24 against a
+              49.86 predicted lunge -- indistinguishable from the composite refusing the lunge. Predates the
+              camera axis (s95); no camera pass had ever produced a genuine hit, so nothing exercised it.
+              Control = the s90 clip, still 0 ULP. (2) **A delivery must author the FULL log (herd+plan)**:
+              `build_boot_movie` puts `log[i]` at F0+1+i and the herd's last 78 frames are PART of the log
+              (s90 authored 107). Authoring only the 29-frame tail shifted the plan 78 frames early, the
+              A-press fired mid-herd, and **Link TALKED to Tetra** -- caught by Dereck on console.
+              (3) A fixed hunt output path let one cell's hunt **clobber another's hits**; now
+              `hunt_<cell>_thr<thrust>.json`.
       - [~] **EVERY BAND THE LOTTERY EVER PRICED A DRAW AGAINST WAS MEASURED 10-19 u OUTSIDE THE SET A
             FRAME-FLOOR PLAN CAN REACH -- AND RE-ASKING THE QUESTION INSIDE THAT SET FOUND THE TARGET AT
             THE THRUST SESSION 96 DROPPED FOR CLOCK (session 99).** Dereck's call was "run the station

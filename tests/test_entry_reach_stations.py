@@ -271,3 +271,38 @@ def test_cell_2553_is_barren_at_thrust_15_across_every_lean_the_fan_reaches():
         live += ER.hull_scan(tetra, TARGET['facing'], TARGET['thrust'], lean, frames=4,
                              sep=6.0)['live']
     assert live == 0
+
+
+# ------------------------------------------------------- the thrust is a frame cost (session 99)
+
+def test_the_thrust_floor_is_the_decomp_gate():
+    """`procFrontRoll` dispatches a cut only when `getFrame() > mRoll.field_0x10` (17.0), the frame ctrl
+    advances at `field_0x8` (1.1) from `field_0xC` (0.0), so the first frame past the gate is 1.1*16 =
+    17.6 -> `cut_step` 15 -> thrust 13. Pinned because the model's THRUSTS floor and this gate have to
+    stay the same number, and because the stick is NOT in the gate (holding up cannot open it sooner)."""
+    from harness.tetrapush import entry_fan as EF
+    from tww_sim.core.fp import f32
+    from tww_sim.land.state import LandState
+    rate, gate = float(LandState.ROLL_RATE), float(LandState.ROLL_EARLY)
+    first = next(k for k in range(1, 40) if rate * (k + 1) > gate)
+    assert (rate, gate) == (f32(1.1), f32(17.0))     # the HIO values, as f32 not as doubles
+    assert first == 15                       # cut_step
+    assert EF.THRUST_FLOOR == first - 2      # thrust = cut_step - 2
+    assert min(ES.THRUSTS) == EF.THRUST_FLOOR
+
+
+def test_the_thrust_is_a_frame_cost_the_walk_count_hides():
+    """THE SESSION-99 FINDING (Dereck). `plan_frames` counts walk holds only, so a later thrust was free
+    to the frame-minimal ranking -- the delivered clip is thrust 15 against the floor 13, i.e. TWO frames
+    the objective could not see. `plan_cost` is the honest number, and it matches the console fixture's
+    own log indices."""
+    from harness.tetrapush import entry_fan as EF
+    row = json.load(open(HITS))['rows'][0]
+    meta = json.load(open(os.path.join(_ROOT, 'fixtures',
+                                       'courtyard_clip_s90_console.json')))['plan']
+    # the fixture's own indices: cut_i - n_console IS the cost from the seed to the cut
+    assert EF.plan_cost(row['plan'], row['thrust']) == meta['cut_i'] - meta['n_console']
+    # and the walk count alone cannot see the thrust
+    assert EF.plan_frames(row['plan']) == EF.plan_frames(row['plan'])          # thrust-independent
+    saving = EF.plan_cost(row['plan'], row['thrust']) - EF.plan_cost(row['plan'], EF.THRUST_FLOOR)
+    assert saving == 2, saving

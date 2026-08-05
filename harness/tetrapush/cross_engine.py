@@ -73,15 +73,31 @@ def composite_log(hit, seed, tail=TAIL):
     `b_step` is the delivered UP+B index into the roll (`entry_search`: thrust + 2). The roll
     dispatches at `entry_i` and the DTM is a delay-1 stream, so roll[k] is plan frame `entry_i` + k
     and roll[b_step] fires the cut on `entry_i` + b_step + 1 -- the session-86 mapping trap, kept
-    verbatim because getting it wrong reads as a physics divergence."""
+    verbatim because getting it wrong reads as a physics divergence.
+
+    ``hit['substickX']`` is the CAMERA path, carried frame-for-frame exactly as
+    `entry_search.confirm_entry` carries it (byte k on replayed frame k, the last value held). This
+    module predates the camera axis and used to build every frame off the seed's last log row, which
+    replays the FROZEN camera: a hit found at a slewing camera then walked a different trail, arrived
+    somewhere else, and was rejected with ``handover_ok`` False and a ~1e6 ULP gap -- a tooling artifact
+    that reads exactly like the composite refusing the lunge (session 99). No camera pass had produced a
+    genuine candidate before, so nothing had exercised it."""
     plan = list(hit['plan'])
-    hold = dict(seed['log'][-1], buttons=0)
-    extra = [hold] * plan[0]
+    hold0 = dict(seed['log'][-1], buttons=0)
+    cseq = hit.get('substickX', hold0.get('substickX', 128))
+    cseq = [int(cseq)] if isinstance(cseq, (int, float)) else [int(b) for b in cseq]
+
+    def hold(k, **kw):
+        return dict(hold0, substickX=cseq[min(k, len(cseq) - 1)], substickY=0, **kw)
+
+    extra = [hold(k) for k in range(plan[0])]
     for i in range(1, len(plan), 3):
         sx, sy, j = plan[i:i + 3]
-        extra += [dict(hold, stickX=sx, stickY=sy)] * j
-    extra.append(dict(hold, stickX=hit['aim'][0], stickY=hit['aim'][1], buttons=0x100))  # the A-press
+        extra += [hold(len(extra) + d, stickX=sx, stickY=sy) for d in range(j)]
+    extra.append(hold(len(extra), stickX=hit['aim'][0], stickY=hit['aim'][1],
+                      buttons=0x100))                                        # the A-press
     log = list(seed['log']) + extra
+    hold = hold(len(extra) - 1)          # the camera value the roll tail inherits and holds
     a_i = len(log) - 1                       # the A-press input frame
     entry_i = a_i + 1                        # the first FRONT_ROLL frame
     b_log = entry_i + hit['thrust'] + 2      # b_step = thrust + 2
