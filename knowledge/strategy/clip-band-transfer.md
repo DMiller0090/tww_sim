@@ -65,14 +65,18 @@ else.**
 ## What this costs, in the currency the search is spent in
 
 Fold the measured first factor back in and the 450-draw population is worth **≤ ~0.03 expected clips**,
-not 1.10. At the measured spread rate ([clip-camera-spread.md](clip-camera-spread.md)) E[hits] 1 is then
-not ~1 hour of compute but on the order of **90**, which is a different decision rather than a longer
-version of the same one.
-
-It also retires the reassurance that the emptiness was luck. 450 draws at a true expectation near 0.03
-is not a Poisson coin that came up tails; it is a search whose near-miss population was never near.
+not 1.10. It retires the reassurance that the emptiness was luck: 450 draws at a true expectation near
+0.03 is not a Poisson coin that came up tails; it is a search whose near-miss population was never near.
 The superseded framing is in
 [../history/ehits-priced-as-clips.md](../history/ehits-priced-as-clips.md).
+
+**The remaining factor is not a small rate - for the population that was bought it is zero**, and the
+reason is a scope error: those stations sit 10-19 u **outside the set a frame-floor plan can reach**, so
+no amount of buying converts these draws. Measured over the reachable set instead, the same cell carries
+**918** live stations at a different thrust - so the factor is 0 where it was being spent and 0.0711 one
+configuration away. Both are [clip-station-reachability.md](clip-station-reachability.md), which also
+retires the compute price this page first quoted the missing factor as
+([../history/ehits-ninety-hour-axis.md](../history/ehits-ninety-hour-axis.md)).
 
 ## The rule
 

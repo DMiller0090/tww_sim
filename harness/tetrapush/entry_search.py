@@ -528,7 +528,7 @@ def configuration_band(tetra, facing, thrust, lean, ref_entry, half=0.006, n=120
 
 
 def locus_scan(tetra, facing, thrust, lean, ref_entry, nspeed=None, span=70.0, step=2.0,
-               half=0.02, n=2001):
+               half=0.02, n=2001, inside=None):
     """Is there genuine dust ANYWHERE on this configuration's residual zero?
 
     `configuration_band` sweeps ACROSS the locus at ONE point, which is enough to size a band but not
@@ -538,22 +538,37 @@ def locus_scan(tetra, facing, thrust, lean, ref_entry, nspeed=None, span=70.0, s
 
     It is the strong form of the question, and it is what a NEGATIVE result has to be argued from:
     session 82 used it to close the momentum axis (control at the cap lights 44 of 58 stations; every
-    sub-cap momentum reads 0 of ~60). Returns dict(stations, live, walkable)."""
+    sub-cap momentum reads 0 of ~60). Returns dict(stations, live, walkable).
+
+    ``inside`` is an optional ``(x, z) -> bool`` a station must satisfy to be sampled at all -- the
+    march walks the locus wherever it goes, and a caller may only be asking about part of it. Stations
+    it rejects are skipped entirely rather than counted-and-flagged, so ``stations`` stays the count the
+    live/walkable fractions are of. Default None samples everything, exactly as before; the caller that
+    needs it is `entry_reach.hull_scan`, where "on the locus" and "reachable at the frame floor" are
+    different questions and session 98's whole population sat on the wrong side of the difference."""
     ctx, sch, resid = build_fast(facing, lean, thrust, nspeed=nspeed)
     p, r, grad = zero_the_resid(tetra, facing, thrust, lean, ref_entry, nspeed=nspeed)
     if grad < 1e-3:
         return dict(stations=0, live=0, walkable=0, live_at=[], walkable_at=[],
-                    reason='no leverage at the seed')
+                    reason='no leverage at the seed',
+                    drops=dict(no_leverage=1, no_zero=0, outside=0))
     g = entry_gradient(tetra, p, facing=facing, m351c=lean, thrust=thrust, nspeed=nspeed)
     tx_, tz_ = -g['gz'] / g['grad'], g['gx'] / g['grad']       # along the locus, not across it
     live = walk = stations = 0
     live_at, walk_at = [], []
+    # Why a marched point was not sampled: `stations 0` is three findings, not one (session 99;
+    # knowledge/strategy/clip-station-reachability.md).
+    drops = dict(no_leverage=0, no_zero=0, outside=0)
     s = -span
     while s <= span:
         q = (p[0] + s * tx_, p[1] + s * tz_)
         s += step
         q, r2, gr2 = zero_the_resid(tetra, facing, thrust, lean, q, nspeed=nspeed)
         if gr2 < 1e-3 or abs(r2) > 1e-3:
+            drops['no_leverage' if gr2 < 1e-3 else 'no_zero'] += 1
+            continue
+        if inside is not None and not inside(q):
+            drops['outside'] += 1
             continue
         stations += 1
         gg = entry_gradient(tetra, q, facing=facing, m351c=lean, thrust=thrust, nspeed=nspeed)
@@ -569,7 +584,7 @@ def locus_scan(tetra, facing, thrust, lean, ref_entry, nspeed=None, span=70.0, s
     # The live stations are returned, not just counted: `qualify` needs somewhere to RE-SEED a band,
     # and "live somewhere on the locus" is not a band. Session 90 -- see `qualify`.
     return dict(stations=stations, live=live, walkable=walk, live_at=live_at,
-                walkable_at=walk_at, reason='')
+                walkable_at=walk_at, reason='', drops=drops)
 
 
 def reach_radius(frames=REACH_FRAMES):

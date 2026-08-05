@@ -1679,6 +1679,123 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **EVERY BAND THE LOTTERY EVER PRICED A DRAW AGAINST WAS MEASURED 10-19 u OUTSIDE THE SET A
+            FRAME-FLOOR PLAN CAN REACH -- AND RE-ASKING THE QUESTION INSIDE THAT SET FOUND THE TARGET AT
+            THE THRUST SESSION 96 DROPPED FOR CLOCK (session 99).** Dereck's call was "run the station
+            check, then stop". The check answers session 98's open question -- "is there any entry whose
+            OWN station has dust" -- with a measurement rather than a budget, and the answer is **YES,
+            but not at the thrust six sessions were spent on.** At thrust **15** cell 2553 is barren at
+            the frame floor: **0 live stations over 1040 of 1040 leans, 12823 in-hull stations sampled**.
+            At thrust **14** -- which costs **ZERO extra frames** -- it has live walkable stations at
+            **~7%** of its in-hull locus, with real bands. So the six empty sessions were never Poisson
+            luck, never a resolution limit and never a missing camera; they were a scope error stacked on
+            a clock decision.
+            - **DO NOT READ THIS BOX AS "THE AXIS IS DEAD".** The frame-floor negative belongs to
+              **thrust 15 only**, which is what `thrusts=(15,)` narrowed every pass to from s96 on. The
+              thrust is not a frame cost -- it chooses WHICH roll frame the B edge dispatches the cut on
+              (`cut_step` 15/16/17) and `entry_fan.plan_frames` counts walk holds only -- so thrust 14 is
+              objective-legal at the floor, and firing one roll frame earlier is if anything
+              frame-positive. **s96 dropped it on a clock argument** ("3.8% of the draws / 4.5% of
+              E[hits] for 24% of the clock") and that budget decision silently became a claim about
+              where the answer is.
+            - **WHY THRUST 14 LOOKED BARREN WHEN IT WAS NOT.** Every thrust-14 band s94 measured for
+              this cell came out **width 0.0**, which reads as unusable -- but that is not "no dust". It
+              is genuine points on a residual **PLATEAU**: many genuine samples sharing one residual to
+              the bit, where `grad ~ 0`. `lottery` prices a zero-width band at probability ZERO, so the
+              configuration was scored worthless by the one quantity that cannot see it. The dust there
+              is positional, and a resid-ranked search is blind to it.
+            - **THE TWO SETS, MEASURED AGAINST EACH OTHER.** Against the 4-frame reachable hull
+              (`entry_reach`, session 93): **450 of 450 draws INSIDE** it -- every one within **2.63 u**
+              of its boundary -- and **20 of 20 bands OUTSIDE** it, by **10.196 to 19.400 u** (median
+              12.1). So session 98's 14.5-26.4 u draw-to-station transfer distance and this hull crossing
+              are ONE fact from two sides. One frame up, 13 of the 20 come strictly inside (19 at
+              `reachable`'s own 1 u margin).
+            - **WHY THE "RECORD CLOSEST APPROACH" KEPT IMPROVING AND NEVER CONVERTED.** `window_gap`
+              compares a residual NUMBER to an interval and drops the STATION the interval belongs to,
+              so the search drove every candidate as near as the reachable set allows to a target outside
+              it and then held it there. s96's `8.829e-06` is that boundary point; s98's `0.0` is the
+              same point one buy later. **It also vindicates s93's own frame table** (`clip-exit-angle.md`):
+              cell 2553 reading 1.1e-02 at <=4 frames was RIGHT, and the 400x "improvement" the lean and
+              camera axes booked after it was residual values nearing a band no plan can stand in.
+            - **THE TOOL: `entry_reach.hull_scan`** -- `curve_scan` with `reach_radius`'s 94 u box
+              replaced by the measured hull, plus a containment test on every station it marches to
+              (new additive `entry_search.locus_scan(inside=)`, inert by default and gated so).
+              **Two things it must NOT inherit:** (1) seeds cannot be residual sign changes -- only
+              **~7% of the hull has leverage**, and the rest is a LITERAL plateau, measured: at 5e-4 u
+              steps across 0.02 u a leverage point gives **41 distinct residuals** (~1.3/u, smooth) and a
+              plateau point gives **ONE**, every delta exactly 0.0 (the plowed Tetra is out of Co range at
+              the cut). So a sign change between two plateaus is a JUMP that Newton returns
+              `no leverage` from; seed off the leverage field (`hull_field`). The 7% holds at the
+              DELIVERED configuration too, so it is the corner's shape and not a barren cell.
+              (2) The grid is not a dust detector -- a ~3e-5 band against a local gradient of order 1/u
+              is a ribbon ~1e-4 u wide or narrower -- so `n_genuine_grid` is information, never evidence.
+            - **THE RESULT, WITH THE CONTROL AND THE COUNTERFACTUAL THAT MAKE IT A CLAIM** (thrust 15,
+              `sep` 6.0, the finer of the two tilings that agree; knob-robust over `sep` 6/12 and grid
+              step 1.0/1.5/3.0):
+
+              | scan | live walkable stations | reads as |
+              |---|---|---|
+              | cell 2552, f4, **thr 15** -- the CONSOLE-DELIVERED clip | **518**, 60 of 60 leans | the scan works |
+              | cell **2553**, f4, **thr 15** | **0**, 1040 of 1040 leans, 12823 stations | barren, densely sampled |
+              | cell 2553, **f5**, thr 15 | **243**, 44 of 60 leans | the frame WOULD buy it |
+              | cell **2553**, f4, **thr 14** | **918** over **561 of 1040** leans, 12914 stations (**7.11%**) | **the target was there** |
+
+              The thrust-14 population is not marginal -- its 561 live leans carry **65.8% of the fan's
+              candidate mass** -- and it is the ONLY one: every cell right of 2552 re-swept at **all three
+              thrusts** gives **exactly one** live configuration (`_generated/s99/right_thrusts.json`).
+              Cells 2554-2556 sample 157-612 in-hull stations and read **0 live at every thrust**;
+              **2557 and right have NO in-hull stations at all** (`no leverage on the locus inside the
+              hull` -- s93's second-lobe result, now confirmed across three thrusts instead of one). So
+              the bigger prizes (2561 +149 BAM, 2581 +455) are not expensive, they are absent.
+
+              The control lands **0.044 u** from the console-delivered entry `(-1531.1785, -781.7216)`
+              and the counterfactual **0.24 u** from the station s94 measured 2553's band at -- both
+              directions pinned against something measured independently of the scan
+              (`[[search-space-contains-human]]`; a negative without its control is not a claim).
+              **AND `stations 0` IS THREE FINDINGS, NOT ONE**, so `locus_scan` now returns ``drops``
+              (`no_leverage` / `no_zero` / `outside`): a locus that never comes inside the hull is not a
+              negative about the cell (cells 2557+ read `no leverage on the locus inside the hull`, which
+              is s93's second-lobe result restated), and neither is one with no leverage in it. Only
+              "in-hull stations sampled, none live" is -- which is what cell 2553 at thrust 15 is.
+            - **THE CAMERA CANNOT CLOSE THE GAP -- the one way this could have been wrong.** The hull is
+              measured at the FROZEN camera and the camera is exactly what s95-98 varied. Re-measured as
+              a union over five cameras spanning the whole channel including both extremes (`[1,1]` and
+              the `[254,254]` s98 found): area **1686.7 -> 1687.0 u2** (+0.02%), bbox unchanged, **0 of
+              20** stations inside at a 1 u margin (`entry_camera.hull_shift`, the check s95 built for
+              the second lobe).
+            - **THE FRAME LEVER IS NOW ONLY THE THRUST-15 STORY.** At thrust 15 the dust is real and at
+              **5 walk frames**; that frame is what `entry_fan.capped` refuses, and against cell 2553's
+              **+9 BAM** of a 455 BAM axis worth ~1 frame in total (~2-4% of a frame) the trade is
+              **~25:1 against**. Thrust 14 reaches dust at **4**, so the frame is no longer the binding
+              constraint -- the PRICE is.
+            - **AND THE PLATEAU THAT HID THE POPULATION IS ALSO WHAT IT COSTS.** Only **58 of the 918**
+              live stations carry a resid-measurable band (median **3.26e-05**, max 3.49e-05); at the
+              other **93.7%** the residual is FLAT, so "is my resid inside the band" is either always or
+              never true there and **a resid-ranked search cannot sample into it** -- those need ~1e-4 u
+              POSITIONAL precision, which a walk-endpoint lattice has not got and no tool here targets.
+              Both factors, finally measured at the station the candidate stands on:
+              P(station live) **0.0711** x P(it has a steerable band) **58/918 = 0.063** x P(resid in
+              band) **3.26e-03** = **~1.5e-05 per kept draw**, i.e. **E[hits] 1 ~ 68000 draws, order
+              1000 h** (`_generated/s99/thrust14_sweep.json`).
+            - **WHAT IS OPEN IS A SPEND DECISION, NOT A MODEL GAP.** The thrust-14 population is real,
+              objective-legal and measured; the prize is unchanged and small (~2-4% of a frame).
+              **Recommendation is still STOP -- but on the price of a REAL target rather than on
+              impossibility**, and s98's "~90 h" pricing is retired either way since it was computed for a
+              population that could not clip at all. If it is ever spent, the pass to run is a frame-floor
+              fan at **thrust 14** over the 561 live leans scored against each candidate's OWN station
+              (`configuration_band` at its entry, ~30 ms) instead of `BandTable` -- the correct predicate,
+              never yet run. NOT another camera lottery: the camera does not move the cloud (+0.02%).
+            - Gates: NEW `tests/test_entry_reach_stations.py` (**13 + 1 slow**). KB: NEW
+              [`strategy/clip-station-reachability.md`](../../knowledge/strategy/clip-station-reachability.md);
+              the superseded "~90 h buys E[hits] 1, so the open question is a station search" MIGRATED to
+              [`history/ehits-ninety-hour-axis.md`](../../knowledge/history/ehits-ninety-hour-axis.md);
+              `clip-band-transfer.md` + `clip-exit-angle.md` corrected, hub +1 question.
+            - **THE DELIVERABLE IS BANKED WHATEVER IS DECIDED (Dereck, session 99).** Tetrapush is a
+              one-off solver: milestone 2 stays console-confirmed at the frame floor
+              (`fixtures/courtyard_clip_s90_console.json`, `tests/test_clip_frame_minimal.py`). The
+              general-purpose Tetra-free seam solver -- to be integrated into Dolphin python scripting --
+              is the line that continues (`[[seam-solver-generalization]]`). The exit-angle bonus is the
+              only thing this box leaves open, and it is a spend call, not a blocker.
       - [~] **THE LOTTERY'S E[hits] WAS NEVER A COUNT OF CLIPS -- EACH DRAW IS PRICED BY A BAND
             MEASURED ~21 u AWAY, AND THE ONE DRAW THAT EVER LANDED IN ITS BAND DID NOT CLIP
             (session 98).** Dereck authorized the grind (first an hour, then 3+), so the buy ran as

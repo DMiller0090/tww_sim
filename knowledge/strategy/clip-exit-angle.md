@@ -129,6 +129,15 @@ does not even change sign over the cloud. A frame-capped pass over all nine aima
 buys about an order of magnitude of approach, so the lobe becomes a live lottery at 5-7 frames: three
 frames for +0.85 deg, when the budget is zero frames for ~1.
 
+**Read the 2553 row the same way, and note which axis it is a row of.** Its ≤4-frame entry (1.1e-02, 400x
+outside its band) is not a resolution the later lean and camera axes improved on: they moved the residual
+*number* nearer a band whose station no 4-frame plan reaches. Scanned over the measured hull instead, this
+whole table's **thrust** is the axis that matters - cell 2553 carries no reachable dust at thrust 15 (0
+live over 12823 in-hull stations) and **918 live stations at thrust 14, at the same 4 frames**, which
+costs no frame at all. The table is not wrong; it was read as a statement about cells when it is a
+statement about one configuration of them. See
+[clip-station-reachability.md](clip-station-reachability.md).
+
 Be careful what a sign census licenses. `resid`'s gradient is ~1.2 per unit and the cloud is ~60 u
 across, so it spans +-70 in there; "both signs appear" (cells 2561/2562, 2.7% negative) says a boundary is
 inside the sampled set, **not** that a zero a plan can land on is.

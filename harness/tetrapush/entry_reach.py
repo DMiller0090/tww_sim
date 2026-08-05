@@ -27,8 +27,16 @@ every configuration: `entry_search.roll_entry` adds a 26 u step along the ROLL F
 cloud is the walk cloud translated by a facing-dependent vector. Store the facing-independent walk
 hull once and translate the query instead (`reachable`).
 
+SO THE SET IS ALSO WHERE A BAND MUST BE MEASURED (session 99). The reachability filter above only told
+a configuration whether the station it had ALREADY been qualified at was reachable; it did not re-ask the
+question inside the cloud, and `reachable_quals` said so. Six sessions of entry lotteries then priced
+draws against acceptance bands measured 10-19 u OUTSIDE this hull, which is why 450 draws produced 0
+clips at any width. `hull_scan` is the repair: `entry_search.curve_scan` with the box replaced by the
+measured hull, and a containment test on every station it marches to.
+
     python -m harness.tetrapush.entry_reach hull [frames]     # measure + write the fixture
     python -m harness.tetrapush.entry_reach check             # the s92 stations against it
+    python -m harness.tetrapush.entry_reach stations [facing] [thrust] [lean] [frames]
 """
 import json
 import os
@@ -169,6 +177,152 @@ def reachable(station, facing, frames=FLOOR_FRAMES, nspeed=None, hulls=None, mar
     return contains([tuple(p) for p in h['hull']], (station[0] - ox, station[1] - oz), margin)
 
 
+def entry_hull(facing, frames=FLOOR_FRAMES, nspeed=None, hulls=None):
+    """The reachable ROLL ENTRY polygon for one facing: the walk hull translated by `roll_entry`'s step.
+
+    `reachable` tests a point by translating the POINT the other way, which is right for one query and
+    wrong for a scan -- a scan needs the region itself, to grid it. Same factorisation, stated forwards."""
+    hulls = hulls if hulls is not None else load()
+    h = hulls.get(int(frames))
+    if h is None:
+        raise ValueError("no measured hull at %d frames (have %s)" % (frames, sorted(hulls)))
+    ox, oz = ES.roll_entry((0.0, 0.0), facing, nspeed)
+    return [(p[0] + ox, p[1] + oz) for p in h['hull']]
+
+
+#: `zero_the_resid`'s own leverage floor, restated here because `hull_field` uses it as a seed filter.
+LEVERAGE_MIN = 1e-3
+
+
+def hull_field(tetra, facing, thrust, lean, frames=FLOOR_FRAMES, nspeed=None, step=1.5,
+               hulls=None, margin=0.0, poly=None, d=0.01):
+    """resid, its gradient, and the engine's own genuine flag on a grid of the REACHABLE ENTRY HULL.
+
+    Three vectorized sweeps (the grid and its two 0.01 u probes -- `entry_gradient`'s exact
+    construction, so ``grad`` here is the same number `zero_the_resid` gates on). Returns
+    ``dict(pts, resid, grad, genuine, n_leverage, abs_min, abs_min_leverage)``.
+
+    MEASURED, and it is why `hull_scan` cannot seed the way `curve_seeds` does: only about **7% of the
+    hull has leverage at all** -- at the other 93% the plowed Tetra is out of Co range on the cut frame,
+    so resid does not respond to the entry and sits on a flat plateau. That holds at the DELIVERED
+    configuration too (7%), so it is the shape of this corner and not a property of a barren cell. A
+    resid sign change between two such plateaus is a JUMP, not a zero crossing, and Newton from it
+    returns `no leverage` -- which is exactly how a hull-bounded scan can read empty for a reason that
+    has nothing to do with dust.
+
+    The grid is honest about resid and the gradient, which are smooth where they respond at all. It is
+    NOT a way to look for genuine dust: that set is a ~1.7e-4 u ribbon and a 1.5 u grid steps straight
+    over it (session 98 nearly mis-diagnosed this corner exactly so). ``genuine`` is returned because a
+    stray True would be information, never because a False count is evidence."""
+    poly = entry_hull(facing, frames, nspeed, hulls) if poly is None else poly
+    xs, zs = [p[0] for p in poly], [p[1] for p in poly]
+    ctx, sch, resid = ES.build_fast(facing, lean, thrust,
+                                    (sum(xs) / len(xs), sum(zs) / len(zs)), nspeed=nspeed)
+    pts, x = [], min(xs)
+    while x <= max(xs):
+        z = min(zs)
+        while z <= max(zs):
+            if contains(poly, (x, z), margin):
+                pts.append((x, z))
+            z += step
+        x += step
+    if not pts:
+        return dict(pts=[], resid=[], grad=[], genuine=[], n_leverage=0, abs_min=None,
+                    abs_min_leverage=None)
+
+    def sweep(ps):
+        return ctx.sweep_par([(tetra[0], tetra[1], p[0], p[1]) for p in ps], 0)
+    rows = sweep(pts)
+    r0 = [resid(o) for o in rows]
+    rx = [resid(o) for o in sweep([(p[0] + d, p[1]) for p in pts])]
+    rz = [resid(o) for o in sweep([(p[0], p[1] + d) for p in pts])]
+    gr = [(((rx[i] - r0[i]) / d) ** 2 + ((rz[i] - r0[i]) / d) ** 2) ** 0.5 for i in range(len(pts))]
+    lev = [i for i, g in enumerate(gr) if g >= LEVERAGE_MIN]
+    return dict(pts=pts, resid=r0, grad=gr, genuine=[bool(o[0]) for o in rows], n_leverage=len(lev),
+                abs_min=min(abs(v) for v in r0),
+                abs_min_leverage=(min(abs(r0[i]) for i in lev) if lev else None))
+
+
+def hull_seeds(tetra, facing, thrust, lean, frames=FLOOR_FRAMES, nspeed=None, step=1.5,
+               sep=ES.SEED_SEP, hulls=None, margin=0.0, poly=None, field=None):
+    """`entry_search.curve_seeds` over the REACHABLE ENTRY HULL instead of the `reach_radius` box.
+
+    THE DIFFERENCE THAT IS THE WHOLE POINT. `curve_seeds` grids a 94 u square around `ref_entry`
+    because `reach_radius` is a radius; this grids the measured hull. Sessions 92-98 asked "where on
+    this locus is there dust" in the box -- which is not centred on the cloud, let alone shaped like it,
+    and admits stations **10-19 u outside anything a 4-frame plan reaches**. Those are the stations every
+    band the lottery priced against was measured at.
+
+    The seeds are the in-hull points that HAVE leverage, deduped at ``sep``, rather than resid sign
+    changes: see `hull_field` for why a sign change here is usually a plateau jump. That is a departure
+    from `curve_seeds` and it is in the direction of finding MORE -- every point Newton can actually
+    solve from, instead of the subset a coarse bracketing happens to straddle."""
+    f = hull_field(tetra, facing, thrust, lean, frames=frames, nspeed=nspeed, step=step,
+                   hulls=hulls, margin=margin, poly=poly) if field is None else field
+    picked = []
+    order = sorted(range(len(f['pts'])), key=lambda i: -f['grad'][i])   # strongest leverage first
+    for i in order:
+        if f['grad'][i] < LEVERAGE_MIN:
+            break
+        p = f['pts'][i]
+        if all(((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5 > sep for q in picked):
+            picked.append(p)
+    return picked
+
+
+def hull_scan(tetra, facing, thrust, lean, frames=FLOOR_FRAMES, nspeed=None, step=1.5,
+              sep=ES.SEED_SEP, half=0.02, n=2001, hulls=None, margin=0.0):
+    """IS THERE GENUINE DUST AT A STATION A PLAN OF ``frames`` WALK FRAMES CAN REACH?
+
+    This is the question six sessions of camera-buying were implicitly betting on, and it had never been
+    asked. `entry_search.curve_scan` answers "is there dust on this locus" over the `reach_radius` box;
+    `lottery` then prices every draw by the band measured at whatever station that found. Session 98
+    measured the gap between the two -- 100 of 100 draws priced from a station 14.5-26.4 u away, 0 of 100
+    with dust at their own -- and this is that finding turned into a predicate: seed off the hull, and
+    count a station only if it is itself inside the hull (`ES.locus_scan(inside=)`).
+
+    Returns `locus_scan`'s shape plus ``n_seeds``, so "no dust on a reachable locus I covered" (a
+    negative about the configuration at this frame budget) reads differently from "no locus inside the
+    hull" (0 seeds -- not a negative about anything). Both are worth having and only the first is a
+    claim.
+
+    A False here is the sound direction, for the reason the module docstring gives: the hull is a
+    SUPERSET of the sampled reachable set, so a station outside it is outside the truth as well. It is
+    NOT a proof that no plan clips -- that owes a fan and a `confirm_entry` -- and a positive control is
+    mandatory before believing any negative (`[[search-space-contains-human]]`): the delivered cell must
+    light up under the identical call, or the scan is broken rather than the cell barren."""
+    poly = entry_hull(facing, frames, nspeed, hulls)
+    field = hull_field(tetra, facing, thrust, lean, frames=frames, nspeed=nspeed, step=step,
+                       hulls=hulls, margin=margin, poly=poly)
+    seeds = hull_seeds(tetra, facing, thrust, lean, sep=sep, field=field)
+    tot = dict(stations=0, live=0, walkable=0, live_at=[], walkable_at=[], reason='',
+               n_seeds=len(seeds), frames=int(frames), n_grid=len(field['pts']),
+               n_leverage=field['n_leverage'], abs_min=field['abs_min'],
+               abs_min_leverage=field['abs_min_leverage'],
+               n_genuine_grid=sum(field['genuine']))
+    if not seeds:
+        tot['reason'] = 'no leverage anywhere inside the reachable hull'
+        return tot
+    keep = lambda q: contains(poly, q, margin)                   # noqa: E731 -- one expression
+    tot['drops'] = dict(no_leverage=0, no_zero=0, outside=0)
+    for s in seeds:
+        sc = ES.locus_scan(tetra, facing, thrust, lean, s, nspeed=nspeed, span=sep, step=2.0,
+                           half=half, n=n, inside=keep)
+        for k in ('stations', 'live', 'walkable'):
+            tot[k] += sc[k]
+        for k in tot['drops']:
+            tot['drops'][k] += sc['drops'][k]
+        tot['live_at'] += sc['live_at']
+        tot['walkable_at'] += sc['walkable_at']
+    # Only one of the three ways to reach `stations 0` is about dust -- say which, don't make the reader
+    # re-derive it (knowledge/strategy/clip-station-reachability.md).
+    if not tot['stations']:
+        d = tot['drops']
+        tot['reason'] = ('the locus does not come inside the reachable hull' if d['outside'] >= max(
+            d['no_leverage'], d['no_zero']) else 'no leverage on the locus inside the hull')
+    return tot
+
+
 def reachable_quals(quals, frames=FLOOR_FRAMES, hulls=None, margin=1.0):
     """The productive set with each configuration told whether its own station is REACHABLE at this
     frame budget -- the filter session 92's 40 configurations were never put through.
@@ -227,6 +381,26 @@ def _cmd_check(argv):
     print("the delivered clip is cell %d at %s" % (w['delivered']['cell'], w['delivered']['plan']))
 
 
+def _cmd_stations(argv):
+    """``stations <facing> [thrust] [lean] [frames]`` -- is there REACHABLE dust at this configuration?
+
+    Defaults are the delivered clip's own configuration, which is the control: it prints 500+ live
+    stations. Run it before believing any negative this command gives you."""
+    warnings.simplefilter('ignore')
+    facing = int(argv[0]) if argv else 40841
+    thrust = int(argv[1]) if len(argv) > 1 else 15
+    lean = int(argv[2]) if len(argv) > 2 else 64761
+    frames = int(argv[3]) if len(argv) > 3 else FLOOR_FRAMES
+    t0 = time.time()
+    r = hull_scan(ES.console_seed()['tetra'], facing, thrust, lean, frames=frames, sep=6.0)
+    print("facing %d thrust %d lean %d, <= %d frames: %d grid pts, %d with leverage, %d seeds"
+          % (facing, thrust, lean, frames, r['n_grid'], r['n_leverage'], r['n_seeds']))
+    print("  in-hull stations %d, LIVE %d, walkable %d   |resid| min %.4e   [%.1f s] %s"
+          % (r['stations'], r['live'], r['walkable'], r['abs_min'], time.time() - t0, r['reason']))
+    for q in r['walkable_at'][:8]:
+        print("    live walkable station  %.10f  %.10f" % q)
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     cmd = argv.pop(0) if argv else 'check'
@@ -234,6 +408,8 @@ def main(argv=None):
         _cmd_hull(argv)
     elif cmd == 'check':
         _cmd_check(argv)
+    elif cmd == 'stations':
+        _cmd_stations(argv)
     else:
         raise SystemExit(__doc__)
 
