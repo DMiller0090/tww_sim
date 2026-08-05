@@ -1679,6 +1679,61 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **ONLY ONE OF THE TWO FRAMES EXISTS, AND THE OTHER IS REFUSED BY THE CORNER -- MEASURED, NOT
+            HUNTED. THE TETRA-PLACEMENT LEAD IS DEAD: SHE IS *PLOWED*, SO SHE HAS 0.015 u OF AUTHORITY PER
+            u (session 100).** The handoff ordered the placement sweep as the route to thrust 13. It ran,
+            and its first ring came back an INVARIANCE, which turned into the clause nobody had printed.
+            - **THE DIAGNOSIS, IN 7 SECONDS.** `genuine_clip` is three clauses and a search only ever ranks
+              one of them (the razor, `resid ~ 0`). Printed as numbers at the delivered cell: `old` is the
+              SAME brace-pinned point at all three thrusts, the lunge is a constant, and thrust 13's cut
+              endpoint lands **0.172 u SHORT of the nearer wall plane** -- clause 3, never once asked. Its
+              cut-frame push reads **0.077 u** where thrust 15's genuine stations carry **0.613**.
+            - **THE LAW THAT EXPLAINS IT AND SCREENS EVERYTHING ELSE. S IS THE CORNER VERTEX, so it lies on
+              BOTH wall planes** -- a razor solution puts the endpoint on the ``old -> S`` ray and
+              **`depth ~ |base + push| - |S - old|`**, with `base` constant per facing. So the penetration
+              at the razor is decided by how close the roll braces and how much push survives to the cut:
+              s99's "0.65 u pocket" as a rankable quantity instead of a bound on the exit angle. Over EVERY
+              in-hull razor solution (Newtoned from the whole hull, 4 and 5 walk frames, 48/45/35 solutions):
+
+              | thrust | `plan_cost` | \|S-old\| | depth | genuine |
+              |---|---|---|---|---|
+              | 15 (delivered) | 23 | 49.3812 | **+0.2533** | yes |
+              | 14 | 22 | 49.4053 | **+0.2074** | yes |
+              | 13 (the floor) | 21 | 49.6209 | **-0.1868..-0.3464** | **0** |
+
+            - **HOW TIGHTLY `old` IS PINNED IS THE MECHANISM.** At thrust 15 it is **bit-identical** at all
+              48 solutions (CrrPos has finished sliding him in; the entry cannot move it); at 14 the
+              solutions spread 4e-4 u of z; at 13 **one `old` each over ~0.07 u** -- the floor thrust cuts
+              BEFORE the brace. Firing at `cut_step` 15 costs 0.24 u of brace plus 0.45 u of push.
+            - **THE VERDICT, OVER THE WHOLE 45-CELL AIM WINDOW at the frame floor: thrust 13 reads
+              depth < 0 at ALL 25 cells that have a razor solution at all** (-0.472..-0.133); thrust 14
+              admits at 23 of 25 and has genuine grid solutions at cells 2525 / 2533 / 2549. **So thrust 14
+              (`plan_cost` 22) is the collectable frame and thrust 13 is not available anywhere here.**
+              Its own resolution control, since thrust 13's `old` is NOT pinned: over grid steps
+              2.0/1.0/0.5/0.25 the best depth moves inside **0.008 u** and never trends toward zero
+              (-0.1949/-0.1901/-0.1868/-0.1898) against a 0.19 u shortfall -- a ~24x margin.
+            - **AND THE PLACEMENT CANNOT PAY.** Over a +-3 u grid of Tetra the thrust-13 depth moves
+              **0.015 u per u** (-0.157..-0.217), with a mechanism: **she is PLOWED as the roll sweeps
+              past**, so her overlap on the CUT frame is the roll's geometry and not her seed. Closing
+              0.19 u needs ~12 u of her = 4+ herd frames at `objective.LATERAL_RATE`, for a 2-frame prize,
+              and outside `placement_thread`'s ~10 u lateral window. One more walk frame does not open it
+              either (cost would still be 22): 2.3x the entries, no nearer the plane.
+            - **DEPTH IS A GATE, NEVER A RATE.** ``depth <= 0`` is a PROOF (no razor, camera, lean,
+              placement or candidate volume moves the endpoint through a plane); ``depth > 0`` is only an
+              admission. Against s99's live-station census the two do not even correlate -- cell 2549 at
+              thrust 15 reads depth +0.513 with **0** live stations, cell 2553 at thrust 14 reads +0.127
+              with **918**.
+            - **TRACKED, so no future session re-buys the axis:** NEW
+              [`harness/tetrapush/razor_depth.py`](razor_depth.py) (`depth_of`, `razor_solutions`,
+              `screen`, `thrust_map`; CLI ``screen``/``map`` -- one configuration ~5 s, the whole window x
+              thrust ~3 min) + NEW `tests/test_razor_depth.py` (**9 + 1 slow**, all green), incl. the
+              falsifying direction: **`genuine => depth > 0` over 275 genuine rows sampled ON the locus,
+              0 counterexamples** (a 0.25 u grid over 7.44 M in-hull entries turned up ONE genuine row and
+              tests nothing -- the dust is a ~1e-4 u ribbon). KB NEW
+              [`strategy/clip-razor-depth.md`](../../knowledge/strategy/clip-razor-depth.md); the
+              superseded placement lead MIGRATED to
+              [`history/thrust-13-placement-lead.md`](../../knowledge/history/thrust-13-placement-lead.md);
+              `mechanics/roll-cut-thrust-floor.md` corrected, hub +1 question.
       - [~] **DERECK CORRECTED TWO PREMISES AND BOTH WERE LOAD-BEARING: "RIGHT" IS A **LOWER** FACING
             (the KB has the sign backwards, and it aimed s91-s99), AND THE B THRUST HAS BEEN FIRING **2
             FRAMES LATE** because the frame-minimal objective never charged for it (session 99, second

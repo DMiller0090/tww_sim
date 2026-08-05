@@ -79,8 +79,15 @@ different search. Measured over the frame-floor reachable hull
 | 2549 | 0 | 10 | 0 |
 
 So one frame is plausibly available at the delivered facing (thrust 14) and **thrust 13 has no reachable
-live station at any cell sampled** - the full two frames would need something else to move, the pushed
-actor's placement being the obvious unexplored candidate.
+live station at any cell sampled**.
+
+**Only one of the two frames exists.** A census counts stations and cannot say why one is empty; asked as
+geometry instead, thrust 13's cut endpoint lands ~0.19 u SHORT of the near side of the wall at every cell
+in the aim window that has a razor solution at all - the cut fires before CrrPos has slid Link the last of
+the way into the corner, and the lunge is a constant. See
+[../strategy/clip-razor-depth.md](../strategy/clip-razor-depth.md), which also prices the pushed actor's
+placement (0.015 u per u - she is plowed, so her cut-frame overlap is the roll's geometry and not her
+seed). **Thrust 14 at `plan_cost` 22 is the collectable frame.**
 
 ## The rule
 
@@ -95,5 +102,7 @@ an axis is added for the *variety* it buys, re-ask what it *costs*.
   draw axes, which is where it entered.
 - [../strategy/clip-station-reachability.md](../strategy/clip-station-reachability.md) - the per-thrust
   live-station census the table above comes from.
+- [../strategy/clip-razor-depth.md](../strategy/clip-razor-depth.md) - which of these thrusts the corner
+  can clip at ALL, screened in one call instead of a census.
 - [roll-attack-threshold.md](roll-attack-threshold.md) - the *other* roll gate a press has to clear, on
   deflection rather than frame.
