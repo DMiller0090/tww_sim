@@ -35,12 +35,22 @@ thrust 13's over ~0.07 u with one `old` each. The floor thrust cuts BEFORE the b
 constant.
 
 Over the whole 45-cell aim window at the frame floor, thrust 13 reads depth < 0 at **all 25 cells that
-have a razor solution at all** (-0.472..-0.133) while thrust 14 admits at 23 of 25. So of the two frames,
-**one is refused by the corner's geometry and one is legal at thrust 14** (`plan_cost` 22 against the
-delivered 23). Because thrust 13's `old` is not pinned, that negative does rest on how finely the razor
-curve was sampled -- so it carries its own resolution control: over grid steps 2.0 / 1.0 / 0.5 / 0.25 the
-best depth moves inside **0.008 u** and does not trend toward zero (-0.1949 / -0.1901 / -0.1868 / -0.1898)
-against a **0.19 u** shortfall.
+have a razor solution at all** (-0.472..-0.133) while thrust 14 admits at 23 of 25 -- so **thrust 14 at
+`plan_cost` 22 is a frame available with nothing else changed**. Because thrust 13's `old` is not pinned,
+that negative rests on how finely the razor curve was sampled, so it carries its own resolution control:
+over grid steps 2.0 / 1.0 / 0.5 / 0.25 the best depth moves inside **0.008 u** and does not trend toward
+zero (-0.1949 / -0.1901 / -0.1868 / -0.1898).
+
+**READ EVERY NEGATIVE HERE WITH ITS SET NAMED -- THE HULL IS DOING WORK.** These functions screen over
+`entry_reach`'s reachable hull, which sits ~239 u from the corner brace, and a `cut_step` N roll travels
+26N u -- so out of that hull Link reaches the wall around step 9 whatever the thrust and CrrPos SLIDES him
+along it. The hull therefore contains only the arrive-early-and-slide family, and two fewer slide frames IS
+the 0.19 u. Swept with no hull (851 598 Tetra x entry pairs), 1167 razor solutions at cut_step 15 land on
+the exact brace point thrust 15 cuts from, and entries ~390 u out -- where the cut fires as Link ARRIVES --
+go **positive** (+0.0399 at Tetra 100 u in -z, entry (-1422.7771688289, -677.8451372479), walkable). The
+frame is not banked: `genuine` also needs the swept segment to clear the CrrPos barrier and every genuine
+row on this corner sits at depth >= **0.1273**, so that family is ~0.087 u short. See
+`knowledge/strategy/clip-razor-depth.md` "The two families".
 
 WHAT IT IS AND IS NOT. ``depth <= 0`` is a PROOF that a configuration cannot clip: the endpoint is on
 the near side of both planes and no razor, camera, lean or candidate volume moves it. ``depth > 0`` is
@@ -49,11 +59,11 @@ then `entry_search.confirm_entry`). It is NOT a density model: measured against 
 counts the two do not even correlate (cell 2549 at thrust 15 reads depth +0.513 with 0 live stations,
 cell 2553 at thrust 14 reads +0.127 with 918), so read it as a gate and never as a rate.
 
-AND THE PLACEMENT CANNOT PAY. Over a +-3 u grid of Tetra placements the thrust-13 depth moves 0.015 u
-per u (-0.157..-0.217), because she is PLOWED as the roll sweeps past: her cut-frame overlap is set by
-the roll's own geometry, not by where she started. Closing 0.19-0.44 u would take ~12-29 u of placement,
-which is 4-10 herd frames against a 2-frame prize and outside `objective.placement_thread`'s ~10 u
-lateral window entirely.
+THE PLACEMENT IS INERT AT HERD SCALE AND DECISIVE AT ROLL SCALE. Over a +-3 u grid of Tetra the thrust-13
+depth moves 0.015 u per u (-0.157..-0.217), because she is PLOWED as the roll sweeps past: her cut-frame
+overlap is the roll's geometry, not her seed. At the scale a herd tolerates she cannot pay. The
+through-going solution above needs her ~100 u away -- a different herd, not a tweak to this one, and that
+is the real open question for the second frame.
 
     python -m harness.tetrapush.razor_depth screen [cell] [thrust] [lean] [frames]
     python -m harness.tetrapush.razor_depth map [step]          # the whole aim window x thrust

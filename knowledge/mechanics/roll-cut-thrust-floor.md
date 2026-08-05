@@ -81,13 +81,14 @@ different search. Measured over the frame-floor reachable hull
 So one frame is plausibly available at the delivered facing (thrust 14) and **thrust 13 has no reachable
 live station at any cell sampled**.
 
-**Only one of the two frames exists.** A census counts stations and cannot say why one is empty; asked as
-geometry instead, thrust 13's cut endpoint lands ~0.19 u SHORT of the near side of the wall at every cell
-in the aim window that has a razor solution at all - the cut fires before CrrPos has slid Link the last of
-the way into the corner, and the lunge is a constant. See
-[../strategy/clip-razor-depth.md](../strategy/clip-razor-depth.md), which also prices the pushed actor's
-placement (0.015 u per u - she is plowed, so her cut-frame overlap is the roll's geometry and not her
-seed). **Thrust 14 at `plan_cost` 22 is the collectable frame.**
+**Thrust 14 at `plan_cost` 22 is a frame available with nothing else changed, and thrust 13 needs a
+different herd.** A census counts stations and cannot say why one is empty; asked as geometry, thrust 13's
+cut endpoint lands ~0.19 u SHORT of the near side of the wall at every frame-floor entry - the cut fires
+before CrrPos has slid Link the last of the way in, and the lunge is a constant. That is a statement about
+entries ~239 u from the corner, which is where a frame-floor plan puts him; from ~390 u out (26 u × the 15
+roll steps) the cut fires as he ARRIVES and the endpoint goes through. See
+[../strategy/clip-razor-depth.md](../strategy/clip-razor-depth.md) for both families, the pushed actor's
+two scales, and the 0.087 u of barrier clearance still open on the second frame.
 
 ## The rule
 

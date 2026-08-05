@@ -1679,10 +1679,51 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
-      - [~] **ONLY ONE OF THE TWO FRAMES EXISTS, AND THE OTHER IS REFUSED BY THE CORNER -- MEASURED, NOT
-            HUNTED. THE TETRA-PLACEMENT LEAD IS DEAD: SHE IS *PLOWED*, SO SHE HAS 0.015 u OF AUTHORITY PER
-            u (session 100).** The handoff ordered the placement sweep as the route to thrust 13. It ran,
-            and its first ring came back an INVARIANCE, which turned into the clause nobody had printed.
+      - [~] **DERECK: "IF SLASHING ON FRAME 13 WORKS I WANT BOTH FRAMES" -- AND IT DOES, FROM AN ENTRY
+            FAMILY THE HULL CANNOT SEE. MY OWN "REFUSED BY THE CORNER" VERDICT WAS SCOPED TO THE FRAME-FLOOR
+            HULL AND IS CORRECTED HERE (session 100, second half).** The depth law below all reproduces; what
+            was wrong was the word *anywhere*.
+            - **THE SET WAS DOING THE WORK.** `entry_reach`'s hull sits **~239 u** from the corner brace and
+              a `cut_step` N roll travels **26N u**, so out of that hull Link reaches the wall around step 9
+              at every thrust and CrrPos then SLIDES him along it -- the hull holds only the
+              **arrive-early-and-slide** family, and two fewer slide frames IS the 0.19 u. The tell was in my
+              own numbers: those solutions cut from |S-old| **49.62** while the delivered clip cuts from
+              **49.38**, which says the ENTRY SET was the constraint, not the corner.
+            - **SWEPT WITH NO HULL (851 598 Tetra x entry pairs in one `sweep_par`, then the placement plane
+              with the Newton runs filtered back to sane geometry):** **1167 razor solutions at cut_step 15
+              land on the exact brace point thrust 15 cuts from**, and entries **~390 u** out -- 26 x 15, the
+              roll's own travel, so the cut fires as Link **ARRIVES** rather than after sliding -- go
+              **POSITIVE**: **depth +0.0399** at Tetra **100 u in -z** of her console read, entry
+              **(-1422.7771410239, -677.8451682961)**, WALKABLE, |S-old| 49.2792, travel 386.8 u.
+            - **SO THE PLACEMENT HAS TWO SCALES AND I PRICED THE WRONG ONE.** At the +-3 u a herd tolerates
+              she is inert (0.015 u per u, she is plowed); at **~100 u** she changes the entry family
+              outright. That is a different HERD, not a tweak to this one -- which is now the real question
+              for the second frame.
+            - **WHAT IS STILL MISSING IS BARRIER CLEARANCE, NOT THE PLANE.** `genuine` also needs the swept
+              segment to clear the CrrPos barrier, and every genuine row on this corner sits at depth **>=
+              0.1273** (the four known-live configurations read 0.1273 / 0.2073 / 0.2533 / 0.3398, each
+              bit-constant across its own population). The arrive-exactly family is **~0.087 u** short -- a
+              FIFTH of the hull-bounded gap, with the push as the lever (0.446 there vs 0.613 at thrust 15),
+              and in a family no pass has ever searched. **A search with a direction, not an impossibility.**
+            - **GATED BOTH WAYS** (`tests/test_razor_depth.py`, now **11 + 1 slow**): the hull-scoped gates
+              are RENAMED so their names carry the scope
+              (`test_from_the_frame_floor_hull_the_floor_thrust_cannot_reach_the_plane`,
+              `test_no_frame_floor_entry_at_any_cell_reaches_the_plane_at_thrust_13`), plus NEW
+              `test_the_arrive_exactly_family_reaches_through_the_plane_at_cut_step_15` (pins the solution,
+              asserts it is OUTSIDE the hull, and asserts it is still short of clearance) and
+              `test_the_genuine_depth_floor_is_measured_not_assumed`. Superseded verdict MIGRATED to
+              [`history/thrust-13-refused-by-geometry.md`](../../knowledge/history/thrust-13-refused-by-geometry.md);
+              `strategy/clip-razor-depth.md` gained "The two families".
+            - **NEXT: close the 0.087 u.** Levers, in order: (1) the PUSH at the arrival -- sweep the
+              placement plane finely (this was a 20 u grid) and the lean axis, which sets the Co centre at
+              the cut; (2) the arrival geometry -- put the entry on the arc `|entry - brace| ~ 26 * cut_step`
+              and sweep ALONG it plus the aim cells, since a cell that cuts from nearer S needs less push;
+              (3) only then price the herd that delivers it. Do NOT re-run hull-bounded scans for thrust 13.
+      - [~] **AT THE FRAME FLOOR ONE FRAME IS FREE (thrust 14) AND THE FLOOR THRUST CANNOT REACH THE PLANE
+            -- MEASURED, NOT HUNTED. THE PLACEMENT IS INERT AT HERD SCALE: SHE IS *PLOWED*, 0.015 u PER u
+            (session 100, first half; scope corrected by the box ABOVE).** The handoff ordered the placement
+            sweep as the route to thrust 13. It ran, and its first ring came back an INVARIANCE, which turned
+            into the clause nobody had printed.
             - **THE DIAGNOSIS, IN 7 SECONDS.** `genuine_clip` is three clauses and a search only ever ranks
               one of them (the razor, `resid ~ 0`). Printed as numbers at the delivered cell: `old` is the
               SAME brace-pinned point at all three thrusts, the lunge is a constant, and thrust 13's cut
@@ -1708,16 +1749,17 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
             - **THE VERDICT, OVER THE WHOLE 45-CELL AIM WINDOW at the frame floor: thrust 13 reads
               depth < 0 at ALL 25 cells that have a razor solution at all** (-0.472..-0.133); thrust 14
               admits at 23 of 25 and has genuine grid solutions at cells 2525 / 2533 / 2549. **So thrust 14
-              (`plan_cost` 22) is the collectable frame and thrust 13 is not available anywhere here.**
+              (`plan_cost` 22) is a frame available with nothing else changed, and no entry AT THE FLOOR
+              reaches the plane at thrust 13** (which is NOT "nowhere" -- see the box above).
               Its own resolution control, since thrust 13's `old` is NOT pinned: over grid steps
               2.0/1.0/0.5/0.25 the best depth moves inside **0.008 u** and never trends toward zero
               (-0.1949/-0.1901/-0.1868/-0.1898) against a 0.19 u shortfall -- a ~24x margin.
-            - **AND THE PLACEMENT CANNOT PAY.** Over a +-3 u grid of Tetra the thrust-13 depth moves
-              **0.015 u per u** (-0.157..-0.217), with a mechanism: **she is PLOWED as the roll sweeps
-              past**, so her overlap on the CUT frame is the roll's geometry and not her seed. Closing
-              0.19 u needs ~12 u of her = 4+ herd frames at `objective.LATERAL_RATE`, for a 2-frame prize,
-              and outside `placement_thread`'s ~10 u lateral window. One more walk frame does not open it
-              either (cost would still be 22): 2.3x the entries, no nearer the plane.
+            - **AND THE PLACEMENT CANNOT PAY AT HERD SCALE.** Over a +-3 u grid of Tetra the thrust-13
+              depth moves **0.015 u per u** (-0.157..-0.217), with a mechanism: **she is PLOWED as the roll
+              sweeps past**, so her overlap on the CUT frame is the roll's geometry and not her seed. So no
+              herd-scale nudge buys 0.19 u. (At ~100 u she moves the entry FAMILY instead -- the box above.)
+              One more walk frame does not open the slide family either (cost would still be 22): 2.3x the
+              entries, no nearer the plane.
             - **DEPTH IS A GATE, NEVER A RATE.** ``depth <= 0`` is a PROOF (no razor, camera, lean,
               placement or candidate volume moves the endpoint through a plane); ``depth > 0`` is only an
               admission. Against s99's live-station census the two do not even correlate -- cell 2549 at

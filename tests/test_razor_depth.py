@@ -4,18 +4,22 @@ Session 99 found the frame-minimal objective never charged for the B thrust and 
 makes thrust 13 the floor -- two frames the delivered clip leaves on the table -- and its handoff named
 the TETRA PLACEMENT as the route to them. These gates pin what the measurement found instead:
 
-  * `resid ~ 0` plus the wall brace pin `old` to ONE point per (facing, thrust), so the penetration past
-    the wall plane is a property of the configuration and not something an entry search can move;
-  * at the delivered cell that penetration is +0.2533 / +0.2074 / **-0.1868** u at thrust 15 / 14 / 13,
-    and ``depth <= 0`` makes `genuine` impossible -- so one of the two frames is refused by the corner's
-    geometry and the other (thrust 14, `plan_cost` 22 against the delivered 23) is legal;
-  * the placement cannot pay the shortfall: Tetra is PLOWED as the roll sweeps past, so her cut-frame
-    overlap is set by the roll's geometry -- 0.015 u of depth per u of placement.
+  * `resid ~ 0` forces the cut endpoint onto the `old -> S` ray (S is the corner VERTEX, on both wall
+    planes), so the penetration past the plane is pinned by how close the roll braces and how much push
+    survives to the cut -- and ``depth <= 0`` makes `genuine` impossible;
+  * from the FRAME-FLOOR HULL that penetration is +0.2533 / +0.2074 / **-0.1868** u at thrust 15 / 14 / 13,
+    so thrust 14 (`plan_cost` 22 against the delivered 23) is a frame available with nothing else changed;
+  * at the scale a herd tolerates (+-3 u) the placement is inert -- 0.015 u of depth per u -- because Tetra
+    is PLOWED as the roll sweeps past, so her cut-frame overlap is the roll's geometry and not her seed.
+
+**THE HULL IS PART OF EVERY NEGATIVE HERE AND THE NAMES SAY SO.** It sits ~239 u from the corner brace and
+a `cut_step` N roll travels 26N u, so out of it Link always reaches the wall early and slides. Remove it and
+entries ~390 u out cut as he ARRIVES and go through the plane -- pinned by
+`test_the_arrive_exactly_family_reaches_through_the_plane_at_cut_step_15`, which is the gate that keeps this
+file honest about what it did and did not measure (`knowledge/history/thrust-13-refused-by-geometry.md`).
 
 Values are exact pinned model outputs (`[[zero-ulp-tests-only]]`): every depth/old/push assertion below
-re-sweeps a PINNED ENTRY, which is deterministic, rather than trusting a Newton path. The screen is used
-to declare a thrust impossible, so the gate that matters most is the one that would falsify it --
-`test_genuine_implies_a_through_going_endpoint`.
+re-sweeps a PINNED ENTRY, which is deterministic, rather than trusting a Newton path.
 """
 import json
 import os
@@ -81,11 +85,11 @@ def test_the_pinned_razor_entries_reproduce_their_old_depth_and_push_exactly():
 
 
 def test_the_pocket_orders_the_thrusts_and_the_floor_thrust_falls_outside_it():
-    """WHY THE TWO FRAMES ARE NOT BOTH THERE. A razor solution points the cut at S, the corner VERTEX,
-    which lies on both wall planes -- so the penetration is ``|base + push| - |S - old|`` and the levers
-    are how close the roll braces and how much push survives to the cut frame. Session 99's "0.65 u
-    pocket" restated: firing at `cut_step` 15 leaves Link 0.339 u short of the brace thrust 15 reaches
-    and the push 0.44 u weaker, and the cut lunge is a constant."""
+    """THE LAW, AT THE FRAME FLOOR. A razor solution points the cut at S, the corner VERTEX, which lies on
+    both wall planes -- so the penetration is ``|base + push| - |S - old|`` and the levers are how close the
+    roll braces and how much push survives to the cut frame. Session 99's "0.65 u pocket" restated: out of
+    the frame-floor hull, firing at `cut_step` 15 leaves Link 0.24 u short of the brace thrust 15 reaches
+    and the push 0.45 u weaker, and the cut lunge is a constant."""
     import math
     d = {}
     for thrust, p in PINNED.items():
@@ -131,9 +135,10 @@ def test_the_brace_pin_loosens_as_the_cut_fires_earlier():
 
 # --------------------------------------------------------------- the screen, and its two directions
 
-def test_the_delivered_thrusts_admit_and_the_floor_thrust_is_refused():
-    """The verdict on Dereck's two frames, at the delivered cell and the frame floor: thrust 14
-    (`plan_cost` 22) admits a clip, thrust 13 (cost 21) is refused, and the refusal names its size."""
+def test_from_the_frame_floor_hull_the_floor_thrust_cannot_reach_the_plane():
+    """The verdict AT THE FRAME FLOOR, which is where a plan at the delivered cost puts the entry: thrust 14
+    (`plan_cost` 22) admits a clip, thrust 13 (cost 21) cannot reach the plane from any entry the hull
+    holds, and the refusal names its size. Not a claim about the corner -- see the arrive-exactly gate."""
     tetra, hulls = _tetra(), ER.load()
     for thrust in (15, 14):
         r = RD.screen(tetra, FACING, thrust, lean=LEAN, frames=4, hulls=hulls, step=2.0)
@@ -192,13 +197,13 @@ def test_the_screen_has_no_false_negative_on_the_session_99_live_configurations(
         assert r['admits'], (cell, thrust, r)
 
 
-def test_the_placement_cannot_pay_the_thrust_13_shortfall():
-    """WHY THE HANDOFF'S TETRA-PLACEMENT LEAD IS NOT THE LEVER, measured rather than reasoned.
+def test_the_placement_is_inert_at_the_scale_a_herd_tolerates():
+    """THE PLACEMENT AT HERD SCALE, measured rather than reasoned -- and note the scale in the name.
 
     She is PLOWED as the roll sweeps past, so her overlap on the CUT frame is set by the roll's own
-    geometry: over +-3 u of placement the thrust-13 depth moves ~0.015 u per u. Closing 0.19 u would take
-    ~12 u of placement -- 4+ herd frames by `objective.LATERAL_RATE`, against a 2-frame prize, and
-    outside `placement_thread`'s ~10 u lateral window."""
+    geometry: over +-3 u of placement the thrust-13 depth moves ~0.015 u per u. So no herd-scale nudge pays
+    for 0.19 u. It does NOT follow that she is irrelevant -- at ~100 u she moves the entry family
+    altogether, which is what the arrive-exactly gate below records."""
     tetra, hulls = _tetra(), ER.load()
     depths = []
     for ox, oz in ((0.0, 0.0), (3.0, 3.0), (-3.0, -3.0), (3.0, -3.0), (-3.0, 3.0)):
@@ -239,11 +244,78 @@ def test_the_thrust_13_shortfall_is_not_a_grid_ARTEFACT():
     assert -max(best) > 20 * (max(best) - min(best)), best  # the shortfall dwarfs the sensitivity
 
 
+#: The through-going razor solution at `cut_step` 15, found with the hull REMOVED: Tetra 100 u in -z of her
+#: console read, entry ~390 u from the corner brace so the cut fires as Link ARRIVES rather than sliding.
+ARRIVE = dict(tetra_off=(0.0, -100.0), entry=(-1422.7771410239, -677.8451682961))
+
+#: The shallowest depth any GENUINE row on this corner has (cell 2553 thrust 14) -- the barrier-clearance
+#: bar the arrive-exactly family still has to reach.
+GENUINE_DEPTH_FLOOR = 0.1273
+
+
+def test_the_arrive_exactly_family_reaches_through_the_plane_at_cut_step_15():
+    """THE GATE THAT KEEPS THE REST OF THIS FILE HONEST (Dereck's re-ask, session 100).
+
+    Every negative above is measured over `entry_reach`'s hull, which sits ~239 u from the corner brace --
+    and a `cut_step` N roll travels 26N u, so out of that hull Link reaches the wall around step 9 whatever
+    the thrust and CrrPos then SLIDES him along it. The hull holds only the arrive-early-and-slide family,
+    and two fewer slide frames IS the 0.19 u shortfall.
+
+    From ~390 u out the cut fires as he ARRIVES, and with Tetra 100 u away the endpoint goes THROUGH: this
+    pins that solution so no future session re-reads "thrust 13 is refused at the frame floor" as "thrust 13
+    is impossible" (`knowledge/history/thrust-13-refused-by-geometry.md`).
+
+    It also pins what is still missing -- `genuine` needs the swept segment to clear the CrrPos barrier, and
+    every genuine row on this corner sits at depth >= `GENUINE_DEPTH_FLOOR`, so this family is ~0.087 u
+    short. If a future pass closes that, this assertion flips and the test says so."""
+    import math
+    t0 = _tetra()
+    tetra = (t0[0] + ARRIVE['tetra_off'][0], t0[1] + ARRIVE['tetra_off'][1])
+    row = _row_at(ARRIVE['entry'], FACING, 13, tetra=tetra)
+    depth = RD.depth_of(row)
+    old = (row[1], row[2])
+    # the endpoint clears the plane, where every frame-floor entry misses it by 0.19-0.35 u
+    assert depth > 0.0, depth
+    assert 0.03 < depth < 0.05, depth
+    # and it is the ARRIVAL, not a slide: the roll's travel to `old` is ~26 * cut_step
+    travel = math.hypot(ARRIVE['entry'][0] - old[0], ARRIVE['entry'][1] - old[1])
+    assert 375.0 < travel < 390.0, travel
+    assert math.hypot(RD.GT.S[0] - old[0], RD.GT.S[1] - old[1]) < 49.38   # nearer S than thrust 15's brace
+    # that entry is outside the hull every negative above was argued over -- which is the whole point
+    assert not ER.contains(ER.entry_hull(FACING, 4, None, ER.load()), ARRIVE['entry'], 0.0)
+    # still short of barrier clearance, so it is not a clip yet
+    assert depth < GENUINE_DEPTH_FLOOR and not row[0], (depth, bool(row[0]))
+
+
+def test_the_genuine_depth_floor_is_measured_not_assumed():
+    """`GENUINE_DEPTH_FLOOR` is the bar the open frame is judged against, so it is measured here rather than
+    quoted: at each configuration with known dust, every genuine row's depth is bit-constant across its own
+    population, and the shallowest of the four is 0.1273 (cell 2553, thrust 14)."""
+    tetra = _tetra()
+    floors = []
+    for cell, facing, thrust, lean in ON_LOCUS:
+        r = ER.hull_scan(tetra, facing, thrust, lean, frames=4, sep=6.0)
+        ctx, sch, resid = ES.build_fast(facing, lean, thrust)
+        ds = set()
+        for st in r['live_at'][:4]:
+            g = ES.entry_gradient(tetra, st, facing=facing, m351c=lean, thrust=thrust)
+            ux, uz = g['gx'] / g['grad'], g['gz'] / g['grad']
+            n, half = 2001, 0.02
+            pts = [(tetra[0], tetra[1], st[0] + (2.0 * i / (n - 1) - 1.0) * half * ux,
+                    st[1] + (2.0 * i / (n - 1) - 1.0) * half * uz) for i in range(n)]
+            ds |= {RD.depth_of(o) for o in ctx.sweep_par(pts, 0) if o[0]}
+        assert ds, (cell, thrust)
+        assert max(ds) - min(ds) < 1e-3, (cell, thrust, sorted(ds)[:3])   # bit-constant per configuration
+        floors.append(min(ds))
+    assert abs(min(floors) - GENUINE_DEPTH_FLOOR) < 1e-3, sorted(floors)
+
+
 @pytest.mark.slow
-def test_thrust_13_is_refused_at_every_cell_in_the_aim_window():
-    """The exhaustive form of the verdict (~3 min): of the 45 cells the aim alphabet reaches, 25 have a
-    razor solution inside the frame-floor hull and NONE of them admits a clip at thrust 13, while
-    thrust 14 admits at 23 of 25. So the second frame is not a cell away, a camera away or a lean away."""
+def test_no_frame_floor_entry_at_any_cell_reaches_the_plane_at_thrust_13():
+    """The exhaustive form of the FRAME-FLOOR verdict (~3 min): of the 45 cells the aim alphabet reaches, 25
+    have a razor solution inside the hull and NONE of them reaches the plane at thrust 13, while thrust 14
+    does at 23 of 25. So at the floor the second frame is not a cell, a camera or a lean away -- it is a
+    different entry family (`test_the_arrive_exactly_family_...`)."""
     tetra = _tetra()
     rows = RD.thrust_map(tetra, lean=LEAN, frames=4, step=1.0)
     have13 = [r for r in rows if r['thr13']['n']]

@@ -1,12 +1,13 @@
 # Which thrusts a corner can clip at all, before any dust is hunted
 
 **Answers:** My frame-minimal plan presses B provably late and the earliest thrust returns nothing - is
-that thin dust or is it geometry? How do I REFUSE a configuration in one call instead of buying another
-lottery? Can moving the PUSHED ACTOR buy penetration? What quantity decides whether a cut reaches
-through the seam at all?
+that thin dust, or geometry, or the set I searched? What quantity decides whether a cut reaches through
+the seam at all / how do I screen a configuration in one call instead of buying another lottery? Can
+moving the PUSHED ACTOR buy penetration, and at what SCALE? Why does the same roll clip from one distance
+and not from another?
 **Status:** measured and gated (session 100) on the flooded-Hyrule Tetra corner, in
-[`tests/test_razor_depth.py`](../../tests/test_razor_depth.py) (8 + 1 slow), with the falsifying
-direction (`genuine ⇒ depth > 0`) gated over 15 000+ entries.
+[`tests/test_razor_depth.py`](../../tests/test_razor_depth.py) (10 + 1 slow), with the falsifying
+direction (`genuine ⇒ depth > 0`) gated over 275 genuine rows sampled on the locus.
 **Source:** [`harness/tetrapush/razor_depth.py`](../../harness/tetrapush/razor_depth.py) (`depth_of`,
 `razor_solutions`, `screen`, `thrust_map`), [`harness/rollstab/geometry_tetra.py`](../../harness/rollstab/geometry_tetra.py)
 (`genuine_clip`, `S`), [`harness/tetrapush/entry_reach.py`](../../harness/tetrapush/entry_reach.py)
@@ -58,31 +59,66 @@ Two frames earlier he is still moving: thrust 14's solutions spread over 4e-4 u 
 the cut lunge is a constant, and the endpoint lands ~0.19 u short of the near side of the wall.
 
 Over the whole 45-cell aim window at the frame floor, thrust 13 reads depth < 0 at **all 25 cells that
-have a razor solution at all** (−0.472 … −0.133), while thrust 14 admits at 23 of 25. **One of the two
-frames is available (thrust 14, cost 22); the other is not, anywhere on this corner.**
+have a razor solution at all** (−0.472 … −0.133), while thrust 14 admits at 23 of 25 - so **thrust 14 at
+`plan_cost` 22 is a frame available with no other change**. The negative carries its resolution control,
+which thrust 13 needs because its `old` is not pinned: over grid steps 2.0 / 1.0 / 0.5 / 0.25 the best
+depth moves inside **0.008 u** and does not trend toward zero (−0.1949 / −0.1901 / −0.1868 / −0.1898).
 
-Because thrust 13's `old` is *not* pinned, that negative does rest on how finely the razor curve was
-sampled - so it carries a resolution control. Over grid steps 2.0 / 1.0 / 0.5 / 0.25 the best depth moves
-inside **0.008 u** and does not trend toward zero (−0.1949 / −0.1901 / −0.1868 / −0.1898) against a
-**0.19 u** shortfall: a ~24x margin, so refinement is not what stands between this thrust and a clip.
+**But read that negative with its set named, because the set is doing the work.** Everything above is
+measured over the frame-floor reachable hull, which sits ~239 u from the corner brace - and that is what
+makes it a statement about plans rather than geometry. See the next section.
 
-## The pushed actor cannot pay for it
+## The two families, and why a hull hides one of them
 
-The obvious lever is the pushed actor's placement - she is the term in `push`, and `hull_scan` takes her
-position as its first argument. Measured, she moves the depth **0.015 u per u** over a ±3 u grid
-(−0.157 … −0.217 at thrust 13), and there is a mechanism: **she is PLOWED as the roll sweeps past**, so
-her overlap on the CUT frame is set by the roll's own geometry rather than by where she started. Closing
-0.19 u would take ~12 u of placement - 4+ frames of herding at the measured lateral authority, against a
-2-frame prize, and outside the placeable thread's ~10 u lateral window entirely.
+A roll of `cut_step` N travels **26N u**. From the 4-frame hull, 239 u out, Link reaches the wall around
+step 9 whatever the thrust, and CrrPos then slides him along it - a little less each frame. So the hull
+contains only the **arrive-early-and-slide** family, where the razor picks a slid `old` and two fewer slide
+frames *is* the 0.19 u. The tell was in the numbers all along: those solutions cut from |S−old| 49.62 while
+the delivered clip cuts from 49.38.
 
-One more walk frame does not open it either (`plan_cost` would still be 22): the bigger hull reaches more
-entries and every one of them shares the same `old`.
+Swept with no hull (851 598 Tetra × entry pairs, then the placement plane with Newton runs filtered back to
+sane geometry - `|S−old| ≤ 56 u`, walkable, inside the box):
+
+- **1167 razor solutions at `cut_step` 15 land on the exact brace point thrust 15 cuts from** (|S−old|
+  49.3812). The brace is not the barrier it appeared to be.
+- Entries ~**390 u** out - 26 × 15, the roll's own travel - put the cut on the frame Link **arrives**,
+  with no slide at all, and there the depth goes **positive**: **+0.0399** at Tetra 100 u in −z of her
+  console read, entry (−1422.7771688289, −677.8451372479), walkable.
+- So the pushed actor's real scale on this axis is ~**100 u**, not the ±3 u a herd tolerates. Priced on the
+  wrong magnitude inside the wrong family, she reads inert.
+
+**The remaining gap is barrier clearance, not the plane.** `genuine` also needs the swept segment to clear
+the CrrPos barrier, and every genuine row measured anywhere on this corner sits at depth ≥ **0.1273** (the
+four known-live configurations read 0.1273 / 0.2073 / 0.2533 / 0.3398, each bit-constant across its own
+genuine population). So the arrive-exactly family is ~**0.087 u** short - a fifth of what the hull-bounded
+picture showed, in a family no pass has searched, with the push as the lever (0.446 there against 0.613 at
+thrust 15).
+
+## The pushed actor: inert at herd scale, decisive at roll scale
+
+She is the term in `push`, and `hull_scan` takes her position as its first argument. **Within the
+arrive-and-slide family she is inert**: over a ±3 u grid the thrust-13 depth moves **0.015 u per u**
+(−0.157 … −0.217), because she is PLOWED as the roll sweeps past, so her overlap on the CUT frame is set by
+the roll's geometry rather than by where she started. ±3 u is the scale a herd tolerates, and at that scale
+the reading is honest and useless.
+
+**At roll scale she changes the family.** The through-going solution above needs her ~100 u from her
+console read; that is 8+ frames of herding at the measured lateral authority and far outside the placeable
+thread, so it is a different herd, not a tweak to this one. Which is the actual open question for the second
+frame: **what herd puts her and Link in the arrive-exactly geometry, and does it cost less than the two
+frames it buys?**
+
+One more walk frame does not open the slide family (`plan_cost` would still be 22): the bigger hull reaches
+2.3x the entries and gets no nearer the plane.
 
 ## How to use it, and how not to
 
-- ``depth ≤ 0`` **is a proof.** The endpoint is on the near side of both planes; no razor, camera, lean,
-  placement or candidate volume moves it. This is the shape [../history/](../history/) keeps asking for -
-  a razor axis closed by a measurement instead of a compute budget.
+- ``depth ≤ 0`` **is a proof about the configurations you measured, and the ENTRY SET is part of the
+  configuration.** The endpoint is on the near side of both planes, and no razor, camera or lean moves it -
+  but a different distance-to-corner is a different `old`, so say which entry set you swept. Saying it over
+  the frame-floor hull is a claim about plans at the floor; saying it "anywhere" needs the hull removed
+  (that mistake, and its tell, is in
+  [../history/thrust-13-refused-by-geometry.md](../history/thrust-13-refused-by-geometry.md)).
 - ``depth > 0`` **is only an admission.** Dust still has to exist on the locus (`hull_scan`) and a plan
   still has to land on it (`confirm_entry`).
 - **It is not a density model.** Against the per-thrust live-station census it does not even correlate:
@@ -91,13 +127,18 @@ entries and every one of them shares the same `old`.
 - **Screen before you buy.** One configuration is ~5 s and the whole window × thrust is ~3 min
   (`thrust_map`), against hours for one camera pass of a dust lottery.
 
-## The rule
+## The rules
 
-**Ask which clause of your acceptance test is failing before you buy more draws against it.** Six
-sessions priced entry candidates by residual-band probability - the razor clause - while the endpoint at
-those configurations could not reach the wall at all. A residual is the quantity that *varies*, so it is
-the one a search naturally ranks on; the clause that is a hard gate had never been printed. When a
-lottery comes up empty, spend the next hour making each clause a number, not on more tickets.
+**Ask which clause of your acceptance test is failing before you buy more draws against it.** Six sessions
+priced entry candidates by residual-band probability - the razor clause - while the endpoint at those
+configurations could not reach the wall at all. A residual is the quantity that *varies*, so it is the one a
+search naturally ranks on; the clause that is a hard gate had never been printed. When a lottery comes up
+empty, spend the next hour making each clause a number, not on more tickets.
+
+**Then name the set that number was measured over.** The same measurement, read over the frame-floor hull,
+says "this thrust cannot clip"; read over the geometry it says "this thrust cannot clip *from 239 u out*",
+and those differ by a family of entries 150 u further back. A reachable hull exists to price plans - the
+moment it bounds a claim about what the corner allows, the claim has inherited a herd's arrival position.
 
 ## See also
 
@@ -107,5 +148,5 @@ lottery comes up empty, spend the next hour making each clause a number, not on 
   the bands were measured outside the reachable set.
 - [clip-exit-angle.md](clip-exit-angle.md) - the 0.65 u pocket this law is the ranked form of, and the
   exit-angle window it bounds.
-- [../history/thrust-13-placement-lead.md](../history/thrust-13-placement-lead.md) - the superseded
-  reading, that moving the pushed actor was the route to the second frame.
+- [../history/thrust-13-refused-by-geometry.md](../history/thrust-13-refused-by-geometry.md) - the
+  superseded reading, that the floor thrust was refused *anywhere* on this corner.
