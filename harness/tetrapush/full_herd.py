@@ -268,7 +268,7 @@ def junction_alphabet(run, hl, *, ess_step=4, aim_step=64):
 
 def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_window=0x2800,
                dead=None, corridor=None, target_along=None, thread=None, resid=None,
-               fan_center=None, collect=None):
+               fan_center=None, fan=None, rows=None, collect=None):
     """**Is this junction endpoint ROLLABLE at all, how STRAIGHT can its roll be, where does it
     ARRIVE, and where would the ESCAPE land from it?** -- an aim sweep, returning
     ``dict(rate, off, off_rate, along, n, arrive, over, land, land_frames, land_off, land_over,
@@ -318,6 +318,22 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     the landing point and measures it against the segment, so it is exact given the residual -- the
     same shift `aim.handoff_rows` made on the RANK side in session 70, here on the KEEP side.
 
+    ``fan``/``rows`` (session 107) are ``thread``/``resid``'s CLOUD form, and they exist because the two
+    inputs that axis takes are both wrong once the target set is a row cloud: ``resid`` is one member of
+    a FAN (session 106 measured the residual spanning lateral +13.8..+52, and a point-shift of the target
+    measurably steers the rank toward endpoints the fan converts BADLY), and ``thread`` is a fit through
+    a ~170 u-wide cloud. Given a measured fan (`cloud_land.residual_fan`) and the rows, ``cloud_bound``
+    is the cheapest whole candidate any surviving roll could reach -- herd + the atom's log + the row's
+    `plan_cost` + the remaining miss at `objective.PUSH_CEILING`, minimised over fan x rows
+    (`cloud_land.predict_bound`) -- with ``cloud_miss``/``cloud_row`` its landing and target.
+
+    This is the position that MATTERS for a landing, which is the session-107 finding: an endpoint keep
+    on the last cycle only reorders a set that this sweep and the junction cut already fixed, so ranking
+    it honestly names the least-bad survivor without changing the floor. The per-aim cut is where the set
+    is decided, and it cannot afford the ~28 s enumeration -- hence a predictor here and the enumeration
+    (`cloud_land.cloud_landing`) at the survivors. Optimistic by construction, so it sizes the cut and
+    never makes the claim.
+
     ``fan_center`` (session 71) is WHERE the sweep points, and it is the difference between a screen
     that answers and one that does not. The default fan is +-0x2800 (112.5 deg wide) about the HERD
     bearing thinned by ``step``, and 95-99% of every aim in it dies ``followed`` -- Link past
@@ -353,6 +369,8 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     walls = O.courtyard_walls()
     dead = {} if dead is None else dead
     cor = O.push_corridor(hl) if corridor is None else corridor
+    # the rows in herd coords ONCE, not per aim (the raw genuine-coord set carries only x/z)
+    hrows = _CL().herd_rows(rows, hl) if (fan and rows) else None
     best = None
     if fan_center is None:
         center = hl.bearing_bam()
@@ -387,15 +405,25 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
             la, ll = al + resid[0], lat + resid[1]
             land = A.thread_miss(la, ll, thread)['miss']
             lframes = O.thread_frames(la, ll, thread)
+        cloud = None
+        if fan and rows:
+            # the CLOUD form of the same axis: cheapest whole candidate over fan x rows, microseconds
+            # an aim -- the only landing measure this per-aim cut can afford
+            cloud = _CL().predict_bound(al, lat, endpoint['frames'] + seg['frames'], fan, hrows)
         if collect is not None:
             collect.append(dict(along=al, lat=lat, off=off, over=over, rate=m['per_frame'],
                                 link_lat=m['lat'], aim=aim, want=_want, jf=endpoint['jf'],
-                                land=land, land_frames=lframes))
+                                land=land, land_frames=lframes,
+                                cloud_bound=(cloud['bound'] if cloud else None),
+                                cloud_miss=(cloud['miss'] if cloud else None)))
         edge = abs(_s16(_want - center))
         if best is None:
             best = dict(rate=m['per_frame'], off=off, off_rate=m['per_frame'], along=al, n=1,
                         arrive=None if over is None else abs(over), over=over,
                         land=land, land_frames=lframes, land_off=off, land_over=over,
+                        cloud_bound=(cloud['bound'] if cloud else None),
+                        cloud_miss=(cloud['miss'] if cloud else None),
+                        cloud_row=(cloud['row_idx'] if cloud else None),
                         fan_edge=edge, fan_half=int(half_window))
             continue
         best['n'] += 1
@@ -408,7 +436,18 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
         if land is not None and land < best['land']:
             best['land'], best['land_frames'] = land, lframes
             best['land_off'], best['land_over'] = off, over
+        if cloud is not None and (best['cloud_bound'] is None
+                                  or cloud['bound'] < best['cloud_bound']):
+            best['cloud_bound'], best['cloud_miss'] = cloud['bound'], cloud['miss']
+            best['cloud_row'] = cloud['row_idx']
     return best
+
+
+def _CL():
+    """`cloud_land`, imported on use. Deferred because it reads `away_walk` which reads this module
+    back, and because a beam that asks for no landing measure should not pay for the module at all."""
+    from harness.tetrapush import cloud_land as CL
+    return CL
 
 
 def _dedup_endpoints(ends):
@@ -1120,7 +1159,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  square_pool=False, corridor=None, arrive_keep=False, target_along=None,
                  resid=None, tcs_landing=False, tcs_square=False, land_keep=False,
                  probe_contact=False, probe_half=None, escape_flip=None, escape_rots=None,
-                 escape_rank=None, tcs_escape=False, verbose=False):
+                 escape_rank=None, tcs_escape=False, cloud_keep=False, cloud_flip=None,
+                 cloud_rots=None, cloud_cap=None, cloud_fan=None, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1223,6 +1263,27 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     (`roll_probe`). Recall of ENDPOINTS still falls with the width (+-2 deg holds 18% / 60%), so a
     wider setting is the thorough one: +-8 deg is 83 aims and 98-99%.
 
+    ``cloud_keep`` / ``cloud_flip`` / ``cloud_rots`` (session 107) are ``escape_keep``'s MEASURED
+    replacement, and they exist because session 106 measured that keep to be landing-blind: every rank
+    in it (`escape_probe`'s ``miss`` and ``bound``, `away_walk.probe`'s ``thread``) reads
+    `objective.placement_thread`'s FIT, and the frame-minimal target set is a ~170 u-wide 2D CLOUD of
+    rows (session 105) through which a fit is fiction. So rounds 1-3 of the retargeted chain reported a
+    ~6 u landing floor over the 6-8 endpoints their beams KEPT out of 18-33 survivors, and that floor
+    was a property of the CUT. This keep ranks the survivors on `cloud_land.cloud_probe` -- the whole
+    atom knob grid enumerated at each endpoint, priced as complete candidates (herd + the atom's own
+    log + the row's `plan_cost` + the remaining miss at `objective.PUSH_CEILING`) -- with a share of the
+    beam kept by the raw miss. It costs ~28 s per survivor, the same order as ``escape_keep``'s swept
+    form, and supersedes ``escape_keep``/``glide_keep`` when on.
+
+    ``cloud_fan`` is the half of that fix with authority, and the distinction is the session-107 finding:
+    the keep above sits at the ENDPOINT of the last cycle, where the survivor set is already fixed by the
+    junction cut, so however honestly it ranks it can only name the least-bad survivor. Handing a measured
+    residual fan (`cloud_land.residual_fan`) here puts the same measure at the per-AIM screen instead --
+    `roll_probe`'s ``cloud_bound``, a share of ``jn_keep`` by the cheapest whole candidate any surviving
+    roll could reach over fan x rows -- which is the cut that decides which endpoints exist. Free per aim
+    (a few thousand distances) against ~28 s for an enumeration, and OPTIMISTIC, so it sizes the cut while
+    ``cloud_keep``'s enumeration makes the claim.
+
     ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) pass the escape atom's two
     unswept knobs and its frames rank through ``escape_keep`` (`escape_probe`, `away_walk.probe`):
     where the conversion frames PUSH her, which on four real arrivals is worth landing 4.90 -> 0.33,
@@ -1290,7 +1351,9 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
         rdead = {}
         scored = [(p, e) for p, e in ((roll_probe(e, hl, step=probe_step, dead=rdead,
                                                  corridor=cor_j, target_along=target_along,
-                                                 thread=th_land, resid=resid, **pkw), e)
+                                                 thread=th_land, resid=resid,
+                                                 fan=cloud_fan, rows=(rows_j if cloud_fan else None),
+                                                 **pkw), e)
                                       for e in uniq) if p is not None]
         scored.sort(key=lambda t: -t[0]['rate'])
         orders = [[e for _p, e in scored]] if scored else []
@@ -1308,6 +1371,12 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             # against the real target segment instead of against a one-point line (session 71)
             orders.append([e for _p, e in sorted(scored, key=lambda t: (t[0]['land'] is None,
                                                                        t[0]['land'] or 0.0))])
+        if cloud_fan and scored:
+            # ...and a share by that axis measured against the CLOUD over the whole residual fan --
+            # the cut that decides which endpoints exist, so it is the one worth a landing measure
+            orders.append([e for _p, e in sorted(scored, key=lambda t: (t[0]['cloud_bound'] is None,
+                                                                       t[0]['cloud_bound']
+                                                                       or 0.0))])
         if len(orders) > 1:
             kept = _mixed_beam(orders, int(jn_keep),
                                ident=lambda e: (_physics_tag(e['run']), e['log'][-1]['stickX'],
@@ -1333,7 +1402,39 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                 cand['plan'] = list(node.get('plan', [])) + [cand['knobs']]
                 out.append(cand)
     out = _budget_cut(out, cut, budget, 'roll survivors', verbose)
-    if escape_keep and out:
+    if cloud_keep and out:
+        # the landing MEASURED rather than predicted -- see the docstring's ``cloud_keep``
+        CL = _CL()
+        # a WALL-CLOCK budget, never a claim about the population: a capped run says what it skipped
+        probed, skipped = out, 0
+        if cloud_cap is not None and len(out) > int(cloud_cap):
+            probed = sorted(out, key=lambda n: cut(n['run'], n['frames'], n['m']))[:int(cloud_cap)]
+            skipped = len(out) - len(probed)
+        for n in probed:
+            n['cloud'] = CL.cloud_probe(n['run'], n['frames'], hl, rows_j,
+                                        flip_step=(CL.FLIP_STEP if cloud_flip is None
+                                                   else cloud_flip),
+                                        rotate_offs=cloud_rots)
+        # an unprobed survivor is UNMEASURED, not refused: infinite bound, and a None miss so the
+        # share below cannot invent a landing for it
+        for n in out:
+            if 'cloud' not in n:
+                n['cloud'] = dict(fires=False, bound=float('inf'), miss=None, total=None,
+                                  frames=n['frames'], unprobed=True, in_band=None)
+        out.sort(key=lambda n: n['cloud']['bound'])
+        if verbose:
+            fired = [n for n in out if n['cloud']['fires']]
+            solved = [n for n in fired if n['cloud']['in_band'] is not None]
+            if skipped:
+                print("    (cloud keep CAPPED at %d: %d survivors were NOT enumerated -- the floor"
+                      " below is the capped slice's, not the population's)" % (cloud_cap, skipped))
+            print("    (cloud-landed %d survivors: %d fire, %d land INSIDE the %.1f u band; best "
+                  "bound %.2f = %.3f u at total %.1f)"
+                  % (len(out), len(fired), len(solved), O.PLACEMENT_BAND,
+                     fired[0]['cloud']['bound'] if fired else float('nan'),
+                     fired[0]['cloud']['miss'] if fired else float('nan'),
+                     fired[0]['cloud']['total'] if fired else float('nan')))
+    elif escape_keep and out:
         # the LAST cycle's endpoint is handed to the ESCAPE, and nothing between them has authority
         # (`escape_probe`) -- so rank it by what the escape lands, and keep a share by that miss.
         th = O.placement_thread(hl, rows_j)
@@ -1379,7 +1480,12 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     if align_keep and out:
         # ...and a share by Link's lateral offset from her, the axis that predicts a terminal
         orders.append(sorted(out, key=lambda n: abs(n['m']['lat'])))
-    if escape_keep and out:
+    if cloud_keep and out:
+        # ...and a share by the MEASURED landing, kept on the raw miss so a band-reaching endpoint
+        # is never cut by the frame rank that averages it away
+        orders.append(sorted(out, key=lambda n: (n['cloud']['miss'] is None,
+                                                 n['cloud']['miss'] or 0.0)))
+    elif escape_keep and out:
         # ...and a share by where the ESCAPE lands her, which is what ends the plan (session 67)
         orders.append(sorted(out, key=lambda n: (n['escape']['miss'] is None,
                                                  n['escape']['miss'] or 0.0)))

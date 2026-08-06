@@ -275,6 +275,7 @@ deliberately unported.
 | `full_herd.glide_probe` / `lateral_authority` | **The LAST cycle's keep and the measurement behind it** (session 62). `lateral_authority` holds each terminal-alphabet stick for 6 frames and reads the SPREAD of Tetra laterals reached -- the plow's sideways authority, **2.92-2.96 u/f** across contact depths on the synthetic bed (CLI `full_herd lat`, ~20 s) and 3.5-5.9 on the real cycle-3 endpoints, against `PUSH_CEILING` 13.0 for the along axis; that ~4.5x is what `objective.LATERAL_RATE` encodes. GOTCHA: `synthetic_hot_arrival`'s `d_short`/`lat_off` translate BOTH actors rigidly, so no relative measurement moves with them -- sweep `feet`. `glide_probe` is `roll_probe`'s counterpart one stage later: the last cycle keeps endpoints for a TERMINAL, so measure the terminal -- run a short narrow glide (5 frames, beam 4, ~1 s) and rank the endpoint by the best `frames + thread_frames` it reaches. Wired as `extend_cycle(glide_keep=True)`, which `chain_herd` sets on the last cycle only. It DOES discriminate (the s62 cycle-3 survivors span 74.24..87.14, and it demotes the endpoint `thread_cost` likes best) but was **INERT on the s62 beam** -- the top 8 after dedup are unchanged. Gated `tests/test_full_herd.py` (the measurement, the disagreement on two synthetic arrivals, and the wiring). |
 | `aim.py` | **THE HANDOFF AIM -- where the last push frames POINT** (session 67), and the module that inverted s63-s66's "lateral deficit" reading. `push_step` = the plow as an **exact one-frame oracle**: ``f32(Tetra + (CO_RADII_BAR - centre_feet)/2 * unit(Tetra - exec_centre))`` is `FreeRun.step`'s next Tetra bit-for-bit on every contact frame (the pipeline acts 2 frames late, so the frame's push is already decided by the state) and exactly 0 at the bar -- so Tetra's side of a placement is analytic and an aim is an exact quantity, not a proxy. `eject_unit` = that ray in herd coords; **`aim_window`** = the directions from a Tetra position that reach the target thread, which is a RAZOR (**0.53-0.62 deg** at the s66 handoff range) because the thread lies 12.2 deg off the herd axis and the approach comes in 13-14 deg off it, i.e. she arrives nearly END-ON; `aim_miss` = how far the current aim misses the 47.6 u SEGMENT, in u, comparable to `objective.PLACEMENT_BAND` (the s66 endpoints: 12.28 / 11.89 / 47.72 u, 10-46 deg steep); `centre_lat_needed` = the same statement as Link's job (his exec centre must sit 9.15 / 10.86 / 40.96 u lower in lateral); `push_reserve` = ``CO_RADII_BAR - centre_feet``, the ejection already stored in the overlap; `landing_miss`/`handoff_target` = the EXACT half and its inverse (where a MEASURED escape residual leaves her, and the handoff a given residual demands -- the chain's target is the coord MINUS the escape's ~44 u: along ~894, lateral ~+2.5); `handoff_spec` = the three numbers in one call. **`corridor_aim_error`** is the same measurement MID-CHAIN, and it is what decides straightness: the push law integrates, so the direction a roll carries Tetra is the mean of its aims (s66 plan, three rolls: mean aim +2.55 / -6.42 / +16.56 deg vs travel +2.98 / -6.36 / +18.13, ~205 u each), the entry aim predicts it to a few degrees, and the human enters his two recorded rolls at +1.22 / -0.70 deg and finishes 44 frames in **0.71 u** off the corridor. The lateral that steers the push is the exec CENTRE's, not the feet's (s66 roll-2 entry: feet +2.22 u off her lateral, aim -10.84 deg). Gated `tests/test_aim.py` (6): the 0-ULP oracle, the razor window, the aim<->centre-lateral inversion, **the terminal alphabet's 2-frame inertness**, the roll-aim law on the HUMAN's own rolls, and the handoff-target round trip. CLI `python -m harness.tetrapush.aim {spec\|beam}`. |
 | `full_herd.escape_probe` | **The LAST cycle's endpoint keep, one stage out from `glide_probe`** (session 67): rank an endpoint by what its real ESCAPE lands (`away_walk.probe` -> `aim.landing_miss` + the frames to the slam), because the terminal GLIDE was measured to have no authority over Tetra at all -- the whole `_terminal_alphabet` moves her identically for four frames (`aim`), which is why six terminal rank configurations came out byte-identical across s61-s63. Wired as `extend_cycle(escape_keep=True)` (a rank AND a keep share) and `chain_herd(last_escape=True)`, superseding `glide_keep` on the last cycle; ~2-5 s per survivor. Result on the s66 cycle-2 beam (461 s, no chain): 21 survivors, **18 fire, best lands 45.62 u off the thread**, and the keep is INERT (byte-identical 8 nodes) -- the right metric, proving the cycle-3 stage cannot reach the handoff. |
+| `cloud_land.py` | **THE LANDING, MEASURED INSTEAD OF PREDICTED -- and the honest statement of what a keep in that position can do** (session 107). `escape_probe` (the row above) ranks against `objective.placement_thread`'s FIT, and session 106 measured that a fit through the frame-minimal target set is fiction: the set is a ~170 u-wide 2D CLOUD of rows, so every beam ranked by that miss was landing-blind and the ~6 u floor it reported was the CUT's. `cloud_landing` replaces the predictor with the ENUMERATION -- the whole atom knob grid (`atom_cloud` = `away_walk.probe`'s loop with the rank removed, 672 variants, ~28 s) priced as WHOLE candidates: herd frames + the atom's own LOG length + the row's `plan_cost` + the remaining miss at `PUSH_CEILING`. Every term is one this work has already been burned by: the log not `freeze_f` (s105's off-by-three, the banked 101), and the row's own cost because the rows are 19-23 frames apart (s104), so a landing 6 u from a cheap row beats 1 u from an expensive one. `in_band` (inside `objective.PLACEMENT_BAND`) is reported SEPARATELY from the rank, since only it answers "solved". Wired `extend_cycle(cloud_keep=)` with a ``cloud_cap`` that PRINTS what it did not enumerate (unprobed survivors keep an infinite bound, never a default). **But note where that keep sits and what it therefore cannot do:** it is an ENDPOINT keep on the last cycle, so it reorders a set the junction and aim cuts already fixed -- it names the best of the survivors, it does not create better ones. The axis with authority is per-AIM, inside `roll_probe`, which cannot afford 28 s; hence `residual_fan` + `predict_bound`, the cheap half: the residual is a FAN (s106: lateral never below +13.8 u, so a point-shift like `aim.handoff_rows` measurably steers the rank toward badly-converting endpoints), so the predictor is a minimum over the fan crossed with the rows, in the same currency as the enumeration, at microseconds an aim. It is OPTIMISTIC by construction (the fan's lateral tracks Link's offset from her at -0.53 u/u), so it sizes the CUT and the enumeration makes the CLAIM. KB: [`knowledge/strategy/landing-keep-on-a-cloud.md`](../../knowledge/strategy/landing-keep-on-a-cloud.md); gate `tests/test_cloud_land.py` (15, 6.5 s -- incl. the containment check that the enumerated grid holds `away_walk.probe`'s own chosen variant). |
 | `full_herd.junction_square_probe` / `cycle1_nodes(square_keep=)` | **THE CYCLE-1 EXIT'S KEEP -- what squareness its junction can still DELIVER** (session 69), the stage s68 pointed at with "squareness is a property of the cycle EXIT". Run the exit's junction at a coarse budget and report the smallest `objective.push_corridor` offset any surviving roll delivers (`roll_probe`'s ``off``; never the endpoint's own entry aim -- s68 measured that swings 5-8 deg/frame at jf 10-12). ~15-25 s per exit; cycle 1 has ~21 unique ones, so it costs 308 s ONCE per solve. It exists because the cycle-1 candidate set is **one roll aim swept over the 25-value `derived_target_css` grid** -- measured: of the whole fan x 3 l_windows exactly 3 (aim, window) pairs survive and all three are the same aim, and every candidate scores `plan_bound` **71.90**, so the frame rank cannot separate them at all. Only 6 of the 25 arm anything, and their deliverable squareness spans **11.20 .. 141.83 u**; the old ``tcs_keep=3`` cut by `junction_quality` (frames in the box) and kept 141.83 / 27.81 / 14.67, with the best at quality rank 5. **The POOL is what makes the probe honest** (`_probe_pool(spread=False)`): on three real exits prefix-only reads `1.34 / none / 27.02`, squarest-only `none / 141.83 / 14.67`, the uncapped mix `1.34 / 141.83 / 14.67` (12 rollable where each single pool found 9), and s68's state-CAPPED pool `none / 141.83 / 25.89` -- it calls an exit that reaches 1.34 u unrollable, so that cap is the one thing not to reuse here. Result on cycle 2, same config and 75-frame budget: corridor offset **37.00 -> 8.97 u**, Tetra lat **-32.10 -> -3.65**, Link's lateral off her **+11.14 -> -0.69**, `plan_bound` 72.81 -> **72.69**, roll survivors **18 -> 71** (964 s vs 516). Gated `tests/test_full_herd.py` (+2: the pool as pure selection, and a slow contrast that the squarest exit is one the old cut drops and the keep keeps). |
 | `aim.handoff_corridor` | **The line the CHAIN must ride, which is not the line to the coord** (session 69) -- `objective.push_corridor`'s shape (``target``/``slope``/``lat_at``/``offset``) aimed at `handoff_target` instead, so every keep that reads a corridor rides the state the chain must DELIVER. The residual is measured, never assumed: probe the real escape atom on an on-line mid-depth arrival at the thread's near end (feet 56 -> resid **43.65 along / +5.47 lat** -> target along **893.89** lat **+2.47**, reproducing s67's solved-backwards "along ~894, lat ~+2.5"), and report ``ok=False`` rather than guess if the atom does not fire. The two lines ask an on-line Tetra for aims **0.46 deg apart at the cycle-1 exit, 0.68 at cycle-2 range, 1.19 by along 700** -- it GROWS as the plan closes. Depth is a knob inside the noise (feet 52..64 moves the ask 0.04 deg, 1/17th of what ignoring the escape costs). Wired `chain_herd(handoff=True)` -> `cycle1_nodes`/`extend_cycle(corridor=)`. **Measured INERT at cycle 2** (identical 8 survivors; the frontier's dead counts and the cycle-1 probe values do move -- best exit 11.20 -> 7.93 u), kept ON because it is the correct target and the bias grows. Gated `tests/test_aim.py`, which also pins WHY it matters: the razor is a property of where the handoff sits, not of the thread -- from the s66 handoff (along 881.6 lat +21.19) the 47.6 u segment is nearly end-on and the window is **0.53 deg**, from the handoff target it subtends **10.04**. |
 | `full_herd.square_probe_key` / `CHEAP_PROBE` | **The tcs cut's mid-chain keep, and the CALIBRATION that overturned the plan it came from** (session 70). Session 69 handed over "give `junction_quality`'s glide an AIM-aware key" for cycles >= 2. Cycle 1's 25-exit grid is fully probed, so the proxy was calibrated against the truth BEFORE being wired -- and an aim key is not merely no better, it is the worst of the candidates. Keep of 3, what it DELIVERS in corridor offset: stock `(-inbox, |lat|)` **14.67 u** (best at rank 5), `(-inbox, glide |aim|)` **116.93** (rank 7), `(-inbox, glide |aim|+cone)` **116.93** (rank 4), `(-inbox, exit |aim|)` and exit-aim-alone **NOTHING** (rank 19), the CHEAP probe **11.20** (rank **1**), the full probe 11.20. The reason is structural: **18 of the 25 exits sit at |aim| 1.26-2.05 deg and not one of them can roll at all** -- every exit that delivers anything measures |aim| >= 3.0 -- so the cheapest scalar that looks like squareness ranks the dead exits first. What IS affordable is the same `junction_square_probe` at a coarser budget (`CHEAP_PROBE`: max_frames 5, beam 8, ess_step 3, aim_step 48, cap 12, step 48, per_state 2 -- **~2.7 s against ~21 s**), because coarseness costs RECALL, not precision: it scores only 2 of the 6 armable exits, but both are real, they are the full probe's **#1 and #3**, and on the one it ranks best its value is **bit-identical** to the full probe's (11.200566297610363). It declined every exit the full probe also calls dead. (The 9.6 s budget does NOT have that property -- it reported 59.97 and 100.74 on two exits the full probe calls unrollable, which is why the cheap budget is the small one.) Wired as a KEEP share (`roll_candidates(tcs_probe=)`, `extend_cycle(tcs_square=)`, `chain_herd(mid_square=)`, default OFF at ~2.7 s per surviving (aim, tcs) pair). Gated `tests/test_full_herd.py` (slow). |
@@ -291,6 +292,36 @@ deliberately unported.
 Run: `python -m harness.tetrapush.capture_push frames=60` (needs Dolphin up with slot 2 = the
 courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM via `dolphin_mem`
 (`../../tools`) only, self-contained.
+
+### Launching a search that runs longer than ten minutes (session 107 -- two traps, both real)
+
+The chain stages here take 30-90 minutes, which is longer than an agent session's background-command
+budget, and two of the obvious ways to launch one silently lose the run:
+
+- **A `nohup ... &` from a tool-call shell dies with the call's process group.** It looks fine (the
+  process reports a pid, the log gets its banner) and is gone minutes later, with no traceback and no
+  completion line -- indistinguishable from a run still working. Launch it as a genuinely detached
+  Windows process instead: `Start-Process python -ArgumentList "-u","<script>" -RedirectStandardOutput
+  <log> -RedirectStandardError <err> -WindowStyle Hidden -PassThru`, and watch the pid, not the log.
+- **Reuse the same log path across relaunches and the record becomes unreadable as a SEQUENCE.** A
+  killed writer's bytes survive in the file (Windows leaves NUL padding where the handle was), so a later
+  run's lines end up adjacent to an earlier run's with nothing marking the seam. Concretely: two
+  "probing N of M endpoints" lines that belong to *different nodes of different runs* read as two
+  different answers for the same node, which looks exactly like nondeterminism in a search whose whole
+  value is that it is reproducible. (It was not -- the counts are per node and both were correct.) Give
+  every launch its own log file, and if a log has holes in it, rerun rather than reason from it.
+
+And always pass `-u`: without it a redirected run buffers, so the log stays empty for its whole first
+stage and a healthy run is indistinguishable from a hung one.
+
+**Do not edit a `.py` file while a `pytest` run is live** -- and in this repo that rule has teeth, because
+many gates here are WIRING gates that assert on `inspect.getsource(...)`. `getsource` resolves through the
+loaded code object's file *and its first line number*, so an edit that shifts lines under a running
+process makes it return an unrelated fragment of the new file. Session 107 spent a cycle on five
+"failures" that were all this: three `test_full_herd` wiring assertions comparing against a stray
+`orders.append(...)` line, plus two of its own new tests. Nothing was wrong with the code, and no
+attribution work was needed once the mechanism was recognised -- but a 21-minute suite had to be re-run
+from scratch. Land the edits first, then gate.
 
 ## Addresses / offsets (JP GZLJ01)
 
@@ -1679,6 +1710,78 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE ~6 u FLOOR WAS NOT THE CUT'S -- REMOVING THE LANDING-BLIND KEEPS MADE IT WORSE, AND
+            WHAT THAT KEEP WAS REALLY BUYING WAS ENDPOINTS THAT CAN ESCAPE AT ALL (session 107).**
+            Round 4 ran to completion (2256 s): the un-kept cycle-3 stage produced 36 roll survivors, 30
+            after dedup/beam, and the atom grid was enumerated at **every one of the 30**. Result: only
+            **3 of 30 fire**, and the population floor at totals <= 101 is **8.919 u at total 99**
+            (node 7, herd 75, a 3-frame atom onto row 111 at `plan_cost` 21) against session 106's
+            kept-cut **5.933 u at 99 / 6.317 at 98**. The other two firing nodes are far worse (25.342 u
+            @102 and 42.900 @104). So session 106's open question is CLOSED in the negative: the floor is
+            not an artifact of the landing-blind cut, and dropping `escape_keep` did not reveal hidden
+            landings -- it admitted endpoints that cannot end a plan.
+            - **AND THE REFUSAL IS DIAGNOSED, not counted** (`away_walk.fires_census`, the s77 tool):
+              on all four non-firing survivors sampled (nodes 0, 1, 5, 12) **`l_ok` refuses ALL 672
+              variants** -- the L would act with Tetra in the front cone -- with ``dips`` down on most
+              too and a sole-blocker count of 0 on three of the four. That is the same clause s77
+              measured on the live bands, and `snap_reach` already showed the camera channel cannot buy
+              it (0-1 of 110 states snap where the same csangles COMMANDED on a travel-frozen state snap
+              9-10). So these 27 endpoints are structurally escape-less, not a knob away from firing.
+            - **WHICH MEANS THE LAST CYCLE'S ENDPOINT POOL IS NOT THE LEVER**, and the structural half of
+              this session says the same thing from the other side: `extend_cycle` cuts junction ->
+              aim/camera -> ENDPOINT, and on the last cycle nothing follows the endpoint, so an endpoint
+              keep -- however honestly it ranks -- reorders a survivor set the two upstream cuts already
+              fixed. It names the least-bad survivor; it cannot create a better one. Both halves point
+              upstream: the CYCLE-2 beam every round since s106 has iterated off (itself chosen
+              target-blind), and the per-aim cut, which is what `cloud_fan` is for.
+            - **THE FAN'S SIGN IS BAND-LOCAL, and this session measured both signs.** Validating the
+              s107 driver's first stage against round 4's own dump: the residual fan at its two firing
+              survivors spans lat **-74.5..-1.9** (along +14.7..+72.3, 110 members), where session 106
+              measured **+13.8..+52** at ITS endpoints -- same herd line, same code, opposite sign. So
+              s106's "the atom always pushes her lat-positive, so deliver her ~14 u lat-LOW of a row" is
+              an instruction for that band and BACKWARDS for this one. It follows from the dependence
+              `away_walk.probe` documents (the residual's lateral tracks Link's offset from her at
+              **-0.53 u per u**), so which side of her a family of endpoints sits on flips the whole fan.
+              The s106 page's claim is SCOPED, not retired -- it is right about its own band. Never cache
+              a fan: `residual_fan` takes its endpoints as an argument for this reason.
+            - The tool session 106 asked for is built and gated anyway, because it is the honest ranking
+              of a final list and because running both measures on the same survivors is how this
+              question gets answered on any future cycle. KB:
+              [`knowledge/strategy/landing-keep-on-a-cloud.md`](../../knowledge/strategy/landing-keep-on-a-cloud.md);
+              gate `tests/test_cloud_land.py` (17, 7 s). Scratch: `_notes/s106_retarget4.py` (the run),
+              `_notes/s107_fan_cut.py` (the fan-cut, ready); `_generated/s106/retarget4_landing.json`.
+            - **`cloud_land.py` -- the honest measure, at two prices.** `cloud_landing` enumerates the
+              whole 672-variant atom grid at an endpoint (`atom_cloud` = `away_walk.probe`'s loop with
+              the rank removed) and prices every firing variant as a WHOLE candidate: herd frames + the
+              atom's own LOG length + the row's `plan_cost` + the remaining miss at `PUSH_CEILING`. The
+              log not `freeze_f` (s105's off-by-three -- the bank is 101, not 98), and the row's own cost
+              because the rows are 19-23 frames apart (s104), so 6 u from a cheap row beats 1 u from an
+              expensive one. ~28 s an endpoint. `in_band` is reported SEPARATELY from the rank, since
+              only it answers "solved".
+            - **`residual_fan` + `predict_bound` -- the cheap half, and the axis with authority.** The
+              residual is a FAN (s106: lateral never below +13.8 u), which is exactly why s106's
+              `aim.handoff_rows` point-shift steered the rank toward badly-converting endpoints. So the
+              predictor is a minimum over fan x rows in the SAME currency as the enumeration, at
+              microseconds an aim -- affordable in `roll_probe`, where the survivor set is decided.
+              Wired `roll_probe(fan=, rows=)` -> ``cloud_bound`` + `extend_cycle(cloud_fan=)` as a
+              ``jn_keep`` share. OPTIMISTIC by construction (the fan's lateral tracks Link's offset from
+              her at -0.53 u/u), so it sizes the CUT and the enumeration makes the CLAIM
+              (`[[banded-proxy-needs-its-newton]]`).
+            - **`extend_cycle(cloud_keep=, cloud_cap=)`** is the endpoint form, kept because it is the
+              honest ranking of a final list and because running both measures on the same survivors is
+              how the cut-vs-population question gets answered on any future cycle. ``cloud_cap`` PRINTS
+              what it did not enumerate; unprobed survivors keep an infinite bound and a `None` miss,
+              never a default -- a silent truncation is the error s106 found one level up.
+            - **Two launch traps cost this session its first hour, both now in `## Tooling`:** a
+              `nohup ... &` from a tool-call shell dies with the call's process group while LOOKING
+              alive (pid returned, banner written, then gone -- no traceback, indistinguishable from a
+              run still working; use `Start-Process ... -PassThru` and watch the PID), and reusing one
+              log path across relaunches leaves a killed writer's bytes in the file (Windows NUL
+              padding), so an earlier run's lines sit adjacent to a later run's with nothing marking the
+              seam: two per-node "probing N of M endpoints" lines from DIFFERENT nodes of different runs
+              read as two answers for the same node, which looks exactly like nondeterminism in a search
+              whose value is reproducibility. It was not -- both counts were correct for their own node.
+              Re-ran clean rather than reason from a holed log. Always `-u`.
       - [~] **THE RETARGETED CHAIN ARRIVES AND STILL LOSES TO THE BANK: the fast-atom landing floor
             over every scored endpoint is 5.93 u at totals 98-99 against a 1.0 u band, and the floor
             measured so far is the CUT's, not yet the population's (session 106).** The s105 handoff's

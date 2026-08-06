@@ -146,9 +146,12 @@ Nothing beats the banked 101: the fast landings are ~6x the band, and the banded
 frame-negative. The estimate's 69-72 herd band priced her straight-line distance at the delivered
 cadence, but a plan cannot simply stop ON the row - the herd's frame count is quantized by its roll
 structure (above), and the atom's residual is a 2D FAN whose lateral is **never below +13.8 u** at
-these endpoints (along -31..+23, lat +13.8..+52): the atom always pushes her lat-positive, so the herd
+these endpoints (along -31..+23, lat +13.8..+52): here the atom pushes her lat-positive, so the herd
 must deliver a state the atom CONVERTS onto a row, ~14+ u lat-low of it, which the chain's natural
-corridor (lat +9..+25 at the last cycle) does not visit cheaply.
+corridor (lat +9..+25 at the last cycle) does not visit cheaply. **The fan is real; its SIGN is
+band-local** - re-measured at session 107's endpoints the same fan spans lat **-74.5..-1.9**, so
+"deliver her lat-low" is an instruction for THIS band and backwards for that one. See
+[`landing-keep-on-a-cloud.md`](landing-keep-on-a-cloud.md).
 
 Two configurations are measured out. Shifting the target head by a fast residual
 (`aim.handoff_rows`) steered the beam to WORSE-converting endpoints (7.8-33.8 u at totals 99-100),
