@@ -1679,6 +1679,61 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE SAVING IS REAL IN UNITS AND THE HERD CANNOT PAY IT CONTINUOUSLY: the price is ~6
+            frames (101 -> ~95), no prefix of the delivered plan reaches it, and the 14 rows s104
+            VERIFIED are the expensive ones (session 105).** s104 handed over the distance-to-frames
+            conversion as the job. It is done, and it is three findings and two negatives. KB:
+            [`knowledge/strategy/herd-price-of-a-placement.md`](../../knowledge/strategy/herd-price-of-a-placement.md);
+            gate `tests/test_herd_price.py` (13, 1.9 s); the conversion itself is now
+            `harness/tetrapush/herd_price.py`.
+            - **THE ACCOUNTING WAS OFF BY THREE.** `plan_cost` counts from the ARRIVAL, and the
+              arrival is where `entry_fan.iter_fan2` starts its fan -- it replays the WHOLE delivered
+              log. That log is **78** frames (herd 71 + escape atom 7), not the **75** at which Tetra
+              freezes. **The banked deliverable is 78 + 23 = 101 frames from state 2 to the cut**, and
+              a candidate is `arrival + plan_cost`. Every total below is on that basis.
+            - **THE SCREEN: 33 of the 211 and 11 of the 56 are not static placements at all.** The
+              2-frame cloud they were qualified in is a COUPLED fan from the console arrival -- Link's
+              own walk recoils off her Co cylinder at the full depth -- so a placement inside his Co
+              cylinder there is being pushed, and its cloud is not that cloud. Measured on the exec
+              centre, which LEADS his feet by **21.253 u** at the arrival. The console placement and
+              all 14 pinned s104 rows read depth 0.0000, so the screen costs the verified set nothing;
+              it trims from the CHEAP end, since least-herd means nearest Link's approach.
+            - **THE PRICE, TWO WAYS, AND THEY DISAGREE ABOUT WHICH RUNG WINS.** The delivered plan
+              herds her 939.4737 u in 75 frames = **12.5263 u/f** (96.4% of `PUSH_CEILING`). Priced at
+              that rate: best `plan_cost` 21 = **93.24**, best 20 = **93.45**. Priced by projecting
+              onto the delivered plan's own per-frame CURVE and charging the perpendicular miss at
+              `LATERAL_RATE`: 21 = **94.63**, 20 = **95.04**. They agree to **0.4 frames** within
+              ~2.6 u of that curve and diverge by up to **14** at 46 u off it, so the HEAD of the
+              ranking is trustworthy and the tail is not. Both say the prize is about **6 frames**.
+            - **NEGATIVE 1 -- THE DELIVERED HERD CANNOT BE TRUNCATED; the price is QUANTIZED.** Its own
+              trajectory walks through this region (f68 (-1615.9,-810.8), f70 (-1620.2,-845.1)), so the
+              cheap plan is to stop early. Truncating at k and running the ENTIRE 672-variant escape
+              knob grid: **0 fire at every k in 62..70**, 247 at 71 (the herd's own end), 323/245/7 at
+              72/73/74, 0 at 75-76. The escape needs the state the last roll's exit leaves, so
+              "70.6 herd frames" is not a plan this herd can express. **Control: the k=71 enumeration
+              contains the delivered plan itself -- 0.432 u from coord idx 274 at arrival 78.**
+            - **NEGATIVE 2 -- RE-AIMING THE ESCAPE DOES NOT STEER HER EITHER.** Of k=71's 247 firing
+              variants, **62** arrive by frame 78 (<= 99 total at `plan_cost` 21) and they produce
+              **7 distinct landings**, all within ~5 u of the console placement, against a nearest live
+              placement **21.169 u** away. Tested properly -- each landing's OWN 2-frame cloud
+              re-measured from its OWN arrival, then `hull_scan` -- all 7 read **0 leverage**,
+              `|resid|min` 2.53e-01 against a ~1e-4 band. Best landing on a live placement over EVERY
+              truncation and variant: **6.95 u** (cost 21, at arrival 87 = 108 frames) / 17.38 u (20).
+            - **DEPTH AND FRAMES SELECT DISJOINT PLACEMENTS, which re-points the verification.** The 14
+              rows s104 verified are the DEEPEST and sit **23-48 u off** the delivered curve: under the
+              trajectory price **not one beats the banked 101** (103.46..115.86), under the rate price
+              6 of 14 do (96.70..101.66). Depth is bought with contact and frames with proximity, so
+              **a depth ranking is a ranking away from the objective** -- re-verify at the frame-minimal
+              head (unverified) before another delivery pass.
+            - **HARNESS FIX (`entry_fan.base_core`), and it is why any of this could be measured.** It
+              read ``seed['log']`` for the hold but always REPLAYED `console_seed`'s log, so every
+              cloud `entry_reach.walk_clouds` ever measured with a ``seed=`` was the CONSOLE arrival's,
+              silently. Now it replays the seed's own log; inert at the default (gated 0-ULP).
+              Related: measuring a 2-frame cloud with `MEASURE_FAN` costs MINUTES against **~3-6 s**
+              for ``base_frames=(0,), j1=(1,), j2max=1``, the only shape whose length IS 2 -- which is
+              why a per-candidate cloud looked unaffordable and is not.
+            - **NEXT: the retargeted `chain_herd`.** Nothing short of a new solve reaches these
+              placements, and the estimate it has to beat is ~95 frames against the banked 101.
       - [~] **THE FRAMES WERE ON THE OTHER ADDEND: `plan_cost` 21 AND 20 BOTH CARRY GENUINE DUST AT A
             **TWO-FRAME WALK**, AND THE WALK FLOOR OF 4 WAS INHERITED FROM THE DELIVERED CLIP AND NEVER
             MEASURED (session 104).** `plan_cost` is `plan_frames + thrust + 4`. Sessions 100-103 read the

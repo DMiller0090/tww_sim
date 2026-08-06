@@ -105,12 +105,19 @@ def graft(run):
 
 
 def base_core(n0, seed=None, env=None, hold=None):
-    """The fan's base state for ``n0`` extra held frames, as a native core: replay the
-    console-confirmed log on the wired Python run, hold ``n0`` frames, graft. Returns
-    ``(core, run)`` -- the run is kept so a caller can diff against the Python reference."""
+    """The fan's base state for ``n0`` extra held frames, as a native core: replay ``seed``'s own
+    log on the wired Python run, hold ``n0`` frames, graft. Returns ``(core, run)`` -- the run is
+    kept so a caller can diff against the Python reference.
+
+    ``seed['log']`` IS replayed (session 105). It used to be read only for the hold while the replay
+    always ran `entry_search.console_seed`'s log, so ``seed=`` changed the follow-bar reference and
+    nothing else: every cloud `entry_reach.walk_clouds` measured was the CONSOLE arrival's, whatever
+    seed it was handed. That is silent rather than wrong-looking, and it is exactly the question a
+    shorter herd has to ask (a plan that ends elsewhere reaches a different cloud). Inert at the
+    default -- ``seed`` defaults to `console_seed`, whose log is the one that was being replayed."""
     seed = seed or ES.console_seed()
     hold = hold or dict(seed['log'][-1], buttons=0)
-    run, _ = ES.continue_walk([hold] * n0, env=env)
+    run, _ = ES.continue_walk([hold] * n0, log=seed['log'], env=env)
     return graft(run), run
 
 
