@@ -1696,10 +1696,16 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               `push.u`, the push's PROJECTION on the `old -> S` ray** (`razor_depth.law_of`;
               `depth = kappa*(|base| + push.u - |S-old|)`, kappa = |n.u| ~ 0.712). In-hull at the delivered
               cell: thrust 15 push.u **+0.5175** at brace 49.3812 -> +0.2532; thrust 14 **+0.4773** at
-              49.4053 -> +0.2075; thrust 13 **+0.1304** at 49.6202 -> **-0.1901**. **Both terms move
-              together with the frames**, because the braced frames before the cut are when the push is
-              ACCUMULATED and when CrrPos STRAIGHTENS the displacement that same push puts into `old`. That
-              is why the thrust is a real frame cost and not a free draw.
+              49.4053 -> +0.2075; thrust 13 **+0.1304** at 49.6202 -> **-0.1901**.
+            - **ONLY THE PUSH COLUMN BELONGS TO THE THRUST (Dereck: "it's all the same animations" -- he is
+              right).** Shift the entry by whole roll steps and `old` is **BIT-IDENTICAL** at 13/14/15
+              (-1692.3143310546875, -955.07611083984375), so the brace is a property of the ENTRY SET, not
+              of the frame -- the "0.24 u of brace" reading is retired. What does not survive the shift is
+              the push: the cut-frame contact is a **1.2 u graze on an 80 u radius sum** and the Co centre
+              is POSED FROM THE MODEL, swinging **1.1..31.3 u** off his position at **2-9 u per frame**, so
+              from the brace-reproducing entry her console spot pushes **0.0000** at thrust 13 against
+              0.6129 at thrust 15. Same animation, a different frame of it. Gated
+              `test_the_brace_is_reproducible_at_every_thrust_but_the_push_is_not`.
             - **THE FLOOR IS THE CORNER'S, AND IT IS NOW MEASURED** (`razor_depth.floor_at_brace`, in
               endpoint space, over the brace locus CrrPos parks him on): **0.1154..0.1216 with no trend** in
               the brace or the aim. s100's ">= 0.1273" was the min over the four populations that happened

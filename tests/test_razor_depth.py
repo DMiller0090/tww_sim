@@ -370,6 +370,49 @@ def test_the_clip_is_bought_with_the_pushs_projection():
     assert law[15]['push_u'] > law[15]['s_dist'] + RD.DEPTH_FLOOR / law[15]['kappa'] - RD.BASE_REACH
 
 
+def test_the_brace_is_reproducible_at_every_thrust_but_the_push_is_not():
+    """WHAT ACTUALLY DIFFERS BETWEEN THE THRUSTS (Dereck, session 101: "it's all the same animations").
+
+    He is right, and the measurement says so three ways: the cut lunge is a CONSTANT at every thrust, the
+    roll step is constant, and shifting the entry by whole roll steps puts Link on the **bit-identical**
+    brace two frames earlier. So the brace is a property of the ENTRY SET, not of the thrust - which
+    retires the "0.24 u of brace" half of the session-100 reading.
+
+    What does not survive the shift is the PUSH. The cut-frame contact is a ~1.2 u graze on an 80 u radius
+    sum, and Link's Co-cylinder centre is posed from the model, so it is indexed by the ROLL'S OWN
+    ANIMATION FRAME - it swings 1.1..31.3 u off his position over the roll, 2-9 u per frame. Two frames
+    earlier the same standing position is not touching her at all, and the push that buys the depth is
+    gone. Same animation; a different frame of it."""
+    import math
+    tetra = _tetra()
+    e15, rr, _gr = ES.zero_the_resid(tetra, FACING, 15, LEAN,
+                                     (-1529.6196515725367, -779.7578481252098))
+    assert abs(rr) < 1e-3
+    sch = ES.fast_schedule(FACING, LEAN, 15)
+    dx, dz = sch['dx'][0], sch['dz'][0]
+    olds, pushes = {}, {}
+    for thrust, shift in ((15, 0), (14, 1), (13, 2)):
+        entry = (e15[0] + shift * dx, e15[1] + shift * dz)
+        row = _row_at(entry, FACING, thrust, tetra=tetra)
+        olds[thrust] = (row[1], row[2])
+        pushes[thrust] = math.hypot(row[5], row[6])
+    # the brace: bit-identical at all three, and it IS the delivered clip's own
+    assert olds[13] == olds[14] == olds[15] == PINNED[15]['old']
+    # the push: present at the thrust the pose was sampled for, gone two frames earlier
+    assert pushes[15] > 0.6 and pushes[14] == 0.0 and pushes[13] == 0.0
+    # ...because the Co centre is animation-driven and moves several units per frame
+    nr = sch['nroot']
+    cen = [(0.5 * (sum(sch['chx'][k][:nr]) + sum(sch['chx'][k][nr:])),
+            0.5 * (sum(sch['chz'][k][:nr]) + sum(sch['chz'][k][nr:]))) for k in range(len(sch['chx']))]
+    mags = [math.hypot(*c) for c in cen]
+    assert min(mags) < 1.2 and max(mags) > 31.0, (min(mags), max(mags))
+    step = [math.hypot(cen[k][0] - cen[k - 1][0], cen[k][1] - cen[k - 1][1])
+            for k in range(1, len(cen))]
+    assert max(step) > 8.0 and sorted(step)[len(step) // 2] > 5.0, (max(step), sorted(step))
+    # between the two cut frames in question it moves ~2.8 u, on a 1.2 u overlap
+    assert 2.0 < math.hypot(cen[17][0] - cen[15][0], cen[17][1] - cen[15][1]) < 4.0
+
+
 def test_the_entry_lean_is_spent_before_the_cut_fires():
     """WHY THE LEAN AXIS IS NOT A LEVER AT A LATE CUT, and it is general rather than about this corner.
     `m351C` decays 35% per roll frame (`entry_search.lean_at_roll`), so the delivered lean's -388 draw is

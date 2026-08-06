@@ -90,10 +90,20 @@ corner. Measured in-hull at the delivered cell, both terms move together with th
 | 14 | 22 | +0.4773 | 0.5661 | 49.4053 | +0.2075 |
 | 13 | 21 | +0.1304 | 0.1588 | 49.6202 | **−0.1901** |
 
-That is what makes the thrust a real frame cost rather than a free draw. The braced frames before the cut
-are when the push is **accumulated** (she keeps contact while CrrPos holds him at the wall) and when it is
-**straightened** (CrrPos undoes the displacement that same push puts into `old`). Cut two frames early and
-you lose both: less push, aimed worse, from a brace 0.24 u further out.
+**Only one of those two columns belongs to the thrust** (Dereck, session 101: *"it's all the same
+animations"* - and he is right). The cut lunge is a constant at every thrust, and shifting the entry by
+whole roll steps puts Link on the **bit-identical** brace two frames earlier: `old` reads
+(−1692.3143310546875, −955.07611083984375) at thrust 13, 14 and 15 alike. So the brace column above is a
+property of the ENTRY SET the hull allows, not of the frame the cut fires on, and it is recoverable by
+entering closer.
+
+**The push column is not recoverable, and it is the only real difference.** The cut-frame contact is a
+~1.2 u graze on an 80 u radius sum, and Link's Co-cylinder centre is *posed from the model*
+([../mechanics/link-co-centre.md](../mechanics/link-co-centre.md)) - so it is indexed by the ROLL'S OWN
+ANIMATION FRAME, swinging **1.1 … 31.3 u** off his position over the roll at **2-9 u per frame**. From the
+shifted entry that reproduces the brace exactly, her console spot gives a push of **0.0000** at thrust 13
+where it gives 0.6129 at thrust 15: two frames earlier the same standing position is not touching her.
+Same animation, a different frame of it, and the push that buys the depth is gone.
 
 ## The floor is the corner's, and it is measured
 
