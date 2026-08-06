@@ -484,14 +484,17 @@ def aim_cells(csangle=CSANGLE, lo=AIM_WINDOW[0], hi=AIM_WINDOW[1], msd_min=None)
     return [(v[0][0], v[0][1], [list(b) for _, b in v]) for _, v in sorted(by.items())]
 
 
-def zero_the_resid(tetra, facing, thrust, lean, start, iters=40, tol=1e-6, nspeed=None):
+def zero_the_resid(tetra, facing, thrust, lean, start, iters=40, tol=1e-6, nspeed=None, seed=None):
     """Newton the entry along the residual gradient to `resid ~ 0`. Returns (entry, resid, grad).
 
     A grad that stays ~0 is the diagnostic that this configuration has NO LEVERAGE -- the pushed
-    actor is out of Co range on the cut frame, so nothing about the entry moves the razor there."""
+    actor is out of Co range on the cut frame, so nothing about the entry moves the razor there.
+
+    ``seed`` = ``(speedF, facing, stt)`` puts Tetra in motion at the placement (`entry_gradient`)."""
     p, g = tuple(start), None
     for _ in range(iters):
-        g = entry_gradient(tetra, p, facing=facing, m351c=lean, thrust=thrust, nspeed=nspeed)
+        g = entry_gradient(tetra, p, facing=facing, m351c=lean, thrust=thrust, nspeed=nspeed,
+                           seed=seed)
         if abs(g['resid']) < tol or g['grad'] == 0.0:
             break
         s = g['resid'] / (g['grad'] ** 2)
@@ -1004,17 +1007,20 @@ def locus_metrics(hits, seed=None):
 
 
 def entry_gradient(tetra, entry, *, facing=TAB_FACING, m351c=0, d=0.01, thrust=TA.THRUST,
-                   nspeed=None):
+                   nspeed=None, seed=None):
     """|d resid / d entry| at a point, and the entry precision it implies for a given window.
 
     Builds the ANALYTIC ctx (0-ULP identical to the simulated one -- `test_the_analytic_schedule_is_
     the_simulated_one`) and caches it: this runs once per Newton iteration inside `zero_the_resid`,
     and at the simulated 22 ms build a single `configuration_band` cost ~0.9 s, which is what made
-    qualifying 243 configurations a 269 s job."""
+    qualifying 243 configurations a 269 s job.
+
+    ``seed`` = ``(speedF, facing, stt)`` puts TETRA IN MOTION at the placement instead of at rest
+    (`ShoveCtx._run`); None keeps the historical at-rest seed."""
     ctx, sch, resid = build_fast(facing, m351c, thrust, TAB_ENTRY, cache=True, nspeed=nspeed)
     q = ctx.sweep_par([(tetra[0], tetra[1], entry[0], entry[1]),
                        (tetra[0], tetra[1], entry[0] + d, entry[1]),
-                       (tetra[0], tetra[1], entry[0], entry[1] + d)], 0)
+                       (tetra[0], tetra[1], entry[0], entry[1] + d)], 0, seed=seed)
     r0 = resid(q[0])
     gx, gz = (resid(q[1]) - r0) / d, (resid(q[2]) - r0) / d
     return dict(resid=r0, gx=gx, gz=gz, grad=math.hypot(gx, gz))

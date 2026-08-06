@@ -108,6 +108,11 @@ DEPTH_FLOOR = 0.1150
 #: coords clear it by 7 u). knowledge/model/placement-standability.md
 TETRA_WALL_MIN = TETRA_WALL_R
 
+#: The Co radius sum and Link's share of the ejection -- the two constants that turn a required push
+#: into a required OVERLAP (`contact_required`). The 50/50 split is the live-confirmed dCcS rank table.
+CO_R_SUM = ES.LINK_CO_R + ES.TETRA_CO_R
+SHARE_LINK = 0.5
+
 #: Newton solves per configuration. The cost is entirely here; seeds are taken in |resid| order so the
 #: cap spends itself on the points nearest the curve rather than on a corner of the box.
 SOLVE_CAP = 400
@@ -199,6 +204,131 @@ def floor_at_brace(old, d_max=0.30, d_step=0.0005, eps_half=4e-4, eps_step=2e-6)
                 return d, -min(GT.wA.pla.func(q), GT.wB.pla.func(q))
         d += d_step
     return None, None
+
+
+def brace_for_ray(ux, uz):
+    """``(|S-old|, old, kappa)`` for a razor RAY DIRECTION -- where the brace locus puts Link if the
+    cut segment is to point at S along ``u``.
+
+    `old` lies on ``S - t*u`` and on the locus CrrPos parks him on (35 u off one wall, at least 35 off
+    the other), so ``t`` is forced: the larger of the two wall roots. This is the function that makes
+    a misaligned push expensive without any hand-waving -- rotating the ray slides `old` down the wall
+    and `t` grows with it."""
+    a, b = GT.wA.pla, GT.wB.pla
+    da, db = a.nx * ux + a.nz * uz, b.nx * ux + b.nz * uz
+    ts = [-35.0 / d for d in (da, db) if d < 0.0]
+    if not ts:
+        return None
+    t = max(ts)
+    return t, (GT.S[0] - t * ux, GT.S[1] - t * uz), max(abs(da), abs(db))
+
+
+def achievable_depth(push, facing, thrust, lean=DELIVERED_LEAN):
+    """THE DEPTH A CUT-FRAME PUSH IS WORTH, wherever the razor has to brace to use it.
+
+    A raw row cannot be ranked by its own `depth_of` -- `genuine` is three clauses, and a row 86 u out
+    with its endpoint behind a far wall reads +13.6 -- nor by comparing push MAGNITUDES against
+    `contact_required`, which scores a 7.4 u overlap pointing anywhere at +6.5. Both were false starts
+    this session. The scalar that is actually well posed depends on the push VECTOR alone:
+
+        ray = |base| * m_hat + push        (the cut segment, whatever `old` is)
+        depth = kappa(ray) * (|ray| - |S - old(ray)|)
+
+    because `resid = 0` says the ray points at S, which FIXES the brace via `brace_for_ray`. A big
+    misaligned push therefore pays for itself twice over -- it rotates the ray and slides `old` down
+    the wall -- and a small aligned one is worth more than a large crooked one. Reproduces the
+    delivered clip's +0.2533 from its push alone. Returns ``(depth, s_dist, old, phi_deg)``.
+
+    **THE CLAUSE IT DOES NOT ENFORCE, AND A SEARCH MUST**: this is a function of the PUSH, so the
+    brace it reports is the one the razor WOULD use, not the one the row is at. A row whose own Link
+    is 107 u out in the courtyard still scores its push here, and Newtoning it leaves him 107 u out
+    (measured, session 102: +0.0955 at ``|S - old| 107.46``, solving to -41). Screen rows on their own
+    ``|S - old|`` before ranking them with this."""
+    mx = ES.ML.cM_ssin_s16(int(facing) & 0xFFFF)
+    mz = ES.ML.cM_scos_s16(int(facing) & 0xFFFF)
+    base = base_reach(facing, lean, thrust)
+    vx, vz = base * mx + push[0], base * mz + push[1]
+    L = math.hypot(vx, vz)
+    if L <= 0.0:
+        return None
+    br = brace_for_ray(vx / L, vz / L)
+    if br is None:
+        return None
+    s, old, kappa = br
+    phi = math.degrees(math.atan2(mx * (vz / L) - mz * (vx / L), mx * (vx / L) + mz * (vz / L)))
+    return kappa * (L - s), s, old, phi
+
+
+def contact_required(facing, thrust, lean=DELIVERED_LEAN, depth=DEPTH_FLOOR, w_max=8.0,
+                     w_step=0.01, u_step=0.002, u_max=6.0):
+    """THE LAW INVERTED: the SMALLEST cut-frame OVERLAP this cell can clip on, and where.
+
+    `law_of` reads a configuration and reports what it is worth. This asks the question a search
+    actually needs -- what would be enough -- and it is exact, analytic and ~30 ms, because at a razor
+    solution every term is pinned by the CELL and the BRACE:
+
+      * `resid = 0` means ``base_vec + push`` is PARALLEL to ``old -> S``, so the push's perpendicular
+        component is not free: it must cancel `base`'s, ``g = -|base| sin(delta)``, where `delta` is
+        the facing's angle off that ray. **That perpendicular push is not a cost -- it ROTATES the ray
+        and buys a NEARER brace**, which is why the delivered clip cuts from 49.3812 while cell 2552's
+        no-push razor is stuck at 49.6161.
+      * the parallel component must then reach the floor: ``f = |S-old| + depth/kappa - |base| cos(delta)``.
+      * `|push| = share2 * cross_len` (the shares are 50/50, live-confirmed), and Link is shoved
+        directly away from Tetra -- so the push DIRECTION fixes where she has to be, ``t = c -
+        (R_sum - cross_len) * push_hat`` about the animation-posed Co centre ``c = old + off[cut-1]``,
+        and `placeable` decides whether that spot exists. A push aimed too far off the ray puts her
+        inside a wall, so `push_u` has a floor from the GEOMETRY as well as from the depth.
+
+    Sweeping `old` along the brace locus (both slide branches) and `push_u` up from `f`, the first
+    placeable spot gives that brace's requirement; the minimum over the locus is the CELL's. Returns
+    ``dict(cross_len, push_u, push_perp, s_dist, w, branch, tetra, old, c, theta_deg)`` or None.
+
+    This is what makes a thrust's refusal a measurement rather than a search outcome: thrust 15
+    delivers `cross_len` 1.226 at cell 2552, and what a candidate must beat is this number."""
+    sch = ES.fast_schedule(facing, lean, thrust)
+    k = sch['cut_step']
+    nr = sch['nroot']
+    off = (0.5 * (sum(sch['chx'][k - 1][:nr]) + sum(sch['chx'][k - 1][nr:])),
+           0.5 * (sum(sch['chz'][k - 1][:nr]) + sum(sch['chz'][k - 1][nr:])))
+    mhat = (ES.ML.cM_ssin_s16(int(facing) & 0xFFFF), ES.ML.cM_scos_s16(int(facing) & 0xFFFF))
+    base = base_reach(facing, lean, thrust)
+    best = None
+    for branch in ('A', 'B'):
+        w = 0.0
+        while w <= w_max + 1e-12:
+            old = brace_point(35.0, 35.0 + w) if branch == 'B' else brace_point(35.0 + w, 35.0)
+            sx, sz = GT.S[0] - old[0], GT.S[1] - old[1]
+            s = math.hypot(sx, sz)
+            w += w_step
+            if s > 56.0:
+                continue
+            ux, uz = sx / s, sz / s
+            px, pz = -uz, ux
+            cosd = mhat[0] * ux + mhat[1] * uz
+            sind = mhat[0] * px + mhat[1] * pz
+            kappa = max(abs(GT.wA.pla.nx * ux + GT.wA.pla.nz * uz),
+                        abs(GT.wB.pla.nx * ux + GT.wB.pla.nz * uz))
+            g = -base * sind
+            f = s + depth / kappa - base * cosd
+            c = (old[0] + off[0], old[1] + off[1])
+            pu = max(f, 0.0)
+            while pu <= u_max:
+                mag = math.hypot(pu, g)
+                cross = mag / SHARE_LINK
+                if cross >= CO_R_SUM:
+                    break
+                hx, hz = (pu * ux + g * px) / mag, (pu * uz + g * pz) / mag
+                tet = (c[0] - (CO_R_SUM - cross) * hx, c[1] - (CO_R_SUM - cross) * hz)
+                if placeable(tet):
+                    row = dict(cross_len=cross, push_u=pu, push_perp=g, s_dist=s, w=w - w_step,
+                               branch=branch, tetra=[tet[0], tet[1]], old=[old[0], old[1]],
+                               c=[c[0], c[1]], theta_deg=math.degrees(math.atan2(abs(g), pu)),
+                               kappa=kappa, facing=int(facing) & 0xFFFF, thrust=thrust)
+                    if best is None or cross < best['cross_len']:
+                        best = row
+                    break
+                pu += u_step
+    return best
 
 
 def hull_points(poly, step=1.0):

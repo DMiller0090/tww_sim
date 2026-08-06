@@ -1679,6 +1679,77 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE REFUSAL IS A CONJUNCTION, AND IT IS MONOTONE: EVERY UNIT OF RESIDUAL LEFT UN-ZEROED
+            BUYS DEPTH, SO THE PUSH THAT PAYS FOR A CLIP IS NEAR THE RAZOR AND NEVER ON IT (session 102).**
+            The handoff's axis 1 (her VELOCITY, the one term never varied) is now BUILT and it is the
+            game's own follow model, but the axis is not what was refusing thrust 13. What was refusing it
+            is a pair of constraints nobody had asked at the same time.
+            - **THE MECHANISM BEHIND THE INERT PLACEMENT PLANE: AN EJECTION EQUILIBRIUM.** The plow throws
+              her out at HALF the overlap every frame, so her distance from the cut frame's Co centre is an
+              ATTRACTOR: over a +-40 u grid of static seeds, 22 of the 24 that touch him at all arrive at
+              |c - t| **87..93 u** having been flung **10..60 u**, against a requirement of <= 79.4.
+              Seeding her a unit closer buys a deeper early plow that ejects her a unit further. The one
+              seed that does get inside (68 u, 12 u of overlap) is aimed so far off the ray it is the worst
+              row on the grid. KB NEW `mechanics/plow-ejection-equilibrium.md`.
+            - **THE SEED-MOTION AXIS, 0-ULP AND ADDITIVE.** `ShoveCtx._run` takes `(speedF, facing, stt)`
+              at `placed_step`; `stt < 0` is the historical at-rest seed, bit-identical. A moving seed
+              integrates `npc_zl1.Zl1FollowState` **bit-exactly, every frame** (gated). What is
+              deliverable is narrow: `STT_MOVE` only, speedF <= 10, and near the corner she has NO DRIVE
+              (target speed 0 inside 130 u), so a seed is RESIDUAL momentum decaying 1.0/frame, spent by
+              frame `speedF`. It does not close the contact at the cut; it buys a different EJECTION
+              HISTORY. Measured worth: it moves the equilibrium ~3 u against a 10.8 u deficit.
+            - **THE ENGINE NOW REPORTS THE CONTACT PAIR** (`sweep_par(..., extra=True)`, slots 10-13: the
+              animation-posed Co centre and where she stands on the cut-consumed frame), bit-identical to
+              `cc_push.co_move_pair` (gated). It exists because a search is BLIND without it: with no
+              overlap the push is zero and the depth stops depending on her placement at all, so a climb
+              has no gradient exactly where it needs one.
+            - **THE LAW INVERTED -- what would be ENOUGH.** NEW `razor_depth.contact_required`: the
+              smallest cut-frame OVERLAP a cell can clip on, and the spot she must stand in for it,
+              analytic in ~30 ms. Control: at the delivered cell it predicts `cross_len` **0.8085** at
+              (-1618.79, -939.00), 31.6 deg off the ray; the console clip delivers **1.2259** at
+              (-1618.95, -940.17), 32.4 deg -- **right spot to 1.2 u, right angle to 0.8 deg**. And the
+              requirement is **THRUST-INDEPENDENT** (13 vs 15 agree to under 1% at every cell), which is
+              Dereck's "it's all the same animations" as a number: thrust 13 is not refused for needing
+              more. KB NEW `model/required-cut-contact.md`.
+            - **THE DELIVERED CELL IS AN EXPENSIVE ONE.** Required overlap is MONOTONE IN THE BRACE:
+              cell **2557 asks 0.3939** (corner-most brace 49.2546, only 4.9 deg off the ray) against
+              cell 2552's **0.8037**. Also pinned: `|base|` 49.2202 is **0.0345 u SHORT** of the
+              corner-most brace, so every clip here is bought with contact and no aiming trick pays alone.
+            - **THE CONJUNCTION, WHICH IS THE VERDICT.** Banding a swept space (placement x entry x seed
+              motion, ~10-13 M rows a cell) by |resid| and taking the best `achievable_depth`:
+
+              | \|resid\| | cell 2557 (needs 0.394) | cell 2552 (needs 0.804) |
+              |---|---|---|
+              | <= 0.05 | **-0.0363**, NO contact | **+0.0399**, 0.65 u of contact |
+              | <= 0.5 | -0.0020 | +0.1564 |
+              | <= 2 | +0.0841 | +0.3910 |
+              | <= 10 | +0.2205 | +0.5121 |
+
+              The razor's own acceptance band is ~1e-4, **500x tighter than the tightest column**. So the
+              paying push is real and near the curve, never on it: at 2557 the near-razor rows have no
+              contact and the best is exactly the no-push value. **Best corner-scoped near-razor
+              achievable depth: +0.0399 at cell 2552** -- past the PLANE, where s101's best over
+              everything was -0.0208, and still 0.075 under the 0.1150 floor. It is an UPPER bound
+              (it over-reads the delivered clip by 0.066), so treat it as the ceiling, not a result.
+            - **AND THE CELL THAT WINS THE CONJUNCTION IS NOT THE CHEAP ONE**, which names the trade: 2557
+              asks half the overlap but wants her 4.9 deg off the ray, i.e. essentially ON Link's roll
+              line where the plow ejects hardest; 2552's 34 deg costs more overlap and lets her stand off
+              the line. **The optimum over the window is INTERIOR and the two cells measured are its ends.**
+            - **GATES `tests/test_tetra_motion.py` NEW (10, ~110 s), `razor_depth` 17+2 still green.**
+              Bit-equality gates: the at-rest seed is the historical run, a moving seed IS `Zl1FollowState`,
+              the contact pair IS `co_move_pair`, `razor_batch` IS `zero_the_resid`.
+            - **FOUR SCOPE ERRORS IN ONE SESSION, ALL THE SAME SHAPE** -- a scalar ranked over rows it did
+              not scope. Raw `depth_of` returns **+13.6** for a Link 86 u out with the endpoint behind a far
+              wall; the law's `d_ray` on a raw row silently grants the steering the razor must pay; a
+              magnitude-only surplus scores a **7.4 u** overlap pointing anywhere at +6.5; and
+              `achievable_depth` scores **+0.0955** for a row at `|S-old|` **107.46** that Newtons to -41.
+              Each was caught by printing the clause, not the proxy.
+            - **NEXT: SWEEP ALL 45 CELLS ON THE CORNER-SCOPED CONJUNCTION** and find the interior optimum
+              (the two ends are measured; the middle is not). Then attack the trade itself rather than
+              either half: what a given contact costs in RESIDUAL is set by how much perpendicular push
+              the cell has to spend steering, so the question is which cell's no-push razor sits where the
+              contact-bearing configurations naturally brace. Do NOT re-run at-rest placement, lean, or
+              hull scans, and do not rank any raw row without first screening its own `|S - old|`.
       - [~] **THE ARRIVE-EXACTLY HIT PUTS TETRA 3.54 u INSIDE WALL B. SHE CANNOT STAND THERE, THE ENGINE
             NEVER CHECKS A SEED, AND WITH THE CLAUSE ENFORCED THRUST 13 IS REFUSED AT ALL 45 CELLS WITH NO
             HULL IN THE SEARCH (session 101).** The box below is measured correctly and reproduces; what it

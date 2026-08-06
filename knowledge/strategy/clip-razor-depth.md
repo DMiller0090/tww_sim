@@ -212,6 +212,11 @@ clause that says which of its values are deliverable - the hull was Link's, and 
   the bands were measured outside the reachable set.
 - [clip-exit-angle.md](clip-exit-angle.md) - the 0.65 u pocket this law is the ranked form of, and the
   exit-angle window it bounds.
+- [../model/required-cut-contact.md](../model/required-cut-contact.md) - **the law inverted**: how much
+  OVERLAP a cell needs and where she has to stand for it, plus `achievable_depth`, the scalar that ranks
+  a raw row before the razor is solved.
+- [../mechanics/plow-ejection-equilibrium.md](../mechanics/plow-ejection-equilibrium.md) - why her
+  placement reads inert: the plow ejects her to a fixed distance whatever the seed, and what axis is left.
 - [../model/placement-standability.md](../model/placement-standability.md) - the clause on HER axis, the
   50 u bar, and why the engine leaves it to the caller.
 - [../mechanics/roll-lean-decay.md](../mechanics/roll-lean-decay.md) - why the lean is not a lever at a
