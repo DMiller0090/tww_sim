@@ -1,0 +1,584 @@
+{
+ "source": "_notes/s104_{cost21_hunt,verify_cost21}.py (session 104)",
+ "note": "THE WALK-BUDGET LADDER at plan_frames 2. plan_cost = plan_frames + thrust + 4 (entry_fan.plan_cost); the banked console deliverable is 23 at plan_frames 4 / thrust 15. Sessions 100-103 attacked the THRUST addend and closed it against an animation constant (knowledge/mechanics/cut-frame-co-swing.md); this is the WALK addend, which had never been taken below the delivered clip's own 4. A MODEL OUTPUT. Every `rows` entry was re-derived from its station coordinates alone and passes the engine's genuine flag AND geometry_tetra.genuine_clip on the post-CrrPos endpoint, containment in the FINE (stride-2) 2-frame cloud, is_walkable, placeable, and depth over DEPTH_FLOOR. NOT delivered clips: a station inside the cloud is dust at an entry a two-frame plan can REACH, not one it lands on -- delivery owes a discrete 2-frame plan, confirm_entry, cross_engine at 0 ULP, the DTM. herd_delta is the placement's distance-to-corner MINUS the console placement's 137.2561 u: POSITIVE means she has less distance to be herded, so it is a frame LEAD and not a cost. It is a distance, never a frame count -- converting it owes the herd search.",
+ "console_tetra": [
+  -1629.101806640625,
+  -893.7962036132812
+ ],
+ "console_tetra_dist_to_corner": 137.2560625336703,
+ "corner": [
+  -1727.0,
+  -990.0
+ ],
+ "rungs": [
+  {
+   "plan_cost": 21,
+   "thrust": 15,
+   "plan_frames": 2,
+   "cells": [
+    2552,
+    2551,
+    2553
+   ],
+   "n_live_placements": 211,
+   "n_verified": 8,
+   "deepest": 0.33990478515625,
+   "herd_delta_max": 64.62667145526333,
+   "herd_delta_min": -50.64346469242618,
+   "n_less_herd_than_console": 163,
+   "rows": [
+    {
+     "entry": [
+      -1573.621145637189,
+      -778.6635706345738
+     ],
+     "old": [
+      -1692.3143310546875,
+      -955.0763549804688
+     ],
+     "new": [
+      -1727.302978515625,
+      -990.5951538085938
+     ],
+     "depth": 0.33953857421875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.381005689727616,
+     "resid": 5.490837969058509e-06,
+     "grad": 0.03500749774952294,
+     "station": [
+      -1573.6217240557999,
+      -778.6636134353989
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2551,
+     "facing": 40820,
+     "tetra": [
+      -1674.312688615132,
+      -905.2556233293003
+     ],
+     "plan_cost": 21,
+     "thrust": 15
+    },
+    {
+     "entry": [
+      -1570.6022285277704,
+      -776.2367043714795
+     ],
+     "old": [
+      -1692.3143310546875,
+      -955.0763549804688
+     ],
+     "new": [
+      -1727.302978515625,
+      -990.5951538085938
+     ],
+     "depth": 0.33953857421875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.381005689727616,
+     "resid": 1.0099071021054012e-06,
+     "grad": 0.03145872840204694,
+     "station": [
+      -1570.6030646914949,
+      -776.2367845601697
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2551,
+     "facing": 40820,
+     "tetra": [
+      -1674.312688615132,
+      -909.2556233293003
+     ],
+     "plan_cost": 21,
+     "thrust": 15
+    },
+    {
+     "entry": [
+      -1573.612797657442,
+      -776.137960465313
+     ],
+     "old": [
+      -1692.3143310546875,
+      -955.0763549804688
+     ],
+     "new": [
+      -1727.302978515625,
+      -990.5951538085938
+     ],
+     "depth": 0.33953857421875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.381005689727616,
+     "resid": 1.2498311443924559e-05,
+     "grad": 0.02043252404916012,
+     "station": [
+      -1573.6139448104275,
+      -776.1396231258399
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2551,
+     "facing": 40820,
+     "tetra": [
+      -1670.312688615132,
+      -905.2556233293003
+     ],
+     "plan_cost": 21,
+     "thrust": 15
+    },
+    {
+     "entry": [
+      -1576.1975550973445,
+      -775.1189650531506
+     ],
+     "old": [
+      -1692.3143310546875,
+      -955.0761108398438
+     ],
+     "new": [
+      -1727.2181396484375,
+      -990.509033203125
+     ],
+     "depth": 0.25341796875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.38117961695212,
+     "resid": -7.423333112374472e-07,
+     "grad": 0.21337633560246896,
+     "station": [
+      -1576.1977845721376,
+      -775.1188046121355
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2552,
+     "facing": 40841,
+     "tetra": [
+      -1646.312688615132,
+      -861.2556233293003
+     ],
+     "plan_cost": 21,
+     "thrust": 15
+    },
+    {
+     "entry": [
+      -1569.540942028473,
+      -779.1675711666567
+     ],
+     "old": [
+      -1692.3143310546875,
+      -955.0763549804688
+     ],
+     "new": [
+      -1727.302978515625,
+      -990.5951538085938
+     ],
+     "depth": 0.33953857421875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.381005689727616,
+     "resid": 1.0099071021054012e-06,
+     "grad": 0.04003756093327299,
+     "station": [
+      -1569.541922028473,
+      -779.1675711666567
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2551,
+     "facing": 40820,
+     "tetra": [
+      -1670.312688615132,
+      -909.2556233293003
+     ],
+     "plan_cost": 21,
+     "thrust": 15
+    },
+    {
+     "entry": [
+      -1568.1027191349563,
+      -784.4668075350698
+     ],
+     "old": [
+      -1692.3143310546875,
+      -955.0763549804688
+     ],
+     "new": [
+      -1727.302978515625,
+      -990.5951538085938
+     ],
+     "depth": 0.33953857421875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.381005689727616,
+     "resid": -1.2999736336266127e-05,
+     "grad": 0.05501533652109741,
+     "station": [
+      -1568.1035090107355,
+      -784.466680664059
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2551,
+     "facing": 40820,
+     "tetra": [
+      -1674.312688615132,
+      -913.2556233293003
+     ],
+     "plan_cost": 21,
+     "thrust": 15
+    },
+    {
+     "entry": [
+      -1566.7672649630438,
+      -779.7920541456168
+     ],
+     "old": [
+      -1692.3143310546875,
+      -955.0763549804688
+     ],
+     "new": [
+      -1727.302978515625,
+      -990.5951538085938
+     ],
+     "depth": 0.33953857421875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.381005689727616,
+     "resid": 5.490837969058509e-06,
+     "grad": 0.048806672039585046,
+     "station": [
+      -1566.7677042622813,
+      -779.7920293226462
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2551,
+     "facing": 40820,
+     "tetra": [
+      -1670.312688615132,
+      -913.2556233293003
+     ],
+     "plan_cost": 21,
+     "thrust": 15
+    },
+    {
+     "entry": [
+      -1576.0695970483123,
+      -775.2760315425647
+     ],
+     "old": [
+      -1692.3143310546875,
+      -955.0763549804688
+     ],
+     "new": [
+      -1727.3033447265625,
+      -990.5955200195312
+     ],
+     "depth": 0.33990478515625,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.381005689727616,
+     "resid": -2.1333613857316734e-07,
+     "grad": 0.25539182513963016,
+     "station": [
+      -1576.069629635358,
+      -775.2760083459175
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2551,
+     "facing": 40820,
+     "tetra": [
+      -1646.312688615132,
+      -861.2556233293003
+     ],
+     "plan_cost": 21,
+     "thrust": 15
+    }
+   ]
+  },
+  {
+   "plan_cost": 20,
+   "thrust": 14,
+   "plan_frames": 2,
+   "cells": [
+    2551,
+    2552
+   ],
+   "n_live_placements": 56,
+   "n_verified": 6,
+   "deepest": 0.2078857421875,
+   "herd_delta_max": 69.35379992454932,
+   "herd_delta_min": -16.200975043481137,
+   "n_less_herd_than_console": 46,
+   "rows": [
+    {
+     "entry": [
+      -1574.999803320322,
+      -777.0890468871451
+     ],
+     "old": [
+      -1692.314697265625,
+      -955.0421142578125
+     ],
+     "new": [
+      -1727.173095703125,
+      -990.4635009765625
+     ],
+     "depth": 0.2078857421875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.40514791690277,
+     "resid": -9.603358258558418e-05,
+     "grad": 0.3895760348530691,
+     "station": [
+      -1574.9996529322514,
+      -777.089145798359
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2552,
+     "facing": 40841,
+     "tetra": [
+      -1658.312688615132,
+      -881.2556233293003
+     ],
+     "plan_cost": 20,
+     "thrust": 14
+    },
+    {
+     "entry": [
+      -1572.396055574556,
+      -779.4300121652551
+     ],
+     "old": [
+      -1692.314697265625,
+      -955.0420532226562
+     ],
+     "new": [
+      -1727.1729736328125,
+      -990.46337890625
+     ],
+     "depth": 0.207763671875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.40519141970645,
+     "resid": 1.203081115573928e-05,
+     "grad": 0.475431398591764,
+     "station": [
+      -1572.396138076499,
+      -779.4299556548191
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2552,
+     "facing": 40841,
+     "tetra": [
+      -1650.312688615132,
+      -873.2556233293003
+     ],
+     "plan_cost": 20,
+     "thrust": 14
+    },
+    {
+     "entry": [
+      -1578.270688518835,
+      -772.6929457402686
+     ],
+     "old": [
+      -1692.314697265625,
+      -955.0421142578125
+     ],
+     "new": [
+      -1727.173095703125,
+      -990.4635009765625
+     ],
+     "depth": 0.2078857421875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.40514791690277,
+     "resid": 7.384656032216802e-05,
+     "grad": 0.29300927305239033,
+     "station": [
+      -1578.270841656306,
+      -772.6928511415637
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2552,
+     "facing": 40841,
+     "tetra": [
+      -1662.312688615132,
+      -881.2556233293003
+     ],
+     "plan_cost": 20,
+     "thrust": 14
+    },
+    {
+     "entry": [
+      -1576.7625100992702,
+      -774.2897619288276
+     ],
+     "old": [
+      -1692.314697265625,
+      -955.0420532226562
+     ],
+     "new": [
+      -1727.1729736328125,
+      -990.46337890625
+     ],
+     "depth": 0.207763671875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.40519141970645,
+     "resid": -6.223159191851424e-05,
+     "grad": 0.3585190731845928,
+     "station": [
+      -1576.7624929298988,
+      -774.2897721861511
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2552,
+     "facing": 40841,
+     "tetra": [
+      -1658.312688615132,
+      -877.2556233293003
+     ],
+     "plan_cost": 20,
+     "thrust": 14
+    },
+    {
+     "entry": [
+      -1570.3015656238176,
+      -781.545209148686
+     ],
+     "old": [
+      -1692.314697265625,
+      -955.0421142578125
+     ],
+     "new": [
+      -1727.173095703125,
+      -990.4635009765625
+     ],
+     "depth": 0.2078857421875,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.40514791690277,
+     "resid": -3.5551862739459746e-05,
+     "grad": 0.49286593110220234,
+     "station": [
+      -1570.3015820537628,
+      -781.5451977444366
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2552,
+     "facing": 40841,
+     "tetra": [
+      -1650.312688615132,
+      -877.2556233293003
+     ],
+     "plan_cost": 20,
+     "thrust": 14
+    },
+    {
+     "entry": [
+      -1574.2212737036027,
+      -777.0633915795465
+     ],
+     "old": [
+      -1692.314697265625,
+      -955.0419311523438
+     ],
+     "new": [
+      -1727.1727294921875,
+      -990.463134765625
+     ],
+     "depth": 0.20751953125,
+     "genuine_flag": true,
+     "genuine_clip": true,
+     "s_dist": 49.4052784254251,
+     "resid": -2.0562427947743917e-05,
+     "grad": 0.46423934241505804,
+     "station": [
+      -1574.221324079529,
+      -777.0633589871235
+     ],
+     "in_fine_cloud": true,
+     "entry_walkable": true,
+     "tetra_placeable": true,
+     "clears_floor": true,
+     "ok": true,
+     "cell": 2552,
+     "facing": 40841,
+     "tetra": [
+      -1650.312688615132,
+      -869.2556233293003
+     ],
+     "plan_cost": 20,
+     "thrust": 14
+    }
+   ]
+  },
+  {
+   "plan_cost": 19,
+   "thrust": 13,
+   "plan_frames": 2,
+   "cells": [
+    2551,
+    2552
+   ],
+   "n_live_placements": 0,
+   "n_verified": 0,
+   "deepest": null,
+   "herd_delta_max": null,
+   "herd_delta_min": null,
+   "n_less_herd_than_console": 0,
+   "rows": []
+  }
+ ]
+}

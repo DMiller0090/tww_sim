@@ -1679,6 +1679,70 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE FRAMES WERE ON THE OTHER ADDEND: `plan_cost` 21 AND 20 BOTH CARRY GENUINE DUST AT A
+            **TWO-FRAME WALK**, AND THE WALK FLOOR OF 4 WAS INHERITED FROM THE DELIVERED CLIP AND NEVER
+            MEASURED (session 104).** `plan_cost` is `plan_frames + thrust + 4`. Sessions 100-103 read the
+            standing ask for 21 as a THRUST and closed it against an animation constant (the box below).
+            The walk addend had never been taken DOWN -- s100 tested walk 5 (more) and nothing tested 2 or 3.
+            - **DERECK KILLED THE FIRST PASS AND HE WAS RIGHT.** "i assumed for testing you would just
+              teleport Link to locations. i doubt your 2/3 frame walk search was exhaustive. we should just
+              be trying to prove it works first before finding the walk plan." The first pass gridded
+              `entry_reach.hull_scan` over the 2-frame cloud and reported ``n_leverage 0`` at all 22
+              aimable cells -- **VOID**: `hull_scan` grids LINK'S ENTRY with HER FROZEN at the console
+              placement, and a 2-frame entry sits ~40 u away, so she is out of Co range on the cut frame
+              and the field is a no-push plateau. Same cloud, same thrust, same facing, cell 2552, 492
+              grid points: **console placement 0 leverage / |resid|min 3.29e-01; a productive placement
+              293 leverage / 3.50e-03.** HER PLACEMENT IS THE SWITCH, so it is the swept axis. (And a
+              1.5 u grid steps over a ~1e-4 u ribbon anyway -- `hull_field`'s own docstring says so.)
+            - **THE LADDER, her placement SWEPT over ±170 u / 4 u about the brace, entries gridded at
+              1.0 u inside the 2-frame cloud, locus walked at ~1e-5:**
+
+              | `plan_cost` | thrust | live placements | verified | deepest | `cut_frame_swing` |
+              |---|---|---|---|---|---|
+              | 21 | 15 | **211** (1130 stations) | 8/8 | **+0.339905** | -1.2850 |
+              | 20 | 14 | **56** | 6/6 | **+0.207886** | +1.8547 |
+              | 19 | 13 | **0** | - | none (nearest \|resid\| 1.6e-03) | +8.9252 |
+
+              Floor +0.1150; the banked 4-frame thrust-15 clip reads +0.2533, so **`plan_cost` 21 is
+              DEEPER than the deliverable it beats by two frames.** Every verified row is re-derived from
+              its station coordinates alone and passes the engine's genuine flag AND `GT.genuine_clip` on
+              the post-CrrPos endpoint, containment in the FINE 2-frame cloud, `is_walkable`, `placeable`
+              and depth over floor, at `|resid|` down to 2.1e-07; endpoints land within 1 u of the known
+              seam corner (-1727, -990). **19 is refused for the reason the box below already gave** --
+              the addends are interchangeable in the ARITHMETIC and not in the physics, since a shorter
+              walk starts the roll earlier without re-phasing it.
+            - **AND THE SHORT WALK MOVES HER PLACEMENT OUTWARD, WHICH IS WHERE THE NEXT FRAMES ARE.**
+              `plan_cost` counts from the ARRIVAL, so a shorter walk is only real if the herd does not hand
+              the frames back. Measured against the console placement's 137.2560625336703 u to the corner
+              (POSITIVE = less distance to herd): **21 spans -50.6..+64.6 u with 163 of 211 needing LESS
+              herd; 20 spans -16.2..+69.4 u with 46 of 56.** A DISTANCE, never a frame count.
+              **Dereck's call: "I'm fine with a 15 frame thrust if it means we need to herd her less as
+              well"** -- so the objective is now frame-minimal across ALL THREE addends (herd + walk +
+              thrust), not the thrust alone, and pricing the herd is the next job.
+            - **THE s93 HULL FIXTURE IS 4.8x TOO SMALL AND EVERY `outside the hull` PRUNE SINCE WAS
+              OVER-TIGHT.** `MEASURE_FAN` sweeps ``j1=(2,3,4)``, and since `plan_frames` is
+              ``base + j1 + j2`` with ``j2 >= 1`` its shortest representable plan is **3 frames** -- it
+              returns **0 endpoints** at budget 2, which reads as "no such plan" and is an alphabet
+              artifact (`iter_fan2` accepts ``j1=1``). Widening ``j1`` grows the FOUR-frame hull
+              **1688 -> 8074 u²** with all 616 pinned vertices contained. Only `outside` was ever a claim,
+              so the error made negatives too EARLY, never too late. New fixture
+              `fixtures/courtyard_walk_hull_s104.json` (budgets 2/3/4); **the s93 fixture is left pinned**,
+              since its own gates were written against it.
+            - **THE 2-FRAME CLOUD IS BOUNDED BY PHYSICS, NOT BY THE ALPHABET** -- worth knowing before
+              anyone refines sticks at it. On the only 2-frame plan shape (``base_frames=(0,), j1=(1,),
+              j2max=1``): stride 8 (583 sticks) = 139 213 endpoints / 123.8 u²; stride 2 (3355 sticks) =
+              1 577 346 / **129.7 u²**. A 5.75x alphabet buys **+4.8%** of area and 0.1 u of extent, and
+              the nearest genuine entry stayed 2.218 u out of both. Two frames at the speedF cap is the bound.
+            - NEW [`knowledge/strategy/plan-cost-walk-budget.md`](../../knowledge/strategy/plan-cost-walk-budget.md)
+              + hub; NEW `tests/test_walk_budget.py` (**14 + 1 slow, green**); NEW fixtures
+              `courtyard_{walk_hull,walk_budget}_s104.json`; `_notes/s104_*.py`.
+            - **NOT A DELIVERED CLIP, and this is the whole remaining gap:** a station inside the cloud is
+              dust at an entry a two-frame plan can **REACH**, not one it **lands on**. The fan's entries
+              are discrete (two sticks in the whole plan) and the genuine set is a ~1e-4 u ribbon, so
+              delivery owes a 2-frame plan whose own predicted entry coincides with a station, then
+              `confirm_entry` -> `cross_engine` at 0 ULP -> the DTM. Entry density at stride 1 is ample
+              (~1 M endpoints per u² against a ~1.7e-3 u² ribbon), so this is a matching job, not a
+              feasibility one.
       - [~] **THE INTERIOR OPTIMUM IS REAL IN THE BAND AND DOES NOT SURVIVE THE RAZOR: 5.0 M NEWTONS SAY
             -0.015503, AND THE REFUSAL IS ONE NUMBER NO SEARCH CAN MOVE (session 103).** All three
             handoff items ran and the peak session 102 predicted is there. Then the confirmation nobody
