@@ -1731,12 +1731,21 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               assertion. **KB:** NEW `model/placement-standability.md`, NEW `mechanics/roll-lean-decay.md`,
               superseded claim MIGRATED to NEW `history/arrive-exactly-through-the-plane.md`;
               `strategy/clip-razor-depth.md` corrected (floor, projection law, the trade), hub +2.
-            - **NEXT.** Thrust 14 (`plan_cost` 22) is still a frame available with nothing else changed and
-              is now the only one with evidence behind it -- s99 never hunted cells 2533 or 2525 at it. For
-              thrust 13 the open axis is the one the law points at: **`push.u` without giving up the brace**,
-              which means contact that arrives from UP-RAY without the slide frames -- i.e. HER moving
-              (stt-4 follow, ~10 u/frame) rather than plowed-and-static, the one term the sweep still seeds
-              at rest. Do NOT re-run placement or lean sweeps for thrust 13.
+            - **NEXT -- THE REQUIRED DTM IS THRUST 13 (`cut_step` 15, `plan_cost` 21), Dereck's explicit
+              call.** That is the deliverable this work owes, and **thrust 14 is NOT a substitute**: bank it
+              only if it falls out free, never as what a delivery run targets. The refusal to break, stated
+              exactly: at the converged brace the cut ray misses S by **0.329 u** with no push at all, so the
+              push must BOTH steer the razor onto the vertex and add >= ~0.118 of depth -- and every
+              placement that restores enough contact to steer it displaces Link off the brace, which is what
+              the two extra frames of CrrPos exist to clean up. The open axis is the one term the sweep has
+              never varied: **her VELOCITY at the cut** (seeded at rest every time -- `tet_seed` speedF 0,
+              stt 3, and `placed_step` re-zeros both), because in stt-4 follow she closes at up to 10 u/frame
+              against a 2-9 u Co-centre swing, and that adds push WITHOUT a placement that displaces him.
+              Then the pose axis (`nspeed` re-times the chain against the anim frame, but shrinks `|base|`
+              1:1). Do NOT re-run placement or lean sweeps for thrust 13. **Price the walk coupling before
+              delivering** (unmeasured): buying the brace by entering ~52 u closer costs ~3 walk frames at
+              the 17 u/frame cap to save 2 roll frames at 26 u/frame, so a working thrust 13 may not be two
+              frames cheaper end to end -- that changes what the frames are worth, not the target.
       - [~] **DERECK: "IF SLASHING ON FRAME 13 WORKS I WANT BOTH FRAMES" -- AND IT DOES, FROM AN ENTRY
             FAMILY THE HULL CANNOT SEE. MY OWN "REFUSED BY THE CORNER" VERDICT WAS SCOPED TO THE FRAME-FLOOR
             HULL AND IS CORRECTED HERE (session 100, second half; SCOPE CORRECTED BY THE BOX ABOVE -- the
