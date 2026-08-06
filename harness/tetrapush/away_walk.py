@@ -134,7 +134,14 @@ def _clone_for_atom(run0):
     ``rec17_f``, the dips and every ``tstep``; what moves is Link's own escape path (0.12 -> 0.65 u),
     which belongs to the separate entry search. Detaching also keeps s65-s77's banked rows
     comparable. Before pricing a camera bill on an arrival whose last roll slewed, read the settled
-    value off a WIRED clone rather than ``run0.csangle``."""
+    value off a WIRED clone rather than ``run0.csangle``.
+
+    **"Tetra is bit-identical" is the SHIPPED PLAN's number, not a law (session 108).** On an
+    arrival whose camera is still mid-chase (the s107 re-chain winner: csangle 36254 -> 36375 over
+    the atom), the stick decode moves Link's push line enough to move TETRA's landing ~0.026 u --
+    the size of a placement-band edge. A landing quoted for delivery must therefore be re-measured
+    on the WIRED continuous replay (`_notes/s107_confirm_winner.py`'s convention); the detached
+    number is for ranking inside the enumeration only."""
     r = run0.clone()
     if getattr(r, 'camera', None) is not None:
         r.camera = None

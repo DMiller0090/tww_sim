@@ -1710,6 +1710,52 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE RE-CHAIN WITH A TARGET-AWARE CYCLE 2 LANDS INSIDE THE BAND: 0.789 u FROM ROW 105
+            AT TOTAL 100 -- ONE FRAME UNDER THE BANKED 101, CONFIRMED REPLAY-FAITHFUL OFFLINE
+            (session 108).** Both halves of the s107 handoff ran, in order, and the second one
+            produced a candidate that beats the bank.
+            - **THE FAN-CUT (the handoff's default step) CLOSED ITS OWN QUESTION: the last cycle was
+              exhausted over the OLD beam.** `_notes/s107_fan_cut.py` (fixed first: it took the
+              first 3 round-4 survivors as fan sources, which are escape-less -- the fan must be
+              measured at the FIRING ones, nodes 7/18/25 per the landing dump's census; 178 members,
+              along +14.7..+72.3 lat **-74.5..+4.7**, the band-local sign again). With the per-aim
+              fan screen on: **6 of 30 survivors fire** (round 4: 3 of 30) and the floor DOES NOT
+              MOVE -- **8.919 u @99, the identical endpoint round 4 found**. The proxy validated on
+              its own band: `predict_bound` error -0.51..+1.25 f, **0.00 on the floor node**. So the
+              population over `retarget2_beams` was the ceiling, exactly the handoff's first branch.
+            - **THE RE-CHAIN (`_notes/s107_rechain.py`, 2578 s): cycle 2 made landing-aware --
+              `extend_cycle(cloud_fan=)` in its per-aim cut + endpoint beam 16 (vs the 8 every round
+              since s106 reused) -- then the fan-cut cycle 3 verbatim, then the enumeration at all
+              54 survivors.** The richer cycle-2 entry set (16 nodes, corridor offsets down to 0.1)
+              nearly doubled the cycle-3 population (54 vs 30), **19 of 54 fire** (vs 3/30 and
+              6/30), and the front finally crossed the band: **node 11 (herd 73 f) lands 0.801 u
+              from row 105 (`plan_cost` 21) with a 6-frame atom -> total 100**; node 40 has 2.58 u
+              @100, node 23 4.54 u @99, and the s106/s107 5.93-8.92 floor endpoints reappear as a
+              mid-pack. The lever was exactly where both s107 halves pointed: upstream, in the beam
+              that decides which entry geometries cycle 3 ever sees.
+            - **CONFIRMED from the raw log (`_notes/s107_confirm_winner.py`; the quotable number is
+              the WIRED one): total 100 = 73 herd + 6 atom log + 21 plan_cost, landing 0.7886909226
+              u from row 105, in-band.** The full 79-frame input log replays from state 2
+              deterministic and bit-exact (`confirm_plan` ok: talk-safe, wall margin **+12.07 u** at
+              f79, 3 rolls, regime held), and the atom's acceptance clauses re-measured on the WIRED
+              continuous replay all hold (`l_ok` True, freeze_f 6, rec17_f 6, no dips, follow shell
+              untripped). Winner package (full log + knobs + landing): `_generated/s106/
+              s107_winner.json`; beams/landing dumps `s107_rechain_{c2_beam,beam,landing}.json`.
+            - **A SCOPE CORRECTION ON `_clone_for_atom`, found by the confirm and now in its
+              docstring: "Tetra is bit-identical under detachment" was the shipped plan's number,
+              not a law.** This arrival's camera is still mid-chase (csangle 36254 -> 36375 over the
+              atom), and wired-vs-detached moves TETRA's landing 0.026 u -- the size of a band edge
+              (here favorable: 0.801 -> 0.789). Rank on the detached enumeration; QUOTE the wired
+              replay. (The chase mechanism itself was already console-gated, s78.)
+            - **NEXT: the delivery gap, per the s107 handoff's second branch** -- the 2-frame
+              per-candidate cloud from THIS winner's arrival (`_notes/s105_arrival_cloud.py`
+              pattern) -> `entry_search.confirm_entry` -> `cross_engine` -> the boot-movie splice
+              (`[[tetrapush-dtm-delivery]]`), gating a console total <= 100 against the banked 101.
+              Note row 105 is an s105-priced walk-budget row: its `plan_cost` 21 is a trajectory
+              price, so the delivery confirm is what turns 100 from a priced claim into a console
+              number. Do NOT re-pay: the endpoint-keep question (s107, closed negative), the
+              cycle-3-alone iteration (four rounds, floor pinned), or a cached fan (band-local,
+              both signs measured).
       - [~] **THE ~6 u FLOOR WAS NOT THE CUT'S -- REMOVING THE LANDING-BLIND KEEPS MADE IT WORSE, AND
             WHAT THAT KEEP WAS REALLY BUYING WAS ENDPOINTS THAT CAN ESCAPE AT ALL (session 107).**
             Round 4 ran to completion (2256 s): the un-kept cycle-3 stage produced 36 roll survivors, 30
