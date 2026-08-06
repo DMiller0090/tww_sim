@@ -1679,14 +1679,36 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
-      - [~] **THE INTERIOR OPTIMUM IS REAL IN THE BAND AND DOES NOT SURVIVE THE RAZOR: CONFIRMED
-            -0.0157, AND THE REFUSAL IS NOW ONE NUMBER NO SEARCH CAN MOVE (session 103).** All three
+      - [~] **THE INTERIOR OPTIMUM IS REAL IN THE BAND AND DOES NOT SURVIVE THE RAZOR: 5.0 M NEWTONS SAY
+            -0.015503, AND THE REFUSAL IS ONE NUMBER NO SEARCH CAN MOVE (session 103).** All three
             handoff items ran and the peak session 102 predicted is there. Then the confirmation nobody
             had run says the banded gains were the BAND: Newtoned onto the razor the whole peak region
             goes negative, and the s102 + s103 banded headlines collapse to **+0.005** of real progress
             against session 101's own on-razor number.
-            - **THE CONFIRMATION, AND IT IS THE VERDICT.** Every banded best is an upper bound and owes
-              a Newton (s102 said so; this ran it). Pulling the kept leads onto `|resid| <= 1e-4`:
+            - **DERECK: "SOUNDS TO ME YOU HAVEN'T IDENTIFIED THE CORRECT LOCATION YET FOR WHERE TO ROLL
+              AND WHERE TO PLACE TETRA." HE WAS RIGHT ABOUT THE METHOD, AND THE ANSWER DOES NOT MOVE.**
+              The confirmation below Newtons the BAND'S OWN top 8-16 rows -- a biased sample of the razor
+              curve, taken with a proxy this very session proved bad, over an entry corridor only
+              +-40..60 u wide. Three things fix it, and all three ran:
+              - **THE DENSE MARCH.** `_notes/s103_march.py`: placement x seed motion x entry seed over a
+                **+-200 u** corridor, **505 k candidates a cell, every one Newtoned**, nothing ranked by
+                its band -- 4.0 M Newtons over eight cells in 25 min. The landscape comes back SMOOTH
+                where the sample was ragged (2552 -0.065 -> **-0.0317**, 2553 -0.029 -> -0.0219, 2551
+                -0.0416, 2549 -0.0662, 2555 -0.0911, 2557 -0.0776), so the raggedness WAS sampling --
+                **but the peak is unmoved: -0.015503 at cell 2554, cross +0.4552, 0 genuine of 320.**
+              - **THE FINE LOCAL TEST.** `_notes/s103_local.py` re-searches that row's neighbourhood at
+                the resolution the quantities live at -- placement **1 u**, entry **2 u**, seed speed
+                **0.25 u/frame**, seed aim **1.4 deg**, 1.0 M Newtons -- and returns **exactly
+                -0.015503**, at a DIFFERENT (tetra, entry, seed) triple 2-3 u away. The depth is
+                bit-identical across neighbours, which is the ejection equilibrium as a plateau: the
+                cut-frame geometry is an attractor, so the grid was never the bound.
+              - **AND THE AIM WINDOW IS NOT THE BOUND EITHER.** `AIM_WINDOW` is a hardcoded 900 BAM and
+                the GEOMETRIC window (`brace_for_ray` with `|S-old| <= 56`) is **2304 BAM** -- but the
+                requirement MINIMISES at facing 40920, interior to the searched range, and climbs from
+                0.43 to **13.2** at the geometric edge. Widening it goes the wrong way.
+            - **THE CONFIRMATION (the biased sample, kept for the record).** Every banded best is an
+              upper bound and owes a Newton (s102 said so; this ran it). Pulling the kept leads onto
+              `|resid| <= 1e-4`:
               2551 **-0.0529** / 2552 **-0.0648** / 2553 **-0.0293** / 2554 **-0.0157** / 2555
               **-0.0918** / 2556 -0.1327 / 2557 -0.0795 / 2558 -0.0261, **0 of 56 GENUINE**. Two
               independent routes agree at the peak (the lead-set Newton reads -0.015747, an independent
