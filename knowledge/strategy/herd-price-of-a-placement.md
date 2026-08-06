@@ -5,7 +5,8 @@ DISTANCE - what is that worth in frames? What does `plan_cost` count from, exact
 delivered plan early, or re-aim its escape, and have a shorter herd? Which placements is a DEPTH ranking
 actually selecting for me?
 **Status:** measured offline (session 105) on the flooded-Hyrule Tetra corner, on the delivered console
-plan `fixtures/courtyard_plan_s73_console.json`. Gated in
+plan `fixtures/courtyard_plan_s73_console.json`; the retargeted-chain conversion it owed is MEASURED
+(session 106) and came in above the estimate. Gated in
 [`tests/test_herd_price.py`](../../tests/test_herd_price.py).
 **Source:** [`harness/tetrapush/objective.py`](../../harness/tetrapush/objective.py) (`PUSH_CEILING`,
 `LATERAL_RATE`), [`harness/tetrapush/entry_fan.py`](../../harness/tetrapush/entry_fan.py) (`plan_cost`,
@@ -128,6 +129,35 @@ deepest placements are further DOWN-herd and off-line, and depth is bought with 
 ([model/required-cut-contact.md](../model/required-cut-contact.md)) while frames are bought with
 proximity. **A ranking by depth is a ranking away from the objective**, so the verification effort has
 to be re-pointed at the frame-minimal head before any of it is deliverable.
+
+## The retargeted chain is measured, and the estimate was optimistic by the escape
+
+The `chain_herd` this page owed ran (session 106), pure `plan_bound` against the screened rows. It
+ARRIVES - 75 herd frames, 1.56 u from a screened row - but a herd endpoint is not an arrival: the
+escape atom still owes its frames and its push, and enumerating its whole knob grid at every endpoint
+(the honest scorer - `probe`'s own rank never looks at the landing) gives the real frontier:
+
+| what the atom lands | miss | total frames |
+|---|---|---|
+| fastest atoms (2-3 frames) | **5.93-6.32 u** | **98-99** |
+| inside the 1.0 u band | 0.299 u | 112 (a 16-frame atom) |
+
+Nothing beats the banked 101: the fast landings are ~6x the band, and the banded landings are
+frame-negative. The estimate's 69-72 herd band priced her straight-line distance at the delivered
+cadence, but a plan cannot simply stop ON the row - the herd's frame count is quantized by its roll
+structure (above), and the atom's residual is a 2D FAN whose lateral is **never below +13.8 u** at
+these endpoints (along -31..+23, lat +13.8..+52): the atom always pushes her lat-positive, so the herd
+must deliver a state the atom CONVERTS onto a row, ~14+ u lat-low of it, which the chain's natural
+corridor (lat +9..+25 at the last cycle) does not visit cheaply.
+
+Two configurations are measured out. Shifting the target head by a fast residual
+(`aim.handoff_rows`) steered the beam to WORSE-converting endpoints (7.8-33.8 u at totals 99-100),
+and a hard budget of 76 against the shifted rows dropped every roll survivor - the bound against a
+single-point shift OVERSTATES the cost of endpoints the atom's fan can still convert. What remains
+open: every keep that chose the 6-8 scored endpoints out of the 18-33 roll survivors is blind to the
+cloud landing (`escape_probe` ranks against a thread FIT, meaningless on a 2D cloud), so the floor
+measured so far is the CUT's, not yet the population's (`_notes/s106_retarget4.py` is the pending
+measurement, and a last-cycle keep ranked on the enumerated landing is the missing tool).
 
 ## The transferable rule
 

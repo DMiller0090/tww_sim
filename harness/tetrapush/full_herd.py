@@ -1363,7 +1363,10 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     else:
         # the rank first, then continuability -- a faster cycle that strands the plan is worth less
         # than a marginally slower one the next junction can pick up (the s42 entry-state lesson).
-        out.sort(key=lambda n: (key(n['run'], n['frames'], n['m']), n.get('quality')))
+        # ``quality`` is None under ``require_quality=False`` and a tuple otherwise, and a beam can
+        # hold BOTH (the last cycle keeps unjudged rolls), so the tie-break must be None-safe.
+        out.sort(key=lambda n: (key(n['run'], n['frames'], n['m']),
+                                n.get('quality') is None, n.get('quality') or ()))
 
     def _off(n):
         return cor_j['offset'](hl.along(n['run'].tx, n['run'].tz),

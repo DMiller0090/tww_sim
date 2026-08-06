@@ -189,6 +189,7 @@ def test_the_bands_locus_moves_with_the_lean():
     assert 0.01 < d < 1.0, d
 
 
+@pytest.mark.slow
 def test_the_dead_share_is_a_property_of_the_seed_not_of_the_lean():
     """THE s81 RECOUNT AND ITS s94 CORRECTION, as one measurement.
 
@@ -310,6 +311,7 @@ def test_the_momentum_below_the_cap_is_a_dead_axis():
     assert any(d['reason'] == 'no leverage at the seed' for d in dead)
 
 
+@pytest.mark.slow
 def test_dropping_the_cap_multiplies_the_draws_and_buys_no_near_misses():
     """The same thing end to end, which is the only version that settles it: at one resolution, the
     uncapped pass reaches 3x the candidates and finds the SAME near-miss population, gap for gap.
@@ -382,6 +384,7 @@ def test_the_analytic_entry_gradient_is_the_simulated_one():
     assert _bits(g['gz']) == _bits((resid(q[2]) - r0) / d)
 
 
+@pytest.mark.slow
 def test_the_streaming_search_reproduces_a_materialised_one():
     """`stream_search` over a generator must find what scoring the whole dict finds -- the batching
     and the packed-key dedup are memory plumbing, not a change of answer."""
@@ -399,6 +402,7 @@ def test_the_streaming_search_reproduces_a_materialised_one():
 
 # ---------------------------------------------- the pass is priced in families (session 84)
 
+@pytest.mark.slow
 def test_the_family_price_is_counted_and_does_not_change_the_answer():
     """A two-segment pass pays in PREFIX FAMILIES, so `stream_search` counts them -- and counting
     them must be pure bookkeeping.
@@ -459,6 +463,7 @@ def test_a_near_miss_population_is_counted_in_draws_not_in_scorings():
     assert EF.distinct_near([]) == 0
 
 
+@pytest.mark.slow
 def test_the_near_misses_are_reported_with_their_identity():
     """The gaps and their identities are the same population in the same order -- so a suspicious
     multiplier can be audited from the pass's own output instead of a re-run."""
@@ -554,6 +559,7 @@ def _iter_fan2_bytes(**kw):
         EF.stick_alphabet = real
 
 
+@pytest.mark.slow
 def test_scoping_the_key_set_per_family_reports_the_same_pass():
     """`dedup_scope='family'` is a memory budget, not a different search: it re-evaluates the few
     endpoints two prefixes share, and because the near-misses carry identity and are deduped on the
@@ -681,6 +687,7 @@ def test_the_band_cache_survives_a_killed_pass_and_a_concurrent_one(tmp_path):
     assert EF.BandTable(SEED, path=path).tab == {}
 
 
+@pytest.mark.slow
 def test_a_coarser_pass_is_read_out_of_the_finer_one_it_is_contained_in():
     """THE TWO-ALPHABET SATURATION TEST, FROM ONE PASS. `clip-lottery-draws.md` says the honest read
     on whether an axis still pays is two whole-circle alphabets compared on draws per family -- which
@@ -817,6 +824,7 @@ def test_the_frame_cap_drops_exactly_the_plans_the_objective_would_reject():
     assert EF.plan_frames([3, 9, 9, 6]) == 9                             # one segment: n0 + j
 
 
+@pytest.mark.slow
 def test_a_scoped_pass_is_the_unscoped_pass_restricted_to_those_cells():
     """**THE CONTRACT THE WHOLE SCOPING RESTS ON: it may change the COST and never an ANSWER.**
 

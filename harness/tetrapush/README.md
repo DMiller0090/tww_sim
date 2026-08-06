@@ -1679,6 +1679,51 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE RETARGETED CHAIN ARRIVES AND STILL LOSES TO THE BANK: the fast-atom landing floor
+            over every scored endpoint is 5.93 u at totals 98-99 against a 1.0 u band, and the floor
+            measured so far is the CUT's, not yet the population's (session 106).** The s105 handoff's
+            solve ran, three configurations of it, all off one ~34-min chain (cycles 1-2 are
+            target-blind, so rounds 2-3 iterated cycle 3 alone off the dumped beam via
+            `beam_io.rebuild_beam`, ~27 min each). KB:
+            [`knowledge/strategy/herd-price-of-a-placement.md`](../../knowledge/strategy/herd-price-of-a-placement.md)
+            (new section). Scratch: `_notes/s106_{retarget_chain,escape_landing,retarget2,retarget3,retarget4}.py`
+            + logs; `_generated/s106/*.json` (targets, beams, landings -- local).
+            - **ROUND 1 (the handoff's config: pure `plan_bound`, the 116 screened rows, budget 79).**
+              It ARRIVES: 947.4 u in 75 herd frames, 6 nodes 1.56-1.69 u from screened rows -- but on
+              the FAR rows (herd_dist ~947 ≈ the console's 939, not the head's 880-900), because with
+              `last_arrive=False` nothing prices the last ~205 u roll's overshoot and the far rows
+              catch it. And a herd endpoint is not an arrival: the atom's own frames put the naive
+              total at ~103.
+            - **THE HONEST SCORER (adapted from `_notes/s105_atom_landing.py`): enumerate the whole
+              672-variant atom grid at every endpoint and read the (miss, total) Pareto front.**
+              `probe`'s rank never looks at the landing, and `escape_probe`'s `landing_miss` reads the
+              thread FIT, which a ±170 u 2D cloud makes meaningless. Fronts: fast atoms (arrival =
+              herd + 2..3) land **5.93-6.32 u** off the nearest row at totals **98-99**; the only
+              inside-band landing (**0.299 u**, row idx 48) needs a 16-frame atom -- total 112.
+            - **THE RESIDUAL IS A 2D FAN AND ITS LATERAL NEVER GOES BELOW +13.8 u** (along -31..+23,
+              lat +13.8..+52 over all 1345 firing variants at the round-1 endpoints): the atom always
+              pushes her lat-positive, so the herd must deliver ~14+ u lat-LOW of a row -- and the
+              chain's natural last-cycle corridor sits at lat +9..+25.
+            - **ROUND 2 (head-15 rows shifted by the measured fast residual (12.35, 19.03) via
+              `aim.handoff_rows`, budget 76): STALLED by the budget** -- 0 of 33 cycle-3 roll
+              survivors under a bound measured against the SHIFTED rows, which overstates endpoints
+              the atom's fan can still convert. **ROUND 3 (same, `budget=None`): fills 8 nodes at
+              75-76 f whose landings are WORSE (7.8-33.8 u at 99-100)** -- the single-point shift
+              steers the rank toward endpoints that convert badly. The shift is not the lever.
+            - **WHAT THE THREE ROUNDS LEAVE OPEN, and it is a specific tool:** every keep that chose
+              the 6-8 scored endpoints out of the 18-33 roll survivors is landing-blind, so the ~6 u
+              floor is the cut's. `_notes/s106_retarget4.py` (ready, was killed mid-run) enumerates
+              ALL survivors (`beam=64`, no thread keeps); if the floor holds there too, the missing
+              tool is a last-cycle keep ranked on the ENUMERATED cloud landing (not `escape_probe`'s
+              thread miss) -- the s107 job either way.
+            - **TWO HARNESS FIXES, both in-place per `[[harden-harness-traps]]`:** `extend_cycle`'s
+              stock sort crashed comparing `None` vs tuple `quality` under `require_quality=False`
+              with no escape/glide keep (a path no prior session ran) -- now None-safe, gated by the
+              82-test `test_full_herd`/`test_herd_price`/`test_objective` pass. And **8 slow tests in
+              `tests/test_entry_fan.py` are now `@pytest.mark.slow`** (measured individually: each
+              >90 s, one >1 h; the other 35 run in 44 s; `test_cross_engine` +
+              `test_courtyard_fleet_native` measured FAST, 18 tests in 7.9 s, so they carry no marks
+              -- TESTS marked, not files, and the `base_core` gates stay in the default run).
       - [~] **THE SAVING IS REAL IN UNITS AND THE HERD CANNOT PAY IT CONTINUOUSLY: the price is ~6
             frames (101 -> ~95), no prefix of the delivered plan reaches it, and the 14 rows s104
             VERIFIED are the expensive ones (session 105).** s104 handed over the distance-to-frames
