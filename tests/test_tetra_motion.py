@@ -232,6 +232,63 @@ def test_the_delivered_cell_is_an_expensive_one_and_2557_is_the_cheapest():
     assert [need[c]['s_dist'] for c in order] == sorted(need[c]['s_dist'] for c in order)
 
 
+def test_the_cut_frames_co_swing_is_the_whole_difference_between_the_thrusts():
+    """WHY THRUST 13 IS REFUSED, AS ONE NUMBER OFF THE BAKED SCHEDULE -- no search in it.
+
+    The cut consumes the Co overlap on frame ``cut_step - 1``, Link is braced against the corner by
+    then, and he is shoved directly AWAY from her -- so she can only pay from UP-RAY, and what decides
+    whether she is touching is whether the animation-posed cylinder is closing on that direction or
+    running from it. Projected on the roll direction the step into that frame is **+8.9252** at
+    thrust 13, **+1.8547** at 14 and **-1.2850** at 15: the floor thrust's cut lands on the fastest
+    FORWARD frame of the roll's straightening-out, and the delivered clip's lands after it has
+    reversed. That reversal is where its free 1.2 u of overlap comes from.
+
+    Aim-invariant to 1e-4 over the whole 45-cell window, because the facing rotates the offset and
+    the ray together -- which is what makes it a property of the animation rather than of a search."""
+    by = {c: f for f, b, s in ES.aim_cells() for c in [ES.aim_cell(f)]}
+    for cell in (2552, 2554, 2557):
+        s = {t: RD.cut_frame_swing(by[cell], t) for t in (13, 14, 15)}
+        assert [s[t]['cut_frame'] for t in (13, 14, 15)] == [14, 15, 16]
+        assert abs(s[13]['swing'] - 8.9252) < 1e-3, s[13]['swing']
+        assert abs(s[14]['swing'] - 1.8547) < 1e-3, s[14]['swing']
+        assert abs(s[15]['swing'] + 1.2850) < 1e-3, s[15]['swing']
+        # the ordering IS the push ordering session 101 measured (+0.5175 / +0.4773 / +0.1304)
+        assert s[15]['swing'] < 0.0 < s[14]['swing'] < s[13]['swing']
+        # and thrust 13 is doubly unlucky: the frame BEFORE its cut is the second-fastest forward one
+        assert s[13]['prev'] > 8.0, s[13]['prev']
+    sw = [RD.cut_frame_swing(f, 13)['swing'] for f, _b, _s in ES.aim_cells()]
+    assert max(sw) - min(sw) < 1e-3, (min(sw), max(sw))
+    # the tuck the recovery is recovering FROM: deepest at roll step 11, 13.5 u behind his feet
+    along = RD.cut_frame_swing(FACING, 15)['along']
+    assert along.index(min(along)) == 11 and min(along) < -13.0, min(along)
+
+
+def test_the_swing_is_visible_as_overlap_gained_or_lost_on_the_cut_frame():
+    """THE SWING, READ BACK OFF THE ENGINE at the two entries that share a brace.
+
+    Session 101 pinned that shifting the entry by whole roll steps reproduces `old` BIT-IDENTICALLY at
+    every thrust, so the two runs below differ in nothing but which frame of the animation the cut
+    fires on. From the console placement the thrust-15 cut GAINS overlap on its cut-consumed frame
+    while the thrust-13 cut is already 10 u clear and opening -- the sign of `cut_frame_swing`,
+    measured rather than asserted."""
+    tetra = _tetra()
+    got = {}
+    for thrust, entry in ((15, E15), (13, _shifted_entry(13))):
+        ctx, sch, resid = ES.build_fast(FACING, LEAN, thrust)
+        off = RD.co_centre_offsets(sch)
+        _r, steps = ctx.run_trace(tetra[0], tetra[1], 0, entry[0], entry[1])
+        k = sch['cut_step'] - 1
+        d = []
+        for j in (k - 1, k):
+            lx, lz, tx, tz = steps[j]
+            d.append(RD.CO_R_SUM - math.hypot(lx + off[j][0] - tx, lz + off[j][1] - tz))
+        got[thrust] = d
+    assert got[15][1] > got[15][0]                 # thrust 15 CLOSES into its cut frame
+    assert got[15][1] > 0.0                        # ...and lands in contact
+    assert got[13][1] < got[13][0] < 0.0           # thrust 13 is already clear and still opening
+    assert got[13][1] < -10.0, got[13]             # by 10 u, against a bar of ~0.4 u of overlap
+
+
 def _conjunction(facing, thrust, halo=48.0, hstep=8.0, travel=(160.0, 420.0), t_step=26.0,
                  lat=32.0, lat_step=32.0, speeds=(0.0, 5.0, 10.0), aim_step=0x2000):
     """Best `achievable_depth` per |resid| band over placement x entry x seed motion. Returns

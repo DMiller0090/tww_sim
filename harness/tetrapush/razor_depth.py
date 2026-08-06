@@ -206,6 +206,47 @@ def floor_at_brace(old, d_max=0.30, d_step=0.0005, eps_half=4e-4, eps_step=2e-6)
     return None, None
 
 
+def co_centre_offsets(sch):
+    """The animation-posed Co centre's OFFSET from Link's feet, per roll step -- the root/neck joint
+    midpoint `_shovec._run` accumulates, read straight off a baked schedule."""
+    nr = sch['nroot']
+    return [(0.5 * (sum(sch['chx'][k][:nr]) + sum(sch['chx'][k][nr:])),
+             0.5 * (sum(sch['chz'][k][:nr]) + sum(sch['chz'][k][nr:])))
+            for k in range(len(sch['chx']))]
+
+
+def cut_frame_swing(facing, thrust, lean=DELIVERED_LEAN):
+    """WHY ONE THRUST CLIPS AND ITS NEIGHBOUR DOES NOT -- one number, and no search in it.
+
+    The cut consumes the Co overlap on frame ``cut_step - 1``. A clip is bought with `push_u` and
+    Link is shoved directly AWAY from the pusher, so the only place she can pay from is UP-RAY,
+    behind him -- and by that frame he is braced against the corner, so the Co centre's whole step is
+    the ANIMATION. Project that step on the roll direction:
+
+        swing  =  (off[cut_step-1] - off[cut_step-2]) . m_hat
+
+    Positive means the cylinder is moving forward, away from the only direction that pays; negative
+    means it is swinging back onto her. Measured over the whole 45-cell aim window it is a CONSTANT
+    to 1e-4 -- the facing rotates the offset and the ray together:
+
+        thrust 13   cut frame 14   +8.9252    receding at 8.9 u/frame
+        thrust 14   cut frame 15   +1.8547
+        thrust 15   cut frame 16   -1.2850    closing -- and this IS the delivered clip's 1.2 u
+
+    The roll's Co centre sweeps back through frames 9-12 (the tuck, reaching -13.5 u) and then
+    straightens hard; thrust 13's cut lands on the two fastest FORWARD frames of that recovery
+    (+8.07 then +8.93) while thrust 15's lands after it has settled and reversed. Returns
+    ``dict(swing, prev, cut_frame, along)``. See knowledge/mechanics/cut-frame-co-swing.md."""
+    sch = ES.fast_schedule(facing, lean, thrust)
+    off = co_centre_offsets(sch)
+    mx = ES.ML.cM_ssin_s16(int(facing) & 0xFFFF)
+    mz = ES.ML.cM_scos_s16(int(facing) & 0xFFFF)
+    along = [o[0] * mx + o[1] * mz for o in off]
+    k = sch['cut_step'] - 1
+    return dict(cut_frame=k, swing=along[k] - along[k - 1], prev=along[k - 1] - along[k - 2],
+                along=along, facing=int(facing) & 0xFFFF, thrust=thrust)
+
+
 def brace_for_ray(ux, uz):
     """``(|S-old|, old, kappa)`` for a razor RAY DIRECTION -- where the brace locus puts Link if the
     cut segment is to point at S along ``u``.

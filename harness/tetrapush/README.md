@@ -1679,6 +1679,88 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE INTERIOR OPTIMUM IS REAL IN THE BAND AND DOES NOT SURVIVE THE RAZOR: CONFIRMED
+            -0.0157, AND THE REFUSAL IS NOW ONE NUMBER NO SEARCH CAN MOVE (session 103).** All three
+            handoff items ran and the peak session 102 predicted is there. Then the confirmation nobody
+            had run says the banded gains were the BAND: Newtoned onto the razor the whole peak region
+            goes negative, and the s102 + s103 banded headlines collapse to **+0.005** of real progress
+            against session 101's own on-razor number.
+            - **THE CONFIRMATION, AND IT IS THE VERDICT.** Every banded best is an upper bound and owes
+              a Newton (s102 said so; this ran it). Pulling the kept leads onto `|resid| <= 1e-4`:
+              2551 **-0.0529** / 2552 **-0.0648** / 2553 **-0.0293** / 2554 **-0.0157** / 2555
+              **-0.0918** / 2556 -0.1327 / 2557 -0.0795 / 2558 -0.0261, **0 of 56 GENUINE**. Two
+              independent routes agree at the peak (the lead-set Newton reads -0.015747, an independent
+              10x-tighter-band fine sweep of 44.8 M rows reads -0.015625). So the honest hull-free
+              thrust-13 number is **-0.0157 at cell 2554: it does not reach the wall PLANE**, against
+              s101's on-razor -0.0208 -- the seed-motion axis, the interior optimum, the wide box and
+              the fine grids together are worth **+0.005**, not the +0.088 the bands read.
+              **AND THE BAND MIS-RANKS THE CELLS**: banded it peaks at 2554/2555 within 0.007, on the
+              razor 2555 is the fourth-worst cell in the window. Never quote a banded depth again
+              without its Newton. `_notes/s103_confirm.py`, `_notes/s103_fine.py`.
+            - **THE 45-CELL CONJUNCTION (item 1). Every number in this bullet is BANDED, so read it as
+              the upper bound the bullet above prices.** All 45 cells at the `coarse` grid: best
+              **+0.05966 at cell 2555**, and the whole high side 2558+ has no near-razor row at all.
+              Re-run at the `wide` grid over the eight cells around that peak the shape is
+              2551 +0.0295 -> 2552 +0.0427 -> 2553 +0.0536 -> **2554 +0.06739** -> 2555 +0.0603, then a
+              COLLAPSE at 2556 (-0.0170) and 2557 (-0.0363) where the contact vanishes. So the interior
+              optimum session 102 predicted does exist in this metric (its own best was +0.0399 at 2552),
+              0.048 under the floor. `_notes/s103_conjunction.py` (three grids; ~25 s a cell coarse, and
+              its full grid reproduces s102's cell-2557 reading of -0.0363, at -0.03628).
+            - **THE TRADE IS NOT STEERING (item 2).** NEW `_notes/s103_forced_brace.py` asks what a cell
+              costs AT THE BRACE ITS OWN RAZOR FORCES (`brace_for_ray` of the facing, iterated to a
+              fixed point in the push, since the push rotates the ray). `delta` comes back **0.000 at
+              every one of the 45 cells**, so a cell pays NO steering at its own brace and the
+              requirement is just `2*(s_forced - |base| + floor/kappa)`. It bottoms out at **0.4256 at
+              cell 2557** against a theoretical 0.3927. `contact_required`'s min-over-the-locus sits
+              under that (0.3939) only because it lets `old` slide to a nearer brace and buys the slide
+              with perpendicular push. Either way the bar is ~0.4 u of overlap, and what refuses thrust
+              13 is the CONTACT.
+            - **AND THE CONTACT IS REFUSED BY ONE NUMBER OFF THE BAKED SCHEDULE.** NEW
+              `razor_depth.cut_frame_swing`: the along-roll step of the animation-posed Co centre INTO
+              the cut-consumed frame is **+8.9252 at thrust 13, +1.8547 at 14, -1.2850 at 15**, and it
+              is **aim-invariant to 1e-4** over the whole window (the facing rotates the offset and the
+              ray together). She can only pay from UP-RAY, so a positive swing is the cylinder RECEDING
+              from the only direction that pays. The roll's Co centre tucks to -13.5 u by step 11 and
+              then straightens at +8.07 then +8.93, and **thrust 13's cut lands on both of those
+              frames**; thrust 15's lands after the recovery has reversed, which IS its free 1.2 u of
+              overlap. The ordering reproduces s101's independently measured push column (+0.1304 /
+              +0.4773 / +0.5175). KB NEW [`mechanics/cut-frame-co-swing.md`](../../knowledge/mechanics/cut-frame-co-swing.md);
+              gates `tests/test_tetra_motion.py` +2.
+            - **THE WALK COUPLING IS PRICED AND IT DOES NOT BITE (item 3), and the first way I asked
+              was wrong.** Taking the conjunction's kept rows and asking whether they happen to be
+              hull-reachable says **94% are outside even the SIX-frame hull** -- but that is a statement
+              about the GEOMETRIC entry family those scans generate, not about the corner, and reading
+              it as a price is s100's error again. Searching INSIDE the four-frame hull instead
+              (`_notes/s103_inhull.py`, entries gridded off `entry_reach.entry_hull`) recovers
+              essentially the same result: banded within **0.004** at every peak cell, and confirmed on
+              the razor **-0.026367 at cell 2554 with the entry verified in the 4-frame hull**, against
+              the hull-free -0.015747. **So the hull costs 0.011 of depth and is not the constraint:
+              `plan_cost` 21 entries exist, they simply do not clip.** Control passes -- the delivered
+              thrust-15 entry prices at 4 frames, `plan_cost` 23 (`_notes/s103_walk_price.py`).
+            - **`placed_step` IS A LIVE ENGINE KNOB NOBODY HAD MOVED OFF 0**, and sweeping it says the
+              refusal is the PLOW and not the razor: at cells 2552/2557 the depth CLEARS the floor the
+              moment she gets 3-4 frames of plow-freedom (+0.886 at P=12, cell 2557), and every one of
+              those rows fails its own deliverability clause by 30-70 u -- she would have had to be that
+              far inside his cylinder the frame before. `_notes/s103_placed_step.py` prints the clause
+              beside the depth so the two can never be read apart.
+            - **GOTCHA -- THE PLACEMENT HALO WAS THE BOUND AND THE PEAKS SAT ON ITS EDGE.** Every peak
+              cell's best placement came back at the +-60 u box boundary (cell 2555 at offset
+              (-48, +60)): session 100's hull error in a smaller box. Re-run centred on the corner BRACE
+              at +-200 u it reads +0.06026 vs +0.05966 and is NOT on the edge, so the plateau really is
+              flat and the box was not binding -- but it was luck, not method. Every scan now reports
+              `on_box_edge`.
+            - **ONE OF THE TWO FRAMES IS AVAILABLE AND THE OTHER IS REFUSED BY THE ANIMATION.** Thrust
+              14 (`plan_cost` 22) re-measured on the CURRENT engine, in-hull, on the console placement
+              (`placeable` True): depth **+0.2075 at cell 2552**, +0.09 clear of the floor, against
+              thrust 15's +0.2532 at the same cell. Not delivered, and NOT a substitute (Dereck's call
+              stands) -- reported because it prices what the second frame is worth chasing.
+            - **AND THE THRUST-13 NEGATIVE IS THE PROOF DIRECTION, NOT A NEAR MISS.** `depth <= 0` means
+              the endpoint is on the near side of BOTH wall planes, which no razor, camera, lean or
+              candidate volume moves -- so at every one of the eight peak cells the lunge **does not get
+              through the wall at all** and the 0.1150 floor is moot rather than close. Combined with an
+              aim-invariant swing that has no knob, the useful next move is a question for Dereck (the
+              available frame vs the refused one) and not a finer pass: nothing in the swept space is
+              within 0.14 of clipping, and the term that would have to move is an animation constant.
       - [~] **THE REFUSAL IS A CONJUNCTION, AND IT IS MONOTONE: EVERY UNIT OF RESIDUAL LEFT UN-ZEROED
             BUYS DEPTH, SO THE PUSH THAT PAYS FOR A CLIP IS NEAR THE RAZOR AND NEVER ON IT (session 102).**
             The handoff's axis 1 (her VELOCITY, the one term never varied) is now BUILT and it is the
