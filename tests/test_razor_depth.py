@@ -253,21 +253,21 @@ ARRIVE = dict(tetra_off=(0.0, -100.0), entry=(-1422.7771410239, -677.8451682961)
 GENUINE_DEPTH_FLOOR = 0.1273
 
 
-def test_the_arrive_exactly_family_reaches_through_the_plane_at_cut_step_15():
-    """THE GATE THAT KEEPS THE REST OF THIS FILE HONEST (Dereck's re-ask, session 100).
+def test_the_arrive_exactly_family_reaches_through_the_plane_only_from_inside_the_wall():
+    """THE GATE THAT KEEPS THE REST OF THIS FILE HONEST -- and the session-101 correction that keeps IT
+    honest.
 
-    Every negative above is measured over `entry_reach`'s hull, which sits ~239 u from the corner brace --
-    and a `cut_step` N roll travels 26N u, so out of that hull Link reaches the wall around step 9 whatever
-    the thrust and CrrPos then SLIDES him along it. The hull holds only the arrive-early-and-slide family,
-    and two fewer slide frames IS the 0.19 u shortfall.
+    Every hull-scoped negative above is measured over `entry_reach`'s hull, which sits ~239 u from the
+    corner brace; a `cut_step` N roll travels 26N u, so out of that hull Link reaches the wall around step 9
+    whatever the thrust and CrrPos then SLIDES him along it. From ~390 u out the cut fires as he ARRIVES
+    instead, and session 100 measured the endpoint going THROUGH the plane there -- which is why the file
+    keeps this configuration pinned.
 
-    From ~390 u out the cut fires as he ARRIVES, and with Tetra 100 u away the endpoint goes THROUGH: this
-    pins that solution so no future session re-reads "thrust 13 is refused at the frame floor" as "thrust 13
-    is impossible" (`knowledge/history/thrust-13-refused-by-geometry.md`).
-
-    It also pins what is still missing -- `genuine` needs the swept segment to clear the CrrPos barrier, and
-    every genuine row on this corner sits at depth >= `GENUINE_DEPTH_FLOOR`, so this family is ~0.087 u
-    short. If a future pass closes that, this assertion flips and the test says so."""
+    **But the placement it needs is 3.54 u BEHIND wall B.** She cannot stand there: her BG wall radius is
+    50 u, all 288 live-validated genuine coords sit at >= 56.98 u off both planes, and the engine never
+    checks a seed (`placed_step` writes her position with no motion, so her CrrPos has no sweep to test).
+    The +0.0399 is a graze taken from inside the wall. Both halves are asserted here, because the depth is
+    real and the configuration is not."""
     import math
     t0 = _tetra()
     tetra = (t0[0] + ARRIVE['tetra_off'][0], t0[1] + ARRIVE['tetra_off'][1])
@@ -281,10 +281,120 @@ def test_the_arrive_exactly_family_reaches_through_the_plane_at_cut_step_15():
     travel = math.hypot(ARRIVE['entry'][0] - old[0], ARRIVE['entry'][1] - old[1])
     assert 375.0 < travel < 390.0, travel
     assert math.hypot(RD.GT.S[0] - old[0], RD.GT.S[1] - old[1]) < 49.38   # nearer S than thrust 15's brace
-    # that entry is outside the hull every negative above was argued over -- which is the whole point
+    # that entry is outside the hull every hull-scoped negative was argued over
     assert not ER.contains(ER.entry_hull(FACING, 4, None, ER.load()), ARRIVE['entry'], 0.0)
-    # still short of barrier clearance, so it is not a clip yet
+    # still short of barrier clearance, so it is not a clip even before placeability
     assert depth < GENUINE_DEPTH_FLOOR and not row[0], (depth, bool(row[0]))
+    # ...and the placement is not one a herd can deliver: 3.54 u behind wall B
+    assert not RD.placeable(tetra)
+    assert RD.GT.wB.pla.func(RD.GT.p32(*tetra)) < 0.0
+    assert abs(RD.GT.wB.pla.func(RD.GT.p32(*tetra)) + 3.5406) < 1e-3
+
+
+def test_a_placement_is_a_position_she_can_stand_in():
+    """THE CLAUSE THE ENGINE LEAVES TO THE CALLER, and it is load-bearing (session 101).
+
+    `_shovec` seeds Tetra by writing her position at `placed_step` with no motion, so her own CrrPos sees no
+    sweep to line-check and WallCorrect's offset segment misses a point already behind the plane. A seed
+    inside the wall therefore STAYS inside the wall and pushes Link perfectly happily -- from a bearing no
+    reachable spot offers, which is exactly how session 100's arrive-exactly hit read +0.0399.
+
+    The bar is her BG wall radius (`npc_zl1.WALL_R` = 50 u, where CrrPos would leave her); the 288
+    live-validated genuine coords are the empirical check on it and clear it by 7 u."""
+    import math
+    lines = [l.split() for l in open(os.path.join(_ROOT, '_generated', 'tetra_placements.tsv'))
+             if l.strip() and not l.startswith('#')][1:]
+    clear = [min(RD.GT.wA.pla.func(RD.GT.p32(float(f[1]), float(f[2]))),
+                 RD.GT.wB.pla.func(RD.GT.p32(float(f[1]), float(f[2])))) for f in lines]
+    assert len(clear) == 288
+    assert min(clear) > RD.TETRA_WALL_MIN, min(clear)          # every live coord is standable
+    assert abs(min(clear) - 56.984) < 1e-2, min(clear)
+    assert all(RD.placeable((float(f[1]), float(f[2]))) for f in lines)
+    # her console read is placeable; 100 u in -z of it is not, and that is the s100 hit's placement
+    t0 = _tetra()
+    assert RD.placeable(t0)
+    assert not RD.placeable((t0[0], t0[1] - 100.0))
+    # and the engine does not enforce it -- the unplaceable seed still returns a pushed, deeper row
+    row = _row_at(ARRIVE['entry'], FACING, 13, tetra=(t0[0], t0[1] - 100.0))
+    assert math.hypot(row[5], row[6]) > 0.4 and RD.depth_of(row) > 0.0
+
+
+def test_the_depth_floor_is_a_corner_constant_over_the_brace_locus():
+    """WHAT THE FLOOR IS A PROPERTY OF. Session 100 read ">= 0.1273" off the four populations that happened
+    to have live dust, which cannot distinguish a corner constant from a coincidence of those braces.
+    Measured directly in endpoint space instead (`floor_at_brace`), over the locus CrrPos actually parks
+    Link on -- planeA pinned at 35 with planeB 35..35.5, and the mirror -- the floor is **0.1154..0.1216
+    with no trend in the brace**. So it is the corner's, and a search may screen against the low end."""
+    def brace(pa, pb):
+        a, b = RD.GT.wA.pla, RD.GT.wB.pla
+        det = a.nx * b.nz - a.nz * b.nx
+        rx, rz = pa - (a.ny * RD.GT.LINK_Y + a.d), pb - (b.ny * RD.GT.LINK_Y + b.d)
+        return ((rx * b.nz - a.nz * rz) / det, (a.nx * rz - rx * b.nx) / det)
+
+    floors = []
+    for t in (35.0, 35.1, 35.2, 35.3, 35.4, 35.5):
+        for old in (brace(35.0, t), brace(t, 35.0)):
+            d, depth = RD.floor_at_brace(old)
+            assert d is not None, old
+            floors.append(depth)
+    assert min(floors) >= 0.1150 and max(floors) <= 0.1220, (min(floors), max(floors))
+    assert max(floors) - min(floors) < 0.007, sorted(floors)
+    assert RD.DEPTH_FLOOR <= min(floors)                        # the screen never over-admits
+    # the two real braces this corner has produced land in the same band
+    for old in ((-1692.3129882812, -955.2207031250), (-1692.3143310547, -955.0761108398)):
+        _d, depth = RD.floor_at_brace(old)
+        assert 0.1150 < depth < 0.1220, (old, depth)
+
+
+def test_the_clip_is_bought_with_the_pushs_projection():
+    """THE LAW, DECOMPOSED (session 101). `|base|` -- the cut frame's roll step plus the cut root translate
+    -- is a CONSTANT: the thrust does not enter it and the facing only rotates it. So the whole of a clip's
+    penetration is the PUSH's projection onto the `old -> S` ray against the brace distance, and the two
+    move together with the frames, which is what makes the thrust a real cost rather than a free draw."""
+    # base is thrust-invariant exactly, and facing-invariant to sine-table quantization
+    bases = {t: RD.base_reach(FACING, LEAN, t) for t in (13, 14, 15)}
+    assert bases[13] == bases[14] == bases[15] == RD.BASE_REACH
+    for f in (40400, 40511, 41296):
+        assert abs(RD.base_reach(f, LEAN, 13) - RD.BASE_REACH) < 1e-5, f
+    # the pinned rows, read through the law
+    law = {t: RD.law_of(_row_at(p['entry'], FACING, t)) for t, p in PINNED.items()}
+    assert law[13]['push_u'] < law[14]['push_u'] < law[15]['push_u']      # more frames, more push
+    assert law[13]['s_dist'] > law[14]['s_dist'] > law[15]['s_dist']      # AND a nearer brace
+    # d_ray reproduces the engine's plane depth through the ray/normal projection
+    for t, l in law.items():
+        assert abs(l['kappa'] * l['d_ray'] - l['depth']) < 0.01, (t, l)
+        assert 0.70 < l['kappa'] < 0.72, l['kappa']
+    # and the floor, restated as what a configuration must produce
+    need = law[13]['s_dist'] + RD.DEPTH_FLOOR / law[13]['kappa'] - RD.BASE_REACH
+    assert law[13]['push_u'] < need                                        # thrust 13 is short
+    assert law[15]['push_u'] > law[15]['s_dist'] + RD.DEPTH_FLOOR / law[15]['kappa'] - RD.BASE_REACH
+
+
+def test_the_entry_lean_is_spent_before_the_cut_fires():
+    """WHY THE LEAN AXIS IS NOT A LEVER AT A LATE CUT, and it is general rather than about this corner.
+    `m351C` decays 35% per roll frame (`entry_search.lean_at_roll`), so the delivered lean's -388 draw is
+    -1 by roll frame 15 and the pose the Co centre is read off is the same whatever the entry lean was.
+    Measured: over +-3000 s16 at the arrive-exactly configuration the depth moves 0.0003 u.
+
+    **ON THE RAZOR, not at a frozen entry.** Changing the lean moves the razor, so holding the entry while
+    sweeping it compares off-curve points and reads a spurious 0.03 u of "lean sensitivity" -- the entry has
+    to be re-solved per lean, which is what makes the inertness a statement about the lever."""
+    from tww_sim.core.mathlib import s16_signed
+    lean, draws = LEAN, []
+    for _k in range(16):
+        draws.append(s16_signed(lean) >> 1)
+        lean = ES.lean_at_roll(lean)
+    assert draws[0] == -388
+    assert abs(draws[15]) <= 1                                   # spent by the cut step of thrust 13
+    t0 = _tetra()
+    tetra = (t0[0] + ARRIVE['tetra_off'][0], t0[1] + ARRIVE['tetra_off'][1])
+    depths = []
+    for lv in (-3000, -1500, 0, 1500, 3000):
+        lean = lv & 0xFFFF
+        p, rr, gr = ES.zero_the_resid(tetra, FACING, 13, lean, ARRIVE['entry'])
+        assert abs(rr) < 1e-3, (lv, rr)
+        depths.append(RD.depth_of(_row_at(p, FACING, 13, lean=lean, tetra=tetra)))
+    assert max(depths) - min(depths) < 1e-3, depths
 
 
 def test_the_genuine_depth_floor_is_measured_not_assumed():
@@ -308,6 +418,41 @@ def test_the_genuine_depth_floor_is_measured_not_assumed():
         assert max(ds) - min(ds) < 1e-3, (cell, thrust, sorted(ds)[:3])   # bit-constant per configuration
         floors.append(min(ds))
     assert abs(min(floors) - GENUINE_DEPTH_FLOOR) < 1e-3, sorted(floors)
+
+
+def test_no_placeable_configuration_reaches_the_floor_at_thrust_13_at_the_best_cells():
+    """THE HULL-FREE VERDICT, with the placement clause enforced (session 101).
+
+    With her constrained to spots she can stand in, the cells that come closest at thrust 13 still miss the
+    corner's floor by ~0.14 u -- and the reason is legible in the law: the push that AIMS at the corner is
+    the same push that shoves Link off the brace, so buying `push_u` costs `s_dist` faster than it pays.
+    The exhaustive 45-cell form is the slow test below."""
+    for cell, facing, want in ((2554, 40869, -0.0215), (2553, 40850, -0.0281), (2552, 40841, -0.0392)):
+        b = RD.placeable_screen(facing, 13, lean=LEAN)
+        assert b is not None, cell
+        assert b['depth'] < RD.DEPTH_FLOOR, (cell, b['depth'])
+        assert abs(b['depth'] - want) < 0.01, (cell, b['depth'], want)
+        assert RD.placeable(b['tetra'])
+        # the trade that refuses it: this cell's push is well aimed and its brace pays for it
+        assert b['push_u'] > 0.15 and b['s_dist'] > 49.42, b
+
+
+@pytest.mark.slow
+def test_no_placeable_configuration_at_any_aim_cell_reaches_the_floor_at_thrust_13():
+    """The exhaustive hull-free, placement-constrained verdict over all 45 cells (~2 min): NONE reaches the
+    corner's depth floor at thrust 13. This is the gate that has to flip before the second frame is real --
+    and the set it is measured over is named in the name: placeable placements, every aim cell, no hull."""
+    cells = sorted({ES.aim_cell(f) for f, _b, _s in ES.aim_cells()})
+    by_cell = _cells()
+    best = []
+    for cell in cells:
+        b = RD.placeable_screen(by_cell[cell], 13, lean=LEAN)
+        if b:
+            assert b['depth'] < RD.DEPTH_FLOOR, (cell, b['depth'])
+            best.append((b['depth'], cell))
+    assert len(best) >= 40, len(best)
+    assert max(best)[0] < 0.0, max(best)               # not one of them even reaches the PLANE
+    assert abs(max(best)[0] + 0.0215) < 0.01, max(best)
 
 
 @pytest.mark.slow

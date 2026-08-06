@@ -45,12 +45,18 @@ zero (-0.1949 / -0.1901 / -0.1868 / -0.1898).
 `entry_reach`'s reachable hull, which sits ~239 u from the corner brace, and a `cut_step` N roll travels
 26N u -- so out of that hull Link reaches the wall around step 9 whatever the thrust and CrrPos SLIDES him
 along it. The hull therefore contains only the arrive-early-and-slide family, and two fewer slide frames IS
-the 0.19 u. Swept with no hull (851 598 Tetra x entry pairs), 1167 razor solutions at cut_step 15 land on
-the exact brace point thrust 15 cuts from, and entries ~390 u out -- where the cut fires as Link ARRIVES --
-go **positive** (+0.0399 at Tetra 100 u in -z, entry (-1422.7771688289, -677.8451372479), walkable). The
-frame is not banked: `genuine` also needs the swept segment to clear the CrrPos barrier and every genuine
-row on this corner sits at depth >= **0.1273**, so that family is ~0.087 u short. See
-`knowledge/strategy/clip-razor-depth.md` "The two families".
+the 0.19 u. Session 100 removed the hull, found entries ~390 u out where the cut fires as Link ARRIVES, and
+measured the depth going POSITIVE there (+0.0399 at Tetra 100 u in -z of her console read).
+
+**THAT PLACEMENT IS 3.54 u BEHIND WALL B AND SHE CANNOT STAND IN IT** (session 101, `placeable`). The
+engine never checks a seed, so she grazes Link's Co cylinder from inside the wall at a bearing no
+reachable spot offers. Constrained to placements a herd can deliver -- at least her 50 u BG wall radius
+off both planes, where all 288 live-validated coords sit -- **thrust 13 is refused at every one of the 45
+aim cells with no hull anywhere in the search**: best depth -0.0208 at cell 2554, 0.139 u under the floor,
+and a 4x finer grid moves it 0.0007. What the arrive family really trades is legible in `law_of`: its
+brace is the best on the corner (49.2611) and its push is aimed 75 deg off the ray, because arriving
+exactly is giving up the braced frames during which the push is both accumulated and straightened.
+See `knowledge/strategy/clip-razor-depth.md`.
 
 WHAT IT IS AND IS NOT. ``depth <= 0`` is a PROOF that a configuration cannot clip: the endpoint is on
 the near side of both planes and no razor, camera, lean or candidate volume moves it. ``depth > 0`` is
@@ -85,9 +91,22 @@ if _rb not in sys.path:
 from harness.rollstab import geometry_tetra as GT
 from harness.tetrapush import entry_reach as ER
 from harness.tetrapush import entry_search as ES
+from tww_sim.core.npc_zl1 import WALL_R as TETRA_WALL_R
 
 #: The delivered clip's lean, and the one every cross-thrust comparison here is measured at.
 DELIVERED_LEAN = 64761
+
+#: |base| (roll step + cut root translate) -- a CONSTANT, so a clip is bought with the push's PROJECTION
+#: (`law_of`; knowledge/strategy/clip-razor-depth.md). `base_reach` recomputes it per configuration.
+BASE_REACH = 49.220224583762864
+
+#: The corner's depth floor, MEASURED over the brace locus (`floor_at_brace`): 0.1154..0.1216, no trend.
+#: Screen with this low end; check a survivor against its own brace. knowledge/strategy/clip-razor-depth.md
+DEPTH_FLOOR = 0.1150
+
+#: Her BG wall radius -- the bar on a placement the engine does NOT enforce (`placeable`; the 288 live
+#: coords clear it by 7 u). knowledge/model/placement-standability.md
+TETRA_WALL_MIN = TETRA_WALL_R
 
 #: Newton solves per configuration. The cost is entirely here; seeds are taken in |resid| order so the
 #: cap spends itself on the points nearest the curve rather than on a corner of the box.
@@ -105,6 +124,81 @@ def depth_of(row):
     whenever the segment is unblocked -- which is the only case where `genuine` can be true anyway
     (gated: `tests/test_razor_depth.py::test_genuine_implies_a_through_going_endpoint`)."""
     return -min(row[8], row[9])
+
+
+def placeable(tetra):
+    """CAN SHE STAND THERE? -- the clause the engine leaves to the caller (see `TETRA_WALL_MIN`).
+
+    Every placement a herd can deliver is at least her BG wall radius off both wall planes, because
+    that is where CrrPos would leave her. Session 100's arrive-exactly hit -- the through-going
+    endpoint that made both frames look live -- sits **3.54 u BEHIND wall B**, and reads +0.0399 of
+    depth precisely because a placement inside the wall can graze Link's Co cylinder from a bearing no
+    reachable spot offers. Screen placements with this before ranking anything they produce."""
+    q = GT.p32(tetra[0], tetra[1])
+    return GT.wA.pla.func(q) >= TETRA_WALL_MIN and GT.wB.pla.func(q) >= TETRA_WALL_MIN
+
+
+def base_reach(facing, lean=DELIVERED_LEAN, thrust=13):
+    """|base| for a configuration -- the cut frame's roll step plus the cut root translate."""
+    sch = ES.fast_schedule(facing, lean, thrust)
+    k = sch['cut_step']
+    return math.hypot(sch['dx'][k] + sch['cutx'][k], sch['dz'][k] + sch['cutz'][k])
+
+
+def law_of(row, base=BASE_REACH):
+    """The depth law's PIECES at a sweep row -- what a search should actually be ranking.
+
+    `resid ~ 0` puts the endpoint on the ``old -> S`` ray, so the ray-distance past the vertex is
+    ``d_ray = |base + push| - |S - old|`` and the plane penetration `depth_of` reports is that times
+    the ray's projection onto the nearer wall normal (``kappa`` ~ 0.712 here). Two terms, and only one
+    of them is a lever: **`base` is a constant**, so a clip is bought with ``push_u``, the push's
+    projection onto the ray -- which is set by WHERE SHE SITS relative to Link's Co centre on the cut
+    frame, since he is shoved directly away from her.
+
+    Measured in-hull at the delivered cell, the two terms move together with the frames, which is what
+    makes the thrust a real frame cost rather than a free draw:
+
+        thrust 15  push_u +0.5175  |S-old| 49.3812  depth +0.2532
+        thrust 14  push_u +0.4773  |S-old| 49.4053  depth +0.2075
+        thrust 13  push_u +0.1304  |S-old| 49.6202  depth -0.1901
+    """
+    old, push = (row[1], row[2]), (row[5], row[6])
+    s = math.hypot(GT.S[0] - old[0], GT.S[1] - old[1])
+    ux, uz = (GT.S[0] - old[0]) / s, (GT.S[1] - old[1]) / s
+    kappa = max(abs(GT.wA.pla.nx * ux + GT.wA.pla.nz * uz),
+                abs(GT.wB.pla.nx * ux + GT.wB.pla.nz * uz))
+    return dict(s_dist=s, push_u=push[0] * ux + push[1] * uz, push_mag=math.hypot(*push),
+                d_ray=math.hypot(base * ux + push[0], base * uz + push[1]) - s, kappa=kappa,
+                depth=depth_of(row), old=[old[0], old[1]], push=[push[0], push[1]])
+
+
+def floor_at_brace(old, d_max=0.30, d_step=0.0005, eps_half=4e-4, eps_step=2e-6):
+    """HOW DEEP MUST THE ENDPOINT BE BEFORE THIS CORNER ACCEPTS ANYTHING? -- measured, not inherited.
+
+    `genuine` is a question about one segment, `old -> endpoint`, so sweep the endpoint directly:
+    ``pred = S + d*u + eps*perp`` along this brace's own razor ray, and return the first `d` whose eps
+    band holds a genuine endpoint. Returns ``(d, depth)`` or ``(None, None)``.
+
+    Over the whole brace locus (planeA = 35 with planeB 35..36 and the mirror) this reads
+    **d 0.155..0.171, depth 0.1154..0.1216 with no trend** -- a constant of the corner, not of the
+    brace and not of the aim. Below it the swept segment is blocked whatever the razor does: the
+    endpoint is behind both planes but the corner edge still catches the sweep."""
+    ux, uz = GT.S[0] - old[0], GT.S[1] - old[1]
+    s = math.hypot(ux, uz)
+    ux, uz = ux / s, uz / s
+    px, pz = -uz, ux
+    ne = int(2 * eps_half / eps_step) + 1
+    d = d_step
+    while d <= d_max + 1e-12:
+        bx, bz = GT.S[0] + d * ux, GT.S[1] + d * uz
+        for i in range(ne):
+            e = -eps_half + i * eps_step
+            p = (bx + e * px, bz + e * pz)
+            if GT.genuine_clip(old, p):
+                q = GT.p32(*p)
+                return d, -min(GT.wA.pla.func(q), GT.wB.pla.func(q))
+        d += d_step
+    return None, None
 
 
 def hull_points(poly, step=1.0):
@@ -165,6 +259,77 @@ def razor_solutions(tetra, facing, thrust, lean=DELIVERED_LEAN, frames=ER.FLOOR_
                         push=[o[5], o[6]], genuine=bool(o[0]),
                         s_dist=math.hypot(GT.S[0] - old[0], GT.S[1] - old[1])))
     return out
+
+
+def brace_point(pa, pb):
+    """The point at the given signed distances from the two wall planes -- the locus CrrPos parks Link
+    on (both at 35 is the corner-most brace, |S - old| 49.2546, the cheapest on the corner)."""
+    a, b = GT.wA.pla, GT.wB.pla
+    det = a.nx * b.nz - a.nz * b.nx
+    rx, rz = pa - (a.ny * GT.LINK_Y + a.d), pb - (b.ny * GT.LINK_Y + b.d)
+    return ((rx * b.nz - a.nz * rz) / det, (a.nx * rz - rx * b.nx) / det)
+
+
+def placeable_screen(facing, thrust, lean=DELIVERED_LEAN, p_half=120.0, p_step=8.0, ebox=110.0,
+                     estep=8.0, travel_mid=311.0, seed_cap=8, nspeed=None):
+    """THE DEEPEST CLIP ONE AIM CELL CAN BUY -- **no hull, and only placements she can stand in**.
+
+    The two axes a hull-free question needs are her placement and Link's entry, and both are swept in
+    the ROLL's own frame so neither family is covered by luck: entries are the brace backed off by
+    `travel_mid +- ebox` of roll travel (26 x cut_step ~ 390 is the cut firing as he ARRIVES, ~233 the
+    delivered slide), placements are a grid about the brace filtered by `placeable` and by Co reach.
+    Every near-curve seed is Newtoned onto the razor and filtered back to sane geometry.
+
+    Returns the best row (`law_of` fields plus entry/tetra/travel/genuine) or None. At thrust 13 this
+    reads NEGATIVE at all 45 cells -- best -0.0208 at cell 2554, against a floor of ~0.118."""
+    ctx, sch, resid = ES.build_fast(facing, lean, thrust, nspeed=nspeed)
+    k = sch['cut_step']
+    mx, mz = sch['dx'][k] + sch['cutx'][k], sch['dz'][k] + sch['cutz'][k]
+    bd = math.hypot(mx, mz)
+    rx, rz = mx / bd, mz / bd
+    qx, qz = -rz, rx
+    brace = brace_point(35.0, 35.0)
+    ecen = (brace[0] - travel_mid * rx, brace[1] - travel_mid * rz)
+
+    entries, t = [], travel_mid - ebox
+    while t <= travel_mid + ebox + 1e-9:
+        lat = -ebox / 2.0
+        while lat <= ebox / 2.0 + 1e-9:
+            entries.append((brace[0] - t * rx + lat * qx, brace[1] - t * rz + lat * qz))
+            lat += estep
+        t += estep
+
+    best, n = None, int(2 * p_half / p_step) + 1
+    for i in range(n):
+        for j in range(n):
+            tet = (brace[0] - p_half + i * p_step, brace[1] - p_half + j * p_step)
+            if not placeable(tet) or math.hypot(tet[0] - brace[0], tet[1] - brace[1]) > 95.0:
+                continue
+            out = ctx.sweep_par([(tet[0], tet[1], e[0], e[1]) for e in entries], 0)
+            seen = []
+            for _r, p0 in sorted((abs(resid(o)), e) for e, o in zip(entries, out))[:seed_cap * 4]:
+                if len(seen) >= seed_cap:
+                    break
+                if any(math.hypot(p0[0] - q[0], p0[1] - q[1]) < 6.0 for q in seen):
+                    continue
+                p, rr, gr = ES.zero_the_resid(tet, facing, thrust, lean, p0, nspeed=nspeed)
+                if gr < ER.LEVERAGE_MIN or abs(rr) > 1e-3:
+                    continue
+                if math.hypot(p[0] - ecen[0], p[1] - ecen[1]) > ebox * 2.0:
+                    continue
+                if not (GT.wA.pla.func(GT.p32(*p)) > 0.0 and GT.wB.pla.func(GT.p32(*p)) > 0.0):
+                    continue
+                o = ctx.sweep_par([(tet[0], tet[1], p[0], p[1])], 0)[0]
+                law = law_of(o)
+                if law['s_dist'] > 56.0:
+                    continue
+                seen.append(p)
+                law.update(entry=[p[0], p[1]], tetra=[tet[0], tet[1]], resid=resid(o),
+                           genuine=bool(o[0]), facing=facing, thrust=thrust,
+                           travel=math.hypot(p[0] - law['old'][0], p[1] - law['old'][1]))
+                if best is None or law['depth'] > best['depth']:
+                    best = law
+    return best
 
 
 def screen(tetra, facing, thrust, lean=DELIVERED_LEAN, frames=ER.FLOOR_FRAMES, **kw):

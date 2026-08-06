@@ -5,13 +5,15 @@ that thin dust, or geometry, or the set I searched? What quantity decides whethe
 the seam at all / how do I screen a configuration in one call instead of buying another lottery? Can
 moving the PUSHED ACTOR buy penetration, and at what SCALE? Why does the same roll clip from one distance
 and not from another?
-**Status:** measured and gated (session 100) on the flooded-Hyrule Tetra corner, in
-[`tests/test_razor_depth.py`](../../tests/test_razor_depth.py) (10 + 1 slow), with the falsifying
-direction (`genuine ⇒ depth > 0`) gated over 275 genuine rows sampled on the locus.
+**Status:** measured and gated (sessions 100-101) on the flooded-Hyrule Tetra corner, in
+[`tests/test_razor_depth.py`](../../tests/test_razor_depth.py) (16 + 2 slow), with the falsifying
+direction (`genuine ⇒ depth > 0`) gated over 275 genuine rows sampled on the locus and the hull-free,
+placement-constrained thrust-13 refusal gated over all 45 aim cells.
 **Source:** [`harness/tetrapush/razor_depth.py`](../../harness/tetrapush/razor_depth.py) (`depth_of`,
-`razor_solutions`, `screen`, `thrust_map`), [`harness/rollstab/geometry_tetra.py`](../../harness/rollstab/geometry_tetra.py)
+`law_of`, `floor_at_brace`, `placeable`, `placeable_screen`, `razor_solutions`, `screen`, `thrust_map`),
+[`harness/rollstab/geometry_tetra.py`](../../harness/rollstab/geometry_tetra.py)
 (`genuine_clip`, `S`), [`harness/tetrapush/entry_reach.py`](../../harness/tetrapush/entry_reach.py)
-(the reachable hull the solutions are taken inside).
+(the reachable hull the frame-floor solutions are taken inside).
 
 [roll-cut-thrust-floor.md](../mechanics/roll-cut-thrust-floor.md) established that the cut can dispatch
 two frames earlier than the delivered clip does, and that the frame-minimal ranking could not see the
@@ -68,33 +70,72 @@ depth moves inside **0.008 u** and does not trend toward zero (−0.1949 / −0.
 measured over the frame-floor reachable hull, which sits ~239 u from the corner brace - and that is what
 makes it a statement about plans rather than geometry. See the next section.
 
-## The two families, and why a hull hides one of them
+## What the depth is bought with: the push's PROJECTION
+
+`base` is not just constant per facing - it is **a constant**, 49.220225 u. The roll step and the cut root
+translate rotate together, so the facing only turns the pair (49.220227 / 49.220232 at the window's ends,
+sine-table quantization), and the thrust does not enter it at all. Write the law with that in:
+
+    d_ray  =  49.220225 + push·û  −  |S − old|          `razor_depth.law_of`
+    depth  =  κ · d_ray                                  κ = |n·û| ≈ 0.712 here
+
+**So every clip on this corner is bought with `push·û`, the push's projection onto the `old → S` ray**, and
+`push·û` is set by WHERE THE PUSHED ACTOR SITS relative to Link's Co centre on the cut frame - he is shoved
+directly away from her, so `push·û > 0` means she is up-ray BEHIND him and his recoil throws him at the
+corner. Measured in-hull at the delivered cell, both terms move together with the frames:
+
+| thrust | `plan_cost` | push·û | \|push\| | \|S−old\| | depth |
+|---|---|---|---|---|---|
+| 15 | 23 | +0.5175 | 0.6129 | 49.3812 | +0.2532 |
+| 14 | 22 | +0.4773 | 0.5661 | 49.4053 | +0.2075 |
+| 13 | 21 | +0.1304 | 0.1588 | 49.6202 | **−0.1901** |
+
+That is what makes the thrust a real frame cost rather than a free draw. The braced frames before the cut
+are when the push is **accumulated** (she keeps contact while CrrPos holds him at the wall) and when it is
+**straightened** (CrrPos undoes the displacement that same push puts into `old`). Cut two frames early and
+you lose both: less push, aimed worse, from a brace 0.24 u further out.
+
+## The floor is the corner's, and it is measured
+
+`genuine` needs the swept segment to clear the corner as well, and below some penetration it never does -
+the endpoint is behind both planes but the corner edge still catches the sweep. That floor is measured
+directly in endpoint space (`floor_at_brace`: sweep `pred = S + d·û + ε·perp` and find the first `d` whose
+ε band holds a genuine endpoint), over the brace locus CrrPos actually parks Link on:
+
+    depth ≥ 0.1154 … 0.1216      no trend in the brace, none in the aim → a constant of the corner
+
+Session 100 read the same wall as "≥ 0.1273" from the four populations that happened to have live dust,
+which cannot tell a corner constant from a coincidence of those braces. Screen against the low end
+(`DEPTH_FLOOR`), then check a survivor against its own brace.
+
+## Two families, and the clause that decides between them
 
 A roll of `cut_step` N travels **26N u**. From the 4-frame hull, 239 u out, Link reaches the wall around
-step 9 whatever the thrust, and CrrPos then slides him along it - a little less each frame. So the hull
-contains only the **arrive-early-and-slide** family, where the razor picks a slid `old` and two fewer slide
-frames *is* the 0.19 u. The tell was in the numbers all along: those solutions cut from |S−old| 49.62 while
-the delivered clip cuts from 49.38.
+step 9 whatever the thrust and CrrPos slides him along it, so the hull contains only the
+**arrive-early-and-slide** family - and two fewer slide frames *is* the 0.19 u. Remove the hull and entries
+~**390 u** out put the cut on the frame Link **ARRIVES**, with no slide at all. Session 100 measured the
+depth going positive there, at Tetra 100 u in −z of her console read.
 
-Swept with no hull (851 598 Tetra × entry pairs, then the placement plane with Newton runs filtered back to
-sane geometry - `|S−old| ≤ 56 u`, walkable, inside the box):
+**That placement is 3.54 u behind wall B and she cannot stand in it.** The engine does not check a seed -
+`placed_step` writes her position with no motion, so her CrrPos has no sweep to line-check and
+`wall_correct`'s outward-offset segment misses a point already behind the plane
+([../model/placement-standability.md](../model/placement-standability.md)). From inside the wall she grazes
+Link's Co cylinder from a bearing no reachable spot offers, and that graze *was* the +0.0399.
 
-- **1167 razor solutions at `cut_step` 15 land on the exact brace point thrust 15 cuts from** (|S−old|
-  49.3812). The brace is not the barrier it appeared to be.
-- Entries ~**390 u** out - 26 × 15, the roll's own travel - put the cut on the frame Link **arrives**,
-  with no slide at all, and there the depth goes **positive**: **+0.0399** at Tetra 100 u in −z of her
-  console read, entry (−1422.7771688289, −677.8451372479), walkable.
-- So the pushed actor's real scale on this axis is ~**100 u**, not the ±3 u a herd tolerates. Priced on the
-  wrong magnitude inside the wrong family, she reads inert.
+Constrained to placements a herd can deliver (≥ 50 u off both planes, her BG wall radius; the 288 live
+coords sit at ≥ 56.98), swept over every aim cell with **no hull anywhere in the search**
+(`placeable_screen`):
 
-**The remaining gap is barrier clearance, not the plane.** `genuine` also needs the swept segment to clear
-the CrrPos barrier, and every genuine row measured anywhere on this corner sits at depth ≥ **0.1273** (the
-four known-live configurations read 0.1273 / 0.2073 / 0.2533 / 0.3398, each bit-constant across its own
-genuine population). So the arrive-exactly family is ~**0.087 u** short - a fifth of what the hull-bounded
-picture showed, in a family no pass has searched, with the push as the lever (0.446 there against 0.613 at
-thrust 15).
+- **thrust 13 is refused at all 45 cells** - best depth **−0.0208** at cell 2554, which does not reach the
+  plane, let alone the floor. A 4× finer placement grid moves it 0.0007.
+- The refusal has a mechanism rather than a budget: **the push that aims at the corner is the same push
+  that shoves Link off the brace**, and it costs `|S−old|` faster than it buys `push·û`. Cell 2549 carries
+  push·û +0.3656 at a brace of 49.6836; cell 2554 carries +0.1834 at 49.4329; every cell loses the trade.
+- The arrive-exactly family's real trade is now legible: it holds **the best brace on the corner**
+  (49.2611) and aims its push **75° off** the ray, because arriving exactly is precisely giving up the
+  braced frames in which the push is accumulated and straightened.
 
-## The pushed actor: inert at herd scale, decisive at roll scale
+## The pushed actor: inert at herd scale, and bounded by where she can stand
 
 She is the term in `push`, and `hull_scan` takes her position as its first argument. **Within the
 arrive-and-slide family she is inert**: over a ±3 u grid the thrust-13 depth moves **0.015 u per u**
@@ -102,14 +143,17 @@ arrive-and-slide family she is inert**: over a ±3 u grid the thrust-13 depth mo
 the roll's geometry rather than by where she started. ±3 u is the scale a herd tolerates, and at that scale
 the reading is honest and useless.
 
-**At roll scale she changes the family.** The through-going solution above needs her ~100 u from her
-console read; that is 8+ frames of herding at the measured lateral authority and far outside the placeable
-thread, so it is a different herd, not a tweak to this one. Which is the actual open question for the second
-frame: **what herd puts her and Link in the arrive-exactly geometry, and does it cost less than the two
-frames it buys?**
+At roll scale she sets the contact BEARING, which is the whole of `push·û` - but only from spots she can
+occupy. Swept over the arrive-exactly entry at ±40 u and ±200 u, `push·û` is pinned at **0.11-0.12** and
+the depth tops out at +0.0427: a fresh contact is only available on the crescent his cylinder has just
+reached, i.e. AHEAD of him, and a from-behind push needs the braced frames the arrival gives up. The
+placements that do aim it well are the ones inside the wall
+([../model/placement-standability.md](../model/placement-standability.md)).
 
 One more walk frame does not open the slide family (`plan_cost` would still be 22): the bigger hull reaches
-2.3x the entries and gets no nearer the plane.
+2.3x the entries and gets no nearer the plane. Neither does the **lean** - `m351C` decays 35% per roll
+frame, so a −388 draw is −1 by the cut step and ±3000 s16 moves the depth 0.0003 u
+([../mechanics/roll-lean-decay.md](../mechanics/roll-lean-decay.md)).
 
 ## How to use it, and how not to
 
@@ -121,6 +165,11 @@ One more walk frame does not open the slide family (`plan_cost` would still be 2
   [../history/thrust-13-refused-by-geometry.md](../history/thrust-13-refused-by-geometry.md)).
 - ``depth > 0`` **is only an admission.** Dust still has to exist on the locus (`hull_scan`) and a plan
   still has to land on it (`confirm_entry`).
+- **Every axis you sweep needs its own deliverability clause.** A placement is a position she can STAND in
+  (`placeable`, ≥ 50 u off both planes) and the engine will not tell you otherwise; an entry is a point a
+  plan can walk to (`is_walkable`, then the reachable hull). Applying one axis's filter to the other axis
+  is how a graze from inside a wall reads as the second frame
+  ([../model/placement-standability.md](../model/placement-standability.md)).
 - **It is not a density model.** Against the per-thrust live-station census it does not even correlate:
   cell 2549 at thrust 15 reads depth +0.513 with **0** live stations, cell 2553 at thrust 14 reads +0.127
   with **918**. Read it as a gate, never as a rate.
@@ -140,6 +189,11 @@ says "this thrust cannot clip"; read over the geometry it says "this thrust cann
 and those differ by a family of entries 150 u further back. A reachable hull exists to price plans - the
 moment it bounds a claim about what the corner allows, the claim has inherited a herd's arrival position.
 
+**And check that the set is one the game can produce.** Naming the set is not enough if the set contains
+configurations that cannot exist: removing the hull to answer "what does the corner allow" also removed the
+only thing that had been keeping the pushed actor outside the walls. Each axis a search gains needs the
+clause that says which of its values are deliverable - the hull was Link's, and hers was never written.
+
 ## See also
 
 - [../mechanics/roll-cut-thrust-floor.md](../mechanics/roll-cut-thrust-floor.md) - why thrust 13 is the
@@ -148,5 +202,11 @@ moment it bounds a claim about what the corner allows, the claim has inherited a
   the bands were measured outside the reachable set.
 - [clip-exit-angle.md](clip-exit-angle.md) - the 0.65 u pocket this law is the ranked form of, and the
   exit-angle window it bounds.
+- [../model/placement-standability.md](../model/placement-standability.md) - the clause on HER axis, the
+  50 u bar, and why the engine leaves it to the caller.
+- [../mechanics/roll-lean-decay.md](../mechanics/roll-lean-decay.md) - why the lean is not a lever at a
+  late cut, and the frozen-entry trap that makes it look like one.
 - [../history/thrust-13-refused-by-geometry.md](../history/thrust-13-refused-by-geometry.md) - the
   superseded reading, that the floor thrust was refused *anywhere* on this corner.
+- [../history/arrive-exactly-through-the-plane.md](../history/arrive-exactly-through-the-plane.md) - the
+  superseded reading that both frames were live, from a placement inside the wall.

@@ -1679,9 +1679,62 @@ courtyard push; `harness/dolphin_env.ensure_running` if not). Reads/writes RAM v
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE ARRIVE-EXACTLY HIT PUTS TETRA 3.54 u INSIDE WALL B. SHE CANNOT STAND THERE, THE ENGINE
+            NEVER CHECKS A SEED, AND WITH THE CLAUSE ENFORCED THRUST 13 IS REFUSED AT ALL 45 CELLS WITH NO
+            HULL IN THE SEARCH (session 101).** The box below is measured correctly and reproduces; what it
+            was measured at is not a configuration the game can produce. What the session BUYS in exchange
+            is the mechanism: the law's push term, decomposed, says exactly what a clip costs and why the
+            two frames are not there.
+            - **THE CLAUSE.** `ShoveCtx._run` seeds her by WRITING a position with no motion, so her own
+              CrrPos has no sweep to line-check and `wall_correct`'s outward-offset segment misses a point
+              already behind the plane -- she stays inside the wall and grazes Link's Co cylinder from a
+              bearing no reachable spot offers. Her BG wall radius is **50 u** (`npc_zl1.WALL_R`) and all
+              **288** live-validated genuine coords sit at **>= 56.98 u** off both planes. NEW
+              `razor_depth.placeable`. **The tell was one column over in my own output: every row printed
+              `walkable True` -- for LINK's entry.** The filter existed, applied to the other actor.
+            - **THE LAW, DECOMPOSED -- `|base|` IS A CONSTANT (49.220224583762864), so a clip is bought with
+              `push.u`, the push's PROJECTION on the `old -> S` ray** (`razor_depth.law_of`;
+              `depth = kappa*(|base| + push.u - |S-old|)`, kappa = |n.u| ~ 0.712). In-hull at the delivered
+              cell: thrust 15 push.u **+0.5175** at brace 49.3812 -> +0.2532; thrust 14 **+0.4773** at
+              49.4053 -> +0.2075; thrust 13 **+0.1304** at 49.6202 -> **-0.1901**. **Both terms move
+              together with the frames**, because the braced frames before the cut are when the push is
+              ACCUMULATED and when CrrPos STRAIGHTENS the displacement that same push puts into `old`. That
+              is why the thrust is a real frame cost and not a free draw.
+            - **THE FLOOR IS THE CORNER'S, AND IT IS NOW MEASURED** (`razor_depth.floor_at_brace`, in
+              endpoint space, over the brace locus CrrPos parks him on): **0.1154..0.1216 with no trend** in
+              the brace or the aim. s100's ">= 0.1273" was the min over the four populations that happened
+              to have live dust, which cannot tell a corner constant from those braces.
+            - **THE HULL-FREE, PLACEMENT-CONSTRAINED VERDICT: 0 of 45 cells** reach the floor at thrust 13 --
+              best depth **-0.0208** (cell 2554), which does not reach the PLANE, and a 4x finer placement
+              grid moves it **0.0007**. The refusal has a mechanism rather than a budget: **the push that
+              aims at the corner is the same push that shoves Link off the brace**, and it costs `|S-old|`
+              faster than it buys `push.u` (cell 2549: push.u +0.3656 at brace 49.6836; cell 2554: +0.1834
+              at 49.4329). NEW `razor_depth.placeable_screen` (~3 s a cell, no hull, both entry families
+              swept in the roll's own frame).
+            - **TWO LEVERS THE HANDOFF NAMED, BOTH MEASURED DEAD.** The placement plane (+-40 u at 4 u and
+              +-200 u at 8 u): `push.u` pinned at **0.11-0.12**, depth ceiling +0.0427 -- a fresh contact is
+              only available on the crescent his cylinder has just reached, i.e. AHEAD of him. The LEAN:
+              `m351C` decays 35%/frame, so the delivered -388 draw is **-1 by roll frame 15** and +-3000 s16
+              moves the depth **0.0003 u**. GOTCHA: sweeping the lean at a FROZEN entry reads a spurious
+              0.03 u -- changing the lean moves the razor, so the entry must be re-solved per value.
+            - **GATES `tests/test_razor_depth.py` (16 + 2 slow, green; 45 s fast).** NEW
+              `test_a_placement_is_a_position_she_can_stand_in`, `..._depth_floor_is_a_corner_constant...`,
+              `..._clip_is_bought_with_the_pushs_projection`, `..._entry_lean_is_spent_before_the_cut_fires`,
+              `..._no_placeable_configuration_reaches_the_floor_at_thrust_13...` (+ the slow 45-cell form);
+              the s100 arrive gate RENAMED to `..._only_from_inside_the_wall` and given the placeability
+              assertion. **KB:** NEW `model/placement-standability.md`, NEW `mechanics/roll-lean-decay.md`,
+              superseded claim MIGRATED to NEW `history/arrive-exactly-through-the-plane.md`;
+              `strategy/clip-razor-depth.md` corrected (floor, projection law, the trade), hub +2.
+            - **NEXT.** Thrust 14 (`plan_cost` 22) is still a frame available with nothing else changed and
+              is now the only one with evidence behind it -- s99 never hunted cells 2533 or 2525 at it. For
+              thrust 13 the open axis is the one the law points at: **`push.u` without giving up the brace**,
+              which means contact that arrives from UP-RAY without the slide frames -- i.e. HER moving
+              (stt-4 follow, ~10 u/frame) rather than plowed-and-static, the one term the sweep still seeds
+              at rest. Do NOT re-run placement or lean sweeps for thrust 13.
       - [~] **DERECK: "IF SLASHING ON FRAME 13 WORKS I WANT BOTH FRAMES" -- AND IT DOES, FROM AN ENTRY
             FAMILY THE HULL CANNOT SEE. MY OWN "REFUSED BY THE CORNER" VERDICT WAS SCOPED TO THE FRAME-FLOOR
-            HULL AND IS CORRECTED HERE (session 100, second half).** The depth law below all reproduces; what
+            HULL AND IS CORRECTED HERE (session 100, second half; SCOPE CORRECTED BY THE BOX ABOVE -- the
+            placement it is measured at is inside the wall).** The depth law below all reproduces; what
             was wrong was the word *anywhere*.
             - **THE SET WAS DOING THE WORK.** `entry_reach`'s hull sits **~239 u** from the corner brace and
               a `cut_step` N roll travels **26N u**, so out of that hull Link reaches the wall around step 9
