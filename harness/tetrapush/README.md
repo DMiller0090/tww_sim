@@ -1756,6 +1756,17 @@ from scratch. Land the edits first, then gate.
               29** endpoints -- but the top-8 endpoint ranking is **identical** and the honest gain is
               **<= +0.28 frames**. So it removes a fiction and re-aims a third of the beam; it does not
               move this cut. Gates: `tests/test_cloud_land.py` (+6), 103 passed.
+            - **A LONG-RUNNING SOLVE WAS LEFT RUNNING, AND ITS DUMP IS THE ONLY THING TO TRUST.**
+              `_notes/s114_endpoint_solve.py 0,7,8,11,13,10,12,1 all 6` was relaunched detached at the
+              end of this session (~150 s a solve, ~192 solves, ~8 h) and now writes
+              `_generated/s106/s114_endpoint_solve.json` **after every solve** -- s114's run was stopped
+              at 8 of them and lost all of it to a dump written only on completion. **Read that file,
+              not a process:** ``partial: true`` with ``n_solves`` says how far it got, and the log is
+              `_notes/s115c_endpoint_solve.log`. Do NOT test the pid it was launched under (5164) --
+              Windows recycles pids, so a live pid is not evidence this job is the one running, and a
+              dead one is not evidence it failed. It was at **60 solves** at handoff, best total 89.00
+              (node 0, row 9) -- an arithmetic SPECIFICATION whose separation this session measured
+              cannot be delivered as a suffix, so read it with that box above in hand.
       - [~] **THE BASIS WAS A DIMENSION SHORT: THE FOURTH COORDINATE (TETRA'S LATERAL) PAYS BOTH
             HALVES AT TOTAL 95.00, AND WHAT IS LEFT IS THE SEPARATION -- A PRICE, NOT A WALL
             (session 114; its frame price is retired above).** New truth page
