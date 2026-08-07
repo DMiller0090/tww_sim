@@ -1710,6 +1710,44 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE DELIVERY TIER KILLED THE s107 WINNER, AND THE FINDING IS THE PREDICATE ITSELF:
+            DELIVERY IS TWO PREDICATES, AND THE POPULATION'S FRONT NEVER PAYS BOTH (session 109).**
+            The s108 handoff's delivery chain ran and stopped at its first gate: the winner's own
+            2-frame cloud (control: the console arrival's cloud reproduces s104's 139213 endpoints
+            bit-for-bit) has **leverage 0 at every in-hull grid point, all cells** -- row 105's
+            `plan_cost` 21 was PRICED at the console arrival, and this plan arrives elsewhere. The
+            banked 101 stands; the offline 100 is a landing-half number only. New truth page:
+            [`knowledge/strategy/delivery-is-two-predicates.md`](../../knowledge/strategy/delivery-is-two-predicates.md).
+            - **THE DIAGNOSTIC SPLIT (one run, `_notes/s109_control_diag.py`):** control (hunt tetra
+              + console hulls) = 4 live walkable stations, so the scan path is sound; winner landing
+              + console hulls = **1 live** (the 0.789 u miss costs leverage 9 -> 4, not the dust);
+              hunt tetra + winner hulls = **0 leverage**. The killer is LINK'S ARRIVAL: his atom
+              ends him 128.2 u from the nearest hunted station (console: 25.0 u), and his ~20 u
+              2-frame hull points down-herd. Leverage tracks the ARRIVAL; dust tracks the LANDING.
+            - **THE CENSUS (all 8581 firing atom variants at all 24 firing re-chain survivors,
+              `_notes/s109_arrival_census.py`):** the (landing miss, arrival d_station) front is a
+              hard exchange -- **miss < 1 u only at d_station ~ 127 u (node 11); d_station < 10 u
+              only at miss ~ 25 u (nodes 4/5, totals 97-99)**. No variant pays both, because both
+              are set by where the HERD ends.
+            - **THE SCANS (20 distinct near-arrival candidates, own cloud + all 45 cells x 3
+              thrusts, `_notes/s109_scan_best.py`): 0 of 20 live.** Two failure shapes, both now
+              legible: an arrival still mid-backslide fans an **EMPTY cloud** (`iter_fan2` keeps
+              junctions only at ``speedF == cap``), and a settled arrival AT the stations with a
+              landing 24-40 u off the band reads **leverage in all 135 combos, dust in none**.
+            - **THE CONSOLE'S OWN SHAPE PAYS BOTH, and says how** (replayed): its herd ends with the
+              flip already flying (f71 speedF -25.7), **Tetra coasts ~36 u on her own plow momentum
+              through the atom window** while Link runs up-herd at the 17 u/f cap to 111 u behind
+              her, 25 u from the station, walking AT the cap. The atom's exit-hold run and the entry
+              walk are the same currency; after ``freeze_f`` extending the run moves the arrival and
+              nothing else.
+            - **NEXT: a JOINT last-cycle keep** -- price d_station beside the landing miss in the
+              cloud keep (`cloud_land`), and iterate cycle 3 off `s107_rechain_c2_beam.json` letting
+              the chain reach the console's geometry (disengage early, coast, spend the atom's tail
+              running to the stations). The node-4/5 family (herd 68-69, arrivals already AT the
+              stations, landings ~26 u short ~= 2 push frames) is the concrete probe: if +2 herd
+              frames of that family exists in the c2 beam's reach, totals land ~99-100 with both
+              halves paid. Do NOT re-price rows at foreign arrivals; the honest gate stays the
+              per-candidate cloud + `hull_scan` (~30 s).
       - [~] **THE RE-CHAIN WITH A TARGET-AWARE CYCLE 2 LANDS INSIDE THE BAND: 0.789 u FROM ROW 105
             AT TOTAL 100 -- ONE FRAME UNDER THE BANKED 101, CONFIRMED REPLAY-FAITHFUL OFFLINE
             (session 108).** Both halves of the s107 handoff ran, in order, and the second one
