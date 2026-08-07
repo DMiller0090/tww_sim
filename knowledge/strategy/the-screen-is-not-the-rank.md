@@ -4,9 +4,10 @@
 keep mixes three orders; how do I find out which of its slots is earning its place? A quantity a
 previous session retired as "the wrong question" - can it still be the right rank? How fine does a
 swept knob's grid have to be, and how do I price the answer instead of guessing it?
-**Status:** MEASURED (session 117) on the flooded-Hyrule Tetra corner, against the session-111
-cycle-3 beam: every one of the **551 clearing camera states** over the beam's 23 supplied rolls priced
-whole by `cloud_land.cloud_landing` at the session-114/115 atom cap, then each roll's swept optimum
+**Status:** MEASURED (session 117; the `settled` correction to its in-band figures, session 118) on
+the flooded-Hyrule Tetra corner, against the session-111 cycle-3 beam: every one of the **551
+clearing camera states** over the beam's 23 supplied rolls priced whole by
+`cloud_land.cloud_landing` at the session-114/115 atom cap, then each roll's swept optimum
 compared with what every key the cut can see would have kept. Driver `_notes/s117_camera_axis.py`
 (phases ``sweep`` / ``report`` / ``keyeval`` / ``grid``), dump `_generated/s106/s117_axis.json`.
 **Source:** [`harness/tetrapush/full_herd.py`](../../harness/tetrapush/full_herd.py)
@@ -118,7 +119,10 @@ floor moved 0.08 f - but nothing in the sample said it would.
 - **`in_band` is the landing alone.** The sweep's cheapest in-band landing reads total 98.00 against a
   banked delivery of 101 and is not better - it still owes 7.90 frames of arrival. Quote
   `total + arr_frames`, never `total`
-  ([delivery-is-two-predicates.md](delivery-is-two-predicates.md)).
+  ([delivery-is-two-predicates.md](delivery-is-two-predicates.md)). And read `settled` beside it:
+  session 118 scanned that record's arrival and it fans an EMPTY walk cloud, so its delivered 105.90
+  was never a candidate - the honest delivered best over the 14 is **106.62**
+  ([the-exit-bearing-buys-the-arrival.md](the-exit-bearing-buys-the-arrival.md)).
 
 ## See also
 

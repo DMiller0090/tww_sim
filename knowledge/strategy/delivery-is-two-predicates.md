@@ -4,7 +4,8 @@
 still not deliverable? What does a row's `plan_cost` silently assume about MY plan's arrival? Why does
 `hull_scan` read `no leverage anywhere` at one arrival and leverage-everywhere-but-no-dust at another?
 Which half of the predicate does each term track?
-**Status:** MEASURED (session 109) on the flooded-Hyrule Tetra corner -- the s107 re-chain winner
+**Status:** MEASURED (session 109; the arrival constant re-measured and the delivered figure
+corrected in session 118) on the flooded-Hyrule Tetra corner -- the s107 re-chain winner
 (total 100, 0.789 u in-band) and the whole re-chain population, killed against the full predicate;
 drivers `_notes/s109_{winner_cloud,control_diag,arrival_census,arrival_rank,scan_best}.py`, dumps
 `_generated/s106/s109_*.json`.
@@ -87,13 +88,21 @@ exactly the same arrival:
 | landing total | **98.00 - 102.00** |
 | `arr_frames` still owed | **7.38 - 8.37** |
 | implied station gap | **163 - 168 u** |
-| delivered (`total + arr_frames`) | **105.90** at best, against the banked **101** |
+| delivered (`total + arr_frames`) | **106.62** at best, against the banked **101** |
 
 So the s109 front is not something a lucky candidate slips through: solve the landing on this beam and
 the arrival bill comes back a near-constant ~8 frames, whatever roll and whatever row produced it. A
 camera that steers the landing to a coord steers Link to the same place every time, because both are
 set by where the herd ended. **Reducing that constant is the endgame, and no camera target touches it**
 - which is why `joint` is still empty after the sweep and the banked 101 stands.
+
+Two of those numbers moved in session 118 and both are worth carrying. The delivered figure is
+**106.62**, not the 105.90 the sweep first printed: that record's arrival is not settled, so it fans
+an empty walk cloud and was never a candidate. And the constant is not all geometry - hull-scanning
+all 14 at their own arrivals reads leverage **0 of 19** against a lit control, but ~3 frames of the
+bill belong to the atom's own EXIT BEARING, and sweeping it takes the delivered best to **103.45**
+with the beam's first `joint` records
+([the-exit-bearing-buys-the-arrival.md](the-exit-bearing-buys-the-arrival.md)).
 
 So the lever is a JOINT last-cycle keep: the landing keep
 ([landing-keep-on-a-cloud](landing-keep-on-a-cloud.md)) must price the arrival's station distance

@@ -511,3 +511,93 @@ def test_the_joint_keep_is_wired_and_defaults_to_the_landing_half_alone():
         assert inspect.signature(CL.cloud_landing).parameters[k].default == want
     src = inspect.getsource(CL.cloud_landing)
     assert 'if stations:' in src and '_joint_row' in src, "the joint branch is not guarded"
+
+
+# --------------------------------------------------------------- the exit bearing (session 118)
+
+def test_the_exit_arc_strictly_contains_the_standing_pair_the_grid_defaults_to(arrival, hl):
+    """The arc's own positive control has to be a MEMBER of the arc, not a remembered number.
+
+    `atom_cloud` defaults to the standing PAIR (the live entry bearing and the herd up-bearing) and
+    `exit_arc` sweeps about both centres, so the pair is inside the arc by construction -- which is
+    what lets one call price the swept axis and its control together and attribute the difference to
+    the sweep (`[[search-space-contains-human]]`)."""
+    from tww_sim.land.plan_land._primitives import world_angle_s16
+    run = arrival['run']
+    ex, ez = SD.ENTRY_ROLL_POS
+    pair = {world_angle_s16(ex - run.link.pos_x, ez - run.link.pos_z),
+            (hl.bearing_bam() + 0x8000) & 0xFFFF}
+    assert set(CL.exit_arc(run, hl, step=0)) == pair, "a zero step must be the pair verbatim"
+    arc = set(CL.exit_arc(run, hl, step=0x800, half=0x2000))
+    assert pair <= arc and len(arc) > len(pair)
+    kw = dict(flip_step=AW.FLIP_SPAN, rotate_offs=AW.ROTATE_OFFS[1:2])
+    assert {r['knobs']['exit_bearing'] for r in CL.atom_cloud(run, hl, **kw)} <= pair
+
+
+def test_the_exit_arc_reaches_arrivals_the_standing_pair_cannot(arrival, hl):
+    """**The axis the enumeration owns and had never turned** (session 118).
+
+    The exit stick is held past the handoff, so the bearing it holds decides WHERE the arrival lands;
+    the standing pair is two directions and not a steering axis. Measured on the swept session-111
+    cycle-3 beam, that is the whole arrival bill: the pair's best in-band station gap is 160-176 u and
+    the arc's is 9.9-12.0 u at the same states, taking the delivered figure from 106.45 to 103.45 and
+    producing the beam's first ``joint`` records.
+
+    Gated as the INEQUALITY rather than the measurement (which moves): over the same thinned grid and
+    the same tails, the arc must strictly out-reach its own pair, and every arc member must be a real
+    rollout at its own bearing. The claim is about where the enumeration can PUT Link, so it is read
+    over the whole grid -- the synthetic fixture arrival fires nothing (`away_walk.fires` is a
+    property of a real terminal's depth), and the frame figures above come from the real beam."""
+    kw = dict(flip_step=AW.FLIP_SPAN, rotate_offs=AW.ROTATE_OFFS[1:2], exit_runs=(0, 2, 4))
+    run = arrival['run']
+    arc = CL.exit_arc(run, hl, step=0x1000, half=0x2000)
+    pair = CL.exit_arc(run, hl, step=0)
+    # far enough that the FRAME term is live for both lanes -- inside `FREE_REACH` every gap prices
+    # at 0.0 and the comparison would be about nothing
+    station = [(run.link.pos_x - 280.0, run.link.pos_z + 80.0)]
+
+    def reach(bearings):
+        v = CL.atom_cloud(run, hl, exit_bearings=bearings, **kw)
+        return min((CL.station_gap(r['link_end'], station) for r in v), default=None), v
+
+    g_pair, v_pair = reach(pair)
+    g_arc, v_arc = reach(arc)
+    assert g_pair is not None and g_arc is not None, "the fixture arrival must enumerate on both"
+    assert g_pair > CL.FREE_REACH, "the station must be out of free reach or nothing is compared"
+    assert g_arc < g_pair, "the arc must reach an arrival the pair cannot"
+    assert CL.arrival_frames(g_arc) < CL.arrival_frames(g_pair)
+    assert {r['knobs']['exit_bearing'] for r in v_pair} <= {r['knobs']['exit_bearing'] for r in v_arc}
+    r = min(v_arc, key=lambda r: CL.station_gap(r['link_end'], station))
+    k = r['knobs']
+    fresh = AW.escape_atom(run, hl, turnaround_first=k['turnaround_first'],
+                           rotate_side=k['rotate_side'], rotate_off=k['rotate_off'],
+                           flip_bearing=k['flip_bearing'], exit_bearing=k['exit_bearing'],
+                           csangle=int(run.csangle), exit_run=k['exit_run'])
+    assert r['link_end'] == fresh['link_end'] and r['tetra_end'] == fresh['tetra_end']
+
+
+def test_a_longer_tail_can_move_the_arrival_FURTHER_from_the_station(arrival, hl):
+    """**The tail is not monotone in the station gap, so `EXIT_RUNS`' longest member is not its best**
+    (session 118).
+
+    A tail runs at the walk cap along the exit-hold bearing, and Link's heading chases it rather than
+    snapping to it, so the path is a CURVE. Traced at the session-117 beam's cheapest settled in-band
+    state out to the 230 u follow bar, ``d_station`` is minimised at tail **0** (146.4 u) and rises to
+    227.2 u by tail 20 -- the exit hold was running 58 deg off the bearing to its own station.
+
+    So a keep may not read "the gap is payable at the cap" as "more tail is closer". Gated as
+    non-monotonicity over the enumerated grid: some tail on some knob combo is FURTHER from a station
+    than a shorter one (the fixture arrival fires nothing, so this reads the rollouts, not the
+    acceptance -- see the arc gate above)."""
+    kw = dict(flip_step=AW.FLIP_SPAN, rotate_offs=AW.ROTATE_OFFS[1:2], exit_runs=(0, 1, 2, 3, 4))
+    station = [(arrival['run'].link.pos_x - 140.0, arrival['run'].link.pos_z + 40.0)]
+    by_knob = {}
+    for r in CL.atom_cloud(arrival['run'], hl, **kw):
+        k = tuple(sorted((a, b) for a, b in r['knobs'].items() if a != 'exit_run'))
+        by_knob.setdefault(k, {})[r['knobs']['exit_run']] = CL.station_gap(r['link_end'], station)
+    curves = [v for v in by_knob.values() if len(v) >= 3]
+    assert curves, "the fixture must produce at least one multi-tail family"
+    worse = [v for v in curves if max(v.values()) > v[min(v)] + 1e-9]
+    assert worse, "no tail anywhere moved an arrival further from the station -- re-read the trace"
+    assert any(min(v, key=lambda t: v[t]) != max(v) for v in curves), \
+        "the cheapest tail is always the longest one, so the gap would be monotone after all"

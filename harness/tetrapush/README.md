@@ -1710,6 +1710,68 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE ~165 u ARRIVAL IS A BEARING, NOT ONLY A GEOMETRY: THE EXIT ARC TAKES THE DELIVERED
+            FIGURE 106.62 -> 103.45 AND GIVES THE BEAM ITS FIRST `joint` RECORDS (session 118).**
+            New truth page
+            [`knowledge/strategy/the-exit-bearing-buys-the-arrival.md`](../../knowledge/strategy/the-exit-bearing-buys-the-arrival.md)
+            + hub; `delivery-is-two-predicates.md` / `the-screen-is-not-the-rank.md` /
+            `the-arrival-is-payable.md` carry the corrected figures (nothing deprecated -- the s117
+            table's `delivered 105.90` was arithmetic on an UNSETTLED record and is now 106.62).
+            - **THE BILL IS REAL AND IT IS NOT THE STATION LIST** (`_notes/s118_arrival_scan.py`
+              phases `control`/`scan`, dump `_generated/s106/s118_arrival_scan.json`). All 14 swept
+              in-band states re-fired and re-enumerated, 19 distinct arrivals `entry_reach.hull_scan`ed
+              at their OWN arrival and OWN landing over **45 aim cells x 3 thrusts**: **0 of 19 read
+              ANY leverage**, against a positive control that LIT at **3 of 3** rows (the hunted tetra
+              in the console hulls -- rows 0/26/107, live 2/1/15). So `arrival_frames` is not a
+              fiction of the s104 hunted-station list; if anything it is optimistic.
+            - **...AND NINE OF THE NINETEEN WERE NEVER DELIVERABLE AT ALL.** They fan an **EMPTY** walk
+              cloud -- not settled at `WALK_CAP`, so `entry_fan.iter_fan2` keeps no junction and they
+              reach nothing at any distance. **That includes the state behind s117's headline** (node 4,
+              landing total 98.00, delivered 105.90). The other ten (node 3's family) are settled and
+              fan **133 444-134 381** endpoints against the console's **139 213** -- a console-sized
+              cloud with no leverage in it, which is a PLACE verdict and not a distance one. Honest
+              s117 delivered best: **106.62**.
+            - **WHAT THE GAP IS MADE OF -- THE HERD OWES HALF, THE ATOM SPENDS THE OTHER HALF.** At the
+              roll TERMINAL the gap to the row's own station is **67.6-106.7 u (1.97-4.28 f)**; after
+              the atom it is **159.5-176.3 u (7.38-8.37 f)**. The atom roughly DOUBLES it. Over all 551
+              priced camera states the terminal gap runs **26.6-125.9 u**, and per roll it IS the bill:
+              Spearman(terminal gap, arrival bill) **+0.858** over the 22 rolls that price a variant,
+              while the landing is near-independent of it (**+0.189**) -- so the two halves are not one
+              quantity with two names.
+            - **AND THE TAIL RUNS THE WRONG WAY** (`trace`, out to the 230 u follow bar at the cheapest
+              settled in-band state): ``d_station`` is **minimised at tail 0 (146.4 u)** and RISES to
+              **227.2 u** by tail 20. The variant holds the live entry bearing at **85.8 deg** while the
+              bearing from its own handoff to its own station is **27.7 deg** -- and the standing pair's
+              OTHER member, the herd up-bearing, is **18.5 deg**. The grid held a nearly-right answer and
+              the rank never picked it, because the rank prices the LANDING and the exit stick moves both.
+            - **SO TURN THE AXIS** (`arc`, `cloud_land.exit_arc` step 0x800 half 0x3000 = 26 bearings,
+              tails 0-12, 69k-101k variants a state, 546 s at 7 procs; dump `s118_arc.json`). The
+              standing PAIR is re-priced inside the same call at the same tails, so the gain is the
+              ARC's and not the tail's:
+
+              | at the 14 in-band states | standing pair | the arc |
+              |---|---|---|
+              | smallest in-band station gap | 31.3 - 176.3 u | **9.9 - 162.1 u** |
+              | best DELIVERED (`total + arr_frames`, settled) | 106.45 | **103.45** |
+              | states holding a `joint` record | 1 (total 111.0) | **10 (total 104.0)** |
+
+              Best delivered: node 3 ``off`` -3968, **total 103.0 + 0.45 = 103.45**, miss 0.492 u, tail
+              10, row 30. Best `joint` (nothing owed on either half): node 3 ``off`` -3264, **total
+              104.0**, miss 0.403 u, tail 11, gap 25.3 u. **This beam had produced no `joint` record
+              before.**
+            - **WHAT IT DOES NOT BUY: THE FLOOR ROLLS STILL CANNOT LAND HER** (`arc f0,f1`, dump
+              `s118_arc_floor.json`). Node 0 (terminal gap **26.6 u**, arrival free, bound 93.95) and
+              node 1 (**39.5 u**, bound 93.87) would deliver ~94 if either landed in band. Swept at
+              their 4 + 3 cheapest camera states, 30k-59k firing variants each: **node 0 has zero
+              in-band landings** with pair or arc, and node 1 has **3 at 2 states, arc only**, 134.9 u
+              from a station -> delivered **111.93**. The arc does not cross the exchange.
+              **The banked 101 STANDS**, and the remaining 2.45 frames are not in the atom.
+            - **Gates**: `tests/test_cloud_land.py` +3 --
+              `test_the_exit_arc_strictly_contains_the_standing_pair_the_grid_defaults_to`,
+              `test_the_exit_arc_reaches_arrivals_the_standing_pair_cannot`,
+              `test_a_longer_tail_can_move_the_arrival_FURTHER_from_the_station`. No library behaviour
+              changed this session -- the arc and the tail were already built; what changed is that they
+              were run.
       - [~] **THE CAMERA AXIS IS SWEPT AND CLOSED: THE FLOOR MOVES 0.08 FRAMES, THE SCREEN IS EXACT
             AND IS NOT THE RANK, AND THE WHOLE REMAINING BILL IS A ~165 u ARRIVAL (session 117).**
             New truth page

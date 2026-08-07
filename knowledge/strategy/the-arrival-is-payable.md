@@ -4,8 +4,8 @@
 property of the endpoint, or of where I stopped measuring? What ends the escape atom, and what happens
 if I keep holding the exit stick? Why does an arrival that stands 20 u from a station reach nothing?
 Why does adding tail frames never improve my frame bound -- and why is the axis still worth having?
-**Status:** MEASURED (session 110) on the flooded-Hyrule Tetra corner -- 46877 firing variant/tail
-records over the session-107 re-chain's 24 firing survivors; the tail's laws gated bit-exact in
+**Status:** MEASURED (session 110; the exit arc finally swept on a real beam in session 118) on the
+flooded-Hyrule Tetra corner -- 46877 firing variant/tail records over the session-107 re-chain's 24 firing survivors; the tail's laws gated bit-exact in
 [`tests/test_away_walk.py`](../../tests/test_away_walk.py), the pricing in
 [`tests/test_cloud_land.py`](../../tests/test_cloud_land.py). Driver
 `_notes/s110_joint_census.py`, dump `_generated/s106/s110_joint_census.json`.
@@ -86,6 +86,11 @@ Swept 18 wide at the population's best endpoint, that alone turned its best full
 1.881 u to **0.8008 u** and produced the first records that pay both predicates at once. It is not
 free (each bearing is its own rollout, unlike the tail), so the pattern is the usual one: the standing
 pair sizes the search, the arc refines where it pointed.
+
+**And every enumeration for the next seven sessions then ran the pair anyway.** Session 118 turned the
+arc on the swept session-111 beam and it is worth ~3 frames of the arrival bill there - the pair's
+chosen bearing sat 58 deg off its own station while the pair's OTHER member sat 9 deg off it:
+[the-exit-bearing-buys-the-arrival](the-exit-bearing-buys-the-arrival.md).
 
 ## What it is worth, against the razor rather than against a bound
 
