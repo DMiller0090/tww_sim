@@ -1710,6 +1710,70 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE CAMERA AXIS IS SWEPT AND CLOSED: THE FLOOR MOVES 0.08 FRAMES, THE SCREEN IS EXACT
+            AND IS NOT THE RANK, AND THE WHOLE REMAINING BILL IS A ~165 u ARRIVAL (session 117).**
+            New truth page
+            [`knowledge/strategy/the-screen-is-not-the-rank.md`](../../knowledge/strategy/the-screen-is-not-the-rank.md);
+            `the-camera-supplies-the-cone.md`'s "SAMPLE, not a sweep" section replaced with the swept
+            verdict; the arrival constant added to `delivery-is-two-predicates.md`.
+            - **THE WHOLE AXIS, PRICED** (`_notes/s117_camera_axis.py sweep`, **551 clearing states
+              over the 23 supplied rolls, 1293 s at 8 processes**; dump
+              `_generated/s106/s117_axis.json`). The unit of work is the FAMILY -- the 64 nodes are 26
+              rolls, and `assert_families` PROVES the grouping (every member's pre-roll log and
+              endpoint bit-identical) instead of inferring it from the key. Beam floor **93.95 ->
+              93.87** (node 1's roll at ``off`` -3456, total 91.00): the camera moves it **0.08 f**.
+              Within a roll the axis is worth **0.01-5.81 f** (median span 1.6), so it is a large lever
+              locally and a nearly flat one globally -- the roll that already held the floor was
+              already near its own camera optimum. s116's structural 2-per-roll sample was **0.89 f**
+              off at that very roll (94.76 vs 93.87); its conclusion survived, but nothing in it said
+              it would.
+            - **THE SCREEN IS EXACT** (`sweep ... states=all` at the two bracket rolls, 225 states,
+              `_generated/s106/s117_axis_all.json`): **107 of 107 clearing states fire and 118 of 118
+              non-clearing states fire nothing** -- no false positive, no false negative. So
+              `away_walk.lok_clear` is not a heuristic filter on this axis; on these rolls it IS the
+              axis, and sweeping only the clearing subset at the other 21 rolls loses nothing.
+            - **...AND IT IS NOT THE RANK, WHICH IS WHY BOTH PROBES STAY** (`keyeval`: each roll's
+              swept optimum against what every key the cut can see would have kept at ``tcs_keep`` 3).
+              `lok_probe_key` is binary, so over an all-clearing set it ties everything and its slot
+              collapses onto `landing_key`'s order -- **10 of 23** rolls retain their optimum at mean
+              **+0.53 f**, indistinguishable from `landing_key` alone (**9**, +0.53). The SHIPPED mix
+              reaches **11**, +0.22. And the best VALUE key measured is **`camera_probe_key` -- the
+              snap bill s116 showed was the wrong SCREEN** -- at **14 of 23**, mean **+0.14** (the
+              arrival's own cone margin, 15 / +0.14, is the only thing better). A key can be the wrong
+              screen and the right rank; the s116 retirement is evidence about the first only. Both
+              docstrings now carry the calibration so neither share gets dropped on the other's
+              argument.
+            - **THE 512 STEP, PRICED INSTEAD OF ARGUED** (`grid`, enumerating the grid DIRECTLY and
+              joining to the sweep BY DELIVERED STATE): bound loss median **+0.01**, mean +0.30, max
+              **+3.00 f**, and **2 of 23 rolls hold no clearing grid member at all**. So
+              `ESCAPE_TCS_STEP` 512 is right where it matters and has a real tail. **The offset filter
+              is the trap** -- `snap_reach` dedupes by delivered state, so filtering its step-64 states
+              by ``off % 512 == 0`` names 15-17 of the 31 states the grid really delivers; this session
+              nearly published a resolution figure off it (now gated).
+            - **AND THE LANDING IS SOLVED FOURTEEN WAYS WHILE THE ARRIVAL IS A CONSTANT.** `in_band`
+              goes **1 -> 14 states over 3 rolls**, best landing total **98.00** (s116's was 102.00) --
+              and every one of the 14 owes **7.38-8.37 arrival frames**, a **163-168 u** station gap,
+              across 3 different rolls and 2 different rows. So the s109 exchange front is not
+              something a lucky candidate slips through: solving the landing puts Link in the same
+              place every time, because both halves are set by where the herd ended. Delivered best
+              **105.90** (`total + arr_frames`), `joint` **still none**, **the banked 101 STANDS**.
+            - **AND THE SAME ANSWER FROM THE OTHER DIRECTION -- THE A/B RE-CUT** (the handoff's second
+              option: pricing a banked beam's cameras asks what the search could have CHOSEN, re-running
+              the cut asks which endpoints EXIST). `_notes/s117_recut_c3.py` re-runs the s111 cycle-3
+              cut verbatim -- same c2 nodes, same ``target_along`` 876, same beam/cloud caps -- with
+              s116's keep as its ONLY difference (4059 s, `_generated/s106/s117_c3_{beam,landing}.json`).
+              **45 of 64 endpoints shared** (19 out, 12 new), endpoints whose atom FIRES **21 -> 27
+              (+29%)**, best bound **93.95 -> 93.95**, and the `joint` winner is **the same candidate
+              bit-identical** (herd 73, along 934.2644, lat -10.2041, offset +9.6323, total 105 at
+              0.474 u) at index 11 -> 13. The median firing bound gets WORSE (100.44 -> 101.89),
+              because what a screen admits is endpoints that FIRE, not endpoints that are close.
+            - **Gates**: `tests/test_away_walk.py` +2 --
+              `test_the_screen_cannot_order_the_axis_it_lets_through` (the `l_ok` probe must TIE over a
+              clearing set while the snap bill separates it) and
+              `test_a_coarse_camera_grid_must_be_swept_directly_not_filtered_from_a_fine_one` (the join
+              trap), sharing one `lok_reach_s116` fixture. **111 passed, 6 deselected (11:13)** over
+              `test_{full_herd,away_walk,cloud_land,kb_links,kb_hygiene,code_hygiene}.py`, against
+              s116's 109.
       - [~] **THE CAMERA CANNOT BUY THE SNAP, BUT `l_ok` NEVER NEEDED THE SNAP -- AND THE SUPPLY WAS
             ALREADY INSIDE THE SEARCH'S OWN GRID. 19 DEAD NODES COME BACK; THE FLOOR DOES NOT MOVE
             (session 116).** New truth page

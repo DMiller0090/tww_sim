@@ -930,3 +930,84 @@ def test_the_tail_is_what_settles_an_arrival_at_the_walk_cap(hl, arrivals_s75):
     assert settled, "no tail length settles this arrival at the cap"
     assert long['settled_f'] == long['tail'][settled[0]]['f']
     assert AW.tail_variant(long, settled[0])['settled'] is True
+
+
+@pytest.fixture(scope='module')
+def lok_reach_s116(hl, lok_s116):
+    """`snap_reach` run once per s116 family -- the per-state camera axis the fixture banks only a
+    summary of. ~4 s a family, so it is shared rather than run per test."""
+    return {k: AW.snap_reach(a['node'], tuple(a['rec']['aim']), hl,
+                             l_window=tuple(a['rec']['l_window']))
+            for k, a in lok_s116.items()}
+
+
+def test_the_screen_cannot_order_the_axis_it_lets_through(hl, lok_s116, lok_reach_s116):
+    """**A screen is not a rank** (session 117) -- the property that keeps `full_herd.lok_probe_key`
+    and `full_herd.camera_probe_key` BOTH in the last cycle's ``tcs_probe`` instead of the newer one
+    replacing the older.
+
+    `lok_clear` decides whether an atom may fire at all, and session 117 measured it exact on the
+    camera axis (107 of 107 clearing states fire, 118 of 118 non-clearing ones do not, over 225 priced
+    states at two rolls). But it is BINARY on purpose, so over a set of states that ALL clear it
+    returns one value and supplies no ordering whatever -- and the slot it takes in the keep then
+    contributes nothing `landing_key`'s own order was not already contributing. Swept whole, that is
+    10 of 23 rolls retaining their optimum at +0.53 frames against the snap bill's 14 at +0.14.
+
+    So the gate is the mechanism, not the frame number: on a family's own clearing states the ``l_ok``
+    probe must TIE while the snap bill must still separate them."""
+    from harness.tetrapush import full_herd as F
+    from harness.tetrapush import two_roll as T
+
+    lok, cam = F.lok_probe_key(hl), F.camera_probe_key()
+    separating = 0
+    for key, a in lok_s116.items():
+        rec, sr = a['rec'], lok_reach_s116[key]
+        offs = [s['off'] for s in sr['states'] if not s['l_active']][:12]
+        assert offs, "%s: no clearing state at all -- the bed no longer expresses the finding" % key
+        lv, cv = set(), set()
+        for off in offs:
+            rr = a['node']['run'].clone()
+            seg = T.roll_segment(rr, tuple(rec['aim']), l_window=tuple(rec['l_window']),
+                                 target_cs=(sr['cs0'] + off) & 0xFFFF)
+            assert seg['ok']
+            nd = dict(run=rr, frames=rec['split'] + int(seg['frames']))
+            assert AW.lok_clear(rr, hl)['clear'], "%s: a clearing state stopped clearing" % key
+            lv.add(lok(nd))
+            cv.add(cam(nd))
+        assert lv == {0.0},             "%s: the l_ok probe is ordering a set it has already passed: %r" % (key, lv)
+        separating += len(cv) > 1
+    assert separating, "no family's clearing set is separated by the snap bill either -- the gate "                        "is measuring nothing"
+
+
+def test_a_coarse_camera_grid_must_be_swept_directly_not_filtered_from_a_fine_one(lok_s116,
+                                                                                  lok_reach_s116):
+    """**The join trap, gated** (sessions 116 and 117 both paid for it).
+
+    `snap_reach` sweeps at ``step`` 64 and dedupes by the ``(csangle, travel)`` a target DELIVERS, so
+    when a multiple of `full_herd.ESCAPE_TCS_STEP` lands on a state an earlier offset already
+    produced, the coarse-grid member is the one dropped. Filtering those states by ``off % 512 == 0``
+    therefore reports a SMALLER set than the 512 grid actually reaches -- s116 measured that error
+    finding supply at 19 rolls where a direct sweep finds 21, and s117 nearly published a resolution
+    figure off the same mistake.
+
+    The gate: enumerate the 512 grid directly, and require that it delivers states the offset filter
+    does not name. Joining by DELIVERED STATE is the fix, and it has to be, because two offsets that
+    deliver the same state are the same candidate."""
+    from harness.tetrapush import full_herd as F
+    from harness.tetrapush import two_roll as T
+
+    shown = False
+    for key, a in lok_s116.items():
+        rec, sr = a['rec'], lok_reach_s116[key]
+        filtered = {(s['cs'], s['travel']) for s in sr['states']
+                    if s['off'] % F.ESCAPE_TCS_STEP == 0}
+        direct = set()
+        for off in range(-F.ESCAPE_TCS_SPAN, F.ESCAPE_TCS_SPAN + 1, F.ESCAPE_TCS_STEP):
+            rr = a['node']['run'].clone()
+            seg = T.roll_segment(rr, tuple(rec['aim']), l_window=tuple(rec['l_window']),
+                                 target_cs=(sr['cs0'] + off) & 0xFFFF)
+            if seg['ok']:
+                direct.add((int(rr.csangle), int(rr.link.travel)))
+        assert direct, "%s: the 512 grid delivers nothing at all" % key
+        shown |= bool(direct - filtered)
+    assert shown, "the offset filter named every state the 512 grid delivers -- either the dedup "                   "changed or this bed can no longer show the trap"

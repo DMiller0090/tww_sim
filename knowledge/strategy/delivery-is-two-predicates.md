@@ -74,6 +74,27 @@ exit-hold run and the entry plan's walk are the same currency -- so the budget i
 while the landing stays put (after ``freeze_f`` she takes no more push; extending the exit run moves
 the arrival and nothing else).
 
+## The exchange is a CONSTANT, not a spectrum (session 117)
+
+Sweeping the session-111 cycle-3 beam's whole camera axis (551 priced states,
+[the-screen-is-not-the-rank](the-screen-is-not-the-rank.md)) took the in-band population from **1
+landing to 14, across 3 different rolls and 2 different rows** - and every one of them owes almost
+exactly the same arrival:
+
+| the 14 swept in-band landings | |
+|---|---|
+| landing miss | 0.30 - 0.90 u (inside `objective.PLACEMENT_BAND`) |
+| landing total | **98.00 - 102.00** |
+| `arr_frames` still owed | **7.38 - 8.37** |
+| implied station gap | **163 - 168 u** |
+| delivered (`total + arr_frames`) | **105.90** at best, against the banked **101** |
+
+So the s109 front is not something a lucky candidate slips through: solve the landing on this beam and
+the arrival bill comes back a near-constant ~8 frames, whatever roll and whatever row produced it. A
+camera that steers the landing to a coord steers Link to the same place every time, because both are
+set by where the herd ended. **Reducing that constant is the endgame, and no camera target touches it**
+- which is why `joint` is still empty after the sweep and the banked 101 stands.
+
 So the lever is a JOINT last-cycle keep: the landing keep
 ([landing-keep-on-a-cloud](landing-keep-on-a-cloud.md)) must price the arrival's station distance
 beside the landing miss, and the chain must be allowed the console's geometry -- disengage early, let

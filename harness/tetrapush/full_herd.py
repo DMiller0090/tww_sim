@@ -872,6 +872,15 @@ def camera_probe_key():
     and loses 7 / 11 arrivals outright. The cone cannot screen this at all: the frontier cell's own
     margin is **5.2 deg**, below the DEAD cells' median of 11.1. Costs one frame per candidate.
 
+    **KEEP THIS SHARE, and not for the reason it was added** (session 117, and the reason `lok_probe_key`
+    below does not replace it). Session 77 proved the snap itself undeliverable and session 116 showed
+    this key had been RANKING the cut on it blindly -- both true, and both about whether an atom FIRES.
+    Asked the other question, on the whole swept camera axis (551 priced states over 23 rolls,
+    `_notes/s117_camera_axis.py`), the same bill is the best VALUE order measured: it retains the roll's
+    swept-optimum bound at **14 of 23** rolls at mean **+0.14** frames of loss, where `landing_key` --
+    the last cycle's own order -- retains **9** at **+0.53**. A key can be the wrong screen and the right
+    rank; the s116 retirement is evidence about the first only.
+
     Returns a callable ``node -> bam or None`` for `roll_candidates`' ``tcs_probe``."""
     from harness.tetrapush import away_walk as AW    # deferred: `away_walk` imports this module
 
@@ -910,6 +919,18 @@ def lok_probe_key(hl):
     A KEEP SHARE, never a filter, for `roll_candidates`' ``tcs_probe`` -- the s73 calibration applies
     unchanged: a camera term as a filter throws away firing states (there, 96% of them), and here the
     other half of the census is ``dips``, which no camera fixes. Costs two steps per candidate.
+
+    **AND IT IS EXACT AS A SCREEN AND INERT AS AN ORDER** (session 117, both measured, and the
+    distinction is the whole reason this coexists with `camera_probe_key` rather than replacing it).
+    At the two rolls whose EVERY reachable camera state was priced -- 225 of them -- this predicate is
+    perfect: **107 of 107 clearing states fire and 118 of 118 non-clearing states fire nothing**, no
+    false positive and no false negative. But being binary it ties every clearing target at 0.0, so over
+    a set that is entirely clearing it supplies no ordering at all and the slot collapses onto
+    `landing_key`'s: swept whole, this order retains the roll's optimum at **10 of 23** rolls at mean
+    **+0.53** frames, indistinguishable from `landing_key` alone (9, +0.53), while the snap bill above
+    reaches 14 at +0.14. The share earns its place on the FULL graded set, where it decides whether an
+    endpoint exists at all -- not on the axis it has already let through
+    (`knowledge/strategy/the-screen-is-not-the-rank.md`).
 
     Returns a callable ``node -> 0.0 (clears) | None (does not)``."""
     from harness.tetrapush import away_walk as AW    # deferred: `away_walk` imports this module

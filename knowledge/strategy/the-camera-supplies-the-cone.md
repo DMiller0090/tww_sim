@@ -5,11 +5,12 @@ that never asked? Session 77 measured the camera unreachable; does that close th
 nodes of the same beam, same endpoint, same roll, one firing and one dead, differ only in a camera
 target? How do I tell a screen that is measuring the wrong quantity from one that is measuring a real
 limit?
-**Status:** MEASURED (session 116) on the flooded-Hyrule Tetra corner, against the session-111 cycle-3
-beam (`_generated/s106/s111_c3_beam.json`): `away_walk.snap_reach` at all 64 nodes (26 distinct
-rolls), the atom re-enumerated at clearing camera targets, and every firing terminal priced whole by
-`cloud_land.cloud_landing`. Driver `_notes/s116_lok_supply.py`, bed
-`fixtures/courtyard_lok_s116.json`, dumps `_generated/s106/s116_*.json`.
+**Status:** MEASURED (session 116) and SWEPT WHOLE (session 117) on the flooded-Hyrule Tetra corner,
+against the session-111 cycle-3 beam (`_generated/s106/s111_c3_beam.json`): `away_walk.snap_reach` at
+all 64 nodes (26 distinct rolls), the atom re-enumerated at clearing camera targets, and **every one
+of the 551 clearing states priced whole** by `cloud_land.cloud_landing`. Drivers
+`_notes/s116_lok_supply.py` and `_notes/s117_camera_axis.py`, bed
+`fixtures/courtyard_lok_s116.json`, dumps `_generated/s106/s11{6,7}_*.json`.
 **Source:** [`harness/tetrapush/away_walk.py`](../../harness/tetrapush/away_walk.py) (`lok_clear`,
 `snap_reach`, `fires_census`, `escape_atom`, `snap_bill`),
 [`harness/tetrapush/full_herd.py`](../../harness/tetrapush/full_herd.py) (`lok_probe_key`,
@@ -82,13 +83,25 @@ reproduced bit-identically here. One `in_band` landing appears that s115 had now
 
 So the honest statement has two halves and neither may be dropped: **the #1 blocker is real, is a rank
 error rather than a physics limit, and is fixable inside the existing grid - and fixing it re-opens a
-third of the beam without lowering its floor.** What it buys is a search that may now choose among
-those endpoints at all.
+third of the beam without moving its floor to speak of.** What it buys is a search that may now choose
+among those endpoints at all.
 
-**And this is a SAMPLE, not a sweep.** Two clearing targets were priced per roll out of up to 68, and
-the picks (widest cone margin / smallest slew / median) are structural, not optimal-by-bound. The
-camera is now a live axis with tens of members per roll at ~30 s to price each; nothing here says
-93.95 survives a real cut over it.
+Session 116 priced two clearing targets a roll out of up to 68, picked structurally (widest cone
+margin / smallest slew / median), which is a sample of an axis rather than a measurement of it.
+Session 117 swept it: **all 551 clearing states, all 23 rolls that have any, 22 minutes at 8
+processes.** The verdict:
+
+| over the whole swept axis | |
+|---|---|
+| beam floor | **93.87** (node 1's roll, `off` -3456), against the sampled **93.95** - it moves **0.08 f** |
+| what the camera is worth WITHIN one roll | **0.01 - 5.81 f** of bound (median span 1.6) |
+| what the structural sample missed at the floor's own roll | **0.89 f** (94.76 sampled vs 93.87 swept) |
+| landings inside `objective.PLACEMENT_BAND` | **1 -> 14 states over 3 rolls**, best landing total **98.00** |
+| `joint` (landing AND arrival owed nothing) | **still none** - see [delivery-is-two-predicates.md](delivery-is-two-predicates.md) |
+
+So both halves survive the sweep, with one number changed: the floor moves 0.08 f, not 0. The camera
+is a large lever inside a roll and a nearly flat one across the beam, because the roll that already
+held the floor was already near its own camera optimum. **The banked 101 STANDS.**
 
 ## The rule: rank on the clause that refuses, and BINARY
 
@@ -104,6 +117,13 @@ A KEEP SHARE, never a filter: the other half of the census is ``dips``, which no
 camera term used as a filter throws away firing states (session 73 measured 96% of them). ``tcs_probe``
 now takes a SEQUENCE, one share each, because the snap bill and the cone are independent orders and
 neither contains the other.
+
+And the screen is **exact**, which session 117 measured rather than assumed: at the two rolls whose
+every reachable state was priced (225 of them), **107 of 107 clearing states fire and 118 of 118
+non-clearing states fire nothing** - no false positive, no false negative. `lok_clear` is not a
+heuristic filter on the camera axis; on these rolls it IS the axis. What it is not is a rank -
+[the-screen-is-not-the-rank.md](the-screen-is-not-the-rank.md) measures what the ordering left on the
+table once the screen let everything through.
 
 **The transferable rule:** when a census names one clause as the blocker, find the CHANNEL with
 authority over that clause and measure what it can deliver - then check that the screen choosing from
