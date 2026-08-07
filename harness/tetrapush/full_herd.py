@@ -882,6 +882,44 @@ def camera_probe_key():
     return probe
 
 
+def lok_probe_key(hl):
+    """**The LAST cycle's camera keep, on the clause that actually refuses -- ``l_ok``** (session 116,
+    and the correction of `camera_probe_key`'s quantity, not of its shape).
+
+    Session 73 established that the escape's camera requirement belongs in this cut and wired
+    `camera_probe_key` to carry it, ranked on the SNAP bill. Session 77 then measured that the snap is
+    not deliverable -- over a roll's whole reachable camera set ``want - travel`` has an 87 deg hole
+    exactly where the snapping band sits -- and the conclusion drawn was that the camera cannot pay.
+    Half of that is right: the snap cannot be bought (0-6 reachable states of ~110 over the whole
+    session-111 beam). But the snap is not what the frame owes. What ``l_ok`` needs is only that the L
+    does not act with Tetra in the cone (`away_walk.escape_atom`'s s75 note), and THAT the camera
+    supplies at **1-68 of the same ~110 states, in all 16 families of the beam, on the search's own
+    `ESCAPE_TCS_STEP` 512 grid**. So the supply was there the whole time and nothing asked for it: the
+    rank picked a ``target_cs`` blind to it, and at 19 of the 35 nodes that fire nothing it picked one
+    that refuses -- while a SIBLING node of the same family, same endpoint, same aim, differing only in
+    this camera, fires. Enumerated at the 7 families those 19 sit in, re-firing the roll at a clearing
+    target takes every one of them from **0 of 672** variants to **238-624**.
+
+    BINARY, and that is measured rather than modest. The margin at the L frame predicts how MANY
+    variants fire (within a family, monotone over 18 enumerated states) but NOT what they are worth:
+    node 16's widest margin (47.9 deg, 1507 firing) bounds 94.78 while its narrowest (30.1, 1494)
+    bounds 94.76, and node 52's widest (68.2, 3622 firing) bounds 98.72 against 98.41 for a narrower
+    one. So an ordering by margin would be a preference nothing measured -- every clearing target ties
+    at 0.0 and the stable sort leaves `landing_key`'s own order to separate them.
+
+    A KEEP SHARE, never a filter, for `roll_candidates`' ``tcs_probe`` -- the s73 calibration applies
+    unchanged: a camera term as a filter throws away firing states (there, 96% of them), and here the
+    other half of the census is ``dips``, which no camera fixes. Costs two steps per candidate.
+
+    Returns a callable ``node -> 0.0 (clears) | None (does not)``."""
+    from harness.tetrapush import away_walk as AW    # deferred: `away_walk` imports this module
+
+    def probe(node):
+        return 0.0 if AW.lok_clear(node['run'], hl)['clear'] else None
+
+    return probe
+
+
 def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4, 7), (5, 8)),
                     aim_keep=3, min_roll=20.0, tcs_keep=3, target_css=None,
                     fan_center=None, require_quality=True, key=None, mixed_aims=True,
@@ -914,7 +952,11 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
       * ``tcs_probe`` ADDS a keep share (a callable ``node -> off or None``), for mid-chain cycles where
         continuability IS the question but the aim also has to survive: `square_probe_key`, the cheap
         `junction_square_probe`. Its calibration -- and the measurement that every CHEAP AIM KEY IS
-        WORSE THAN THE STOCK ONE -- is in that docstring.
+        WORSE THAN THE STOCK ONE -- is in that docstring. A SEQUENCE of probes gives a share each
+        (session 116): the last cycle's camera answers to two independent customers, the snap bill
+        (`camera_probe_key`) and the escape's ``l_ok`` cone (`lok_probe_key`), and neither order
+        contains the other -- the snap is reachable at 0-6 of ~110 camera states where the cone clears
+        at 1-68.
 
     ``tcs_span`` / ``tcs_step`` (session 73) widen the grid `derived_target_css` builds, which the LAST
     cycle needs and the shipped `TCS_SPAN` cannot supply: the escape atom's turnaround wants the camera
@@ -985,11 +1027,14 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                         else (0, key(t[1]['run'], t[1]['frames'], t[1]['m'])))
         if tcs_probe is not None and len(graded) > int(tcs_keep):
             # a share by what the exit's junction can still DELIVER -- a keep, so the order above is
-            # untouched and the probe can only ADD (`square_probe_key`)
-            probed = sorted(((tcs_probe(n), n) for _q, n in graded),
-                            key=lambda t: (t[0] is None, t[0] or 0.0))
-            out.extend(_mixed_beam([[n for _q, n in graded], [n for _v, n in probed]],
-                                   int(tcs_keep), ident=lambda n: _state_tag(n['run'])))
+            # untouched and the probe can only ADD; several probes, several shares (see the docstring)
+            probes = [tcs_probe] if callable(tcs_probe) else list(tcs_probe)
+            orders = [[n for _q, n in graded]]
+            for pr in probes:
+                orders.append([n for _v, n in sorted(((pr(n), n) for _q, n in graded),
+                                                     key=lambda t: (t[0] is None, t[0] or 0.0))])
+            out.extend(_mixed_beam(orders, int(tcs_keep),
+                                   ident=lambda n: _state_tag(n['run'])))
         else:
             out.extend(n for _q, n in graded[:int(tcs_keep)])
     return out
@@ -1384,9 +1429,9 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     tcs_key = (landing_key(hl, th_j, resid) if tcs_landing else None)
     tcs_probe = square_probe_key(hl, box, cor_j) if tcs_square else None
     if tcs_escape:
-        # the LAST cycle's camera has a second customer the cut never priced: the escape's own snap
-        # window (s73). Widened grid + a share by what the arrival owes -- `camera_probe_key`.
-        tcs_probe = camera_probe_key()
+        # the LAST cycle's camera has two customers the cut never priced: the escape's snap window
+        # (s73) and the clause that actually refuses, its ``l_ok`` cone (s116). A keep share each.
+        tcs_probe = [camera_probe_key(), lok_probe_key(hl)]
     jdead = {}
     for node in nodes:
         ends = junction_beam(node, hl, box, max_frames=max_frames, beam=jn_beam,

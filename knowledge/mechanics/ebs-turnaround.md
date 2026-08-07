@@ -76,6 +76,13 @@ working escape because the cone is cleared one frame later by the frame the L ac
 OUTCOME (did the L act with the actor out of cone) rather than the snap, or a sufficient condition gets
 used as a necessary one and real states are discarded.
 
+**And the difference between the two is not marginal - it is the whole question** (session 116). Over
+26 real planner rolls the same camera sweep that snaps at 0-6 of ~110 reachable states CLEARS THE CONE
+at 1-68 of them, with a clearing target on the search's own grid for every one of the 26. The
+unreachability above is a statement about the snap and about the three arrivals it was measured on; it
+is not a statement about what the camera can pay for. See
+[strategy/the-camera-supplies-the-cone.md](../strategy/the-camera-supplies-the-cone.md).
+
 ## See also
 
 - [brakeslide-ebs.md](brakeslide-ebs.md) - the EBS this snaps out of, and the facing/travel decoupling

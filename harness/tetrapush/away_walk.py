@@ -531,6 +531,34 @@ def _ess_want(csangle):
     return T.world_facing(main_stick_decode(ESS_DOWN[0], ESS_DOWN[1])[0], int(csangle))
 
 
+def lok_clear(run0, hl):
+    """**Does the atom's L frame act with Tetra OUT of the front cone, from this arrival?** -- the
+    ``l_ok`` predicate as a one-state question, in ONE place (session 116).
+
+    ``l_ok`` is what `fires_census` measures as the beam's #1 blocker (sole clause on 63% of refusals,
+    sole at 19 of the 35 nodes that fire nothing), and it is decided two frames into `escape_atom`:
+    the ESS turnaround, then the L-conversion, and `search.talk_active` read at the state the L acts
+    on. That is a two-step rollout, cheap enough for a per-candidate keep and exact -- so the screen
+    and the enumeration must not each spell it out. They share this.
+
+    NOT the snap (`snap_bill`) and not the arrival's own cone margin. Measured over the session-111
+    cycle-3 beam: the snap is essentially unreachable (0-6 of ~110 reachable camera states) while the
+    cone clears at 1-68 of them, and the arrivals whose atom fires still read a NEGATIVE margin at the
+    endpoint itself (-33 to -79 deg, Tetra well inside the cone) -- the two atom frames are what move
+    it. Both quantities have stood in for this one and both are the wrong question.
+
+    Returns ``dict(clear, cone, turned, snaps)``; ``cone`` is the signed margin in degrees at the L
+    frame (`_cone_margin`, + = outside), ``turned``/``snaps`` the ESS frame's own facing step."""
+    from harness.tetrapush.reposition import ESS_DOWN
+    c = _clone_for_atom(run0)
+    f0 = int(c.link.facing)
+    c.step(_mk(*ESS_DOWN))
+    turned = abs(_s16(int(c.link.facing) - f0))
+    c.step(_mk(*stick_for_bearing(hl.bearing_bam(), int(c.csangle), msd=1.0), l=1))
+    return dict(clear=not S.talk_active(c), cone=_cone_margin(c), turned=turned,
+                snaps=turned > _SNAP_MIN_TURN)
+
+
 def snap_reach(node, aim, hl, *, span=None, step=64, l_window=(4, 7), gap_min=2000):
     """**WHICH CAMERA STATES A ROLL CAN ACTUALLY DELIVER, and why the snap is not among them**
     (session 77) -- the measurement that closes the escape's camera bill instead of re-pricing it.
@@ -553,11 +581,21 @@ def snap_reach(node, aim, hl, *, span=None, step=64, l_window=(4, 7), gap_min=20
     its roll aim: the sweep has to re-fire the roll per target, because the camera's effect on the
     arrival is the whole point.
 
-    Returns ``dict(n_states, n_snap, n_clear, wt_lo, wt_hi, gap, best_cone, states)``; ``gap`` is the
-    widest hole (> ``gap_min`` BAM) in the reachable ``want - travel`` set, ``None`` if there is none."""
+    **AND THE NUMBER IS SCOPED TO THE ARRIVALS IT WAS RUN ON** (session 116). The three s77 arrivals
+    read ``n_clear`` 0/0/1, which is what made "the camera cannot pay" read as a law; over the whole
+    session-111 cycle-3 beam it runs **0..107 of ~110** and the 19 nodes ``fires_census`` calls
+    ``l_ok``-sole are exactly where it is large. ``n_snap`` stays ~0 everywhere -- the 87 deg hole is
+    real -- but the snap is not what the frame owes (`escape_atom`, the s75 note): ``n_clear`` is, and
+    the two come apart. Read them separately.
+
+    Every state carries the ``off`` that produced it and the roll's own ``frames``, so a caller can
+    RE-FIRE the state this names (``T.roll_segment(node['run'].clone(), aim, target_cs=(cs0 + off) &
+    0xFFFF, l_window=l_window)``) and price it whole -- a census here is a screen, never the verdict:
+    the camera moves the post-roll EBS travel, so a clearing target_cs is also a different arrival.
+
+    Returns ``dict(cs0, n_states, n_snap, n_clear, wt_lo, wt_hi, gap, best_cone, states)``; ``gap`` is
+    the widest hole (> ``gap_min`` BAM) in the reachable ``want - travel`` set, ``None`` if none."""
     from harness.tetrapush import two_roll as T
-    from harness.tetrapush.reposition import ESS_DOWN
-    from harness.tetrapush import search as S
     span = FH.ESCAPE_TCS_SPAN if span is None else int(span)
     cs0 = int(node['run'].csangle)
     seen, states = set(), []
@@ -570,20 +608,17 @@ def snap_reach(node, aim, hl, *, span=None, step=64, l_window=(4, 7), gap_min=20
         if (cs, travel) in seen:
             continue
         seen.add((cs, travel))
-        c = _clone_for_atom(rr)
-        f0 = int(c.link.facing)
-        c.step(_mk(*ESS_DOWN))
-        turned = abs(_s16(int(c.link.facing) - f0))
-        c.step(_mk(*stick_for_bearing(hl.bearing_bam(), int(c.csangle), msd=1.0), l=1))
-        states.append(dict(cs=cs, travel=travel, want_minus_travel=_s16(_ess_want(cs) - travel),
-                           turned=turned, snaps=turned > _SNAP_MIN_TURN,
-                           l_active=bool(S.talk_active(c)), cone=_cone_margin(c)))
+        lk = lok_clear(rr, hl)
+        states.append(dict(off=int(off), frames=int(seg['frames']),
+                           cs=cs, travel=travel, want_minus_travel=_s16(_ess_want(cs) - travel),
+                           turned=lk['turned'], snaps=lk['snaps'],
+                           l_active=not lk['clear'], cone=lk['cone']))
     wts = sorted(s['want_minus_travel'] for s in states)
     gap = None
     for a, b in zip(wts, wts[1:]):
         if b - a > int(gap_min) and (gap is None or b - a > gap[1] - gap[0]):
             gap = (a, b)
-    return dict(n_states=len(states), n_snap=sum(1 for s in states if s['snaps']),
+    return dict(cs0=cs0, n_states=len(states), n_snap=sum(1 for s in states if s['snaps']),
                 n_clear=sum(1 for s in states if not s['l_active']),
                 wt_lo=(wts[0] if wts else None), wt_hi=(wts[-1] if wts else None), gap=gap,
                 best_cone=(max(s['cone'] for s in states) if states else None), states=states)

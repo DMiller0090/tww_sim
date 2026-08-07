@@ -81,6 +81,32 @@ def arrivals_s75(env):
 
 
 @pytest.fixture(scope='module')
+def lok_s116(env):
+    """The three camera FAMILIES of `fixtures/courtyard_lok_s116.json`, each replayed to its PRE-ROLL
+    endpoint from the banked log -- the bed `arrivals_s75` and `snapreach_s77` cannot supply.
+
+    At the s77 arrivals nothing snaps AND nothing clears, so the snap bill and the escape's ``l_ok``
+    cone agree on every reachable camera state and no gate written there can tell them apart. These
+    three come from the session-111 cycle-3 beam and do: 68 / 35 / 2 clearing states against 0 / 1 / 2
+    snapping ones, and each fires 0 of 672 atom variants at the camera the beam picked."""
+    import json
+    import os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'fixtures', 'courtyard_lok_s116.json')
+    with open(path) as fh:
+        rec = json.load(fh)
+    out = {}
+    for key, a in rec['families'].items():
+        run = seeds.make_freerun(env)
+        run.pre_seed_input(seeds.dtm_input_at(env)(0))
+        for d in a['pre_log']:
+            run.step(d)
+        assert len(a['pre_log']) == a['split']
+        out[key] = dict(node=dict(run=run, frames=a['split'], log=a['pre_log']), rec=a)
+    return out
+
+
+@pytest.fixture(scope='module')
 def best(bed):
     run, hl = bed
     return AW.probe(run, hl, csangle=_BED_CS)
@@ -698,6 +724,122 @@ def test_the_camera_cannot_deliver_the_snap_because_travel_chases_it(hl, snaprea
     sr = AW.snap_reach(a['node'], tuple(a['rec']['aim']), hl, span=0x1000, step=512)
     assert sr['n_states'] >= 5 and sr['n_snap'] == 0 and sr['n_clear'] == 0
     assert sr['best_cone'] < 0.0, "Tetra is out of the cone somewhere in the reduced grid"
+
+
+def test_lok_clear_is_the_atoms_own_l_ok_and_not_the_snap_or_the_arrival_cone(hl, arrivals_s75,
+                                                                             snapreach_s77):
+    """**The ``l_ok`` predicate as one shared definition** (session 116) -- because the screen that
+    chooses a camera and the enumeration that judges it must not each spell it out.
+
+    Two properties, and the second is the session's finding:
+
+    1. `lok_clear` IS the atom's own first ``l_ok`` opportunity. A state it calls blocked must make the
+       matching atom -- ``turnaround_first=True`` at the herd down-bearing, the two frames it runs --
+       refuse on ``l_ok``. (One-directional by construction: ``l_ok`` can still fail LATER, when the
+       lock acquires, so clearing here is necessary and not sufficient.)
+    2. It is neither of the two quantities that have stood in for it. The snap
+       (`snap_bill`/``snaps``) and the ARRIVAL's own cone margin both come apart from it -- which is
+       why the s73 camera keep, ranked on the snap bill, could pick a target that refuses."""
+    for key, a in arrivals_s75.items():
+        lk = AW.lok_clear(a['run'], hl)
+        assert set(lk) == {'clear', 'cone', 'turned', 'snaps'}
+        # the margin and the verdict are the same reading
+        assert lk['clear'] == (lk['cone'] > 0.0)
+        res = AW.escape_atom(a['run'], hl, turnaround_first=True)
+        if not lk['clear']:
+            assert not res['l_ok'], "%s: lok_clear blocks where the atom's l_ok passes" % key
+
+    # ...and at the s77 bed the two stand-ins are INDISTINGUISHABLE -- nothing snaps and nothing
+    # clears -- which is exactly why a session concluded the camera cannot pay from it
+    a = snapreach_s77[sorted(snapreach_s77)[0]]
+    sr = AW.snap_reach(a['node'], tuple(a['rec']['aim']), hl, span=0x1000, step=512)
+    assert all(s['snaps'] == (not s['l_active']) for s in sr['states']) and sr['n_clear'] == 0
+
+
+def test_the_camera_supplies_l_ok_where_it_cannot_supply_the_snap(hl, lok_s116):
+    """**THE SESSION-116 FINDING, gated: the snap and the cone are different questions, and the last
+    roll can answer the one that matters.**
+
+    Session 77 measured that a roll's reachable camera set has an 87 deg hole where the snapping band
+    sits and read the whole camera off as unpayable. The snap half survives -- 0 / 1 / 2 snapping
+    states here. But ``l_ok`` never needed the snap (`escape_atom`'s s75 note): it needs only that the
+    L does not act with Tetra in the cone, and that is supplied at **68 / 35 / 2** of the same ~107
+    states, on the search's OWN `full_herd.ESCAPE_TCS_STEP` grid.
+
+    The before/after is the gate, because a supply that changes no verdict would be a curiosity: each
+    family fires **0 of 672** atom variants at the camera the beam picked and **238-624** at a clearing
+    one, from the same pre-roll endpoint, the same aim, the same herd frame count -- only ``target_cs``
+    differs."""
+    from harness.tetrapush import two_roll as T
+
+    for key, a in lok_s116.items():
+        rec, sr = a['rec'], a['rec']['snap_reach']
+        assert rec['live']['fires_census']['n_fire'] == 0
+        assert not rec['live']['lok_clear']['clear'], "%s: the live camera already clears" % key
+        assert sr['n_clear'] > sr['n_snap'] or sr['n_clear'] > 0, \
+            "%s: the cone is no better supplied than the snap" % key
+
+        c = rec['clearing']
+        assert c['off'] % c['grid'] == 0, \
+            "%s: the clearing target is off the search's own camera grid" % key
+        # re-fired, not read back: the fixture's claim is that THIS roll produces THAT verdict
+        rr = a['node']['run'].clone()
+        seg = T.roll_segment(rr, tuple(rec['aim']), target_cs=(sr['cs0'] + c['off']) & 0xFFFF,
+                             l_window=tuple(rec['l_window']))
+        assert seg['ok'] and int(seg['frames']) == c['roll_frames']
+        assert (rr.link.pos_x, rr.link.pos_z) == tuple(c['arrival']['link'])      # 0-ULP
+        assert (rr.tx, rr.tz) == tuple(c['arrival']['tetra'])
+        assert AW.lok_clear(rr, hl)['clear'], "%s: the banked clearing target does not clear" % key
+
+        fc = AW.fires_census(rr, hl)
+        assert fc == c['fires_census']
+        assert fc['n_fire'] >= 200, "%s: the revival collapsed (%d)" % (key, fc['n_fire'])
+        # and the herd cost did not move -- this is a camera choice, not extra frames
+        assert c['frames'] == rec['split'] + c['roll_frames']
+        assert abs(c['frames'] - rec['herd']) <= 1
+
+
+def test_lok_probe_key_is_binary_and_agrees_with_the_predicate(hl, arrivals_s75):
+    """`full_herd.lok_probe_key` is a KEEP share, and it ties every clearing target at 0.0 on purpose:
+    the L-frame margin predicts how many atom variants fire but not what they are worth (session 116,
+    measured -- node 16's widest margin bounds 94.78 against 94.76 for its narrowest), so an ordering
+    by margin would be a preference nothing measured. Ties let `landing_key`'s own order decide."""
+    from harness.tetrapush import full_herd as F
+
+    probe = F.lok_probe_key(hl)
+    for key, a in arrivals_s75.items():
+        v = probe(dict(run=a['run']))
+        assert v in (0.0, None)
+        assert (v == 0.0) == AW.lok_clear(a['run'], hl)['clear'], \
+            "%s: the keep and the predicate disagree" % key
+
+
+def test_every_reachable_camera_state_names_the_target_that_re_fires_it(hl, snapreach_s77):
+    """**A camera census a caller can ACT on** (session 116): each state carries the ``off`` that
+    produced it, so re-firing the roll at ``cs0 + off`` reproduces exactly that state.
+
+    Without it the census is read-only -- it says a camera exists and gives no way to stand in it --
+    and the next question after "does the cone clear" is always "then run the whole `fires_census`
+    THERE", which needs the state rebuilt. Gated exactly, not approximately: a re-fire that lands on a
+    neighbouring csangle would answer a different endpoint's question and look right
+    (`[[zero-ulp-tests-only]]`)."""
+    from harness.tetrapush import two_roll as T
+
+    a = snapreach_s77[sorted(snapreach_s77)[0]]
+    node, aim = a['node'], tuple(a['rec']['aim'])
+    sr = AW.snap_reach(node, aim, hl, span=0x1000, step=512)
+    assert sr['n_states'] >= 5 and sr['cs0'] == int(node['run'].csangle)
+
+    for s in sr['states']:
+        rr = node['run'].clone()
+        seg = T.roll_segment(rr, aim, target_cs=(sr['cs0'] + s['off']) & 0xFFFF, l_window=(4, 7))
+        assert seg['ok'] and int(seg['frames']) == s['frames']
+        assert (int(rr.csangle), int(rr.link.travel)) == (s['cs'], s['travel']), \
+            "off %+d does not re-fire the state it is recorded on" % s['off']
+        assert AW._cone_margin(rr) is not None
+    # the offs are distinct and inside the span the sweep was given
+    offs = [s['off'] for s in sr['states']]
+    assert len(set(offs)) == len(offs) and max(abs(o) for o in offs) <= 0x1000
 
 
 @pytest.mark.slow

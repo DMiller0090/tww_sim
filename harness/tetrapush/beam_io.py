@@ -61,6 +61,61 @@ def load_beams(path):
         return json.load(fh)
 
 
+def split_last_roll(env, node, *, verify=True):
+    """**A terminal node re-opened as its PRE-ROLL endpoint plus the roll that made it** (session 116).
+
+    `away_walk.snap_reach` and every other camera question take a node BEFORE its roll and the aim --
+    the whole point is that they re-fire it -- while a beam holds only terminals. Reconstructing that
+    by hand is where a session loses an afternoon: the split index is not in the record, and a split
+    one frame off measures a different roll and says so nowhere.
+
+    The index IS recoverable, exactly, from the log: `two_roll.roll_stream` puts k=0 at the A-press
+    delivery and holds A for ``a_hold`` frames, so the LAST contiguous A-run in the log starts the last
+    roll segment. The knobs come from the node's own ``plan`` tail (``aim``/``l_window``/``target_cs``).
+
+    ``verify`` (the default, and the reason to use this instead of an inline split) re-fires the roll
+    from the reconstructed endpoint and asserts the delivered stream is byte-identical to the log tail
+    and the state 0-ULP against the node's own ``run`` -- so a caller measuring the camera at this
+    endpoint knows it is measuring THIS node's roll (`[[zero-ulp-tests-only]]`).
+
+    Returns ``dict(pre, aim, l_window, target_cs, split, roll_frames)``; ``pre`` is a node dict in
+    `full_herd.roll_probe`'s shape (``run``/``frames``/``jf``/``log``)."""
+    from harness.tetrapush import search as S
+    from harness.tetrapush import two_roll as T
+    log, plan = list(node['log']), list(node.get('plan') or [])
+    if not plan:
+        raise ValueError('node carries no plan: the roll knobs are not recoverable from the log')
+    a = [k for k, d in enumerate(log) if int(d.get('buttons', 0)) & S.PAD_A]
+    if not a:
+        raise ValueError('node log holds no A-press: it ends in no roll')
+    st = a[-1]
+    while st - 1 in a:
+        st -= 1
+    p = plan[-1]
+    aim, lw, tcs = tuple(p['aim']), tuple(p['l_window']), int(p['target_cs'])
+    run = seeds.make_freerun(env)
+    run.pre_seed_input(seeds.dtm_input_at(env)(0))
+    for d in log[:st]:
+        run.step(d)
+    pre = dict(run=run, frames=st, jf=int(p.get('jframes', 0)), log=log[:st])
+    if verify:
+        rr, out = run.clone(), []
+        seg = T.roll_segment(rr, aim, target_cs=tcs, l_window=lw, log=out)
+        if [dict(d) for d in out] != [dict(d) for d in log[st:]]:
+            raise AssertionError('re-fired roll is not the logged one (split %d)' % st)
+        ref = node['run']
+        got = (rr.link.pos_x, rr.link.pos_z, rr.link.speedF, int(rr.link.facing),
+               int(rr.link.travel), int(rr.csangle), rr.tx, rr.tz, rr.link.state)
+        want = (ref.link.pos_x, ref.link.pos_z, ref.link.speedF, int(ref.link.facing),
+                int(ref.link.travel), int(ref.csangle), ref.tx, ref.tz, ref.link.state)
+        if got != want:
+            raise AssertionError('re-fired terminal is not 0-ULP (split %d)' % st)
+        return dict(pre=pre, aim=aim, l_window=lw, target_cs=tcs, split=st,
+                    roll_frames=int(seg['frames']))
+    return dict(pre=pre, aim=aim, l_window=lw, target_cs=tcs, split=st,
+                roll_frames=len(log) - st)
+
+
 def rebuild_beam(env, rec, cycle=-1, hl=None):
     """Rebuild one dumped cycle's nodes as live search nodes, by replaying each log on a fresh
     `FreeRun`. ``cycle`` is 1-based (``-1`` = the last dumped cycle).

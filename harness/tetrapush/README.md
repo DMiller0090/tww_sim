@@ -1710,6 +1710,56 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE CAMERA CANNOT BUY THE SNAP, BUT `l_ok` NEVER NEEDED THE SNAP -- AND THE SUPPLY WAS
+            ALREADY INSIDE THE SEARCH'S OWN GRID. 19 DEAD NODES COME BACK; THE FLOOR DOES NOT MOVE
+            (session 116).** New truth page
+            [`knowledge/strategy/the-camera-supplies-the-cone.md`](../../knowledge/strategy/the-camera-supplies-the-cone.md);
+            forward link added to `knowledge/mechanics/ebs-turnaround.md` (its s77 numbers are about
+            the SNAP and stand unchanged).
+            - **THE SNAP AND THE CONE COME APART BY AN ORDER OF MAGNITUDE** (`_notes/s116_lok_supply.py
+              reach`, `away_walk.snap_reach` at all 64 nodes = **26 distinct rolls**, 237 s). Over
+              107-121 reachable camera states per roll the snap is reachable at **0-6** (s77's hole is
+              real; 5 rolls have none) while the cone CLEARS at **0-68** (3 rolls have none), and
+              **21 of 26** rolls hold a clearing target on the search's own `ESCAPE_TCS_STEP` **512**
+              grid. So it was never a resolution problem and never a physics wall: the cut that picks
+              the camera
+              (`roll_candidates`' ``tcs_probe``) was ranked by `camera_probe_key` -- **the snap bill**,
+              the one quantity s77 had just shown uncollectable.
+            - **AND THE BEAM CONTAINS ITS OWN CONTROL.** Keyed by (pre-roll endpoint, aim, **L
+              window**, entry csangle) the 64 nodes are 26 rolls and **12 hold BOTH a firing and a
+              non-firing member** -- identical up to the last roll, same aim, same herd frames,
+              differing only in ``target_cs`` (1[F] vs 16/17; 3,6[F] vs 52; 50,51[F] vs 53; ...).
+            - **RE-FIRED AT A CLEARING TARGET, EVERY DEAD FAMILY PROBED COMES BACK: 0 of 672 -> 238-624**
+              (`revive`, on the 512 grid, `fires_census` at the terminal the roll actually produces).
+              Node 52 **0 -> 624/672** with ``l_ok`` gone from the census entirely; 16 **0 -> 301-329**;
+              53 **0 -> 510-532**; 54 **0 -> 238-411**; 60 **0 -> 320**. Not confined to the 19: node 18
+              (fires nothing, NO sole clause) reaches **298**, and node 14 (already firing 277) **644**.
+              The herd cost does not move -- same frames, C-stick pointed elsewhere.
+            - **AND IT DOES NOT MOVE THE FLOOR** (`price`, `cloud_landing` at atom cap 6, the s115
+              convention). Best revived is node 16 at **94.76** against node 0's **93.95**, which
+              reproduces bit-identically here. One `in_band` appears that s115 had nowhere (node 11,
+              total **102.00**) -- still worse than the banked **101**. **This is a SAMPLE, not a
+              sweep:** 2 clearing targets priced per roll out of up to 68, picked structurally (widest
+              cone / smallest slew / median), so nothing here says 93.95 survives a real cut.
+            - **THE RANK FIX, GATED.** New `away_walk.lok_clear` (the ``l_ok`` predicate as ONE shared
+              definition -- the screen and the enumeration may not each spell it out) and
+              `full_herd.lok_probe_key`, wired beside `camera_probe_key` on the last cycle;
+              ``tcs_probe`` now takes a SEQUENCE, one keep share each, because neither order contains
+              the other. **BINARY on purpose:** the L-frame margin predicts how many variants fire
+              (monotone within a roll over 18 states) and NOT what they are worth -- node 16's widest
+              margin bounds 94.78 against **94.76** for its narrowest -- so every clearing target ties
+              and `landing_key` separates them.
+            - **NEW BED + HARNESS.** `beam_io.split_last_roll` re-opens a banked terminal as its
+              pre-roll endpoint + roll knobs, asserting the re-fire is byte-identical and 0-ULP;
+              `snap_reach` states now carry the ``off`` that re-fires them (a census a caller can act
+              on). Fixture `fixtures/courtyard_lok_s116.json` (3 families) exists because the s77 bed
+              CANNOT express the finding: there nothing snaps AND nothing clears, so the two agree on
+              every state. **+5 gates**, `tests/test_{away_walk,full_herd}.py`.
+            - **AND THE s114/s115 8-NODE ENDPOINT SOLVE FINISHED** (128 solves, 3261 s, complete dump
+              -- no ``partial``): **23 accepted, floor TOTAL 95.00** (node 0, rows 9/16, atom 6; node 8
+              at 96.00). **No sub-95 exists in that bed.** Its required separations run **99.2-235.7 u**
+              against the live band 41-85, which is exactly the term s115 measured cannot be delivered
+              as a suffix -- so the hope that "a sub-95 would show up there" is retired.
       - [~] **THE SEPARATION IS NOT A SUFFIX -- IT IS THE SAME RESOURCE AS THE MOMENTUM AND THE
             FACING, AND `l_ok` IS THE MEASURED #1 BLOCKER ON THE BEAM (session 115).** New truth page
             [`knowledge/strategy/the-separation-is-not-a-suffix.md`](../../knowledge/strategy/the-separation-is-not-a-suffix.md);

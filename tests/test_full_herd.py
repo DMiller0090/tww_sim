@@ -892,6 +892,92 @@ def test_a_dumped_beam_rebuilds_bit_exact_from_its_input_logs(env, hl, box, tmp_
     assert F.confirm_plan(env, hl, back[0])['ok']
 
 
+def _prologue_node(env, nflip=1):
+    """`cycle1_nodes`' own prologue endpoint -- the cheapest real `roll_candidates` bed there is."""
+    dtm = seeds.dtm_input_at(env)
+    base = seeds.make_freerun(env)
+    base.pre_seed_input(dtm(0))
+    blog = []
+    fb = F._bearing((base.link.pos_x, base.link.pos_z), (base.tx, base.tz))
+    for _ in range(nflip):
+        d = T._inp(fb, base.csangle, 1.0, buttons=S.PAD_L, triggerL=255)
+        blog.append(dict(d))
+        base.step(d)
+    return dict(run=base, log=blog, frames=nflip, jf=nflip, jv=dict(kind='prologue', phases=[]))
+
+
+def test_the_camera_cut_takes_a_share_per_probe_and_one_probe_is_unchanged(env, hl, box):
+    """**Several ``tcs_probe`` keeps, one share each** (session 116). The last cycle's camera answers
+    to two independent customers -- the escape's snap bill (`camera_probe_key`) and its ``l_ok`` cone
+    (`lok_probe_key`) -- and neither order contains the other: measured over the session-111 beam the
+    snap is reachable at 0-6 of ~110 camera states where the cone clears at 1-68.
+
+    Two properties. A SINGLE probe must behave exactly as before -- this generalisation may not move
+    any existing search -- and a LIST must give each probe a share, so a target the second order likes
+    reaches the beam even when the first two orders would have filled every slot."""
+    node = _prologue_node(env)
+    run = node['run']
+    center = F._bearing((run.link.pos_x, run.link.pos_z), (run.tx, run.tz))   # cycle1_nodes' own
+    css = F.derived_target_css(run, span=F.ESCAPE_TCS_SPAN, step=F.ESCAPE_TCS_STEP)
+    kw = dict(half_window=0x2000, step=8, l_windows=((5, 8),), aim_keep=1, tcs_keep=3,
+              target_css=css, require_quality=False, fan_center=center)
+
+    plain = F.roll_candidates(node, hl, box, tcs_probe=None, **kw)
+    one = F.roll_candidates(node, hl, box, tcs_probe=F.camera_probe_key(), **kw)
+    listed = F.roll_candidates(node, hl, box, tcs_probe=[F.camera_probe_key()], **kw)
+    assert plain and len(plain) <= 3
+    assert [n['knobs']['target_cs'] for n in one] == [n['knobs']['target_cs'] for n in listed], \
+        "a one-element list is not the same keep as the bare callable"
+
+    # a second probe gets its own share: whatever it ranks first is in the beam
+    lok = F.lok_probe_key(hl)
+    two = F.roll_candidates(node, hl, box, tcs_probe=[F.camera_probe_key(), lok], **kw)
+    assert len(two) <= 3 and two
+    # the first order is still honoured -- a keep can only ADD (`_mixed_beam`)
+    assert plain[0]['knobs']['target_cs'] in [n['knobs']['target_cs'] for n in two]
+    # and the probe is binary, so it can only ever partition -- never reorder inside a class
+    vals = {lok(n) for n in two}
+    assert vals <= {0.0, None}
+
+
+def test_a_beam_node_re_opens_at_its_last_roll_bit_exact(env, hl, box, tmp_path):
+    """**`beam_io.split_last_roll`, gated** (session 116): a terminal node re-opened as the PRE-ROLL
+    endpoint plus the roll that made it, so the camera questions -- `away_walk.snap_reach` and
+    everything that re-fires a roll -- can be asked at a banked beam instead of only at a live search.
+
+    The property is that the split is EXACT, not approximately right: the reconstructed endpoint plus
+    the recorded knobs must re-emit the log tail byte-for-byte and land 0-ULP on the node's own
+    terminal. A split one frame off measures a different roll and would say so nowhere, which is the
+    whole reason this lives in the harness with an assertion in it rather than inline in a driver."""
+    from harness.tetrapush import beam_io
+
+    nodes = F.cycle1_nodes(env, hl, box, beam=2)
+    assert nodes
+    p = str(tmp_path / 'beams.json')
+    beam_io.dump_beams(p, [nodes], hl)
+    back = beam_io.rebuild_beam(env, beam_io.load_beams(p), cycle=1, hl=hl)
+
+    for nd in back:
+        sp = beam_io.split_last_roll(env, nd)              # verify=True: raises if it is not exact
+        assert 0 <= sp['split'] < nd['frames']
+        assert sp['split'] + sp['roll_frames'] == nd['frames'] == len(nd['log'])
+        assert sp['pre']['frames'] == sp['split'] and sp['pre']['log'] == nd['log'][:sp['split']]
+        # the knobs come from the node's own plan tail, and they are the ones it was built with
+        assert tuple(sp['aim']) == tuple(nd['plan'][-1]['aim'])
+        assert int(sp['target_cs']) == int(nd['plan'][-1]['target_cs'])
+        # the pre-roll state is BEFORE the roll: the A-press has not been delivered yet
+        assert not (int(nd['log'][sp['split']].get('buttons', 0)) & S.PAD_A) or \
+            sp['pre']['run'].link.state != T.FRONT_ROLL
+
+    # and it is not vacuously true -- a wrong split does NOT reproduce the terminal
+    nd = back[0]
+    sp = beam_io.split_last_roll(env, nd)
+    bad = dict(nd, log=nd['log'][:-1], frames=nd['frames'] - 1)
+    with pytest.raises(AssertionError):
+        beam_io.split_last_roll(env, bad)
+    assert sp['roll_frames'] >= 2
+
+
 def test_the_chain_does_not_require_its_LAST_cycle_to_be_continuable(env, hl):
     """**The session-61 stall, gated.** `junction_quality` asks whether the NEXT junction could
     continue from a roll's endpoint -- so requiring it on the FINAL cycle demands continuability from
