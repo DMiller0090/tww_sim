@@ -1710,9 +1710,55 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE SEPARATION IS NOT A SUFFIX -- IT IS THE SAME RESOURCE AS THE MOMENTUM AND THE
+            FACING, AND `l_ok` IS THE MEASURED #1 BLOCKER ON THE BEAM (session 115).** New truth page
+            [`knowledge/strategy/the-separation-is-not-a-suffix.md`](../../knowledge/strategy/the-separation-is-not-a-suffix.md);
+            s114's frame price migrated to
+            [`knowledge/history/separation-priced-at-the-endpoint-speed.md`](../../knowledge/history/separation-priced-at-the-endpoint-speed.md).
+            - **THE SEPARATION MOVES AT A THIRD OF THE QUOTED RATE** (`_notes/s115_recede.py`, a
+              16-bearing x 4-magnitude prologue grid x k = 0..8 at all 64 nodes). Best sustained
+              **+8.3..+10.6 u/frame**, not the quoted 25.727: at the herd endpoint Link is still
+              CLOSING (~+12 u/f along), so the cap belongs to a direction he is not travelling in.
+              Depth itself is not the problem -- node 8 reaches sep **58.52 -> 129.88 u** in 8 frames,
+              node 0 **58.48 -> 124.87**, and Tetra's own displacement stops at **k = 2-3** (measured,
+              never inferred from `CO_RADII_BAR`, whose ``centre_feet`` oscillates with the pose).
+            - **AND EVERY UNIT OF IT IS PAID OUT OF THE ATOM.** Enumerated at every deep pick at nodes
+              0/1/8: **0 of 672 variants fire**, against the same endpoints' controls at **56/720,
+              1888/2640, 1964/4038**. `away_walk.fires_census` attributes it -- ``l_ok`` fails on
+              **672 of 672** and is the SOLE clause on all 672 at node 0's momentum-preserving pick.
+            - **ONE RESOURCE, SPENT THREE WAYS (the mechanism, measured end to end).** Turning Link
+              costs the EBS (speedF **-25.45 -> -11.43**); the turnaround -- the atom's only facing
+              lever -- requires the EBS PRESERVED (`_SNAP_KEEP_SPEED` -24.5), and `snap_csangle` finds
+              a window at **every control** (34816/34304/31232 at nodes 8/0/1) and **None at every
+              receded endpoint**; so the atom's own first frame turns him in, cone margin **+3.51 ->
+              -37.64 deg** (-71 by the L frame), and ``turnaround_first=True`` changes nothing
+              (identical facing 25265 -- the ESS cannot snap without the speed). So the separation is
+              **herd-shaped**: only the last roll can deliver depth AND leave the posture intact.
+            - **THE BEAM PRICED BY ENUMERATION FOR THE FIRST TIME** (`s115_recede.py frontier`, 64
+              nodes, 23 min): **29 fire**; the two floors are held by DISJOINT nodes -- arrival free at
+              **2** (landings 25.40-40.02 u out), in-band landing at **3** (arrivals owe 7.38-8.37
+              frames), **``joint`` 0**. Correlation only **-0.089**, so it is s113's bind on delivered
+              endpoints, not a smooth trade. Best bound anywhere: node 0 **93.95** (total 92.00,
+              landing 25.400, arrival free) -- a bound, not a delivery.
+            - **`l_ok` IS THE BEAM'S #1 BLOCKER, NOT THE SEPARATION.** Over all 64 censuses it is the
+              SOLE failing clause on **7349 variants (63%)** against ``dips`` 4117 (35%), and the sole
+              blocker at **19 of the 35 nodes that fire nothing at all**. That is the s112 side-item,
+              untouched for three sessions, now measured as the main one -- `away_walk.snap_reach` /
+              `full_herd.derived_target_css` is where a camera supply is answered (s77).
+            - **AND THE PER-AIM CUT WAS SCORING HALF A CANDIDATE -- FIXED.** `cloud_land.predict_bound`
+              priced only the LANDING, so the screen that decides which endpoints exist never saw
+              Link's arrival (the keep has priced it since s110, but only at the survivors). Fixed with
+              s114's own finding: the THROW is rigid, so `residual_fan` carries it per member and the
+              predictor places the arrival at ``link + throw`` and prices `arrival_frames` beside the
+              miss; `roll_probe` gains ``stations``/``sep``, `extend_cycle` hands its map through.
+              Measured by scoring ONE enumeration both ways (`_notes/s115_screen_ab.py`): the old key
+              **understates its own pick by median +6.51 frames (max +9.23)**, the ROW moves at **9 of
+              29** endpoints -- but the top-8 endpoint ranking is **identical** and the honest gain is
+              **<= +0.28 frames**. So it removes a fiction and re-aims a third of the beam; it does not
+              move this cut. Gates: `tests/test_cloud_land.py` (+6), 103 passed.
       - [~] **THE BASIS WAS A DIMENSION SHORT: THE FOURTH COORDINATE (TETRA'S LATERAL) PAYS BOTH
             HALVES AT TOTAL 95.00, AND WHAT IS LEFT IS THE SEPARATION -- A PRICE, NOT A WALL
-            (session 114).** New truth page
+            (session 114; its frame price is retired above).** New truth page
             [`knowledge/strategy/the-endpoint-is-four-numbers.md`](../../knowledge/strategy/the-endpoint-is-four-numbers.md).
             - **THE THREE RELOCATION BEDS SPAN THREE OF FOUR COORDINATES.** A herd endpoint is Tetra's
               (along, lat) and Link's (along, lat); the OFFSET moves Link's lateral, the PLACEMENT both

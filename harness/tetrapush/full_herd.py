@@ -268,7 +268,7 @@ def junction_alphabet(run, hl, *, ess_step=4, aim_step=64):
 
 def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_window=0x2800,
                dead=None, corridor=None, target_along=None, thread=None, resid=None,
-               fan_center=None, fan=None, rows=None, collect=None):
+               fan_center=None, fan=None, rows=None, stations=None, collect=None):
     """**Is this junction endpoint ROLLABLE at all, how STRAIGHT can its roll be, where does it
     ARRIVE, and where would the ESCAPE land from it?** -- an aim sweep, returning
     ``dict(rate, off, off_rate, along, n, arrive, over, land, land_frames, land_off, land_over,
@@ -334,6 +334,25 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     (`cloud_land.cloud_landing`) at the survivors. Optimistic by construction, so it sizes the cut and
     never makes the claim.
 
+    ``stations`` (session 115) is the OTHER half of that same cut, and until it existed this screen
+    scored half a candidate: ``cloud_bound`` priced the landing alone, so the set of endpoints the last
+    cycle may choose from was fixed with no reference to whether Link's own arrival could ever reach
+    the stations his row's `plan_cost` was measured at. Enumerated over the whole session-111 cycle-3
+    beam the two halves are ANTI-CORRELATED -- node 0 lands 25.4 u out with its arrival already free
+    (``d_station`` 23.4, inside `cloud_land.FREE_REACH`), node 3 lands 4.7 u out with its stations
+    136.8 u away and owing 6.05 frames -- so a landing-only screen keeps precisely the endpoints whose
+    other half cannot be paid. Given a `cloud_land.herd_stations` map and a fan carrying the THROW
+    (session 114's rigid Link displacement, `cloud_land.residual_fan`), the predictor prices both
+    (`cloud_land.predict_bound`), and ``cloud_d_station``/``cloud_arr`` report the arrival it chose.
+
+    ``sep`` -- Link's separation from Tetra ALONG the herd line (``-lead``, so + = he is behind her) --
+    rides along free because the sweep already computes the metrics, and it is reported rather than
+    ranked on. Session 115 measured why it may not be a keep of its own: the specification wants
+    92.5-157 u where the beam sits at 38-75, but appending frames to buy it at the endpoint kills the
+    atom outright (0 of 672 variants fire at every deep prologue against controls firing 56-1964,
+    attributed by `away_walk.fires_census` to ``l_ok`` on all 672), so depth is worth having only when
+    the HERD produces it and only through the arrival it buys -- which is what ``stations`` prices.
+
     ``fan_center`` (session 71) is WHERE the sweep points, and it is the difference between a screen
     that answers and one that does not. The default fan is +-0x2800 (112.5 deg wide) about the HERD
     bearing thinned by ``step``, and 95-99% of every aim in it dies ``followed`` -- Link past
@@ -371,6 +390,8 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     cor = O.push_corridor(hl) if corridor is None else corridor
     # the rows in herd coords ONCE, not per aim (the raw genuine-coord set carries only x/z)
     hrows = _CL().herd_rows(rows, hl) if (fan and rows) else None
+    # ...and the stations likewise, so the arrival half costs the screen one min() per (member, row)
+    hstat = _CL().herd_stations(stations, hl) if (fan and rows and stations) else None
     best = None
     if fan_center is None:
         center = hl.bearing_bam()
@@ -405,30 +426,42 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
             la, ll = al + resid[0], lat + resid[1]
             land = A.thread_miss(la, ll, thread)['miss']
             lframes = O.thread_frames(la, ll, thread)
+        sep = -m['lead']                     # + = Link is BEHIND her, the pursuit side
         cloud = None
         if fan and rows:
             # the CLOUD form of the same axis: cheapest whole candidate over fan x rows, microseconds
-            # an aim -- the only landing measure this per-aim cut can afford
-            cloud = _CL().predict_bound(al, lat, endpoint['frames'] + seg['frames'], fan, hrows)
+            # an aim -- the only landing measure this per-aim cut can afford. With ``stations`` it
+            # prices the ARRIVAL beside it, off each member's own throw (s115).
+            cloud = _CL().predict_bound(al, lat, endpoint['frames'] + seg['frames'], fan, hrows,
+                                        link=((hl.along(rr.link.pos_x, rr.link.pos_z),
+                                               hl.lateral(rr.link.pos_x, rr.link.pos_z))
+                                              if hstat else None),
+                                        stations=hstat)
         if collect is not None:
             collect.append(dict(along=al, lat=lat, off=off, over=over, rate=m['per_frame'],
-                                link_lat=m['lat'], aim=aim, want=_want, jf=endpoint['jf'],
+                                link_lat=m['lat'], sep=sep, aim=aim, want=_want, jf=endpoint['jf'],
                                 land=land, land_frames=lframes,
                                 cloud_bound=(cloud['bound'] if cloud else None),
-                                cloud_miss=(cloud['miss'] if cloud else None)))
+                                cloud_miss=(cloud['miss'] if cloud else None),
+                                cloud_d_station=(cloud['d_station'] if cloud else None),
+                                cloud_arr=(cloud['arr_frames'] if cloud else None)))
         edge = abs(_s16(_want - center))
         if best is None:
             best = dict(rate=m['per_frame'], off=off, off_rate=m['per_frame'], along=al, n=1,
                         arrive=None if over is None else abs(over), over=over,
                         land=land, land_frames=lframes, land_off=off, land_over=over,
+                        sep_max=sep, cloud_sep=sep,
                         cloud_bound=(cloud['bound'] if cloud else None),
                         cloud_miss=(cloud['miss'] if cloud else None),
                         cloud_row=(cloud['row_idx'] if cloud else None),
+                        cloud_d_station=(cloud['d_station'] if cloud else None),
+                        cloud_arr=(cloud['arr_frames'] if cloud else None),
                         fan_edge=edge, fan_half=int(half_window))
             continue
         best['n'] += 1
         best['fan_edge'] = max(best['fan_edge'], edge)
         best['rate'] = max(best['rate'], m['per_frame'])
+        best['sep_max'] = max(best['sep_max'], sep)
         if off < best['off']:
             best['off'], best['off_rate'], best['along'] = off, m['per_frame'], al
         if over is not None and abs(over) < best['arrive']:
@@ -440,6 +473,8 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
                                   or cloud['bound'] < best['cloud_bound']):
             best['cloud_bound'], best['cloud_miss'] = cloud['bound'], cloud['miss']
             best['cloud_row'] = cloud['row_idx']
+            best['cloud_d_station'], best['cloud_arr'] = cloud['d_station'], cloud['arr_frames']
+            best['cloud_sep'] = sep
     return best
 
 
@@ -1293,6 +1328,14 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     owes NOTHING on either half -- and ``cloud_exit_runs`` gives it the axis to pay with: the atom's tail
     (`away_walk.escape_atom`'s ``exit_run``), which moves the arrival while Tetra stays frozen.
 
+    ``cloud_stations`` now also reaches the per-aim SCREEN (session 115), and that is where it decides
+    something rather than reorders: the keep above runs at the survivors, so until now the set they are
+    drawn from was fixed by a `roll_probe` that priced only the landing. Enumerated over the whole
+    session-111 cycle-3 beam the two halves are anti-correlated (node 0: landing 25.4 u out, arrival
+    already free; node 3: landing 4.7 u, stations 136.8 u away), so a landing-only screen selects the
+    endpoints whose arrival cannot be paid. It costs the screen one ``min()`` per (fan member, row) and
+    needs a fan carrying the THROW (`cloud_land.residual_fan` with ``exit_runs``).
+
     ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) pass the escape atom's two
     unswept knobs and its frames rank through ``escape_keep`` (`escape_probe`, `away_walk.probe`):
     where the conversion frames PUSH her, which on four real arrivals is worth landing 4.90 -> 0.33,
@@ -1362,6 +1405,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                                                  corridor=cor_j, target_along=target_along,
                                                  thread=th_land, resid=resid,
                                                  fan=cloud_fan, rows=(rows_j if cloud_fan else None),
+                                                 stations=cloud_stations,
                                                  **pkw), e)
                                       for e in uniq) if p is not None]
         scored.sort(key=lambda t: -t[0]['rate'])

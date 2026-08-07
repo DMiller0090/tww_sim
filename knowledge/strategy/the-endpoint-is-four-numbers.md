@@ -135,26 +135,25 @@ while the beam's own nodes sit at **38.09..75.25 u** (mean 53.83; feet distance 
   (node, length) classes the throw's along runs **+55.01..+113.42 u** (lateral -44.52..+59.63).
 * The third gives it back, up to ~41 u at the deepest.
 
-**And the separation has a herd price, which no session had taken.** Session 112 priced the ALONG axis
-at `RATE_CAP` **12.8177 u/frame** ([herd-price-of-a-placement.md](herd-price-of-a-placement.md)); the
-separation's own rate is Link's endpoint speed, because a frame of backslide moves him up-line and
-grows the gap directly. Endpoint speedF spans **-25.727..+18.500** with every node in MOVE, so the cap
-is **25.727 u/frame** -- and a node at +18.5 is CLOSING, not opening, so the rate belongs to the node
-and not to the axis.
+**And the separation is the one axis that has to come from the HERD.** Session 112 priced the ALONG
+axis at `RATE_CAP` **12.8177 u/frame** ([herd-price-of-a-placement.md](herd-price-of-a-placement.md)),
+and the obvious move here is the same shape: endpoint speedF spans **-25.727..+18.500** with every node
+in MOVE, so read the gap off that cap and charge it as an addend. Session 115 ran those frames and it
+does not work -- the separation moves at **8.3-10.6 u/frame** (at the endpoint Link is still CLOSING at
+~+12 u/frame along, so the 25.727 belongs to a direction he is not travelling in), and every deep
+prologue makes the atom refuse outright: **0 of 672 variants fire** where the same endpoints' controls
+fire 56-1964, because the frames that buy the depth also spend the EBS the escape's facing lever needs.
+The measurement, its attribution and what it leaves standing are
+[the-separation-is-not-a-suffix.md](the-separation-is-not-a-suffix.md); the retired price is
+[in history](../history/separation-priced-at-the-endpoint-speed.md).
 
-That converts the last obstacle from a wall into an addend, and the addend is small:
-
-| | separation | gap from the beam's widest (75.25) | frames at 25.727 u/f | honest total |
-|---|---|---|---|---|
-| the cheapest SPEC (node 8, row 9, atom 6, total 96.00) | **92.5 u** | 17.3 u | **0.67** | ~**96.7** |
-| node 0's SOLVED endpoint (total 95.00) | 169.87 u | 94.6 u | **3.68** | ~**98.7** |
-
-The first row is arithmetic only -- a specification, not a solved and confirmed endpoint; the second is
-both. Both beat the banked 101. Neither is a candidate: a relocation bed is self-consistent physics
-that no state-2 log reaches, and the frames are an UPPER bound charged at the fastest separating frame
-available -- a re-cut may find such endpoints for less, since Tetra also coasts ~36 u on plow momentum
-after the last push (session 105) and the beam was ranked on `junction_quality`, never on separation.
-The closest any spec comes to the live 41-85 u band is **7.5 u**.
+So the specifications on this page are what they say they are -- **arithmetic**, and the cheapest of
+them (node 8, row 9, atom 6) sits at total **96.00** with its 92.5 u only **7.5 u** past the live
+41-85 u band, against node 0's solved 95.00 at 169.87 u. What neither is, is a candidate: a relocation
+bed is self-consistent physics that no state-2 log reaches, and the separation each one asks for has to
+be produced by a last roll rather than added afterwards. A re-cut may find such endpoints for less,
+since Tetra also coasts ~36 u on plow momentum after the last push (session 105) and the beam was ranked
+on `junction_quality`, never on separation.
 
 ## The overshoot is not a knob: `turnaround_first` makes it worse
 

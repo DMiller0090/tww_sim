@@ -371,7 +371,7 @@ def cloud_landing(run0, frames, hl, rows, *, band=None, flip_step=FLIP_STEP, rot
 
 
 def residual_fan(endpoints, hl, *, flip_step=FLIP_STEP, rotate_offs=None, max_frames=18,
-                 quantum=1.0):
+                 quantum=1.0, exit_runs=(0,)):
     """**The atom's residual as the SET it is, measured once** -- the cheap predictor's table.
 
     Session 106's decisive measurement is that the escape's residual is not a point but a 2D FAN: over
@@ -391,22 +391,49 @@ def residual_fan(endpoints, hl, *, flip_step=FLIP_STEP, rotate_offs=None, max_fr
     residual's lateral tracks Link's offset from Tetra at -0.53 u per u (`away_walk.probe`), so a fan
     measured at unlike states predicts badly. Measure it on the band being searched, and confirm the
     prediction by enumeration at the survivors (`cloud_landing`) before quoting a landing -- the
-    predictor sizes the CUT, the enumeration makes the CLAIM (`[[banded-proxy-needs-its-newton]]`)."""
+    predictor sizes the CUT, the enumeration makes the CLAIM (`[[banded-proxy-needs-its-newton]]`).
+
+    **Each member also carries the THROW** -- Link's own displacement over the same variant
+    (``throw_along``/``throw_lat``, herd coords) -- which is what lets `predict_bound` price the
+    ARRIVAL half beside the landing (session 115). It belongs here for the same reason the residual
+    does: session 114 measured the throw to be a rigid property of the (node, log length) class rather
+    than a steering channel, so it is a member of a measured SET exactly as the residual is, and it is
+    kept per member rather than averaged because at some postures the class spans 15 x 48 u.
+
+    ``exit_runs`` crosses the fan with the atom's tail, whose whole effect is on the throw (past
+    ``freeze_f`` Tetra takes no more push, so a tail moves Link and not her). Default ``(0,)`` keeps
+    the fan a landing table verbatim; a caller pricing arrivals should pass `EXIT_RUNS`."""
     seen, out = set(), []
     for ep in endpoints:
         run0 = ep['run'] if isinstance(ep, dict) else ep
+        la0 = hl.along(run0.link.pos_x, run0.link.pos_z)
+        ll0 = hl.lateral(run0.link.pos_x, run0.link.pos_z)
         for r in atom_cloud(run0, hl, flip_step=flip_step, rotate_offs=rotate_offs,
-                            max_frames=max_frames):
+                            max_frames=max_frames, exit_runs=exit_runs):
             if not AW.fires(r):
                 continue
             n_atom = len(r['log'])
-            key = (round(r['resid_along'] / quantum), round(r['resid_lat'] / quantum), n_atom)
+            lx, lz = r['link_end']
+            ta, tl = hl.along(lx, lz) - la0, hl.lateral(lx, lz) - ll0
+            key = (round(r['resid_along'] / quantum), round(r['resid_lat'] / quantum), n_atom,
+                   round(ta / quantum), round(tl / quantum))
             if key in seen:
                 continue
             seen.add(key)
-            out.append(dict(along=r['resid_along'], lat=r['resid_lat'], n_atom=n_atom))
+            out.append(dict(along=r['resid_along'], lat=r['resid_lat'], n_atom=n_atom,
+                            throw_along=ta, throw_lat=tl))
     out.sort(key=lambda m: (m['n_atom'], m['lat'], m['along']))
     return out
+
+
+def herd_stations(stations, hl):
+    """`station_map`'s world points in HERD coordinates -- ``{row idx: [(along, lat), ...]}``.
+
+    The projection is a rotation about Tetra's start (`reposition.HerdLine`), so a distance measured
+    in either frame is the same number; this exists only so `predict_bound` can work in one frame
+    without re-projecting per aim (it runs inside the per-aim screen, tens of thousands of times)."""
+    return {k: [(hl.along(x, z), hl.lateral(x, z)) for (x, z) in pts]
+            for k, pts in (stations or {}).items()}
 
 
 def herd_rows(rows, hl, *, default_cost=0.0):
@@ -434,7 +461,7 @@ def herd_rows(rows, hl, *, default_cost=0.0):
     return out
 
 
-def predict_bound(t_along, t_lat, frames, fan, rows):
+def predict_bound(t_along, t_lat, frames, fan, rows, *, link=None, stations=None):
     """**The cheap predictor `cloud_landing` is the exact confirm of**: the best whole-candidate frame
     bound a herd endpoint could reach, over the residual FAN crossed with the rows.
 
@@ -448,17 +475,42 @@ def predict_bound(t_along, t_lat, frames, fan, rows):
     It is a LOWER bound on the enumerated bound only to the extent the fan is reachable from THIS state
     (see `residual_fan`) -- an optimistic proxy, in the same family as `objective.plan_bound`'s ``h``,
     and it must be Newtoned onto the real thing before it is quoted. Returns ``dict(bound, miss, total,
-    row_idx, n_atom, resid)`` for the best pair, or None on an empty fan."""
+    row_idx, n_atom, resid, d_station, arr_frames)`` for the best pair, or None on an empty fan.
+
+    ``link``/``stations`` (session 115) make the prediction JOINT, and without them this scores exactly
+    half a candidate. `cloud_landing` has priced the arrival since session 110, but it runs only at the
+    SURVIVORS -- the per-aim screen this feeds (`full_herd.roll_probe`'s ``cloud_bound``) is the cut
+    that decides which endpoints exist, and it could see only the landing. Measured on the session-111
+    cycle-3 beam, that blindness is not academic: the two halves are anti-correlated across it (node 0
+    lands 25.4 u out with the arrival already free, node 3 lands 4.7 u out with its stations 136.8 u
+    away), so a landing-only screen keeps exactly the endpoints whose arrival cannot be paid.
+
+    Given Link's herd-coordinate endpoint and `herd_stations`, each fan member's own ``throw`` places
+    his arrival (``link + throw``) and `arrival_frames` prices the gap to THAT row's stations, in the
+    same currency. A row absent from ``stations`` is UNMEASURED and skipped, never scored as free
+    (`station_map`) -- so the two branches genuinely differ in which rows they may quote."""
+    hst = None if (link is None or not stations) else stations
     best = None
     for m in fan:
         pa, pl = t_along + m['along'], t_lat + m['lat']
+        if hst is not None:
+            la = link[0] + m.get('throw_along', 0.0)
+            ll = link[1] + m.get('throw_lat', 0.0)
         for r in rows:
+            ds = af = None
+            if hst is not None:
+                st = hst.get(r.get('idx'))
+                if not st:
+                    continue                 # unmeasured is not free -- see `station_map`
+                ds = min(math.hypot(la - q[0], ll - q[1]) for q in st)
+                af = arrival_frames(ds)
             d = math.hypot(r['along'] - pa, r['lat'] - pl)
             total = frames + m['n_atom'] + float(r.get('plan_cost', 0))
-            b = total + O.remaining_frames(d)
+            b = total + O.remaining_frames(d) + (af or 0.0)
             if best is None or b < best['bound']:
                 best = dict(bound=b, miss=d, total=total, row_idx=r.get('idx'),
-                            n_atom=m['n_atom'], resid=(m['along'], m['lat']))
+                            n_atom=m['n_atom'], resid=(m['along'], m['lat']),
+                            d_station=ds, arr_frames=af)
     return best
 
 

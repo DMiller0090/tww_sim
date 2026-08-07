@@ -156,31 +156,67 @@ def test_the_residual_fan_of_a_non_firing_endpoint_is_EMPTY_not_a_default(arriva
         assert set(m) == {'along', 'lat', 'n_atom'}
 
 
+class _FakeHL(object):
+    """A `reposition.HerdLine` whose herd axis IS (x, z) -- so a fan test can pin arithmetic without
+    a rollout, and the projection cannot quietly do the work the assertion is about."""
+
+    def along(self, x, z):
+        return x
+
+    def lateral(self, x, z):
+        return z
+
+
+def _fake_run(x=0.0, z=0.0):
+    class _Link(object):
+        pos_x, pos_z = x, z
+
+    class _Run(object):
+        link = _Link()
+    return _Run()
+
+
+def _fake_cloud(made):
+    """`atom_cloud`'s output shape for ``made`` = [(resid_along, resid_lat, n_atom, link_end)]."""
+    def _cloud(run0, hl, **kw):
+        return [dict(resid_along=a, resid_lat=l, log=[0] * n, link_end=le)
+                for (a, l, n, le) in made]
+    return _cloud
+
+
 def test_the_fan_dedups_on_its_quantum_and_orders_by_frames():
     """The table stays small by griding, and cheap atoms come first so a truncated fan degrades toward
     the fast ones the objective prefers. Pinned on a hand-built cloud, no rollout."""
-    made = [dict(along=1.00, lat=20.0, n_atom=7), dict(along=1.20, lat=20.0, n_atom=7),
-            dict(along=5.00, lat=30.0, n_atom=2)]
-
-    class _Fake:
-        pass
-
-    def _cloud(run0, hl, **kw):
-        out = []
-        for m in made:
-            out.append(dict(resid_along=m['along'], resid_lat=m['lat'],
-                            log=[0] * m['n_atom'], _fires=True))
-        return out
-
+    made = [(1.00, 20.0, 7, (50.0, 3.0)), (1.20, 20.0, 7, (50.0, 3.0)),
+            (5.00, 30.0, 2, (60.0, 4.0))]
     real_cloud, real_fires = CL.atom_cloud, AW.fires
     try:
-        CL.atom_cloud = _cloud
+        CL.atom_cloud = _fake_cloud(made)
         AW.fires = lambda r: True
-        fan = CL.residual_fan([{'run': _Fake()}], None, quantum=1.0)
+        fan = CL.residual_fan([{'run': _fake_run()}], _FakeHL(), quantum=1.0)
     finally:
         CL.atom_cloud, AW.fires = real_cloud, real_fires
     assert len(fan) == 2, "1.00 and 1.20 are the same 1.0 u cell and must dedup"
     assert [m['n_atom'] for m in fan] == [2, 7]
+
+
+def test_every_fan_member_carries_its_own_THROW_and_the_dedup_respects_it():
+    """The throw is Link's own displacement over the variant (session 114's rigid quantity), and it is
+    what `predict_bound` prices the ARRIVAL from. Two variants that land Tetra identically but throw
+    Link 10 u apart are DIFFERENT candidates, so the dedup key must keep both -- averaging them is the
+    failure `_notes/s114_throw_map.py` names (a class spans up to 15 x 48 u)."""
+    made = [(1.0, 20.0, 4, (50.0, 3.0)), (1.0, 20.0, 4, (60.0, 3.0))]
+    real_cloud, real_fires = CL.atom_cloud, AW.fires
+    try:
+        CL.atom_cloud = _fake_cloud(made)
+        AW.fires = lambda r: True
+        fan = CL.residual_fan([{'run': _fake_run(x=5.0, z=1.0)}], _FakeHL(), quantum=1.0)
+    finally:
+        CL.atom_cloud, AW.fires = real_cloud, real_fires
+    assert len(fan) == 2, "the same landing at two throws is two candidates, not one"
+    # the throw is the DISPLACEMENT from Link's own start, not the end position
+    assert sorted(m['throw_along'] for m in fan) == [45.0, 55.0]
+    assert all(m['throw_lat'] == 2.0 for m in fan)
 
 
 def test_the_predictor_and_the_enumeration_price_in_THE_SAME_currency():
@@ -217,6 +253,73 @@ def test_raw_genuine_coords_are_converted_exactly_and_priced_rows_pass_through(h
         assert g['plan_cost'] == 0.0                        # not recoverable from a raw row
     priced = [dict(idx=3, x=1.0, z=2.0, along=900.0, lat=1.0, plan_cost=21)]
     assert CL.herd_rows(priced, hl)[0] is priced[0], "a priced row must pass through, not be copied"
+
+
+def test_the_predictor_prices_the_ARRIVAL_only_when_asked_and_is_otherwise_UNCHANGED():
+    """The joint branch is opt-in and the landing-only number must not move under it -- otherwise every
+    beam cut before session 115 becomes incomparable with one cut after. Same fan, same rows, one call
+    with the stations and one without."""
+    rows = [dict(idx=7, along=900.0, lat=0.0, plan_cost=20)]
+    fan = [dict(along=10.0, lat=0.0, n_atom=3, throw_along=50.0, throw_lat=0.0)]
+    plain = CL.predict_bound(880.0, 0.0, 75, fan, rows)
+    assert plain['d_station'] is None and plain['arr_frames'] is None
+    # link 700 + throw 50 = 750, the station at 900 -> a 150 u gap, credited FREE_REACH, at the cap
+    joint = CL.predict_bound(880.0, 0.0, 75, fan, rows, link=(700.0, 0.0),
+                             stations={7: [(900.0, 0.0)]})
+    assert joint['d_station'] == 150.0
+    assert joint['arr_frames'] == (150.0 - CL.FREE_REACH) / CL.WALK_CAP
+    assert joint['bound'] == plain['bound'] + joint['arr_frames']
+    assert joint['miss'] == plain['miss'] and joint['total'] == plain['total']
+    # and an arrival inside the walk the row already pays for adds exactly nothing
+    free = CL.predict_bound(880.0, 0.0, 75, fan, rows, link=(880.0, 0.0),
+                            stations={7: [(900.0, 0.0)]})
+    assert free['d_station'] == 30.0 and free['arr_frames'] == 0.0
+    assert free['bound'] == plain['bound']
+
+
+def test_the_arrival_term_moves_the_PREDICTORS_row_choice_too():
+    """`_joint_row`'s finding at the screen: the row a landing is priced against changes once the
+    arrival is in the sum, so the cheap predictor must make the same choice the enumeration does or the
+    cut and the keep are aimed at different candidates."""
+    rows = [dict(idx=0, along=890.0, lat=0.0, plan_cost=21),
+            dict(idx=1, along=910.0, lat=0.0, plan_cost=21)]
+    fan = [dict(along=0.0, lat=0.0, n_atom=3, throw_along=0.0, throw_lat=0.0)]
+    stations = {0: [(700.0, 0.0)], 1: [(890.0, 0.0)]}
+    assert CL.predict_bound(890.0, 0.0, 70, fan, rows)['row_idx'] == 0          # landing alone
+    joint = CL.predict_bound(890.0, 0.0, 70, fan, rows, link=(890.0, 0.0), stations=stations)
+    assert joint['row_idx'] == 1, "20 u of landing is cheaper than 190 u of walking"
+    assert joint['miss'] == 20.0 and joint['d_station'] == 0.0 and joint['arr_frames'] == 0.0
+
+
+def test_the_predictor_SKIPS_an_unmeasured_row_only_in_the_joint_branch():
+    """A row with no hunted station is unmeasured, and unmeasured is not free (`station_map`). The
+    landing-only branch has no arrival to be wrong about, so it must still score it."""
+    rows = [dict(idx=0, along=900.0, lat=0.0, plan_cost=19),
+            dict(idx=1, along=901.0, lat=0.0, plan_cost=21)]
+    fan = [dict(along=0.0, lat=0.0, n_atom=2, throw_along=0.0, throw_lat=0.0)]
+    assert CL.predict_bound(900.0, 0.0, 70, fan, rows)['row_idx'] == 0
+    joint = CL.predict_bound(900.0, 0.0, 70, fan, rows, link=(900.0, 0.0),
+                             stations={1: [(900.0, 0.0)]})
+    assert joint['row_idx'] == 1, "the cheap row has no station and may not win by lacking evidence"
+    assert CL.predict_bound(900.0, 0.0, 70, fan, rows, link=(0.0, 0.0), stations={}) is not None, \
+        "an EMPTY station map is not a joint request -- it falls back to the landing branch"
+
+
+def test_the_stations_project_into_herd_coordinates_with_the_SAME_projection_as_the_rows(hl):
+    """`herd_stations` exists only so the screen projects once instead of per aim, and it must be the
+    projection `herd_rows` uses or the two sides of a station gap are measured in different frames.
+    It has no arithmetic of its own, so the gate is an identity on every point -- exact, no tolerance.
+
+    (The distance a rotation carries is preserved only to the last ULP or two, which is why the gate is
+    the projection and not the gap: `objective.PLACEMENT_BAND` is 1.0 u, so 1e-13 is not the risk here
+    -- using the WRONG frame, which is a ~1000 u error, is.)"""
+    pts = {3: [(-1500.0, -300.0), (-1400.0, -250.0)]}
+    got = CL.herd_stations(pts, hl)
+    assert got[3] == [(hl.along(-1500.0, -300.0), hl.lateral(-1500.0, -300.0)),
+                      (hl.along(-1400.0, -250.0), hl.lateral(-1400.0, -250.0))]
+    row = CL.herd_rows([dict(idx=3, x=-1500.0, z=-300.0)], hl)[0]
+    assert (row['along'], row['lat']) == got[3][0], "rows and stations must share one frame"
+    assert CL.herd_stations(None, hl) == {}
 
 
 def test_the_predictor_has_nothing_to_say_on_an_empty_fan():
@@ -258,6 +361,35 @@ def test_the_predictor_is_wired_into_the_per_aim_sweep_and_is_inert_without_a_fa
     assert 'if fan and rows:' in src, "the predictor is not guarded on having both inputs"
     # the rows are converted to herd coords ONCE, not per aim (the sweep fires thousands)
     assert src.count('_CL().herd_rows') == 1 and 'if (fan and rows) else None' in src
+
+
+def test_the_ARRIVAL_half_reaches_the_per_aim_screen_and_stays_opt_in():
+    """Session 115: the keep priced the arrival at the SURVIVORS while the screen that decides which
+    endpoints exist priced only the landing, and the two halves are anti-correlated across the beam. So
+    the stations have to reach `roll_probe` -- projected once, not per aim -- and `extend_cycle` must
+    hand its own map through. Opt-in: without stations the screen is byte-for-byte the old one."""
+    import inspect
+    sig = inspect.signature(FH.roll_probe)
+    assert 'stations' in sig.parameters and sig.parameters['stations'].default is None
+    src = inspect.getsource(FH.roll_probe)
+    assert src.count('_CL().herd_stations') == 1, "the stations are projected per aim"
+    assert 'if (fan and rows and stations) else None' in src
+    assert 'stations=hstat' in src and 'link=' in src, "the arrival is not handed to the predictor"
+    ext = inspect.getsource(FH.extend_cycle)
+    assert 'stations=cloud_stations' in ext, "extend_cycle keeps its station map from the screen"
+
+
+def test_the_separation_is_REPORTED_by_the_screen_and_is_exactly_minus_lead():
+    """The separation rides along free (the metrics already carry ``lead``) and is reported, never
+    ranked on -- session 115 measured that buying depth at the endpoint kills the atom outright, so an
+    endpoint keep that maximised it would select for states that cannot fire."""
+    import inspect
+    src = inspect.getsource(FH.roll_probe)
+    assert "sep = -m['lead']" in src, "the separation is not the metrics' own lead"
+    assert "sep=sep" in src and "sep_max" in src and "cloud_sep" in src
+    # and it is not a rank or a keep anywhere in the stage
+    ext = inspect.getsource(FH.extend_cycle)
+    assert "sep_keep" not in ext and "t[0]['sep_max']" not in ext
 
 
 def test_the_in_band_field_is_the_only_solved_claim():
