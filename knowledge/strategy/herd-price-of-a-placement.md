@@ -76,6 +76,16 @@ neither is a measurement: converting properly owes a `full_herd.chain_herd` reta
 
 Both agree the prize is real and about **6 frames** (101 -> ~95).
 
+### What a herd frame is worth, at the ceiling the SEARCH reaches (session 112)
+
+The 12.5263 u/f above is the delivered plan's own cadence, and a search is faster: over all 64 nodes
+of the session-111 cycle-3 beam the along-per-herd-frame tops out at **12.8177 u/f** and the top six
+sit inside 0.006 of it -- a hard ceiling (98.6% of `objective.PUSH_CEILING`'s 13.0), not a tail. Use
+it, not 13.0, whenever a probe moves an endpoint down-line: an endpoint relocated `da` u further along
+at the same herd count is FREE only while it is still under the ceiling and costs `da / 12.8177`
+frames past it. The frame-minimal cycle-3 nodes run 12.18-12.72 u/f, i.e. 1-3.4 frames of slack, so a
+relocation bed that charges nothing for the along axis overstates its endpoint by up to ~5 frames.
+
 ## The delivered herd cannot be truncated - the price is quantized
 
 The obvious way to buy a shorter herd is to stop the delivered plan early, since its own trajectory

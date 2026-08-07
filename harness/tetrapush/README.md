@@ -1710,6 +1710,53 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE LANDING HALF REACHES THE BAR AT 95, AND THE WHOLE REMAINING GAP IS TWO FRAMES OF
+            ARRIVAL. THE OFFSET IS ONE VARIABLE SERVING TWO PREDICATES THAT WANT IT 22-25 u APART
+            (session 112).** New truth page
+            [`knowledge/strategy/the-offset-cannot-pay-both.md`](../../knowledge/strategy/the-offset-cannot-pay-both.md).
+            - **THE s111 RE-CUT FINISHED AFTER ITS HANDOFF WAS WRITTEN AND IS A CLEAN NEGATIVE**
+              (`_notes/s111g_recut_full.log`, 3360 s, 153 roll survivors -> 64 beamed, 57 of them
+              NOT enumerated under the 96 cloud cap). Its frame-minimal nodes still carry offset
+              **+13.9 / +16.1 / +17.5** (miss 25-40 u at totals 91-93) and its only both-halves node
+              is node 11 (herd 73) at **total 105**. No <=95 candidate.
+            - **BUT THE CUT IS NOT BLIND TO THE SPECIFICATION -- ITS ON-LINE ENDPOINTS REFUSE**
+              (`_notes/s112_nofire_probe.py`). The beam holds on-line endpoints at herd 69-74
+              (offsets -6.04 / -5.13 / -1.04 / -0.13 / +0.14 / +0.97 / +4.24 / +4.50) and every one
+              reads `fires=False`, at the standing exit pair AND at a 90 deg exit arc. The clause
+              census splits them: nodes 36/32/33 fail `l_ok` AND `dips` on all 672 base variants with
+              **sole: none**, while nodes 43/45 have **108 / 173 variants one clause from firing** and
+              that clause is `l_ok` -- the PREVIOUS roll's camera, not the escape's shape (s77). So
+              "the cut never asked for on-line endpoints" was wrong; it asks and the camera refuses.
+            - **STRAIGHT AND SHORT ARE THE SAME KNOB** (`_notes/s112_offset_c3.py`, the s111 bed with
+              the JOINT price added). At c3 node 0 the residual's lateral tracks the offset at the
+              documented **-0.53 u/u** and the miss collapses 25.400 -> **2.016 u** from +17.49 to
+              -7.51 -- while the atom's own log goes **3 -> 7** frames (6 at a wide arc). The atom ends
+              when the actors SEPARATE, and an on-line Link keeps closing.
+            - **THE STATIONS SIT ACROSS THE LINE.** All 116 rows' live stations lie at along
+              **804.7-810.0, lat +12.1..+18.6**; the six cost-20 rows are 73-137 u down-line and 27-49 u
+              across from their own. Over the 21 firing c3 nodes `arrival_frames` is <=1.03 only at
+              offsets **-4.1..+17.5** and **0.00** only at **+13.9..+17.5** (d_station 23-39), against
+              124-184 u at offset <=-33 and 66-144 at >=+30. The landing wants -7.5; the free arrival
+              wants +14..+17.
+            - **THE RELOCATION BED WAS CHARGING NOTHING FOR THE ALONG AXIS, worth up to 5 frames.** The
+              search's along-per-herd-frame has a hard measured ceiling of **12.8177 u/f** (top six of
+              64 nodes inside 0.006; 98.6% of `PUSH_CEILING`), so a relocation is free only while the
+              endpoint is under it. Priced into `_notes/s112_honest_surface.py`; recorded in
+              [`herd-price-of-a-placement.md`](../../knowledge/strategy/herd-price-of-a-placement.md).
+            - **AND WITH IT PRICED, THE LANDING HALF HITS THE BAR** (`_notes/s112_atom_front.py`, c3
+              node 4 relocated to offset +6.83, 40900 variants x an 18-bearing arc): a **SETTLED
+              6-frame atom lands 0.083 u from row 74 (cost 20) at TOTAL 95** -- the first time any
+              measurement has put the landing on the bar. It is not deliverable: Link is **99.9 u**
+              from that row's station at frame 6, and the two tail frames that bring him to 25.2 cost
+              exactly the two frames the plan does not have (fully-paid floor **97**). The atom throws
+              him OUT and the tail curves him back -- at the endpoint he was already ~32 u from the
+              station.
+            - **`exit_arc`'s +-45 deg default cannot face the stations from a DEEP straight-push
+              endpoint** (Link lat ~-27: the station bears ~90 deg off both centres, and a tail swept
+              at 0x2000 runs `d_station` 59.8 -> 73.9 -> 88.2 -> 103.1, first under 34 only at atom 15;
+              at 0x4000 it reaches **17.6 at atom 12**). SCOPE IT BY LINK'S LATERAL: at node 4's
+              shallower posture the winning bearing sits **9.8 deg** from its centre and widening buys
+              nothing. The arc moves the LANDING floor 2.401 -> 2.047 u -- it is an arrival knob.
       - [~] **THE ESCAPE IS NOT A STEERING CHANNEL: THE LANDING BELONGS TO THE HERD ENDPOINT, AND
             SESSION 110's "ARRIVAL HALF IS SOLVED" WAS THRUST-13 LEVERAGE (session 111).**
             The session-110 handoff's default step was instrumental (put the arrival term in the
