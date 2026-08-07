@@ -1710,6 +1710,69 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE ESCAPE IS NOT A STEERING CHANNEL: THE LANDING BELONGS TO THE HERD ENDPOINT, AND
+            SESSION 110's "ARRIVAL HALF IS SOLVED" WAS THRUST-13 LEVERAGE (session 111).**
+            The session-110 handoff's default step was instrumental (put the arrival term in the
+            per-aim cut). This session inverted it and went at the outcome -- Dereck's bar is the full
+            ~6-frame saving, 101 -> <=95 -- by asking what an endpoint has to LOOK like. New truth
+            page:
+            [`knowledge/strategy/the-landing-belongs-to-the-endpoint.md`](../../knowledge/strategy/the-landing-belongs-to-the-endpoint.md);
+            overturned claim migrated to
+            [`knowledge/history/arrival-half-was-not-solved.md`](../../knowledge/history/arrival-half-was-not-solved.md).
+            - **THE ATOM HAS NO AUTHORITY OVER THE LANDING** (`_notes/s111_atom_reach.py`, both
+              bearing arcs at FULL circle -- 32 flips x 32 exits x 4 rotates x turnaround x side x
+              tails 0-6, ~115k variants per endpoint). The reachable landing set is a blob fixed by
+              the endpoint: node 2 (herd 68) tops out at along **862** where the row cloud starts at
+              **880** -- herd 68 is out of REACH, not out of rank -- and node 4 (herd 69) spans lat
+              **-30..-124**, 12-40 u below the cloud's lat floor at every along band it reaches.
+            - **WHY: THE PLOW'S HALF-DEPTH EJECTION, POINTED BY LINK.** The first frame ejects her
+              `(CO_RADII_BAR - centre_feet)/2` and each further closing frame adds more -- forced and
+              input-independent. Measured floor vs the law: node 7 (`cf` 62.5) 9.02 against 8.74
+              predicted; the ratio rises with the approach rate, ~1.0 at ``rec`` -8..-12 to
+              **2.3-3.2** at -25 (38-48 u of forced push at the deep endpoints). Its DIRECTION is
+              Link's lateral offset from her, which is why every frame-minimal miss is LATERAL: the
+              row cloud's lat floor drifts -0.17 u per u of along, node 4 at offset **+17.5** pays
+              ~20 u of lateral to reach the rows (= its 21.75 u miss), node 11 at **+3.9** lands 0.80.
+            - **THE MAGNITUDE AXIS AND THE NO-CONVERSION DEPARTURE, both new, both closed**
+              (`_notes/s111_{hold_atom,hold2}.py`, all 54 beam nodes). Every enumeration since s65
+              pinned ``msd=1.0``; sweeping 0.0 (neutral) through 1.0 moves the forced push by
+              **< 0.1 u** -- the ejection is instantaneous and depth-based, so a gentler stick buys no
+              gentler plow. Holding one bearing from frame 1 (the console's own shape, Dereck's s110
+              question) fires in **2-3 frames** against the recipe's 4, and fires where the recipe
+              fires NOTHING (nodes 6 and 8 read 0 firing over the whole full-circle recipe grid). It
+              is still not a plan: `entry_fan.iter_fan2` keeps an entry junction only at
+              ``speedF == WALK_CAP`` and a departure that declines to convert **never settles inside
+              16 frames** (shortest settled log 11-16 against the conversion's 4-6). That is what the
+              L conversion is for.
+            - **THE FRAME IDENTITY, CORRECTED.** `total = herd + atom + plan_frames + thrust + 4`;
+              thrust 13 is refused so 14 is the floor; the recipe atom's shortest SETTLED log is
+              **4** frames, not 6. So the frame-minimal beam nodes have floors 93 (node 4, herd 69)
+              and 93-94 (nodes 2/5) -- the frames are there and only the landing is not.
+            - **SESSION 110's LEVERAGE WAS ALL THRUST 13** (`_notes/s111_scan_landing.py`). `hull_scan`
+              runs `entry_search.THRUSTS` = (13, 14, 15) and s109/s110 pooled the three. Split: **all
+              173** leverage-carrying combos at the joint candidates are thrust **13**, and they read
+              **0 leverage at 14 and 15**. The control passes and is what makes that mean something --
+              the CONSOLE's own placement at its own 4-frame walk reads leverage 45/45/45 and
+              walkable dust **0 / 9 / 18** by thrust, and hunted rows at the 2-frame budget read
+              0/5/4 (row 9), 0/2/1 (row 16), 0/0/4 (row 0). So the joint candidates
+              are barren at every thrust that can clip, the razor residual 3.3e-01 -> 3.1e-03 is a
+              thrust-13 number, and session 109's verdict stands unchanged. The scan now splits by
+              thrust and refuses to bank a thrust-13 hit.
+            - **A HARNESS TRAP, MEASURED: the atom rolls out on a DETACHED camera.**
+              `away_walk._clone_for_atom` detaches so ``csangle`` can be commanded; a wired replay of
+              the same log drifts **121-654 BAM** and re-quantises every stick, moving the recipe
+              atom's Tetra by **0.008-0.080 u** and Link by **0.75-2.00 u** against a razor band of
+              ~1e-4. Quote a landing from the REPLAY. `_notes/s111_scan_landing.py` now takes the
+              replay as truth and reports the delta; re-gating the s110 joint candidates that way
+              changes nothing (still 0 live), so the detach is a trap for future numbers rather than
+              the cause of that negative.
+            - **THE SPECIFICATION A 95-FRAME PLAN IS**: exit a roll at **69-71 frames** (mid-roll
+              truncation does not fire, s105), leaving Tetra where the endpoint's OWN forced push
+              lands her inside the cloud, with Link **on-line** (`|Link lat - Tetra lat| ~ 0`) so that
+              push is straight. The s107 beam contains no such endpoint -- its 68-69 frame nodes run
+              12.19 u/frame at offset +14..+19, its on-line ones (node 10 at +1.78, node 11 at +3.91)
+              are all at herd 73+ -- because the cut has never ranked the exit along and the offset
+              together.
       - [~] **THE ARRIVAL WAS NEVER FIXED -- THE ATOM'S BREAK CONDITION WAS. THE TAIL BREAKS s109's
             HARD FRONT, AND IT COSTS EXACTLY WHAT IT BUYS (session 110).**
             The s109 handoff's joint keep is built, and building it named the reason the front looked

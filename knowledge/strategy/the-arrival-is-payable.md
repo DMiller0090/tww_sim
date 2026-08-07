@@ -92,7 +92,16 @@ pair sizes the search, the arc refines where it pointed.
 Hull-scanned at their own arrivals and landings, **6 of 8 of those candidates read LEVERAGE** -- 15-45
 cell/thrust combos, up to 1760 grid hits -- where every session-109 scan read `n_leverage == 0`.
 Leverage is monotone in the tail (0 combos at tail 3, 18-25 at 4, 45 at 5), and the razor residual
-falls from **3.3e-01 to 3.1e-03**. **The arrival half is solved.**
+falls from **3.3e-01 to 3.1e-03**. The tail and the arc measurably move the arrival.
+
+**Those numbers are all thrust 13, and thrust 13 cannot clip here.** `hull_scan` is called over
+`entry_search.THRUSTS` = (13, 14, 15) and these statistics pooled the three. Split by thrust, all 173
+leverage-carrying combos sit at **13** -- the thrust
+[this corner refuses](../history/thrust-13-refused-by-geometry.md) -- and the same landings read
+**zero** leverage at 14 and 15, where a control at the console arrival reads 45 combos at every thrust
+and dust at 14-15. So the tail and the arc are real and the candidates are not near-misses:
+[arrival-half-was-not-solved](../history/arrival-half-was-not-solved.md). Rank on the deliverable
+thrusts only.
 
 One caveat the numbers force, and it is the optimism above made concrete: ``arr_frames == 0`` is a
 RADIUS and the hull is a FAN. Two tail-3 candidates standing **23.5-24.0 u** from their stations read
