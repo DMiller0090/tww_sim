@@ -42,6 +42,12 @@ knob grid is one arrival. At frame 8 the area jumps by two to three orders of ma
 first CONTAINS the station cluster (along 804.7-818.7, lat +12.1..+35.5) -- which is exactly the frame
 `arrival_frames` first reads 0 (``d_station`` 10.9 at the first endpoint), and exactly the banked 97.
 
+How TIGHT the point is belongs to the posture, not to the log length: taken at the beam nodes' own
+positions the same extent runs from 0.05 x 0.36 u to 14.87 x 47.77 u at comparable lengths, tracking
+how many variants survive `fires` -- so read it at the endpoint in hand
+([the-endpoint-is-four-numbers.md](the-endpoint-is-four-numbers.md), which also uses the rigidity to
+SOLVE the endpoint rather than sweep for it).
+
 The reason is in `escape_atom`'s own recipe: the atom is [optional turnaround] -> L-conversion (2
 frames) -> rotate -> backwards slam -> hold the exit stick. That is 4-5 PRESCRIBED inputs, and the
 frames after them start on ~25.7 u/frame of untarget-flip momentum that one stick cannot turn. The
@@ -121,6 +127,10 @@ The two floors sit 40 u apart down the herd line, and the rigid throw means the 
 Link's point on the stations is the endpoint that leaves Tetra 40 u short of the rows. A 94 does not
 need a better atom or a wider knob -- it needs an endpoint the throw maps ONTO the station box while
 Tetra is already on a row, and no 2D slice of the relocation space contains one.
+
+Session 114 found that endpoint by completing the basis: all three axes above hold **Tetra's lateral**
+fixed, and moving it pays both halves at once --
+[the-endpoint-is-four-numbers.md](the-endpoint-is-four-numbers.md).
 
 ## Read the arrival's own floor, not the landing's passenger
 

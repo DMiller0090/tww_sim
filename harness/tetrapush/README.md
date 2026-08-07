@@ -1710,6 +1710,60 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE BASIS WAS A DIMENSION SHORT: THE FOURTH COORDINATE (TETRA'S LATERAL) PAYS BOTH
+            HALVES AT TOTAL 95.00, AND WHAT IS LEFT IS THE SEPARATION -- A PRICE, NOT A WALL
+            (session 114).** New truth page
+            [`knowledge/strategy/the-endpoint-is-four-numbers.md`](../../knowledge/strategy/the-endpoint-is-four-numbers.md).
+            - **THE THREE RELOCATION BEDS SPAN THREE OF FOUR COORDINATES.** A herd endpoint is Tetra's
+              (along, lat) and Link's (along, lat); the OFFSET moves Link's lateral, the PLACEMENT both
+              actors' along, the SEPARATION Link's along -- and **every one holds TETRA'S LATERAL at
+              whatever the node was born with**. The priced rows span lat **-33.68..+1.61**, so the
+              s113 negative ("no cell pays both, in none of 170 cells") was a statement about the
+              SLICE. New fourth bed `tlat_shifted` + `placed` (absolute herd coordinates, all four
+              beds composed), gated by `basis_check`: max off-diagonal leak **4.6e-05 u**.
+            - **AND THE FOURTH COORDINATE PAYS BOTH HALVES** (`_notes/s114_endpoint_solve.py`, c3 node
+              0, herd 69, row 9 at `plan_cost` 20). Endpoint Link (along **712.571**, lat **-25.976**)
+              / Tetra (along **882.437**, lat **-13.587**): landing **0.0001 u** in the 1.0 u band,
+              arrival **7.73 u** inside `FREE_REACH` 34 (so `arrival_frames` 0), 6-frame firing settled
+              atom, confirmed over the full 690-variant grid -- **TOTAL 95.00** = herd 69 + 0
+              relocation + atom 6 + cost 20. It needed **Tetra's lateral +6.10 u from native**. First
+              endpoint in this work that pays both at once; a second solve from the n=6 class reaches
+              the same total independently (arrival 11.9 u, separation 176.3).
+            - **RIGIDITY MAKES BOTH ENDPOINTS ARITHMETIC** (`_notes/s114_throw_map.py`, the throw
+              measured PER VARIANT at every node). `link_end = start + throw` -> **Link's start is
+              ``station - throw``**; past `CO_RADII_BAR` the push is zero -> **Tetra's start is the
+              row**. Nothing is searched. Totals as low as **93.00** by arithmetic alone.
+            - **A FINITE-DIFFERENCE NEWTON STALLS AT ITERATE 0, AND THE FIX GENERALISES.**
+              ``len(log) = handoff_f + exit_run`` and ``handoff_f`` is decided by `CO_RADII_BAR` and the
+              recession test -- **both step functions in POSITION** -- so a relocated n=4 combo runs to
+              n=6 and the difference quotient measures the jump. Two corrections: **re-select the best
+              member of the grid each iterate** (the rigidity licenses it) instead of freezing a combo,
+              and **iterate on the objective's ACCEPTANCE, not the equation** (the landing owes the
+              band, the arrival owes only `FREE_REACH`; grinding Link onto the station is a tighter
+              problem than the objective poses, and it is the tight part that stalls). Accepts at
+              iterate 2 what grinding refuses at 6.
+            - **WHAT IS LEFT IS THE SEPARATION, AND IT IS NOW PRICED.** The solved endpoints need Link
+              **105-176 u** up-line; all 64 beam nodes sit at **38.09..75.25 u** (mean 53.83) and
+              **none at >= 100 u** -- but a CUT observation, not a population law (the s107 lesson: the
+              beam was ranked on `junction_quality`, never on separation). The requirement decomposes
+              as ``(row along - station along) + throw along - push along``, where the first term is
+              **fixed by the target set at 72.29..164.58 u over all 268 priced row-station pairs**
+              (floor row 0 cost 21; row 9's cost-20 pair 0.8 u behind at 73.09) -- so **Link must end
+              >= 72 u up-line because that is simply where the two target sets are**. Floor ~110 u.
+              **NEW PRICE:** the separation's own rate is Link's endpoint speed, cap **25.727 u/frame**
+              (endpoint speedF spans -25.727..+18.500, every node in MOVE, so a +18.5 node is CLOSING
+              and the rate belongs to the node). Gap from the beam's widest: **1.35 frames** to the
+              arithmetic floor (honest total ~**96.4**), **3.68** to node 0's solved endpoint (~**98.7**).
+              Both still beat the banked 101.
+            - **THE OVERSHOOT IS NOT A KNOB.** `turnaround_first` was the candidate for reversing the
+              throw's along component and it ENLARGES it: node 0 **+54.82..+81.11 -> +74.43..+90.82**,
+              node 13 +61.79..+92.76 -> +83.12..+99.68 (node 1's non-turnaround branch fires nothing --
+              all 1059 fail `l_ok`). The conversion negates a ~25.7 u/f up-line backslide into
+              down-line flight, so the displacement points AT Tetra by construction.
+            - **AND THE POINT IS POSTURE-DEPENDENT.** s113's 1.1 x 1.1 u extent belongs to its two
+              relocated cells; at the nodes' own postures the same measurement spans **0.05 x 0.36 u
+              (node 13, atom 4, 24 variants)** to **14.87 x 47.77 u (node 6, atom 5, 202 variants)**,
+              tracking how many variants survive `fires`. Read it at the endpoint in hand.
       - [~] **BOTH HALVES ARE SOLVED AT A 5-FRAME ATOM AND NEVER AT THE SAME ENDPOINT: THE SHORT
             ATOM'S ARRIVAL SET IS A *POINT* UNTIL FRAME 8 (session 113).** New truth page
             [`knowledge/strategy/the-short-atom-is-a-point.md`](../../knowledge/strategy/the-short-atom-is-a-point.md).
