@@ -48,7 +48,20 @@ Its DIRECTION is Link's lateral offset from her, which is why the miss is latera
 lat floor drifts only **-0.17 u per u** of along, while the push drags her lat-negative in proportion
 to the offset. Node 4 sits at offset **+17.5** and needs ~40 u of along to reach the rows, which
 costs ~20 u of lateral -- exactly its 21.75 u miss. Node 11 sits at offset **+3.9** and lands
-0.80 u. Nothing else about the two endpoints explains that gap.
+0.80 u.
+
+That is a correlation across endpoints that differ in other ways, so it was tested directly: hold one
+real endpoint and move **only Link**, laterally (`_notes/s111_offset_curve.py`; a relocation bed, so a
+causal probe and never a candidate -- anim and momentum do not move with position). The landing tracks
+the offset monotonically, and the residual's lateral collapses with it:
+
+| offset | +42.5 | +27.5 | +17.5 (native) | +7.5 | +2.5 | -7.5 |
+|---|---|---|---|---|---|---|
+| `resid_lat` | -9.2 | -11.4 | -10.3 | -11.4 | -3.4 | **-1.2** |
+| miss to nearest row | 36.7 | 30.7 | 25.4 | 15.9 | 7.0 | **1.755** |
+
+At offset -7.5 the same endpoint's push is essentially straight (+46.5 along, -1.2 lat) and lands her
+1.755 u from row 26 at cost 20. Nothing about the endpoint changed except where Link stood.
 
 ## So a frame-minimal plan is a specification on the ENDPOINT
 

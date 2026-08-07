@@ -1733,6 +1733,15 @@ from scratch. Land the edits first, then gate.
               Link's lateral offset from her, which is why every frame-minimal miss is LATERAL: the
               row cloud's lat floor drifts -0.17 u per u of along, node 4 at offset **+17.5** pays
               ~20 u of lateral to reach the rows (= its 21.75 u miss), node 11 at **+3.9** lands 0.80.
+            - **AND THE OFFSET IS CAUSAL, not a correlation across unlike endpoints**
+              (`_notes/s111_offset_curve.py`): hold ONE real endpoint and move only LINK, laterally.
+              The landing tracks it monotonically -- miss **36.7 / 30.7 / 25.4 / 15.9 / 7.0 /
+              1.755 u** at offset +42.5 / +27.5 / **+17.5 (native)** / +7.5 / +2.5 / -7.5, with
+              ``resid_lat`` collapsing -9.2 -> **-1.2**. At -7.5 node 4's push is straight (+46.5
+              along, -1.2 lat) and lands her **1.755 u from row 26** (cost 20) at total 96. Nothing
+              changed but where Link stood. It is a RELOCATION bed (anim/momentum do not follow
+              position), so it is a causal probe and never a candidate -- the re-cut is what has to
+              produce the endpoint.
             - **THE MAGNITUDE AXIS AND THE NO-CONVERSION DEPARTURE, both new, both closed**
               (`_notes/s111_{hold_atom,hold2}.py`, all 54 beam nodes). Every enumeration since s65
               pinned ``msd=1.0``; sweeping 0.0 (neutral) through 1.0 moves the forced push by
