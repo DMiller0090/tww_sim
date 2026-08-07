@@ -119,17 +119,28 @@ herd leaves him but by where the ATOM does, and a fully-paid 95 needs an endpoin
 excursion happens to end near a station -- a placement question, ranked on `d_station` at atom <= 6,
 which no cut has ever ranked on.
 
-Swept over the whole (along, offset) surface at that posture -- 105 cells, herd priced -- the split
-holds and does not close: best IN-BAND **95.00** at 0.083 u (offset +6.83, `d_station` 99.9), best
-fully-paid **96.27** at 0.477 u (offset +13.08, atom 7, `d_station` 26.9). The 0.27 is the fractional
-herd charge for going 3.5 u past the ceiling, so in whole herd frames the paid floor is **97** and the
-best paid landing sits at the +13 end of the arrival's own window, not at the landing's -7.5.
+Swept over the whole (along, offset) surface -- 105-170 cells at each of three frame-minimal postures,
+herd priced -- the split holds everywhere and the paid floor is the SAME number at all three:
 
-## The on-line endpoints refuse, and the clause names whose problem it is
+| posture (c3 node) | herd | best IN-BAND | best FULLY PAID |
+|---|---|---|---|
+| 1 | **68** | **94.00** @ 0.685 u (atom 5, `d_station` 58.8) | 97.00 @ 0.685 u (atom 8, `d_station` 23.1) |
+| 4 | 69 | 95.00 @ 0.083 u (atom 6, `d_station` 99.9) | 96.27 @ 0.477 u (atom 7, `d_station` 26.9) |
+| 0 | 69 | 96.00 @ 0.082 u (atom 7, `d_station` 46.6) | 97.00 @ 0.089 u (atom 7, `d_station` 22.1) |
 
-The session-111 cut is not blind to the specification -- its cycle-3 beam contains on-line endpoints
-at herd 69-74 (offsets -6.04, -5.13, -1.04, -0.13, +0.14, +0.97, +4.24, +4.50). Every one reads
-`fires=False`. `away_walk.fires_census` says which clause, and it is not the same answer at each:
+The landing reaches **94** and every fully-paid cell is **97** in whole herd frames (node 4's 96.27
+carries a 0.27 fractional charge for going 3.5 u past the ceiling). Node 1's two entries are the SAME
+cell -- offset -13.06, along 868.0 -- differing only in the atom log, 5 against 8: three tail frames,
+and nothing else, is the entire distance between the bar and the floor.
+
+## Half the on-line endpoints refuse, and it is not because they are on-line
+
+The session-111 cut is not blind to the specification -- its cycle-3 beam contains twelve on-line
+endpoints at herd 69-74, offsets -6.04 to +9.63. **Four of them fire and eight do not**, and the split
+does not follow the offset: node 7 (herd 70, offset **-0.54**) fires 1568 of 4654 variants at the
+standing pair and 17220 at a wide arc, while node 32 -- 0.2 u away in along, 1.2 u in lateral, offset
+**-0.13** -- fires **zero**. So the refusal is state-specific, not a law about being on-line, and
+`away_walk.fires_census` says which clause it is at each:
 
 | node | herd | offset | variants | fire (pair / wide arc) | failing clauses | sole |
 |---|---|---|---|---|---|---|
@@ -140,13 +151,18 @@ at herd 69-74 (offsets -6.04, -5.13, -1.04, -0.13, +0.14, +0.97, +4.24, +4.50). 
 | 33 | 73 | +0.14 | 3325 | 0 / 0 | `l_ok` 672, `dips` 672 | none |
 | 35 | 73 | +0.97 | 3684 | 0 / 0 | `l_ok` 672, `dips` 575, `recedes_at_cap` 2 | **`l_ok` 97** |
 | 40 | 73 | +4.24 | 3404 | 0 / 0 | `l_ok` 672, `dips` 672 | none |
+| **7** | 70 | -0.54 | 4654 | **1568 / 17220** | `dips` 439, `recedes_at_cap` 8, `separates` 6 | `dips` 438 |
+| **0** | 69 | +17.49 | 4704 | **2828 / 26801** | `dips` 209 | `dips` 209 |
 
-Nodes 36/32/33/40 fail every clause at once and no knob buys them back. Nodes 43, 45 and 35 have
-**108, 173 and 97 variants one clause from firing**, and that clause is `l_ok` -- a facing question
-the PREVIOUS roll's camera has authority over, not the escape's own shape
+The last two rows are the positive control, and they are what makes the zeros mean anything: an
+endpoint that converts reports thousands of firing variants and fails only `dips`, never `l_ok`. Among
+the refusers, nodes 36/32/33/40 fail every clause at once and no knob buys them back, while 43, 45 and
+35 have **108, 173 and 97 variants one clause from firing** -- and that clause is `l_ok`, a facing
+question the PREVIOUS roll's camera has authority over rather than the escape's own shape
 ([clip-camera-supply.md](clip-camera-supply.md) and `away_walk.snap_reach` are where that is
-answered), and it loosens as the offset goes more negative. So "the cut cannot produce on-line
-endpoints" was never the problem; the cut produces them and the camera refuses them.
+answered). So "the cut cannot produce on-line endpoints" was never the problem: it produces them, the
+camera refuses some of them, and the ones it admits (node 7) fail for the ordinary reason instead --
+node 7 sits at lateral -48, 25 u below the cloud, and lands 18.9 u out at total 97.
 
 ## See also
 

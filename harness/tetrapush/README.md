@@ -1719,14 +1719,18 @@ from scratch. Land the edits first, then gate.
               NOT enumerated under the 96 cloud cap). Its frame-minimal nodes still carry offset
               **+13.9 / +16.1 / +17.5** (miss 25-40 u at totals 91-93) and its only both-halves node
               is node 11 (herd 73) at **total 105**. No <=95 candidate.
-            - **BUT THE CUT IS NOT BLIND TO THE SPECIFICATION -- ITS ON-LINE ENDPOINTS REFUSE**
-              (`_notes/s112_nofire_probe.py`). The beam holds on-line endpoints at herd 69-74
-              (offsets -6.04 / -5.13 / -1.04 / -0.13 / +0.14 / +0.97 / +4.24 / +4.50) and every one
-              reads `fires=False`, at the standing exit pair AND at a 90 deg exit arc. The clause
-              census splits them: nodes 36/32/33 fail `l_ok` AND `dips` on all 672 base variants with
-              **sole: none**, while nodes 43/45 have **108 / 173 variants one clause from firing** and
-              that clause is `l_ok` -- the PREVIOUS roll's camera, not the escape's shape (s77). So
-              "the cut never asked for on-line endpoints" was wrong; it asks and the camera refuses.
+            - **BUT THE CUT IS NOT BLIND TO THE SPECIFICATION -- IT PRODUCES ON-LINE ENDPOINTS AND
+              HALF OF THEM REFUSE, NOT BECAUSE THEY ARE ON-LINE** (`_notes/s112_nofire_probe.py`).
+              The beam holds twelve on-line endpoints at herd 69-74 (offsets -6.04..+9.63); **four
+              fire and eight do not**, and the split does not follow the offset -- node 7 (herd 70,
+              offset **-0.54**) fires 1568 of 4654 variants at the standing pair and 17220 at a 90 deg
+              arc, while node 32 at offset **-0.13**, 0.2 u away in along, fires **zero**. Positive
+              control: the converting endpoints (7, and node 0 at 2828/26801) fail only `dips`, never
+              `l_ok`. Among the refusers 36/32/33/40 fail every clause at once (**sole: none**) while
+              43/45/35 have **108 / 173 / 97 variants one clause from firing** and that clause is
+              `l_ok` -- the PREVIOUS roll's camera (s77). So the refusal is STATE-SPECIFIC, and the
+              on-line endpoint the cut does admit fails for the ordinary reason instead: node 7 sits
+              at lateral -48, 25 u below the cloud, and lands 18.9 u out at total 97.
             - **STRAIGHT AND SHORT ARE THE SAME KNOB** (`_notes/s112_offset_c3.py`, the s111 bed with
               the JOINT price added). At c3 node 0 the residual's lateral tracks the offset at the
               documented **-0.53 u/u** and the miss collapses 25.400 -> **2.016 u** from +17.49 to
@@ -1751,10 +1755,13 @@ from scratch. Land the edits first, then gate.
               exactly the two frames the plan does not have. The atom throws him OUT and the tail
               curves him back -- at the endpoint he was already ~32 u from the station, and
               `d_station` only returns under `FREE_REACH` at atom 8-12 (25.2 / 33.7 / 17.5 / 7.4).
-              Over the whole 105-cell (along, offset) surface at that posture the split holds: best
-              IN-BAND **95.00** at 0.083 u (offset +6.83), best FULLY-PAID **96.27** at 0.477 u
-              (offset +13.08, atom 7, d_station 26.9) -- i.e. **97** in whole herd frames, and the
-              best paid landing sits at the +13 end of the ARRIVAL's window, not the landing's -7.5.
+              Swept over the whole (along, offset) surface at three frame-minimal postures (105-170
+              cells each, herd priced) the split holds everywhere and the PAID FLOOR IS THE SAME
+              NUMBER: node 1 (herd **68**) in-band **94.00** @ 0.685 u / paid **97.00** @ 0.685 u;
+              node 4 in-band 95.00 @ 0.083 / paid 96.27 @ 0.477; node 0 in-band 96.00 @ 0.082 / paid
+              97.00 @ 0.089. Node 1's pair is the SAME CELL (offset -13.06, along 868.0) differing
+              only in the atom log, **5 against 8** -- three tail frames, and nothing else, is the
+              whole distance from the bar to the floor.
             - **`exit_arc`'s +-45 deg default cannot face the stations from a DEEP straight-push
               endpoint** (Link lat ~-27: the station bears ~90 deg off both centres, and a tail swept
               at 0x2000 runs `d_station` 59.8 -> 73.9 -> 88.2 -> 103.1, first under 34 only at atom 15;
