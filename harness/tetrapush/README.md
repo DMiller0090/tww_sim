@@ -1748,9 +1748,13 @@ from scratch. Land the edits first, then gate.
               6-frame atom lands 0.083 u from row 74 (cost 20) at TOTAL 95** -- the first time any
               measurement has put the landing on the bar. It is not deliverable: Link is **99.9 u**
               from that row's station at frame 6, and the two tail frames that bring him to 25.2 cost
-              exactly the two frames the plan does not have (fully-paid floor **97**). The atom throws
-              him OUT and the tail curves him back -- at the endpoint he was already ~32 u from the
-              station.
+              exactly the two frames the plan does not have. The atom throws him OUT and the tail
+              curves him back -- at the endpoint he was already ~32 u from the station, and
+              `d_station` only returns under `FREE_REACH` at atom 8-12 (25.2 / 33.7 / 17.5 / 7.4).
+              Over the whole 105-cell (along, offset) surface at that posture the split holds: best
+              IN-BAND **95.00** at 0.083 u (offset +6.83), best FULLY-PAID **96.27** at 0.477 u
+              (offset +13.08, atom 7, d_station 26.9) -- i.e. **97** in whole herd frames, and the
+              best paid landing sits at the +13 end of the ARRIVAL's window, not the landing's -7.5.
             - **`exit_arc`'s +-45 deg default cannot face the stations from a DEEP straight-push
               endpoint** (Link lat ~-27: the station bears ~90 deg off both centres, and a tail swept
               at 0x2000 runs `d_station` 59.8 -> 73.9 -> 88.2 -> 103.1, first under 34 only at atom 15;

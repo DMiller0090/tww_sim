@@ -119,6 +119,12 @@ herd leaves him but by where the ATOM does, and a fully-paid 95 needs an endpoin
 excursion happens to end near a station -- a placement question, ranked on `d_station` at atom <= 6,
 which no cut has ever ranked on.
 
+Swept over the whole (along, offset) surface at that posture -- 105 cells, herd priced -- the split
+holds and does not close: best IN-BAND **95.00** at 0.083 u (offset +6.83, `d_station` 99.9), best
+fully-paid **96.27** at 0.477 u (offset +13.08, atom 7, `d_station` 26.9). The 0.27 is the fractional
+herd charge for going 3.5 u past the ceiling, so in whole herd frames the paid floor is **97** and the
+best paid landing sits at the +13 end of the arrival's own window, not at the landing's -7.5.
+
 ## The on-line endpoints refuse, and the clause names whose problem it is
 
 The session-111 cut is not blind to the specification -- its cycle-3 beam contains on-line endpoints
@@ -132,10 +138,12 @@ at herd 69-74 (offsets -6.04, -5.13, -1.04, -0.13, +0.14, +0.97, +4.24, +4.50). 
 | 45 | 69 | -6.04 | 4040 | 0 / 0 | `l_ok` 672, `dips` 465, `separates` 34 | **`l_ok` 173** |
 | 32 | 70 | -0.13 | 3476 | 0 / 0 | `l_ok` 672, `dips` 672 | none |
 | 33 | 73 | +0.14 | 3325 | 0 / 0 | `l_ok` 672, `dips` 672 | none |
+| 35 | 73 | +0.97 | 3684 | 0 / 0 | `l_ok` 672, `dips` 575, `recedes_at_cap` 2 | **`l_ok` 97** |
+| 40 | 73 | +4.24 | 3404 | 0 / 0 | `l_ok` 672, `dips` 672 | none |
 
-Nodes 36/32/33 fail every clause at once and no knob buys them back. Nodes 43 and 45 have **108 and
-173 variants one clause from firing**, and that clause is `l_ok` -- a facing question the PREVIOUS
-roll's camera has authority over, not the escape's own shape
+Nodes 36/32/33/40 fail every clause at once and no knob buys them back. Nodes 43, 45 and 35 have
+**108, 173 and 97 variants one clause from firing**, and that clause is `l_ok` -- a facing question
+the PREVIOUS roll's camera has authority over, not the escape's own shape
 ([clip-camera-supply.md](clip-camera-supply.md) and `away_walk.snap_reach` are where that is
 answered), and it loosens as the offset goes more negative. So "the cut cannot produce on-line
 endpoints" was never the problem; the cut produces them and the camera refuses them.
