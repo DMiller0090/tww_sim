@@ -72,6 +72,14 @@ It required **Tetra's lateral +6.10 u from native** -- the coordinate no bed had
 endpoint in this work that pays both halves at once, and the along relocation is free because Tetra's
 882.44 sits inside the herd's own 69 x 12.8177 = 884.42 u of travel.
 
+**What "row 9" is, precisely**, since the whole total rests on it: the rows in
+``_generated/s106/targets.json`` are the session-104 placement HUNT's hits, screened by
+`herd_price.contact_at_arrival` and priced by session 105 -- not the original 288-coord
+`seeds.load_placements` set, from which row 9 is 59.15 u away. That is the target set this work has
+used since session 104 (which is where `plan_cost` 19-23 and the six cost-20 rows come from), and
+whether row 9 is specifically among the 6-of-56 that session independently re-verified live is NOT
+established here.
+
 ## The win is a DECOUPLING, and that is the part that generalises
 
 The endpoint sits at ``centre_feet`` **160.25**, twice `CO_RADII_BAR` -- so Tetra takes **no push at
@@ -111,10 +119,10 @@ the map. Two corrections, and they generalise to any solve over this atom:
 
 ## What is left is the SEPARATION, and it is a PRICE, not a wall
 
-The solved endpoints require Link to stand **105-176 u** up-line of Tetra, and the beam's own 64 nodes
-sit at **38.09..75.25 u** (mean 53.83; feet distance 57.0-75.5, `centre_feet` 46.7-71.1). So the
-specification is off the reachable set on that axis -- but by a measurable amount, and the amount
-decomposes:
+Every specification wants Link further up-line than the beam supplies. Over all **1160** specs at the
+29 of 64 nodes that hold a firing settled short atom, the required separation runs **92.5..156.8 u**,
+while the beam's own nodes sit at **38.09..75.25 u** (mean 53.83; feet distance 57.0-75.5,
+`centre_feet` 46.7-71.1) and **none reaches 100 u**. The requirement decomposes:
 
     required separation  =  (row along - station along)  +  throw along  -  push along
 
@@ -122,31 +130,31 @@ decomposes:
   row-station pairs it runs **72.29..164.58 u** (mean 115.37); the minimum belongs to row 0 at
   `plan_cost` 21, with row 9's cost-20 pair 0.8 u behind it at **73.09**. The stations sit at along
   804.70-818.69 and the rows at 879.92-979.86, so Link must END at least 72 u up-line of Tetra because
-  that is simply where the two target sets are. No cheaper pairing exists.
-* The second term is the atom's own overshoot, **+54.8..+108 u** across the beam.
-* The third gives back at most ~24 u.
+  that is simply where the two target sets are. No cheaper pairing exists, at either cost.
+* The second term is the atom's own overshoot, and it is **positive at every node**: over 66
+  (node, length) classes the throw's along runs **+55.01..+113.42 u** (lateral -44.52..+59.63).
+* The third gives it back, up to ~41 u at the deepest.
 
-Floor: about **110 u**, reached by pairing row 9's 73 u with the smallest throw the beam holds.
+**And the separation has a herd price, which no session had taken.** Session 112 priced the ALONG axis
+at `RATE_CAP` **12.8177 u/frame** ([herd-price-of-a-placement.md](herd-price-of-a-placement.md)); the
+separation's own rate is Link's endpoint speed, because a frame of backslide moves him up-line and
+grows the gap directly. Endpoint speedF spans **-25.727..+18.500** with every node in MOVE, so the cap
+is **25.727 u/frame** -- and a node at +18.5 is CLOSING, not opening, so the rate belongs to the node
+and not to the axis.
 
-**And the separation has a herd price, which no session had ever taken.** Session 112 priced the ALONG
-axis at `RATE_CAP` **12.8177 u/frame** ([herd-price-of-a-placement.md](herd-price-of-a-placement.md));
-the separation's own rate is Link's endpoint speed, because a frame of backslide moves him up-line and
-grows the gap directly. Measured over the beam, endpoint speedF spans **-25.727..+18.500** with every
-node in MOVE, so the cap is **25.727 u/frame** -- and a node at +18.5 is CLOSING, not opening, so the
-rate belongs to the node and not to the axis.
-
-That converts the last obstacle into an addend:
+That converts the last obstacle from a wall into an addend, and the addend is small:
 
 | | separation | gap from the beam's widest (75.25) | frames at 25.727 u/f | honest total |
 |---|---|---|---|---|
-| the arithmetic floor | ~110 u | ~35 u | **1.35** | ~**96.4** |
-| node 0's solved endpoint | 169.87 u | 94.6 u | **3.68** | ~**98.7** |
+| the cheapest SPEC (node 8, row 9, atom 6, total 96.00) | **92.5 u** | 17.3 u | **0.67** | ~**96.7** |
+| node 0's SOLVED endpoint (total 95.00) | 169.87 u | 94.6 u | **3.68** | ~**98.7** |
 
-Both beat the banked 101. Neither is a candidate: a relocation bed is self-consistent physics that no
-state-2 log reaches, and these frames are an UPPER bound charged at the fastest separating frame
-available -- a re-cut that searches for endpoints at 110-170 u separation may find them for less, since
-Tetra also coasts ~36 u on plow momentum after the last push (session 105) and the beam was cut on
-`junction_quality`, never on separation.
+The first row is arithmetic only -- a specification, not a solved and confirmed endpoint; the second is
+both. Both beat the banked 101. Neither is a candidate: a relocation bed is self-consistent physics
+that no state-2 log reaches, and the frames are an UPPER bound charged at the fastest separating frame
+available -- a re-cut may find such endpoints for less, since Tetra also coasts ~36 u on plow momentum
+after the last push (session 105) and the beam was ranked on `junction_quality`, never on separation.
+The closest any spec comes to the live 41-85 u band is **7.5 u**.
 
 ## The overshoot is not a knob: `turnaround_first` makes it worse
 
@@ -172,12 +180,14 @@ spans two orders of magnitude at the same log length:
 
 | node | atom | variants | extent (along x lat) |
 |------|------|----------|----------------------|
-| 13 | 4 | 24 | **0.05 x 0.36 u** |
+| 55 | 4 | 22 | **0.00 x 0.03 u** |
+| 13 | 4 | 24 | 0.05 x 0.36 u |
 | 8 | 6 | 8 | 0.75 x 0.19 u |
 | 0 | 4 | 36 | 0.84 x 1.77 u |
 | 0 | 6 | 48 | 15.98 x 11.52 u |
 | 6 | 5 | 202 | **14.87 x 47.77 u** |
 
-The throw is rigid ENOUGH to build a specification on wherever the extent is small, and the extent
-tracks how many variants survive `fires` -- so measure it at the endpoint being used
+Over all 66 (node, length) classes the extent spans **0.00..20.76 u along** and **0.03..51.62 u
+lateral**. The throw is rigid ENOUGH to build a specification on wherever the extent is small, and the
+extent tracks how many variants survive `fires` -- so measure it at the endpoint being used
 (`_notes/s114_throw_map.py`'s per-node table) instead of inheriting a number from another posture.

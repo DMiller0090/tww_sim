@@ -1742,28 +1742,38 @@ from scratch. Land the edits first, then gate.
               band, the arrival owes only `FREE_REACH`; grinding Link onto the station is a tighter
               problem than the objective poses, and it is the tight part that stalls). Accepts at
               iterate 2 what grinding refuses at 6.
-            - **WHAT IS LEFT IS THE SEPARATION, AND IT IS NOW PRICED.** The solved endpoints need Link
-              **105-176 u** up-line; all 64 beam nodes sit at **38.09..75.25 u** (mean 53.83) and
-              **none at >= 100 u** -- but a CUT observation, not a population law (the s107 lesson: the
-              beam was ranked on `junction_quality`, never on separation). The requirement decomposes
-              as ``(row along - station along) + throw along - push along``, where the first term is
-              **fixed by the target set at 72.29..164.58 u over all 268 priced row-station pairs**
-              (floor row 0 cost 21; row 9's cost-20 pair 0.8 u behind at 73.09) -- so **Link must end
-              >= 72 u up-line because that is simply where the two target sets are**. Floor ~110 u.
-              **NEW PRICE:** the separation's own rate is Link's endpoint speed, cap **25.727 u/frame**
-              (endpoint speedF spans -25.727..+18.500, every node in MOVE, so a +18.5 node is CLOSING
-              and the rate belongs to the node). Gap from the beam's widest: **1.35 frames** to the
-              arithmetic floor (honest total ~**96.4**), **3.68** to node 0's solved endpoint (~**98.7**).
-              Both still beat the banked 101.
+            - **WHAT IS LEFT IS THE SEPARATION, AND IT IS NOW PRICED (a fourth herd-price axis).**
+              Over all **1160** specs at the **29 of 64** nodes holding a firing settled short atom the
+              required separation runs **92.5..156.8 u**, while every beam node sits at
+              **38.09..75.25 u** (mean 53.83) and **none reaches 100** -- a CUT observation, not a
+              population law (the s107 lesson: the beam was ranked on `junction_quality`, never on
+              separation). It decomposes as ``(row along - station along) + throw along - push along``:
+              the first term is **fixed by the target set at 72.29..164.58 u over all 268 priced
+              row-station pairs** (floor row 0 cost 21; row 9's cost-20 pair 0.8 u behind at 73.09), so
+              **Link must end >= 72 u up-line because that is simply where the two target sets are**;
+              the second is **positive at every node** (+55.01..+113.42 u over 66 (node, length)
+              classes); the third gives back up to ~41 u.
+              **NEW PRICE:** the separation's rate is Link's endpoint speed, cap **25.727 u/frame**
+              (speedF spans -25.727..+18.500, every node in MOVE, so a +18.5 node is CLOSING and the
+              rate belongs to the node). Against the beam's widest: the cheapest SPEC (node 8, row 9,
+              atom 6, total 96.00) needs **92.5 u = 0.67 frames** -> ~**96.7**; node 0's SOLVED
+              endpoint needs 169.87 u = **3.68 frames** -> ~**98.7**. The closest any spec comes to the
+              live 41-85 u band is **7.5 u**. Both beat the banked 101.
             - **THE OVERSHOOT IS NOT A KNOB.** `turnaround_first` was the candidate for reversing the
               throw's along component and it ENLARGES it: node 0 **+54.82..+81.11 -> +74.43..+90.82**,
               node 13 +61.79..+92.76 -> +83.12..+99.68 (node 1's non-turnaround branch fires nothing --
               all 1059 fail `l_ok`). The conversion negates a ~25.7 u/f up-line backslide into
               down-line flight, so the displacement points AT Tetra by construction.
             - **AND THE POINT IS POSTURE-DEPENDENT.** s113's 1.1 x 1.1 u extent belongs to its two
-              relocated cells; at the nodes' own postures the same measurement spans **0.05 x 0.36 u
-              (node 13, atom 4, 24 variants)** to **14.87 x 47.77 u (node 6, atom 5, 202 variants)**,
-              tracking how many variants survive `fires`. Read it at the endpoint in hand.
+              relocated cells; at the nodes' own postures the extent spans **0.00 x 0.03 u (node 55,
+              atom 4, 22 variants)** to **14.87 x 47.77 u (node 6, atom 5, 202 variants)** -- 0.00..20.76
+              along and 0.03..51.62 lateral over all 66 classes -- tracking how many variants survive
+              `fires`. Read it at the endpoint in hand.
+            - **PROVENANCE, since the total rests on it:** `_generated/s106/targets.json`'s rows are the
+              **s104 placement HUNT's** hits, screened by `herd_price.contact_at_arrival` and priced by
+              s105 -- NOT the original 288-coord `seeds.load_placements` set, from which row 9 is 59.15 u
+              away. That has been the target set since s104 (where `plan_cost` 19-23 comes from);
+              whether row 9 is among the 6-of-56 that session re-verified live is NOT established.
       - [~] **BOTH HALVES ARE SOLVED AT A 5-FRAME ATOM AND NEVER AT THE SAME ENDPOINT: THE SHORT
             ATOM'S ARRIVAL SET IS A *POINT* UNTIL FRAME 8 (session 113).** New truth page
             [`knowledge/strategy/the-short-atom-is-a-point.md`](../../knowledge/strategy/the-short-atom-is-a-point.md).
