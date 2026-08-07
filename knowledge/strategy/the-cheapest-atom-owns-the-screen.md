@@ -73,6 +73,12 @@ DELIVERED went 106.45 -> 103.45 at tails 10-11.
 to.** Plumbing it in is necessary and insufficient - the plumbing was still right to do, because it is
 what lets the keep ask, but the screen needed a different QUESTION, not a bigger table.
 
+Priced through the keep at the same beam's 27 firing survivors, that is exactly what the arc pays:
+in-band nodes 2 -> **6**, joint nodes 1 -> **2**, best delivered **105.00 -> 104.00** - while the best
+`bound` stays 93.95 and moves at all in only 7 of 27 nodes, by at most 0.176
+([the-exit-bearing-buys-the-arrival](the-exit-bearing-buys-the-arrival.md) carries the table). The
+same axis, through the two measures, is worth a frame and nothing.
+
 ## The rule
 
 Before widening a table a cut reads, check which rows of it the cut's reduction can actually select.

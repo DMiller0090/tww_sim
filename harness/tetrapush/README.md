@@ -1770,11 +1770,25 @@ from scratch. Land the edits first, then gate.
               so once an incumbent beats that its whole row loop is skipped. Identical record,
               order-independent, **~10 s -> 26 ms an aim (~380x)**, so the cut can afford the full
               75627 at full resolution.
-            - **WHAT IS STILL RUNNING**: the ``arc`` lane of the same re-cut (the arc in BOTH halves,
-              cap 96). Its screen is provably identical to the ``pair`` lane's (0 of 64 rank changes
-              above), so it must reproduce the same 165 survivors and the same 64-node beam; what it
-              measures is what the arc adds to those survivors' ``in_band``/``joint`` records, on THIS
-              beam rather than on s118's 14 camera states. ~13x the pair per survivor in the keep.
+            - **AND WHAT THE ARC IS WORTH THROUGH THE OTHER MEASURE: ONE FRAME**
+              (`_notes/s119_arc_at_beam.py`, the keep run at the beam's own **27 firing survivors**,
+              both lanes in one call, 1420 s at 5 procs; dump `s119_arc_at_beam.json`). Legitimate at
+              the banked beam precisely because the screen was measured not to move under the arc, so
+              the survivor set is the same either way.
+
+              | at the 27 firing survivors | standing pair | the arc |
+              |---|---|---|
+              | nodes holding an `in_band` record | 2 | **6** (nodes 3, 4, 6, 8 gained one) |
+              | nodes holding a `joint` record | 1 | **2** |
+              | best DELIVERED (settled) | 105.00 (node 13, tail 3) | **104.00** (node 13, tail 2) |
+              | best ``bound`` | 93.95 | 93.95 (moved at 7 of 27, by <= 0.176) |
+
+              The winner owes nothing on either half -- and its station gap is **33.4 u against a
+              `FREE_REACH` of 34.0**, so it clears the arrival predicate by 0.6 u and still owes
+              `entry_reach.hull_scan` at its own arrival. **The banked 101 STANDS**, now by 3 frames.
+            - **STILL RUNNING**: the in-process ``arc`` lane of the re-cut (cap 96, ~13x the pair per
+              survivor). It is a cross-check, not the measurement: it must reproduce the same 165
+              survivors and the same 64-node beam, and the arc records above.
             - **Gates**: `tests/test_cloud_land.py` +7 (the arc reaches the keep and defaults to the
               pair; the arc is resolved per endpoint; the fan carries it into the screen; a throw-less
               fan is refused; the prune is an identity both ways; its floor comes from the rows the

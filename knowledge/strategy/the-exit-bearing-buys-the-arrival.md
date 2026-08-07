@@ -109,6 +109,27 @@ floor (93.95 / 93.87), so an in-band landing at either would deliver ~94. Swept 
 So the arc does not cross the exchange. The banked **101 stands**, and the remaining 2.45 frames are
 not in the atom.
 
+## Priced again at a whole beam's survivors, it is worth one frame
+
+Session 119 plumbed the arc into the enumeration and ran it at the 27 firing survivors of the cycle-3
+beam itself - not at the 14 camera states above, and with the standing pair re-priced in the same call
+(`_notes/s119_arc_at_beam.py`, 1420 s at 5 processes):
+
+| at the beam's own 27 firing survivors | standing pair | the arc |
+|---|---|---|
+| nodes holding an `in_band` record | 2 | **6** (nodes 3, 4, 6, 8 gained one) |
+| nodes holding a `joint` record | 1 | **2** |
+| best DELIVERED (settled) | 105.00 (node 13, tail 3) | **104.00** (node 13, tail 2) |
+| best `bound` | 93.95 | 93.95 (moved at 7 of 27, by <= 0.176) |
+
+One frame, in the same place session 118 found three: the `joint`/delivered field, never the bound.
+The winner owes nothing on either half - and its station gap is **33.4 u against a `FREE_REACH` of
+34.0**, so it satisfies the arrival predicate by 0.6 u and still owes `hull_scan` at its own arrival
+like every other candidate here. **The banked 101 stands**, now by 3 frames.
+
+And the reason the arc cannot do more than this from inside a cut is structural, not a resolution
+problem: [the-cheapest-atom-owns-the-screen](the-cheapest-atom-owns-the-screen.md).
+
 ## The rule
 
 **An enumeration's default grid is a modelling assumption about every axis it does not sweep**, and
