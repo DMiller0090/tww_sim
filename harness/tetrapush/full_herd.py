@@ -1262,7 +1262,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  probe_contact=False, probe_half=None, escape_flip=None, escape_rots=None,
                  escape_rank=None, tcs_escape=False, cloud_keep=False, cloud_flip=None,
                  cloud_rots=None, cloud_cap=None, cloud_fan=None, cloud_stations=None,
-                 cloud_exit_runs=None, verbose=False):
+                 cloud_exit_runs=None, cloud_exit_step=None, cloud_exit_half=None, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1400,7 +1400,22 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     session-111 cycle-3 beam the two halves are anti-correlated (node 0: landing 25.4 u out, arrival
     already free; node 3: landing 4.7 u, stations 136.8 u away), so a landing-only screen selects the
     endpoints whose arrival cannot be paid. It costs the screen one ``min()`` per (fan member, row) and
-    needs a fan carrying the THROW (`cloud_land.residual_fan` with ``exit_runs``).
+    needs a fan carrying the THROW (`cloud_land.residual_fan` with ``exit_runs``) -- which is now a
+    REFUSAL rather than a default (session 119: the fan the s115-s117 cuts were handed carried it on
+    0 of 178 members, so their screens priced Link's arrival at the roll terminal).
+
+    ``cloud_exit_step`` / ``cloud_exit_half`` (session 119) are the last unplumbed axis, and they are
+    the KEEP's half of it: `cloud_land.exit_arc` was built in session 110 and no enumeration could ask
+    for it, since only `cloud_land.atom_cloud` took bearings. Session 118 swept it by hand at 14
+    already-chosen endpoints for ~3 frames (delivered 106.45 -> 103.45, the beam's first ``joint``
+    records), which is a measurement about ENDPOINTS THAT ALREADY EXISTED; this is what lets the cut
+    that decides they exist see the same axis. The SCREEN's half arrives through ``cloud_fan`` instead
+    (`cloud_land.residual_fan` with the same ``exit_step``), because a bearing list is meaningless
+    beam-wide -- the arc's centres are measured from each endpoint's own position (`cloud_land._arc`).
+    Default None = the standing pair, so a beam cut without them is byte-for-byte the s118 one; at
+    `cloud_land.ARC_STEP` the enumeration is ~13x the pair per endpoint (measured 9.2 s -> 127.9 s at
+    ``max_frames=18``), so a run that turns it on should size ``cloud_cap`` to match and say what it
+    skipped.
 
     ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) pass the escape atom's two
     unswept knobs and its frames rank through ``escape_keep`` (`escape_probe`, `away_walk.probe`):
@@ -1534,7 +1549,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                                         flip_step=(CL.FLIP_STEP if cloud_flip is None
                                                    else cloud_flip),
                                         rotate_offs=cloud_rots, stations=cloud_stations,
-                                        exit_runs=(cloud_exit_runs or (0,)))
+                                        exit_runs=(cloud_exit_runs or (0,)),
+                                        exit_step=cloud_exit_step, exit_half=cloud_exit_half)
         # an unprobed survivor is UNMEASURED, not refused: infinite bound, and a None miss so the
         # share below cannot invent a landing for it
         for n in out:

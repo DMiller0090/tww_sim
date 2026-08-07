@@ -1710,6 +1710,76 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE ARC IS PLUMBED INTO THE CUT, AND THE CUT STRUCTURALLY CANNOT SEE IT: THE SCREEN'S
+            MINIMUM IS PINNED TO THE CHEAPEST ATOM AT 64 OF 64 ENDPOINTS (session 119).** Two new truth
+            pages,
+            [`knowledge/strategy/the-fan-outlived-its-columns.md`](../../knowledge/strategy/the-fan-outlived-its-columns.md)
+            (the plumbing + the missing column) and
+            [`knowledge/strategy/the-cheapest-atom-owns-the-screen.md`](../../knowledge/strategy/the-cheapest-atom-owns-the-screen.md)
+            (the wall both fixes hit) + hub x2. Library change in `cloud_land` + `full_herd`, all
+            additive except one refusal.
+            - **THE ANSWER TO s118's QUESTION, AND IT IS A NEGATIVE WITH A PROOF**
+              (`_notes/s119_screen_delta.py`, all 64 nodes of the s111 c3 beam, 3 lanes in one call;
+              dump `s119_screen_delta.json`). ``zero`` reproduces the s115-s118 behaviour rather than
+              remembering it. **pair -> arc: the predicted bound moves +0.000 at 64 of 64**, 0 rank
+              changes, the identical member chosen -- from a table 10x larger that strictly CONTAINS
+              the smaller one. Because `predict_bound` charges ``n_atom`` 1:1 in frames: **the minimum
+              sits on an `n_atom` = 3 member at 64/64 in all three lanes**, the fan spans 3..24, and
+              only **3** of its 75627 members are at 3. The two fans have IDENTICAL counts at n_atom
+              3/4/5 (3/50/166) and diverge only from 6 up -- the exit stick is held at the END of the
+              atom, so below that the bearing has not happened yet
+              (`the-short-atom-is-a-point.md` measured the same boundary from the other side).
+              **A knob that pays late is invisible to a measure that minimises a quantity it adds
+              frames to**; the arc's frames live in the keep's ``joint``/delivered fields, never in
+              ``bound``, which is exactly the shape of s118's numbers (bound 93.95 unchanged,
+              delivered 106.45 -> 103.45 at tails 10-11).
+            - **AND THE THROW FIX IS REAL BUT DOES NOT REACH THE OUTPUT**: bound **-0.480 .. +2.814**
+              (mean +1.449), **53 of 64** endpoints change rank, **21 of 64** change the row the
+              predictor quotes -- and the re-cut (`_notes/s119_recut_c3.py pair`, 3936 s) comes out
+              **byte-identical to `s117_c3_landing.json` on all 64 nodes, every field, atom knobs
+              included**. The predictor is one of four `_mixed_beam` orders and its share picked the
+              same six endpoints. Report the delta at the SCORER, not only at the output, or a real
+              correction reads as a no-op.
+            - **THE PLUMBING, WHICH IS WHY SESSION 110's ARC HAD NEVER RUN IN AN ENUMERATION.** Only
+              `atom_cloud` took ``exit_bearings``; `cloud_landing`, `cloud_probe` and `extend_cycle`
+              above it had no parameter to pass, so eight sessions of results are the standing PAIR's
+              and not a verdict on the arc. Now ``exit_step``/``exit_half`` on `cloud_landing` and
+              `residual_fan`, ``cloud_exit_step``/``cloud_exit_half`` on `extend_cycle`, default None
+              = the pair so every banked number is unchanged. It is an arc SPEC and not a bearing
+              list because `exit_arc`'s centres are measured from each endpoint's OWN position
+              (`cloud_land._arc`) -- one list hoisted to a beam sweeps a different axis at every
+              endpoint and contains none of their controls.
+            - **AND THE LARGER FIND UNDER IT: THE JOINT SCREEN HAS BEEN PRICING LINK'S ARRIVAL AT HIS
+              ROLL TERMINAL SINCE SESSION 115.** `predict_bound` read the throw as
+              ``m.get('throw_along', 0.0)``, and the fan every joint cut was handed --
+              `_generated/s106/s107_fan.json`, measured in s107, BEFORE `residual_fan` carried the
+              throw -- has the column on **0 of its 178 members**. s118 measured what that costs
+              without knowing it applied: terminal gap **67.6-106.7 u** against the same candidates'
+              post-atom **159.5-176.3**, so the atom roughly DOUBLES the half the screen could not
+              see. Now a **refusal** (unmeasured is not free, the module's oldest rule, applied to
+              the fan). Re-running `_notes/s11{0,1,7}_*recut*` verbatim raises, by design.
+            - **THE FAN, RE-MEASURED** (`_notes/s119_fan.py`, 6 firing endpoints of the s111 c3 beam,
+              both lanes in one call, 257 s at 6 procs; dump `_generated/s106/s119_fan.json`):
+              178 -> **7668** at the standing pair with the throw and tails 0-6 -> **75627** along the
+              arc. An honest fan is ~425x the table the screen was reading, which at 116 rows is
+              ~10 s an aim where the screen must cost milliseconds.
+            - **AND THE PREDICTOR PRUNES ITSELF ONTO IT, EXACTLY** (`_notes/s119_fan_cut.py` priced the
+              alternatives first): frame-dominance is exact and removes **2%**; an 8 u throw quantum
+              costs 0.47 frames of resolution and buys 2.7x. What works is `predict_bound`'s own
+              arithmetic -- a member's best conceivable bound is ``frames + n_atom + min(plan_cost)``,
+              so once an incumbent beats that its whole row loop is skipped. Identical record,
+              order-independent, **~10 s -> 26 ms an aim (~380x)**, so the cut can afford the full
+              75627 at full resolution.
+            - **WHAT IS STILL RUNNING**: the ``arc`` lane of the same re-cut (the arc in BOTH halves,
+              cap 96). Its screen is provably identical to the ``pair`` lane's (0 of 64 rank changes
+              above), so it must reproduce the same 165 survivors and the same 64-node beam; what it
+              measures is what the arc adds to those survivors' ``in_band``/``joint`` records, on THIS
+              beam rather than on s118's 14 camera states. ~13x the pair per survivor in the keep.
+            - **Gates**: `tests/test_cloud_land.py` +7 (the arc reaches the keep and defaults to the
+              pair; the arc is resolved per endpoint; the fan carries it into the screen; a throw-less
+              fan is refused; the prune is an identity both ways; its floor comes from the rows the
+              branch may quote; `extend_cycle`'s passthrough). **121 passed, 6 deselected (11:15)**
+              against s118's 114. Log `_notes/s119_gates.log`.
       - [~] **THE ~165 u ARRIVAL IS A BEARING, NOT ONLY A GEOMETRY: THE EXIT ARC TAKES THE DELIVERED
             FIGURE 106.62 -> 103.45 AND GIVES THE BEAM ITS FIRST `joint` RECORDS (session 118).**
             New truth page

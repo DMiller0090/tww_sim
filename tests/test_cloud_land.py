@@ -601,3 +601,161 @@ def test_a_longer_tail_can_move_the_arrival_FURTHER_from_the_station(arrival, hl
     assert worse, "no tail anywhere moved an arrival further from the station -- re-read the trace"
     assert any(min(v, key=lambda t: v[t]) != max(v) for v in curves), \
         "the cheapest tail is always the longest one, so the gap would be monotone after all"
+
+
+# ------------------------------------------------- the arc reaches the CUT (session 119)
+
+def test_the_keep_can_ASK_for_the_arc_and_still_defaults_to_the_standing_pair(arrival, hl):
+    """The plumbing session 118 said was missing: `cloud_landing` -- and so `cloud_probe` and
+    `full_herd.extend_cycle` above it -- could not pass an exit bearing at all, which is why the arc
+    built in session 110 had never entered an enumeration that decides anything.
+
+    Two identities, no tolerance: with ``exit_step`` the keep enumerates EXACTLY the grid an explicit
+    `atom_cloud` at the same arc does, and without it EXACTLY the standing-pair grid it always did
+    (so every banked number survives the change)."""
+    kw = dict(flip_step=AW.FLIP_SPAN, rotate_offs=AW.ROTATE_OFFS[1:2], exit_runs=(0, 2))
+    run, rows = arrival['run'], _rows()
+    pair = CL.cloud_landing(run, 70, hl, rows, **kw)
+    assert pair['n_variants'] == len(CL.atom_cloud(run, hl, **kw))
+    arc = CL.cloud_landing(run, 70, hl, rows, exit_step=0x1000, exit_half=0x2000, **kw)
+    assert arc['n_variants'] == len(CL.atom_cloud(
+        run, hl, exit_bearings=CL.exit_arc(run, hl, step=0x1000, half=0x2000), **kw))
+    assert arc['n_variants'] > pair['n_variants'], "the arc must widen the grid it is handed to"
+    # ...and an explicit zero step is the pair verbatim, so the control is expressible as a member
+    assert CL.cloud_landing(run, 70, hl, rows, exit_step=0, **kw)['n_variants'] == pair['n_variants']
+
+
+def test_the_arc_is_resolved_PER_ENDPOINT_so_a_bearing_LIST_could_not_be_plumbed(hl):
+    """Why the plumbed knob is a ``(step, half)`` SPEC and not the bearing list `atom_cloud` takes.
+
+    `exit_arc`'s centres are the live entry bearing -- measured from Link's OWN position -- and the
+    herd up-bearing, so one list hoisted to a beam sweeps a different axis at every endpoint and does
+    not contain either one's own control. Pinned on two positions far enough apart to name different
+    directions: the sets differ, and each still contains its own pair."""
+    near, far = _fake_run(x=0.0, z=0.0), _fake_run(x=600.0, z=600.0)
+    a_near = set(CL._arc(near, hl, 0x1000, 0x2000))
+    a_far = set(CL._arc(far, hl, 0x1000, 0x2000))
+    assert a_near != a_far, "the arc does not depend on the endpoint -- re-read `exit_arc`"
+    assert set(CL.exit_arc(near, hl, step=0)) <= a_near
+    assert set(CL.exit_arc(far, hl, step=0)) <= a_far
+    assert CL._arc(near, hl, None, None) is None, "no step asked for is the pair, not an empty sweep"
+
+
+def test_the_fan_carries_the_arc_so_the_SCREEN_sees_the_axis_the_keep_does(arrival, hl):
+    """The screen's half of the same fix. `full_herd.roll_probe` never enumerates -- it prices
+    `predict_bound` over a measured fan -- so the arc reaches the cut that decides which endpoints
+    EXIST only if the fan was measured along it. A fan built at the standing pair prices every
+    arrival as though the plan could leave along one of two directions.
+
+    The fixture arrival fires nothing (`away_walk.fires` is a property of a real terminal's depth), so
+    the acceptance is stubbed and the claim is read off the enumerated rollouts -- the same shape the
+    session-118 gates use."""
+    kw = dict(flip_step=AW.FLIP_SPAN, rotate_offs=AW.ROTATE_OFFS[1:2], exit_runs=(0, 2))
+    real_fires = AW.fires
+    try:
+        AW.fires = lambda r: True
+        pair = CL.residual_fan([arrival], hl, **kw)
+        arc = CL.residual_fan([arrival], hl, exit_step=0x1000, exit_half=0x2000, **kw)
+    finally:
+        AW.fires = real_fires
+    assert pair and arc, "both lanes must measure something or nothing is compared"
+    assert all('throw_along' in m and 'throw_lat' in m for m in arc)
+    throws = {(round(m['throw_along'], 6), round(m['throw_lat'], 6)) for m in arc}
+    assert throws > {(round(m['throw_along'], 6), round(m['throw_lat'], 6)) for m in pair}, \
+        "the arc adds no throw the pair did not already have, so the screen would see the same axis"
+
+
+def test_a_fan_with_NO_THROW_is_refused_by_the_arrival_branch_and_scored_by_the_landing_one():
+    """**The silent zero the joint screen actually ran on** (session 119).
+
+    `predict_bound` read ``m.get('throw_along', 0.0)``, and the fan every joint cut since session 115
+    was handed (``s107_fan.json``, measured in session 107 before the throw existed) carries the column
+    on 0 of its 178 members -- so the screen placed Link's arrival at the roll TERMINAL. That is not a
+    conservative default: session 118 measured the terminal gap at 67.6-106.7 u against the same
+    candidates' post-atom 159.5-176.3, so the atom roughly doubles what was being priced.
+
+    Unmeasured is not free is the module's oldest rule (`station_map`, `arrival_frames`); this puts the
+    fan under it. The landing-only branch has no arrival to be wrong about and must still score."""
+    rows = [dict(idx=7, along=900.0, lat=0.0, plan_cost=20)]
+    throwless = [dict(along=10.0, lat=0.0, n_atom=3)]
+    assert CL.predict_bound(880.0, 0.0, 75, throwless, rows)['miss'] == 10.0
+    with pytest.raises(ValueError):
+        CL.predict_bound(880.0, 0.0, 75, throwless, rows, link=(700.0, 0.0),
+                         stations={7: [(900.0, 0.0)]})
+    # one member missing it is enough -- a partly-measured fan is not a measured one
+    half = [dict(along=10.0, lat=0.0, n_atom=3, throw_along=50.0, throw_lat=0.0),
+            dict(along=10.0, lat=0.0, n_atom=4)]
+    with pytest.raises(ValueError):
+        CL.predict_bound(880.0, 0.0, 75, half, rows, link=(700.0, 0.0),
+                         stations={7: [(900.0, 0.0)]})
+    assert CL.predict_bound(880.0, 0.0, 75, half[:1], rows, link=(700.0, 0.0),
+                            stations={7: [(900.0, 0.0)]})['d_station'] == 150.0
+
+
+def test_the_predictor_PRUNES_by_its_own_arithmetic_without_changing_its_answer():
+    """The prune that makes a real fan affordable (session 119), and the two ways it could be wrong.
+
+    A member costs ``n_atom`` frames whatever it lands and both remaining terms are >= 0, so its best
+    conceivable bound is ``frames + n_atom + min(plan_cost)``; once an incumbent beats that, its row
+    loop is skipped. Necessary because the fan is no longer session 107's 178 members -- with the
+    throw, the tail and the arc it is 75627, and the unpruned pass costs ~10 s per aim.
+
+    Gated as an IDENTITY, not a speedup. It must (a) skip a member that cannot win even landing
+    perfectly, and (b) still find a winner that is expensive in frames when nothing cheap comes close
+    -- an over-eager prune passes the first and fails the second."""
+    rows = [dict(idx=0, along=900.0, lat=0.0, plan_cost=20)]
+    st = {0: [(900.0, 0.0)]}
+    # (a) the cheap member misses by 1 u; the dear one lands EXACTLY, and still may not win
+    fan = [dict(along=19.0, lat=0.0, n_atom=3, throw_along=100.0, throw_lat=0.0),
+           dict(along=20.0, lat=0.0, n_atom=9, throw_along=100.0, throw_lat=0.0)]
+    got = CL.predict_bound(880.0, 0.0, 70, fan, rows, link=(800.0, 0.0), stations=st)
+    assert got['n_atom'] == 3 and got['miss'] == 1.0
+    assert got['bound'] == 70 + 3 + 20 + O.remaining_frames(1.0)
+    # (b) same pair, but now the cheap member is hopeless -- the dear one must still be found
+    fan[0] = dict(along=-200.0, lat=0.0, n_atom=3, throw_along=100.0, throw_lat=0.0)
+    got = CL.predict_bound(880.0, 0.0, 70, fan, rows, link=(800.0, 0.0), stations=st)
+    assert got['n_atom'] == 9 and got['miss'] == 0.0 and got['bound'] == 99.0
+    # and the answer cannot depend on the order the fan is scanned in, which an exact prune guarantees
+    assert CL.predict_bound(880.0, 0.0, 70, fan[::-1], rows, link=(800.0, 0.0),
+                            stations=st)['bound'] == got['bound']
+
+
+def test_the_prune_takes_its_FLOOR_from_the_rows_it_may_actually_quote():
+    """The floor is ``min(plan_cost)`` over the rows in play, and in the joint branch an UNMEASURED row
+    is skipped -- so it may not lower the floor either.
+
+    A floor that is too LOW only prunes less, so it cannot be wrong about an answer; the failure that
+    would bite is a floor that quotes a row the branch never scores. Gated as the identity that means
+    exactly that: with a cheap unstationed row present, the joint answer must equal the answer with
+    that row deleted outright -- the ineligible row may change neither the winner nor the pruning."""
+    dear = dict(idx=1, along=900.0, lat=0.0, plan_cost=25)
+    rows = [dict(idx=0, along=880.0, lat=0.0, plan_cost=10), dear]     # idx 0 cheap and UNMEASURED
+    fan = [dict(along=-200.0, lat=0.0, n_atom=2, throw_along=0.0, throw_lat=0.0),
+           dict(along=20.0, lat=0.0, n_atom=8, throw_along=0.0, throw_lat=0.0)]
+    st = {1: [(880.0, 0.0)]}
+    got = CL.predict_bound(880.0, 0.0, 70, fan, rows, link=(880.0, 0.0), stations=st)
+    alone = CL.predict_bound(880.0, 0.0, 70, fan, [dear], link=(880.0, 0.0), stations=st)
+    assert got == alone, "an ineligible row moved the joint answer"
+    assert got['row_idx'] == 1 and got['n_atom'] == 8 and got['miss'] == 0.0
+    assert got['bound'] == 70 + 8 + 25 and got['arr_frames'] == 0.0   # the dear member still wins
+    # the landing-only branch may quote the cheap row, so it is scored there and only there
+    assert CL.predict_bound(880.0, 0.0, 70, fan, rows)['row_idx'] == 0
+    # ...and no eligible row at all is None, never a bound off an empty minimum
+    assert CL.predict_bound(880.0, 0.0, 70, fan, rows, link=(0.0, 0.0), stations={9: [(0.0, 0.0)]}) \
+        is None
+
+
+def test_extend_cycle_hands_the_arc_to_the_keep_and_is_unchanged_without_it():
+    """Additive at the top of the chain too: the axes exist, default to the standing pair, and the
+    keep passes them on. Without them a cut is byte-for-byte the session-118 one."""
+    import inspect
+    sig = inspect.signature(FH.extend_cycle)
+    for k in ('cloud_exit_step', 'cloud_exit_half'):
+        assert k in sig.parameters and sig.parameters[k].default is None
+    src = inspect.getsource(FH.extend_cycle)
+    assert 'exit_step=cloud_exit_step' in src and 'exit_half=cloud_exit_half' in src
+    for fn in (CL.cloud_landing, CL.residual_fan):
+        p = inspect.signature(fn).parameters
+        assert p['exit_step'].default is None and p['exit_half'].default is None
+    # the SCREEN's arc arrives through the fan, never through a bearing argument of its own
+    assert 'exit_step' not in inspect.signature(FH.roll_probe).parameters

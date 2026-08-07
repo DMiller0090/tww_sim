@@ -40,6 +40,18 @@ the station gap beside the landing miss, in the same frame currency: `arrival_fr
 past what the row's own walk budget already reaches, at the walk cap. It is payable because the atom
 now has a TAIL (`away_walk.escape_atom`'s ``exit_run``): past ``freeze_f`` Tetra takes no more push,
 so exit-hold frames move the arrival and nothing else, at the same price as an entry-walk frame.
+
+**And for eight sessions the arrival half was priced with two of its three axes missing** (session
+119). The tail has a BEARING (`exit_arc`, built session 110) and a tail runs along it at the cap, so
+the bearing decides where the arrival lands; but no caller above `atom_cloud` could pass one, so
+`cloud_landing` / `cloud_probe` / `full_herd.extend_cycle` all enumerated the standing pair and every
+cut since chose endpoints on that basis -- until session 118 swept the axis by hand at 14 endpoints an
+earlier rank had already fixed and measured 3 frames in it. Worse, `predict_bound`'s ``throw`` was a
+``.get(..., 0.0)``, and the fan the joint SCREEN was actually handed (``s107_fan.json``, measured
+before the throw existed) carries it on 0 of 178 members -- so the screen placed Link's arrival at the
+roll TERMINAL, which session 118 measured to be about HALF the real gap. Both are now plumbed and the
+second is a refusal: the arc is an ``exit_step``/``exit_half`` spec resolved per endpoint (`_arc`),
+and a throw-less fan cannot price an arrival at all.
 """
 # >>> repo bootstrap
 import os
@@ -66,6 +78,11 @@ ROTATE_OFFS = AW.ROTATE_OFFS
 #: The atom tail lengths a joint keep enumerates (`away_walk.escape_atom`'s ``exit_run``) -- priced off
 #: ONE rollout each (`away_walk.tail_variant`), and capped anyway by the 230 u follow bar.
 EXIT_RUNS = (0, 1, 2, 3, 4, 5, 6)
+
+#: The exit arc session 118 priced, as `exit_arc`'s ``(step, half)`` -- 26 bearings, ~13x the standing
+#: pair per endpoint. `exit_arc`'s own defaults stay where session 110 put them; see `_arc`.
+ARC_STEP = 0x800
+ARC_HALF = 0x3000
 
 #: The hunts whose LIVE stations priced the rows (session 104) -- the only places a plan can fire the
 #: clip from. Gitignored like `entry_fan.FAN_CACHE`: a missing dump leaves the term UNAVAILABLE, not free.
@@ -180,6 +197,20 @@ def exit_arc(run0, hl, *, step=0x800, half=0x2000):
     return sorted(out)
 
 
+def _arc(run0, hl, step, half):
+    """The bearings a caller's ``exit_step``/``exit_half`` ask for, or None -- the standing pair
+    `atom_cloud` defaults to.
+
+    Resolved PER ENDPOINT, which is why the plumbed knob is an arc SPEC and not the bearing list
+    `atom_cloud` takes: `exit_arc`'s centres are the live entry bearing -- measured from Link's own
+    position -- and the herd up-bearing, so the same s16 numbers name different directions relative to
+    two endpoints, and one list hoisted to a beam would sweep a different axis at each of them (and
+    would not contain either one's own control)."""
+    if step is None:
+        return None
+    return exit_arc(run0, hl, step=int(step), half=(ARC_HALF if half is None else int(half)))
+
+
 def atom_cloud(run0, hl, *, flip_step=FLIP_STEP, rotate_offs=None, max_frames=18, csangle='live',
                exit_runs=(0,), exit_bearings=None):
     """Every atom variant `away_walk.probe` sweeps, with the RANK REMOVED -- the full knob grid as a
@@ -290,7 +321,8 @@ def _joint_row(tx, tz, link_end, rows, stations):
 
 
 def cloud_landing(run0, frames, hl, rows, *, band=None, flip_step=FLIP_STEP, rotate_offs=None,
-                  max_frames=18, csangle='live', front=True, stations=None, exit_runs=(0,)):
+                  max_frames=18, csangle='live', front=True, stations=None, exit_runs=(0,),
+                  exit_step=None, exit_half=None):
     """**Enumerate the atom grid at one herd endpoint and price every firing variant as a WHOLE
     candidate.** The last-cycle keep's measure; `full_herd.escape_probe`'s replacement on a cloud
     target set.
@@ -323,10 +355,18 @@ def cloud_landing(run0, frames, hl, rows, *, band=None, flip_step=FLIP_STEP, rot
         is the field that means "nothing is owed" (still owing `entry_reach.hull_scan` at the
         arrival, which is the claim -- see `arrival_frames`).
     ``exit_runs`` hands the tail axis through to `atom_cloud`, which is what makes a station gap
-    payable at all."""
+    payable at all, and ``exit_step``/``exit_half`` hand through the arc it runs ALONG (`_arc`, added
+    session 119). The second is the axis this keep owned and never turned: session 110 built `exit_arc`
+    and no enumeration could reach it, because only `atom_cloud` took bearings and every caller above
+    it -- this function, `cloud_probe`, `full_herd.extend_cycle` -- passed none. Session 118 swept it
+    by hand at 14 already-chosen endpoints and measured the in-band station gap 160 u -> 9.9 u and the
+    delivered figure 106.45 -> 103.45, so the axis is worth ~3 frames at fixed endpoints and had never
+    entered a cut. Default None = the standing pair, so every banked number is unchanged; `ARC_STEP` /
+    `ARC_HALF` is what session 118 priced, and it costs ~13x the pair per endpoint."""
     bd = O.PLACEMENT_BAND if band is None else float(band)
     variants = atom_cloud(run0, hl, flip_step=flip_step, rotate_offs=rotate_offs,
-                          max_frames=max_frames, csangle=csangle, exit_runs=exit_runs)
+                          max_frames=max_frames, csangle=csangle, exit_runs=exit_runs,
+                          exit_bearings=_arc(run0, hl, exit_step, exit_half))
     firing = [r for r in variants if AW.fires(r)]
     base = dict(n_variants=len(variants), n_firing=len(firing))
     if not firing:
@@ -371,7 +411,7 @@ def cloud_landing(run0, frames, hl, rows, *, band=None, flip_step=FLIP_STEP, rot
 
 
 def residual_fan(endpoints, hl, *, flip_step=FLIP_STEP, rotate_offs=None, max_frames=18,
-                 quantum=1.0, exit_runs=(0,)):
+                 quantum=1.0, exit_runs=(0,), exit_step=None, exit_half=None):
     """**The atom's residual as the SET it is, measured once** -- the cheap predictor's table.
 
     Session 106's decisive measurement is that the escape's residual is not a point but a 2D FAN: over
@@ -402,14 +442,22 @@ def residual_fan(endpoints, hl, *, flip_step=FLIP_STEP, rotate_offs=None, max_fr
 
     ``exit_runs`` crosses the fan with the atom's tail, whose whole effect is on the throw (past
     ``freeze_f`` Tetra takes no more push, so a tail moves Link and not her). Default ``(0,)`` keeps
-    the fan a landing table verbatim; a caller pricing arrivals should pass `EXIT_RUNS`."""
+    the fan a landing table verbatim; a caller pricing arrivals should pass `EXIT_RUNS`.
+
+    ``exit_step``/``exit_half`` (session 119) cross it with the tail's BEARING (`_arc`), and for the
+    arrival half that is the axis with the authority: a tail runs at the cap along the bearing it
+    holds, so the throw a member carries is mostly a statement about which direction the exit stick
+    was pointing. Without it the fan holds two directions and `predict_bound` prices every arrival as
+    if the plan could only leave along one of them -- which is how a cut whose keep can reach the arc
+    (`cloud_landing`) still chooses endpoints as though it could not."""
     seen, out = set(), []
     for ep in endpoints:
         run0 = ep['run'] if isinstance(ep, dict) else ep
         la0 = hl.along(run0.link.pos_x, run0.link.pos_z)
         ll0 = hl.lateral(run0.link.pos_x, run0.link.pos_z)
         for r in atom_cloud(run0, hl, flip_step=flip_step, rotate_offs=rotate_offs,
-                            max_frames=max_frames, exit_runs=exit_runs):
+                            max_frames=max_frames, exit_runs=exit_runs,
+                            exit_bearings=_arc(run0, hl, exit_step, exit_half)):
             if not AW.fires(r):
                 continue
             n_atom = len(r['log'])
@@ -468,9 +516,17 @@ def predict_bound(t_along, t_lat, frames, fan, rows, *, link=None, stations=None
     Same currency as `cloud_landing`'s ``bound`` -- herd frames + the atom's own log + the row's
     ``plan_cost`` + the remaining miss at `objective.PUSH_CEILING` -- so the two are directly
     comparable, which is the only way to know what the prediction is worth. Costs one pass over
-    ``len(fan) * len(rows)`` distances (a few thousand hypots, microseconds) against ~28 s for the
-    enumeration, so this is what a per-aim cut inside the last cycle can afford and the enumeration is
-    not.
+    ``len(fan) * len(rows)`` distances against ~28 s for the enumeration, so this is what a per-aim cut
+    inside the last cycle can afford and the enumeration is not.
+
+    **Pruned by its own arithmetic** (session 119), which is what keeps that true once the fan is a
+    real one: a member costs ``n_atom`` frames whatever it lands, and both remaining terms are >= 0, so
+    its best conceivable bound is ``frames + n_atom + min(plan_cost)``. Once an incumbent beats that,
+    the member cannot be the minimum and its whole row loop is skipped -- exact, never an
+    approximation, and it returns the identical record. It matters because the fan is not the 178
+    members session 107 measured: with the throw (2 more dedup dimensions), the tail and the arc it is
+    **75627**, and the unpruned pass costs ~10 s per aim against **26 ms** pruned. Cheap members first
+    is what makes it bite, which is the order `residual_fan` already returns.
 
     It is a LOWER bound on the enumerated bound only to the extent the fan is reachable from THIS state
     (see `residual_fan`) -- an optimistic proxy, in the same family as `objective.plan_bound`'s ``h``,
@@ -488,14 +544,37 @@ def predict_bound(t_along, t_lat, frames, fan, rows, *, link=None, stations=None
     Given Link's herd-coordinate endpoint and `herd_stations`, each fan member's own ``throw`` places
     his arrival (``link + throw``) and `arrival_frames` prices the gap to THAT row's stations, in the
     same currency. A row absent from ``stations`` is UNMEASURED and skipped, never scored as free
-    (`station_map`) -- so the two branches genuinely differ in which rows they may quote."""
+    (`station_map`) -- so the two branches genuinely differ in which rows they may quote.
+
+    **A fan member with no throw is REFUSED in that branch, never defaulted to zero** (session 119).
+    It read ``m.get('throw_along', 0.0)`` until then, and the fan every joint cut since session 115
+    was actually handed -- ``_generated/s106/s107_fan.json``, measured in session 107, before the throw
+    existed -- carries the column on **0 of its 178 members**. So the screen placed Link's arrival at
+    the roll TERMINAL and called that his arrival, which is not a small error in the direction of
+    caution: session 118 measured the terminal gap at 67.6-106.7 u and the same candidates' post-atom
+    gap at 159.5-176.3, i.e. the atom roughly DOUBLES what this was pricing. A missing measurement is
+    the module's oldest rule (`station_map`, `arrival_frames`) and it applies to the fan too."""
     hst = None if (link is None or not stations) else stations
+    if hst is not None and any('throw_along' not in m or 'throw_lat' not in m for m in fan):
+        raise ValueError("this fan carries no THROW, so the arrival it prices is Link's roll terminal"
+                         " and not his arrival (session 118: the atom roughly doubles the gap)."
+                         " Rebuild it with `residual_fan`, which has carried the throw since session"
+                         " 115 -- a pre-s115 dump such as s107_fan.json cannot price this half")
+    # the prune's floor: the cheapest row a member may be quoted against, which in the joint branch is
+    # the cheapest MEASURED one (an unstationed row is skipped below, so it may not lower the floor)
+    costs = [float(r.get('plan_cost', 0)) for r in rows
+             if hst is None or hst.get(r.get('idx'))]
+    if not costs:
+        return None
+    floor = frames + min(costs)
     best = None
     for m in fan:
+        if best is not None and floor + m['n_atom'] >= best['bound']:
+            continue                         # cannot be the minimum -- see the docstring's prune
         pa, pl = t_along + m['along'], t_lat + m['lat']
         if hst is not None:
-            la = link[0] + m.get('throw_along', 0.0)
-            ll = link[1] + m.get('throw_lat', 0.0)
+            la = link[0] + m['throw_along']
+            ll = link[1] + m['throw_lat']
         for r in rows:
             ds = af = None
             if hst is not None:
