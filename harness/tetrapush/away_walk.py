@@ -71,12 +71,17 @@ import math
 from harness.tetrapush import seeds
 from harness.tetrapush import search as S
 from harness.tetrapush import full_herd as FH
+from tww_sim.land.land import LandState
 from tww_sim.land.plan_land._primitives import stick_for_bearing, world_angle_s16
 
 #: Dereck's s65 bar: sub-17 frames after separation. The dip is inherent (Dereck: 0 infeasible);
 #: the recipe's measured best is 3 (the halving + two accel frames), pinned so worse ranks out.
 WALK_FLOOR = 17.0
 DIP_BUDGET = 3
+
+#: The engine's own walk cap, not a restatement -- and the predicate an arrival must satisfy before
+#: its walk cloud exists at all (`entry_fan.iter_fan2` junctions; `escape_atom`'s ``exit_run``).
+WALK_CAP = LandState.MAX_NSPEED
 
 #: reposition.turnaround's snap-window criterion (the herd junction's own): the ESS frame must
 #: snap the facing >0x4000 with the EBS speed preserved and the proc still MOVE.
@@ -214,7 +219,7 @@ def snap_bill(run0, *, step=512):
 
 
 def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0x4000,
-                flip_bearing=None, exit_bearing=None, csangle=None, max_frames=18):
+                flip_bearing=None, exit_bearing=None, csangle=None, max_frames=18, exit_run=0):
     """Run ONE escape-atom variant from a terminal state (cloned; ``run0`` untouched).
 
     The input sequence is Dereck's recipe (module docstring): [optional turnaround] ->
@@ -236,6 +241,20 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
     wants the window buys it upstream, in the last roll's ``target_cs``, and the arrival then carries
     it live. The result records ``cs_bill`` (BAM off live; 0 = faithful).
 
+    ``exit_run`` (session 110) holds the exit stick for that many frames PAST the handoff instead of
+    stopping there -- **the atom's tail, which is the console's own delivered shape and the only
+    channel this search had for Link's ARRIVAL**. Until now the loop broke the instant it recedes at
+    the cap AND separates, so every variant ever enumerated ended Link beside Tetra, deep and still
+    mid-backslide; session 109 then measured that a plan also owes the razor a SECOND position -- the
+    stations sit ~130-165 u up-herd of the landing, and an arrival whose walk hull misses them reads
+    leverage 0 whatever it lands (`knowledge/strategy/delivery-is-two-predicates.md`). Past
+    ``freeze_f`` Tetra takes no more push, so these frames move the ARRIVAL and nothing else: they buy
+    the station gap at the flip's own ~25.7 u/frame while it is still flying and at `WALK_CAP` after,
+    and they are what converts a backslide into the settled ``speedF == WALK_CAP`` arrival
+    `entry_fan.iter_fan2` requires before a walk cloud exists at all. They are ordinary plan frames --
+    a tail frame and an entry-walk frame cost exactly the same -- and the 230 u follow bar is what
+    bounds them (a tail long enough to trip it sets ``followed``, and rule 3 refuses it).
+
     Returns the measurement dict:
       ``rows``          per-frame (f, proc, speedF, disp, head, cf, d_t, d_e, tres, tstep, rec)
                         -- ``tstep`` is Tetra's own displacement THAT frame, the escape's push in the
@@ -249,6 +268,12 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
                         the conversion frames keep pushing her, so this is the terminal's UNDERSHOOT
       ``l_ok``          True iff no L acted while Tetra was in the front cone AND no lock acquired
       ``followed``      the follow shell tripped (dist > 230)
+      ``handoff_f``     the frame the break condition first held (the ``exit_run`` 0 endpoint)
+      ``settled_f``     first frame at/after the handoff with ``speedF == WALK_CAP`` (None = never;
+                        such an arrival fans an EMPTY entry cloud, see `exit_run`)
+      ``tail``          one snapshot per frame from the handoff on -- ``tail[k]`` IS the k-frame
+                        tail's endpoint, so a caller can price every tail length off ONE rollout
+                        (`tail_variant`); ``tail[0]`` is the handoff frame itself
       ``run``, ``log``  the endpoint state + the exact inputs (extend a plan with them)
     """
     r = _clone_for_atom(run0)
@@ -277,12 +302,13 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
     t0 = (r.tx, r.tz)
     tprev = t0
     prev = (r.link.pos_x, r.link.pos_z)
-    rows, log = [], []
+    rows, log, tail = [], [], []
     l_ok = True
     freeze_run = None                        # first index of the suffix that stays >= the bar
     reversed_f = rec17_f = None
+    handoff_f = settled_f = None
     pend_l = False                           # was last-delivered input an L (acts this frame)?
-    for f in range(int(max_frames)):
+    for f in range(int(max_frames) + int(exit_run)):
         d = inputs[f] if f < len(inputs) else exit_in
         if pend_l and S.talk_active(r):      # the L ACTS this frame with her in the cone
             l_ok = False
@@ -315,11 +341,25 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
             reversed_f = f + 1
         if rec17_f is None and rec > 0.0 and math.hypot(vx, vz) >= WALK_FLOOR:
             rec17_f = f + 1
-        if r._follow_warned:
-            break
-        if rec17_f is not None and freeze_run is not None:
+        if handoff_f is None and rec17_f is not None and freeze_run is not None:
             # Handoff = receding at the cap AND separated: a deep terminal can recede at 17 with
             # the centre still inside the 80 u bar, Tetra still taking push (see `fires`).
+            handoff_f = f + 1
+        if handoff_f is not None:
+            # snapshotted, never inherited: ``freeze_f``/``followed`` still MOVE out here, and
+            # `tail_variant` must not lend a short tail a longer one's refusal
+            if settled_f is None and r.link.speedF == WALK_CAP:
+                settled_f = f + 1
+            tail.append(dict(f=f + 1, link=(r.link.pos_x, r.link.pos_z), tetra=(r.tx, r.tz),
+                             speedF=r.link.speedF, settled=(r.link.speedF == WALK_CAP),
+                             followed=bool(r._follow_warned), freeze_f=freeze_run,
+                             resid_along=hl.along(r.tx, r.tz) - hl.along(t0[0], t0[1]),
+                             resid_lat=hl.lateral(r.tx, r.tz) - hl.lateral(t0[0], t0[1])))
+        if r._follow_warned:
+            break
+        if handoff_f is None and f + 1 >= int(max_frames):
+            break                            # ``max_frames`` bounds the atom; ``exit_run`` is extra
+        if handoff_f is not None and f + 1 >= handoff_f + int(exit_run):
             break
     dips = [rr['f'] for rr in rows
             if rr['disp'] < WALK_FLOOR and freeze_run is not None and rr['f'] >= freeze_run
@@ -330,7 +370,42 @@ def escape_atom(run0, hl, *, turnaround_first=False, rotate_side=1, rotate_off=0
                 rec17_f=rec17_f, dips=dips, resid=math.hypot(ta, tl), resid_along=ta,
                 resid_lat=tl, l_ok=l_ok, followed=r._follow_warned, csangle=cs,
                 cs_bill=_s16(cs - int(run0.csangle)),
-                d_e_end=rows[-1]['d_e'] if rows else None)
+                d_e_end=rows[-1]['d_e'] if rows else None,
+                handoff_f=handoff_f, settled_f=settled_f, exit_run=int(exit_run), tail=tail,
+                settled=(r.link.speedF == WALK_CAP),
+                link_end=(r.link.pos_x, r.link.pos_z), tetra_end=(r.tx, r.tz))
+
+
+def tail_variant(res, k):
+    """**One `escape_atom` rollout, read as the k-frame-tail variant of itself** -- so a keep can
+    price every tail length for the cost of the longest (session 110).
+
+    The tail is a pure Link-side continuation past the handoff (Tetra is separated; see
+    `escape_atom`'s ``exit_run``), so the whole family shares one rollout: ``res['tail'][k]`` is the
+    k-frame tail's endpoint, and everything downstream reads -- the ends, the log, the residual,
+    ``freeze_f``, ``followed`` -- is sliced from it rather than inherited. That distinction is the
+    point: a tail long enough to trip the 230 u follow bar must not lend its refusal to the shorter
+    tails that end before it, and a shorter tail must not borrow a longer one's ``run``.
+
+    Returns None when the rollout is shorter than ``k`` tail frames (it broke on the follow bar or
+    never handed off at all) -- an absent variant, never a truncated one. ``run`` is carried only for
+    the rollout's OWN tail length; for any shorter one it is None and a caller that needs the state
+    re-runs `escape_atom` at that ``exit_run`` (gated: the two agree bit-for-bit)."""
+    tail = res.get('tail') or []
+    k = int(k)
+    if k < 0 or k >= len(tail):
+        return None
+    e = tail[k]
+    return dict(res, run=(res['run'] if k == len(tail) - 1 else None),
+                log=res['log'][:e['f']], rows=res['rows'][:e['f']],
+                d_e_end=res['rows'][e['f'] - 1]['d_e'],
+                link_end=e['link'], tetra_end=e['tetra'],
+                freeze_f=e['freeze_f'], followed=e['followed'], settled=e['settled'],
+                resid_along=e['resid_along'], resid_lat=e['resid_lat'],
+                resid=math.hypot(e['resid_along'], e['resid_lat']), exit_run=k,
+                settled_f=(res['settled_f'] if (res['settled_f'] is not None
+                                                and res['settled_f'] <= e['f']) else None),
+                tail=tail[:k + 1])
 
 
 def push_profile(res, *, upto=None):

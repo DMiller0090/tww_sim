@@ -712,3 +712,79 @@ def test_snap_reach_re_derives_the_banked_camera_census(hl, snapreach_s77):
                                                                        sr[field])
         assert tuple(sr['gap']) == tuple(want['gap'])
         assert sr['best_cone'] == want['best_cone']          # 0-ULP
+
+
+# ------------------------------------------------------------------- the atom's TAIL (session 110)
+
+def test_the_tail_is_inert_at_exit_run_zero(hl, arrivals_s75):
+    """``exit_run=0`` must BE the pre-session-110 atom: the rollout still ends on the handoff frame,
+    and the tail it now records is exactly that one endpoint. The whole axis is additive or it is a
+    silent change to every escape number this work has banked."""
+    for key, a in arrivals_s75.items():
+        r = AW.escape_atom(a['run'], hl)
+        assert r['exit_run'] == 0
+        if r['handoff_f'] is None:
+            assert r['tail'] == []
+            continue
+        assert len(r['log']) == r['handoff_f'], "the rollout ran past its own handoff at exit_run 0"
+        assert len(r['tail']) == 1 and r['tail'][0]['f'] == r['handoff_f']
+
+
+def test_a_tail_variant_is_bit_exact_against_its_own_fresh_rollout(hl, arrivals_s75):
+    """The keep prices every tail length off ONE rollout (`cloud_land.atom_cloud`), so the slice has
+    to be the rollout: for every k, `tail_variant` must equal `escape_atom(exit_run=k)` on every field
+    a landing or an arrival reads -- 0-ULP, no tolerance (`[[zero-ulp-tests-only]]`)."""
+    for key, a in arrivals_s75.items():
+        long = AW.escape_atom(a['run'], hl, exit_run=8)
+        assert len(long['tail']) >= 2, "%s handed off nothing to slice" % key
+        for k in range(len(long['tail'])):
+            got, want = AW.tail_variant(long, k), AW.escape_atom(a['run'], hl, exit_run=k)
+            assert got['link_end'] == want['link_end']          # exact bits, both coordinates
+            assert got['tetra_end'] == want['tetra_end']
+            assert got['log'] == want['log'] and len(got['log']) == want['handoff_f'] + k
+            assert got['freeze_f'] == want['freeze_f'] and got['followed'] == want['followed']
+            assert got['resid_along'] == want['resid_along'] and got['resid_lat'] == want['resid_lat']
+            assert got['settled'] == want['settled'] and AW.fires(got) == AW.fires(want)
+
+
+def test_a_tail_past_the_follow_bar_is_ABSENT_not_truncated(hl, arrivals_s75):
+    """The 230 u shell is what bounds the tail (Tetra starts following, which moves the landing), and
+    the rollout breaks there. A k past that break must read None -- an absent variant, never a short
+    one wearing the requested length."""
+    long = AW.escape_atom(arrivals_s75['deep']['run'], hl, exit_run=8)
+    assert long['followed'] is True, "the deep arrival's 8-frame tail no longer trips the shell"
+    assert len(long['tail']) < 9
+    assert AW.tail_variant(long, len(long['tail'])) is None
+    assert AW.tail_variant(long, 99) is None
+    assert AW.fires(AW.tail_variant(long, len(long['tail']) - 1)) is False
+
+
+def test_the_tail_moves_LINK_and_not_TETRA_while_the_separation_holds(hl, arrivals_s75):
+    """The law the whole joint keep rests on: past ``freeze_f`` the actors are separated, so exit-hold
+    frames buy Link's arrival and cost the landing NOTHING -- her coordinate is bit-identical, not
+    merely close. The converse is gated too: the frame the freeze breaks, `fires` refuses the variant,
+    so a tail that walks back into Co range can never be sold as free."""
+    long = AW.escape_atom(arrivals_s75['shallow']['run'], hl, exit_run=8)
+    t0 = long['tail'][0]['tetra']
+    broke = False
+    for k, e in enumerate(long['tail']):
+        if e['freeze_f'] is None:
+            broke = True
+            assert AW.fires(AW.tail_variant(long, k)) is False
+            continue
+        if not broke:
+            assert e['tetra'] == t0, "the tail pushed her %r -> %r at k=%d" % (t0, e['tetra'], k)
+    assert broke, "the shallow arrival's 8-frame tail no longer re-enters Co range"
+
+
+def test_the_tail_is_what_settles_an_arrival_at_the_walk_cap(hl, arrivals_s75):
+    """Why the axis exists at all beyond the station gap: `entry_fan.iter_fan2` keeps an entry junction
+    ONLY at ``speedF == WALK_CAP``, so an arrival caught mid-backslide fans an EMPTY walk cloud and is
+    worth nothing however close it stands (session 109's first failure shape). The shallow arrival's
+    own handoff is exactly that -- and two tail frames fix it."""
+    long = AW.escape_atom(arrivals_s75['shallow']['run'], hl, exit_run=8)
+    assert long['tail'][0]['speedF'] != AW.WALK_CAP and long['tail'][0]['settled'] is False
+    settled = [k for k, e in enumerate(long['tail']) if e['settled']]
+    assert settled, "no tail length settles this arrival at the cap"
+    assert long['settled_f'] == long['tail'][settled[0]]['f']
+    assert AW.tail_variant(long, settled[0])['settled'] is True

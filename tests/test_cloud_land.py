@@ -265,3 +265,117 @@ def test_the_in_band_field_is_the_only_solved_claim():
     fields: `objective.PLACEMENT_BAND` is 1.0 u and a 5.93 u best-bound landing is not a solve."""
     assert O.PLACEMENT_BAND == 1.0
     assert 5.93 > O.PLACEMENT_BAND
+
+
+# ------------------------------------------------------- the JOINT keep: the arrival half (s110)
+
+def _stations():
+    """Two rows, and the stations each was hunted at -- the map `station_map` builds from the dumps."""
+    return {0: [(0.0, 0.0)], 1: [(200.0, 0.0)]}
+
+
+def test_the_arrival_term_is_free_inside_the_walk_the_row_ALREADY_pays_for():
+    """A row's `plan_cost` buys `WALK_FRAMES` at the cap, so a station inside that reach costs the plan
+    nothing extra and only the SHORTFALL is charged. Pinned as arithmetic: the credit is the reach, the
+    rate is the cap, and one cap-length past it is exactly one frame."""
+    assert CL.FREE_REACH == CL.WALK_CAP * CL.WALK_FRAMES == 34.0
+    assert CL.arrival_frames(0.0) == 0.0 and CL.arrival_frames(CL.FREE_REACH) == 0.0
+    assert CL.arrival_frames(CL.FREE_REACH + CL.WALK_CAP) == 1.0
+    assert CL.arrival_frames(128.2) == (128.2 - 34.0) / 17.0     # the s107 winner's own gap
+
+
+def test_an_UNMEASURED_arrival_is_infinite_and_never_free():
+    """The `cloud_cap` lesson, one level down: a candidate nothing measured must sort LAST, because a
+    zero here would let an unhunted row win the joint rank by having no evidence against it."""
+    assert CL.arrival_frames(None) == float('inf')
+    assert CL.station_gap((0.0, 0.0), None) is None and CL.station_gap((0.0, 0.0), []) is None
+    assert CL.station_gap((3.0, 4.0), [(0.0, 0.0), (100.0, 0.0)]) == 5.0
+
+
+def test_the_ROW_CHOICE_moves_under_the_arrival_term():
+    """The reason this is a separate function and not a flag on `_nearest_row`: the joint rank changes
+    WHICH row a landing is priced against. Here the near row's stations sit 200 u behind Link and the
+    far one's are under his feet, and 20 u of landing (~1.5 frames) is cheaper than 166 u of walking
+    (~9.8) -- so the far row wins, and the landing-only rank picks the other one."""
+    rows = [dict(idx=0, x=6.0, z=0.0, plan_cost=21), dict(idx=1, x=20.0, z=0.0, plan_cost=21)]
+    link = (200.0, 0.0)
+    assert CL._nearest_row(0.0, 0.0, rows)[1]['idx'] == 0            # landing alone
+    miss, row, d_st, af, n = CL._joint_row(0.0, 0.0, link, rows, _stations())
+    assert row['idx'] == 1 and miss == 20.0 and d_st == 0.0 and af == 0.0 and n == 2
+    assert 21 + O.remaining_frames(20.0) < 21 + O.remaining_frames(6.0) + CL.arrival_frames(200.0)
+
+
+def test_a_row_with_no_hunted_station_is_SKIPPED_not_scored_free():
+    """A row absent from the map is unmeasured, and an unmeasured row must not win by default -- it is
+    dropped from the joint rank, and ``n_rows`` says how many were actually eligible."""
+    rows = [dict(idx=0, x=0.0, z=0.0, plan_cost=21), dict(idx=1, x=20.0, z=0.0, plan_cost=21)]
+    miss, row, _d, _af, n = CL._joint_row(0.0, 0.0, (0.0, 0.0), rows, {1: [(0.0, 0.0)]})
+    assert row['idx'] == 1 and miss == 20.0 and n == 1
+    assert CL._joint_row(0.0, 0.0, (0.0, 0.0), rows, {})[1] is None
+
+
+def test_station_map_REFUSES_a_dump_hunted_at_another_walk_budget(tmp_path):
+    """`FREE_REACH` -- what the arrival term credits for nothing -- is derived from the walk the hunts
+    themselves spent, so a dump at a different budget silently invalidates it. It raises instead."""
+    import json
+    import os
+    d = tmp_path / 's104'
+    d.mkdir()
+    row = dict(idx=0, x=1.0, z=2.0)
+    hit = dict(tetra=[1.0, 2.0], live_at=[[10.0, 20.0]])
+    (d / 'h.json').write_text(json.dumps(dict(cells=[dict(cell=1, frames=CL.WALK_FRAMES,
+                                                          hits=[hit])])))
+    got = CL.station_map([row], hunts=('s104/h.json',), gen=str(tmp_path))
+    assert got == {0: [(10.0, 20.0)]}
+    (d / 'h.json').write_text(json.dumps(dict(cells=[dict(cell=1, frames=CL.WALK_FRAMES + 1,
+                                                          hits=[hit])])))
+    with pytest.raises(ValueError):
+        CL.station_map([row], hunts=('s104/h.json',), gen=str(tmp_path))
+    assert CL.station_map([row], hunts=('s104/missing.json',), gen=str(tmp_path)) == {}
+
+
+def test_the_tail_axis_widens_the_grid_and_is_priced_from_ONE_rollout(arrival, hl):
+    """``exit_runs`` crosses the knob grid with `away_walk.escape_atom`'s tail, and each member must be
+    the rollout it claims to be -- so every record is re-derived here against a fresh atom at its own
+    ``exit_run``, bit-exactly. A tail the follow bar cut short is absent, so the grid is bounded ABOVE
+    by the cross product rather than equal to it."""
+    kw = dict(flip_step=AW.FLIP_SPAN, rotate_offs=AW.ROTATE_OFFS[1:2])
+    base = CL.atom_cloud(arrival['run'], hl, **kw)
+    grid = CL.atom_cloud(arrival['run'], hl, exit_runs=(0, 1, 2), **kw)
+    assert {r['knobs']['exit_run'] for r in base} == {0}
+    assert len(base) <= len(grid) <= 3 * len(base)
+    assert {r['knobs']['exit_run'] for r in grid} <= {0, 1, 2}
+    for r in grid[:6] + grid[-6:]:
+        k = r['knobs']
+        fresh = AW.escape_atom(arrival['run'], hl, turnaround_first=k['turnaround_first'],
+                               rotate_side=k['rotate_side'], rotate_off=k['rotate_off'],
+                               flip_bearing=k['flip_bearing'], exit_bearing=k['exit_bearing'],
+                               csangle=int(arrival['run'].csangle), exit_run=k['exit_run'])
+        assert r['link_end'] == fresh['link_end'] and r['tetra_end'] == fresh['tetra_end']
+        assert len(r['log']) == len(fresh['log'])
+
+
+def test_JOINT_is_a_stricter_claim_than_IN_BAND_and_is_reported_separately():
+    """``in_band`` is the landing half and sessions 107-109 mistook it for a solve. ``joint`` is the
+    conjunction -- inside the band AND owing no arrival frames -- so it is a SUBSET, and a candidate
+    that owes nothing has a bound equal to its own total."""
+    rows = [dict(idx=0, x=0.0, z=0.0, plan_cost=21)]
+    stations = {0: [(0.0, 0.0)]}
+    near = CL._joint_row(0.0, 0.0, (10.0, 0.0), rows, stations)
+    far = CL._joint_row(0.0, 0.0, (300.0, 0.0), rows, stations)
+    assert near[0] <= O.PLACEMENT_BAND and near[3] == 0.0        # in band, owes nothing -> joint
+    assert far[0] <= O.PLACEMENT_BAND and far[3] > 0.0           # in band, owes 15.6 f -> NOT joint
+    assert 73 + 6 + 21 + O.remaining_frames(near[0]) + near[3] == 100.0
+
+
+def test_the_joint_keep_is_wired_and_defaults_to_the_landing_half_alone():
+    """Additive or it changes every banked number: without a station map the keep is exactly the
+    session-107 one, and `extend_cycle` reaches the new axes only through explicit arguments."""
+    import inspect
+    sig = inspect.signature(FH.extend_cycle)
+    for k in ('cloud_stations', 'cloud_exit_runs'):
+        assert k in sig.parameters and sig.parameters[k].default is None
+    for k, want in (('stations', None), ('exit_runs', (0,))):
+        assert inspect.signature(CL.cloud_landing).parameters[k].default == want
+    src = inspect.getsource(CL.cloud_landing)
+    assert 'if stations:' in src and '_joint_row' in src, "the joint branch is not guarded"

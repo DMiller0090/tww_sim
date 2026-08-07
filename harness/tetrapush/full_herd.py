@@ -1160,7 +1160,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  resid=None, tcs_landing=False, tcs_square=False, land_keep=False,
                  probe_contact=False, probe_half=None, escape_flip=None, escape_rots=None,
                  escape_rank=None, tcs_escape=False, cloud_keep=False, cloud_flip=None,
-                 cloud_rots=None, cloud_cap=None, cloud_fan=None, verbose=False):
+                 cloud_rots=None, cloud_cap=None, cloud_fan=None, cloud_stations=None,
+                 cloud_exit_runs=None, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1283,6 +1284,14 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     roll could reach over fan x rows -- which is the cut that decides which endpoints exist. Free per aim
     (a few thousand distances) against ~28 s for an enumeration, and OPTIMISTIC, so it sizes the cut while
     ``cloud_keep``'s enumeration makes the claim.
+
+    ``cloud_stations`` / ``cloud_exit_runs`` (session 110) make that keep JOINT, and they are the fix for
+    what killed the session-107 winner: a landing inside the band is half a candidate, because the clip
+    also needs Link's ARRIVAL to reach the stations the row's `plan_cost` was priced at
+    (`knowledge/strategy/delivery-is-two-predicates.md`). Given a `cloud_land.station_map` the keep
+    prices `cloud_land.arrival_frames` beside the landing miss and reports ``joint`` -- the variant that
+    owes NOTHING on either half -- and ``cloud_exit_runs`` gives it the axis to pay with: the atom's tail
+    (`away_walk.escape_atom`'s ``exit_run``), which moves the arrival while Tetra stays frozen.
 
     ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) pass the escape atom's two
     unswept knobs and its frames rank through ``escape_keep`` (`escape_probe`, `away_walk.probe`):
@@ -1414,26 +1423,32 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             n['cloud'] = CL.cloud_probe(n['run'], n['frames'], hl, rows_j,
                                         flip_step=(CL.FLIP_STEP if cloud_flip is None
                                                    else cloud_flip),
-                                        rotate_offs=cloud_rots)
+                                        rotate_offs=cloud_rots, stations=cloud_stations,
+                                        exit_runs=(cloud_exit_runs or (0,)))
         # an unprobed survivor is UNMEASURED, not refused: infinite bound, and a None miss so the
         # share below cannot invent a landing for it
         for n in out:
             if 'cloud' not in n:
                 n['cloud'] = dict(fires=False, bound=float('inf'), miss=None, total=None,
-                                  frames=n['frames'], unprobed=True, in_band=None)
+                                  frames=n['frames'], unprobed=True, in_band=None, joint=None)
         out.sort(key=lambda n: n['cloud']['bound'])
         if verbose:
             fired = [n for n in out if n['cloud']['fires']]
             solved = [n for n in fired if n['cloud']['in_band'] is not None]
+            joint = [n for n in fired if n['cloud'].get('joint') is not None]
             if skipped:
                 print("    (cloud keep CAPPED at %d: %d survivors were NOT enumerated -- the floor"
                       " below is the capped slice's, not the population's)" % (cloud_cap, skipped))
-            print("    (cloud-landed %d survivors: %d fire, %d land INSIDE the %.1f u band; best "
-                  "bound %.2f = %.3f u at total %.1f)"
-                  % (len(out), len(fired), len(solved), O.PLACEMENT_BAND,
+            print("    (cloud-landed %d survivors: %d fire, %d land INSIDE the %.1f u band, %d pay"
+                  " BOTH halves; best bound %.2f = %.3f u at total %.1f%s)"
+                  % (len(out), len(fired), len(solved), O.PLACEMENT_BAND, len(joint),
                      fired[0]['cloud']['bound'] if fired else float('nan'),
                      fired[0]['cloud']['miss'] if fired else float('nan'),
-                     fired[0]['cloud']['total'] if fired else float('nan')))
+                     fired[0]['cloud']['total'] if fired else float('nan'),
+                     (', arrival %.1f u from its stations'
+                      % fired[0]['cloud']['d_station']) if (fired and cloud_stations
+                                                            and fired[0]['cloud'].get('d_station')
+                                                            is not None) else ''))
     elif escape_keep and out:
         # the LAST cycle's endpoint is handed to the ESCAPE, and nothing between them has authority
         # (`escape_probe`) -- so rank it by what the escape lands, and keep a share by that miss.

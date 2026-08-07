@@ -56,6 +56,13 @@ only at miss ~ 25 u**. No variant carries both, because both are set by where th
 that lands her on the band ends Link beside her (deep, down-herd); an atom that ends Link at the
 stations fires off a herd that has not finished pushing her.
 
+**That front is the one the ATOM'S OWN BREAK CONDITION allows** -- every arrival in it was read at the
+handoff frame, which is where `escape_atom` stopped. Session 110 gave the atom a tail and re-measured
+the same population: the exchange is soft, not hard (a settled, fully-paid arrival 0.881 u outside the
+band), and the arrival is payable at the walk cap -- see
+[the-arrival-is-payable](the-arrival-is-payable.md), which also explains why paying it never improves
+the frame bound.
+
 The console's own delivered shape pays both at once, and says how: its herd log ends with the
 untarget flip already flying (speedF -25.7), **Tetra coasts ~36 u down-herd on her own plow momentum
 through the atom window** while Link runs up-herd at the 17 u/f cap, ending 111 u behind her and 25 u
@@ -70,4 +77,7 @@ the arrival and nothing else).
 So the lever is a JOINT last-cycle keep: the landing keep
 ([landing-keep-on-a-cloud](landing-keep-on-a-cloud.md)) must price the arrival's station distance
 beside the landing miss, and the chain must be allowed the console's geometry -- disengage early, let
-her coast, spend the atom's tail running to the stations.
+her coast, spend the atom's tail running to the stations. Built in session 110
+(`cloud_land.cloud_landing`'s ``stations``/``exit_runs``, and ``joint`` -- the field that means
+NOTHING is owed on either half, which unlike ``in_band`` also requires the arrival to be settled at
+the walk cap).
