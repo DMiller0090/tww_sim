@@ -1710,6 +1710,58 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **BOTH HALVES ARE SOLVED AT A 5-FRAME ATOM AND NEVER AT THE SAME ENDPOINT: THE SHORT
+            ATOM'S ARRIVAL SET IS A *POINT* UNTIL FRAME 8 (session 113).** New truth page
+            [`knowledge/strategy/the-short-atom-is-a-point.md`](../../knowledge/strategy/the-short-atom-is-a-point.md).
+            - **THE ARRIVAL SET AT ATOM <= 7 IS A POINT** (`_notes/s113_arrival_front.py`, two
+              endpoints 45 u apart, 768 / 752 firing+settled variants). Grouped by log length, the
+              EXTENT of Link's end positions is **1.1 x 1.1 u at atom 5 over forty distinct knob
+              combinations** (2.0 x 12.6 at the second endpoint), 4 x 4 at 6, ~9 x 6 at 7 -- and then
+              **111 x 94 u at atom 8**, two to three orders of magnitude of area in one frame, at BOTH
+              endpoints. Frame 8 is where the blob first contains the station cluster, which is
+              exactly where `arrival_frames` first reads 0 and exactly the banked 97. Cause is
+              `escape_atom`'s own recipe: 4-5 PRESCRIBED inputs, then frames that start on ~25.7 u/f
+              of untarget-flip momentum one stick cannot turn.
+            - **SO `exit_arc` IS WORTH EXACTLY ZERO AT A SHORT ATOM** (`_notes/s113_arrival_surface.py`,
+              three cells at node 1). The standing pair against a 34-bearing +-90 deg arc: 1242 ->
+              **21114** variants and 1248 -> **21216**, and the arrival floor (43.9 / 46.9) and the
+              landing (0.685 u @ 73.3 / 1.160 u @ 63.5) are IDENTICAL TO THE LAST DIGIT. Seventeen
+              times the rollouts for nothing. Positive control: s112 measured the same arc moving
+              ``d_station`` 59.8 -> 17.6 at atom 12-15, so it is a LONG-atom knob, not a broken one.
+            - **THE THROW IS RIGID AND POINTS OUT OF THE STATION BAND.** Link does not have to travel
+              to the stations -- at node 1's 94/97 cell he stands at along **808.58**, INSIDE their own
+              along band (804.7-818.7), with a gap that is essentially pure lateral. The 5-frame atom
+              fixes the lateral (residual **+3.18**) and BREAKS the along, throwing him to 862.5,
+              **43.8 u past** where he started. Displacement **(+53.9, +60.8)** and **(+60.1, +62.9)**
+              at the two endpoints -- an 81-87 u throw at ~47 deg. The three tail frames from the 94 to
+              the 97 are that EXCURSION, not a journey.
+            - **THE THIRD RELOCATION AXIS EXISTS -- THE SEPARATION -- AND IT TAKES THE BOUND TO 96.00**
+              (`_notes/s113_sep_curve.py`, new `sep_shifted`, 80 priced cells over d_along +50..+64 x
+              d_sep -110..-15). Every bed until now moved Link LATERALLY or moved BOTH actors
+              down-line, so the Link-Tetra separation was invariant by construction. `CO_RADII_BAR` 80
+              is NOT the blocker -- `fires` only needs the separation to persist, so the atom still
+              fires at ``centre_feet`` **160**, and past the bar Tetra takes no push at all, which
+              makes the landing the herd's problem alone and drives it to **0.163 u from row 26**
+              (cost 20). The axis takes the ARRIVAL floor 43.9 -> **2.6 u** and the best joint BOUND
+              from s112's paid 97.00 to **96.00** (d_along +58 / d_sep -80: in band at total 95.12,
+              ``d_station`` 48.9, owing 0.88 frames). It still does not PAY: ``near`` and ``near_band``
+              never converge -- at every deep cell the arrival-optimal blob member lands 28-36 u out
+              while the landing-optimal one arrives 45-49 u from a station, and the blob is small
+              precisely because the atom is rigid.
+            - **AND THE BIND IN ITS FINAL FORM: EACH HALF IS ALREADY SOLVED AT A 5-FRAME ATOM.** Over
+              90 cells at node 1 the ARRIVAL floor is ``d_station`` **4.8 u** (inside `FREE_REACH` 34)
+              at atom 5, total 94.00 -- its landing 35.9 u out; the LANDING floor is **0.685 u** in
+              band, also atom 5, total 94.00 -- its arrival 58.2 u, owing 1.42 frames. **No cell pays
+              both, in none of the 170 cells across all three axes.** The two floors sit 40 u apart
+              down the line and the throw is rigid, so the endpoint that puts Link's point on the
+              stations is the endpoint that leaves Tetra 40 u short of the rows.
+            - **`plan_frames`=1 (cost 19) BUYS NOTHING UNTIL THE ARRIVAL IS SOLVED** -- s111 item 3,
+              retired by arithmetic rather than a hunt. `FREE_REACH` is `WALK_CAP * WALK_FRAMES`,
+              DERIVED from the budget the hunt ran at, so cost 19 credits 17 u instead of 34 and the
+              bound moves by ``min(1, max(0, 34 - d_station)/17)``: a full frame only inside 17 u,
+              **exactly zero** past 34. At the best in-band arrival anywhere (58.2) cost-19 and cost-20
+              both score 21.424. Recorded in
+              [`plan-cost-walk-budget.md`](../../knowledge/strategy/plan-cost-walk-budget.md).
       - [~] **THE LANDING HALF REACHES THE BAR AT 95, AND THE WHOLE REMAINING GAP IS TWO FRAMES OF
             ARRIVAL. THE OFFSET IS ONE VARIABLE SERVING TWO PREDICATES THAT WANT IT 22-25 u APART
             (session 112).** New truth page

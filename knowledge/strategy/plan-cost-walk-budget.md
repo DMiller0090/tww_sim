@@ -135,6 +135,26 @@ plan **lands on**: the fan's entries are discrete (two sticks in the whole plan)
 then `entry_search.confirm_entry`, then `cross_engine` at 0 ULP, then the DTM. That is the same gap the
 4-frame delivery closed, one budget down, and the entry density at stride 1 is ample for it.
 
+## A shorter walk lowers the CREDIT by exactly what it saves (session 113)
+
+The obvious next step off this page is a `plan_frames`-1 hunt for `plan_cost` **19**, on the reading
+that it buys one frame everywhere. It does not, and the arithmetic is exact rather than empirical.
+`cloud_land.FREE_REACH` -- the station gap an arrival owes nothing for -- is `WALK_CAP * WALK_FRAMES`,
+DERIVED from the very budget the hunt was run at (`station_map` re-checks it and raises otherwise). So
+a cost-19 row is hunted at a 1-frame walk and credits 17 u instead of 34, and the whole-candidate bound
+`plan_cost + arrival_frames(d_station)` moves by
+
+    min(1, max(0, FREE_REACH - d_station) / WALK_CAP)
+
+-- a full frame only when the arrival already sits inside **17 u**, sliding to **exactly zero** at 34 and
+staying there. Checked against the live numbers: at the best in-band arrival measured anywhere
+(``d_station`` 58.2, [the-short-atom-is-a-point.md](the-short-atom-is-a-point.md)) cost-19 and cost-20
+score **21.424 frames each**, to three decimals.
+
+The rule that generalises: **a budget cut that also cuts a credit derived from that budget is not a
+saving until the credited term is slack.** Rank the halves in order -- solve the arrival first, and the
+cost-19 hunt becomes worth its full frame; run it first and it is worth nothing at all.
+
 ## The transferable rule
 
 **When the objective is a cost, enumerate its addends before searching any of them, and check which floors
