@@ -1772,8 +1772,16 @@ from scratch. Land the edits first, then gate.
             - **THE LEVER IS STILL THE HERD ENDPOINT** -- both halves are set by it, the atom's
               landing is piecewise-constant in its own knobs, and a JOINT candidate costs **106-108**
               at node 11 against the banked 101 (the atom spends tail 4-5 retreating to the stations).
-              A frame win needs a SHORTER herd whose atom lands genuine. Cycle 3 re-iterated off
-              `s107_rechain_c2_beam.json` with the joint keep (`_notes/s110_rechain_c3.py`).
+              A frame win needs a SHORTER herd whose atom lands genuine.
+            - **AND THE CYCLE-3 ITERATION SAYS WHERE THE LEVER IS NOT** (`_notes/s110_rechain_c3.py`,
+              2324 s, 96 probed / 54 beamed): re-iterated off `s107_rechain_c2_beam.json` with the
+              joint keep, it **reproduces the same population bound for bound** (93.95 / 94.08 / 95.41
+              / 102.53 / 102.96; its node 3 IS the old node 11 at 0.801 u @100). That is session 107's
+              structural finding holding: an ENDPOINT keep reorders a set the upstream cuts fixed, and
+              cannot create a joint-payable endpoint. It also reports "0 pay BOTH halves" at the very
+              endpoint where the ARC found 14, since `extend_cycle`'s keep runs the standing two exit
+              bearings -- so the arc, and the arrival term, belong in the per-aim CUT
+              (`roll_probe`'s ``cloud_bound``), which is what decides which endpoints exist at all.
       - [~] **THE DELIVERY TIER KILLED THE s107 WINNER, AND THE FINDING IS THE PREDICATE ITSELF:
             DELIVERY IS TWO PREDICATES, AND THE POPULATION'S FRONT NEVER PAYS BOTH (session 109).**
             The s108 handoff's delivery chain ran and stopped at its first gate: the winner's own
