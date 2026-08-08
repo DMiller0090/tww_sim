@@ -1710,6 +1710,59 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE RAZOR IS ON LINK, NOT ON HER -- AND EVERY HERD ENDPOINT THAT PARKS HER ON THE RIGHT
+            SIDE ADMITS A CLIP ROLL (session 125).** The chain-back, run: 15 of 127 banked cycle-3
+            endpoints leave her on the genuine side of the clip roll's approach line, and **all 15 have
+            a genuine Link entry** (3-7 each, 74 in total). New library
+            [`harness/tetrapush/handoff.py`](handoff.py), new truth page
+            [`knowledge/strategy/the-razor-is-on-the-pusher-not-the-pushed.md`](../../knowledge/strategy/the-razor-is-on-the-pusher-not-the-pushed.md),
+            gate [`tests/test_handoff.py`](../../tests/test_handoff.py) (7, 2.4 s, runs by default).
+            - **THE COORDINATE HAD TO GROW A FOURTH AXIS.** `terminal.RollFrame` pins Link's entry to
+              the brace line (``entry = brace - runway*m``) because s124 asked the question in the shape
+              where Link WALKS to a chosen spot. A herd arrives off that line by tens of units, so
+              `PairFrame` restores ``side`` -- ``entry = brace - runway*m + side*q`` -- and at a FIXED
+              Tetra the two laterals collapse (``lat = l0 - side``), which makes the genuine set a
+              **CURVE OF LINK ENTRIES**, one solved ``side`` per ``runway`` (`entry_locus`). ``side`` 0
+              is `RollFrame` bit-for-bit, so terminal's bracket/bisect/band methods run on it unchanged.
+            - **AND ON LINK'S AXIS THE ACCEPTANCE IS 4.5e-5..5.1e-4 u INSIDE A CONTACT CORRIDOR ~1 u
+              WIDE** (measured -0.105..+0.895 at the s124 reference cell; outside it the residual
+              saturates at its no-contact value). So `SIDE_STEP` is **0.005**, 100x finer than
+              `terminal.LAT_STEP` -- a half-unit bracket step straddles the whole corridor and reports a
+              clipping configuration as empty. Affordable: one span is a single 28001-sample batch sweep,
+              0.4 s at 72k coupled rolls/s.
+            - **THE CHAIN-BACK TURNS ON A SIGN, NOT A DISTANCE.** Her own offset from the approach line
+              (`tetra_lateral`, ``l0``) is **+2.50..+13.69** over the 288 tabulated coords, **+0.57..
+              +51.00** over the 51 solved terminals and **+0.57..+4.89** over the 13 unbroken-contact
+              ones -- all one side. The console-confirmed 71-frame herd leaves her at **-17.67** (the
+              escape push is what finished the crossing to the +2.75 of the coord it landed on), the two
+              banked beams' terminals span **-71.15..+19.65** and their pre-roll states -243.8..-108.9.
+              So the last roll is what carries her across, and the first question of any endpoint is
+              which side it left her on.
+            - **WHAT IS LEFT IS ENTIRELY LINK'S POSITION.** On the 15 on-side endpoints the clip roll is
+              always available; Link ends the herd's last roll **73-171 u** from the nearest genuine
+              entry (too deep by 58-190 u of ``runway``, too far across by 30-57 u of ``side``). The
+              planning consequence: **score a herd by whether it leaves LINK on the curve, not by where
+              it puts her** -- her placement is free inside a wide band, his is a 1e-4 u razor.
+            - **PRICE: a floor of 94** (73 herd frames + 5 to close 73.69 u at the walk cap + 16 of clip
+              roll) against the banked **101**, at three 73-frame nodes of the s122 require beam. It is a
+              FLOOR, not a plan: the 5 charges the gap at cap speed with no turnaround and no guarantee
+              the move lands ON the razor (`[[banded-proxy-needs-its-newton]]`).
+            - **THE CLIP ROLL'S AIM IS NOT FREE.** On one coarse handoff box (14x19 cells) facing 40835
+              yields 15 genuine / 13 unbroken and **every facing on a 500-BAM ladder from 29000 to 44000
+              yields 0**; refined at 25 BAM, 40810 and 40860 yield 0 and 40735/40760 one each. On the
+              FULL s124 box 40810 gives 3 genuine (0 unbroken, overlap 1.50-1.68 not 1.13) and **36888 --
+              a facing the herd's own last rolls actually deliver -- gives 0 of 1540**. So the last roll
+              has to be aimed at the corner deliberately; the herd's own 31474-36888 are dead.
+            - **TWO TRAPS, BOTH GATED.** (1) `m`/`q` come from the console's f32 sin/cos tables, so the
+              basis is orthonormal only to ~1e-7: projecting a genuine world pair into the coordinates
+              and rebuilding it moves the residual **8.3e-5 -> 1.05e-3, genuine to dead**, twelve band
+              widths lost in the trip -- hold positions, report coordinates. (2) A brace-centred +-60 u
+              ``side`` span at a real herd Tetra reaches a maximum overlap of **-91.8 u**, not one sample
+              in contact, and reads as flatly infeasible; the corridor sits at ``side ~ l0``.
+            - **NEXT: re-cut the LAST CYCLE against `entry_locus`.** The terminal predicate is now
+              computable on a delivered state (`handoff.probe` / `node_gap`), so the last cycle can be
+              searched to leave Link ON the curve instead of 74 u past it -- which is where the frames
+              below 94 are.
       - [x] **THE ZERO-WALK-AWAY BEST CASE EXISTS, AND THE RAZOR ASKS FOR ALIGNMENT AND NEVER FOR DEPTH
             (session 124).** The terminal configuration is SOLVED -- the first work in Dereck's re-aimed
             shape, and it closes the open unknown the s123 handoff named. New library
