@@ -1710,6 +1710,50 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE ZERO-WALK-AWAY BEST CASE EXISTS, AND THE RAZOR ASKS FOR ALIGNMENT AND NEVER FOR DEPTH
+            (session 124).** The terminal configuration is SOLVED -- the first work in Dereck's re-aimed
+            shape, and it closes the open unknown the s123 handoff named. New library
+            [`harness/tetrapush/terminal.py`](terminal.py), new truth page
+            [`knowledge/strategy/the-corner-sets-the-depth-not-the-herd.md`](../../knowledge/strategy/the-corner-sets-the-depth-not-the-herd.md),
+            gate [`tests/test_terminal.py`](../../tests/test_terminal.py) (11, 1.4 s, runs by default).
+            - **THE BEST CASE EXISTS: 51 genuine terminal configurations, 13 of them with Link ALREADY
+              TOUCHING HER at the roll entry and contact NEVER BREAKING for the whole roll**, at handoff
+              distances **50-110 u** -- the range the herd already oscillates over (41-85 u live). No
+              escape, no walk-back, no separate clean roll-in. Swept over a 1540-cell handoff box
+              (``runway`` 140-480 u x ``along`` 30-245 u) at the delivered facing 40835 / thrust 14 in
+              **41 s**.
+            - **THE OPEN UNKNOWN IS ANSWERED, AND THE ANSWER IS THAT IT WAS THE WRONG WORRY.** "The clip
+              wants ~1.23 u of overlap and a herd roll's depth is whatever the plow produces" is true and
+              does not matter: **the corner washes the handoff out.** Over handoffs **50-245 u** apart,
+              with the roll plowing her **53-126 u**, the last three overlaps converge to 18.3/18.4/13.7
+              -> 6.76/6.75/6.70 -> **1.132/1.132/1.127**, her cut-frame position lands in a **0.054 x
+              0.205 u** box, Link's braced point is constant to **0.001 u** and the cut lands inside
+              **0.003 u**. So the depth is the CORNER's, the herd does not have to place her (the last
+              roll parks her), and the only sensitive axis is the pair's LATERAL ALIGNMENT:
+              ``d(resid)/d(lat)`` -4.0..-14.3 /u against ``d(resid)/d(runway)`` **+0.17 /u**.
+            - **THE PAIR IS THE COORDINATE.** `RollFrame` states a configuration the way a herd hands one
+              over -- ``entry = brace - runway*m``, ``tetra = entry + along*m + lat*q`` -- instead of the
+              old fixed-entry/fixed-Tetra slices (`tetra_placements.tsv` and `entry_search`'s locus are
+              both slices of this surface). `classify` adds whether he starts touching her, whether
+              contact breaks, and how far the roll plows her. ``runway`` is what a longer-than-normal EBS
+              buys (Dereck's s124 steer, and it is 190-310 u at every hit).
+            - **THE LEAN IS NOT A BAR** -- `entry_search`'s "m351C 64 already does not clip (resid 1.1e-2)"
+              is measured at a FIXED ENTRY, where 1.1e-2 is a hundred window widths. Re-solving ``lat``
+              finds genuine configurations at **every lean -191..+191**, most in unbroken contact,
+              including the +64 that reads dead and the -191 a replayed herd hands over. It also decays
+              35%/frame -> 0 in 13 frames, so the long backslide flattens it for free.
+            - **METHOD: BRACKET, THEN BISECT -- never sweep.** The acceptance band is **2.2e-5..1.5e-4 u**
+              against a residual gradient of 4.0-14.3 /u, so the module's own 281-sample bracketing grid
+              returns NOTHING at a cell that clips (gated). `razor_crossings` finds the SIGN CHANGE,
+              `solve_razor` bisects every bracket IN LOCKSTEP (one batch sweep per round -- 2500 razors
+              cost 62 sweeps, not 155000), `genuine_band` walks the f32 band and flags ``clipped`` when
+              the width is only a lower bound.
+            - **THE ENGINE WAS NEVER THE 34x PROBLEM HERE**: `ShoveCtx.sweep_par` is **76k full coupled
+              rolls/s** on this hardware -- 30x the `seeds.make_freerun_native` rollout rate the s123
+              handoff pointed at, which is the right tool for the HERD stage, not the terminal one.
+            - **NEXT: chain backwards.** The terminal set is characterised, so the question is now which
+              herd delivers a pair in it -- and the target is a lateral alignment at a 50-110 u handoff,
+              not a placement.
       - [x] **THE ALONG AXIS WAS NEVER A LEVER, AND THE ARRIVAL BILL IS THE ROOM: BOTH s122 OPTIONS
             ARE ANSWERED, ONE IN THREE MINUTES (session 123).** Two new truth pages,
             [`knowledge/strategy/the-handoff-along-was-already-spanned.md`](../../knowledge/strategy/the-handoff-along-was-already-spanned.md)

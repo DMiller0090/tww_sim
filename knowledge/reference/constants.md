@@ -192,6 +192,7 @@ The walk/run, brakeslide/EBS, roll, and ballistic-hop constants. Decomp `d_a_pla
 | roll speed `clamp(speedF·field_0x18 + field_0x1C, field_0x20, cap)` | **×1.5 + 0.5, floor 5.0, cap 26.0** (= 0.5 + 17·1.5) | `mRoll` |
 | A-press → roll (ATTACK) stick floor | `mStickDistance > `**0.75** (×**0.5** while heavy); at or below → `PUT_AWAY`, sheathe, no roll | `mBasic.field_0x1C` / `mMove.field_0x80` (`setDoStatusBasic` 2220/2218 → 4318); [roll-attack-threshold.md](../mechanics/roll-attack-threshold.md) |
 | roll duration / exit frame `mRoll.field_0x10` | **17** (anim rate 1.1, ≈18 frames) | |
+| body lean decay `LandState.SLANT_DECAY` (`m351C`, `_set_move_slant_angle`) | **0.3499999940395355** per frame (undriven: −191 → 0 in 13 frames) | drives the roll pose chain; [the-corner-sets-the-depth-not-the-herd.md](../strategy/the-corner-sets-the-depth-not-the-herd.md) |
 | roll-EBS (frame-perfect) | full-run roll → hold L+down through roll → release L into ESS-down → **≈ −23.1** | live |
 | WAIT idle blend `setMoveAnime(0, f28, f25, WAITS, WALK, 2)` | f28 **1.1** / f25 **0.8** | `mMove.field_0x38`/`0x40` |
 | low-life stop `ANM_WAITATOB` (rate / start / ctrl end / morf) | **0.6** / **0.0** / **12** / **6.0** | `mMove.field_0x68`/`0x6C`/`0x10`/`0x70`; end overrides the clip's own frameMax 13 |
