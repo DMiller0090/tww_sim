@@ -1710,6 +1710,46 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE CAMERA'S SHAPE IS MEASURED AND IT DOES NOT MOVE THE ANSWER EITHER: A 100%-FIRING
+            BEAM LANDS THE SAME 105.00 (session 122).** The last lever s121 named -- the last cycle's
+            ``l_ok`` keep is a SHARE, so it cannot stop admitting the 53 of 99 endpoints where the
+            clause refuses every variant -- is now an A/B. New truth page
+            [`knowledge/strategy/the-shape-of-a-cut-is-not-its-answer.md`](../../knowledge/strategy/the-shape-of-a-cut-is-not-its-answer.md),
+            one MIGRATION to
+            [`knowledge/history/the-cone-keep-was-a-share-because-a-filter-throws-away-firing-states.md`](../../knowledge/history/the-cone-keep-was-a-share-because-a-filter-throws-away-firing-states.md)
+            + hub. Library: `roll_candidates` gains ``tcs_require`` and `extend_cycle` ``lok_require``,
+            both additive and DEFAULT-OFF.
+            - **PRE-FLIGHT FIRST, AND IT WAS BINDING** (`_notes/s122_shape_preflight.py`, 41 s + 62 s
+              -- the s120 lesson, check a cut is binding before building the fix). Re-running R2 whole
+              at the cells behind the banked beam (pre-roll endpoint from `beam_io.split_last_roll`),
+              over the 165-survivor population's **33 R2 cells**: the share spends **54 of its 99
+              slots** on states that can never fire; the requirement returns **63, all firing**, 25 of
+              them targets the share never kept. It empties 8 cells and loses **ZERO junction nodes**
+              -- every emptied cell sits at a pre-roll node that keeps live cells on another aim.
+              The emulation is self-checked to reproduce the banked keep at **33 of 33** (its first
+              version did not: `junction_quality` is still COMPUTED on the last cycle, and a scored
+              target sorts `(-inbox, lat)` ahead of every unscored one).
+            - **AND THE s73 CALIBRATION NEVER APPLIED TO THIS PREDICATE.** "A camera filter throws
+              away 96% of firing states" was measured on the SNAP BILL; `lok_clear` has no false
+              positives (s117: 107/107 and 118/118; s121: 45 of 46 vs 0 of 53), so what it drops fires
+              nothing. That argument is MIGRATED; the share still ships, for a measured reason.
+            - **THE RE-CUT DELIVERS EVERY STRUCTURAL PROMISE AND NOT ONE FRAME**
+              (`_notes/s122_recut_c3.py`, the s119 PAIR lane with one knob, **3160 s** vs 3936 s; dumps
+              `s122_c3_require_{beam,landing}.json`, log `s122b_require.log`, read by
+              `_notes/s122_read_shape.py`). Terminals clearing `l_ok` **33 of 64 -> 63 of 63**; probed
+              endpoints that FIRE **27 of 47 -> 50 of 50**; in-band **2 -> 6** (spread 877.9 x2 /
+              886.8 / 934.3 / 936.6 / 947.4 against 877.9 / 934.3); deliverers **1 -> 4**; **34
+              endpoints the share never reached**; **0 disagreements** at the 23 shared. Best bound
+              93.95 unchanged and best DELIVERED **105.00 at the SAME endpoint**. The three new
+              deliverers are 106.66 / 115.82 / 117.85.
+            - **SO 105.00 IS NOW RETURNED BY THREE CUTS THAT DO NOT SHARE A POPULATION** -- the capped
+              slice (58% of survivors), the uncapped census (all 165), and a requirement-shaped cut
+              reaching 34 endpoints neither contained. That is evidence about the ENDPOINT SET, not
+              about the cut.
+            - **BOTH SIDES OF THE A/B PROVED, NOT ARGUED.** The knob was in force (a prediction made
+              BEFORE the run: 63 of 63 terminals clear), and the CONTROL is still the control -- the
+              pre-edit `roll_candidates` loaded out of git returns **0-ULP identical keeps** on 6 real
+              pre-roll nodes (`_notes/s122_inert_check.py`), so the banked lane needed no re-run.
       - [x] **THE UNCAPPED CENSUS IS IN, AND IT IS BRANCH 2: THE CAP WAS NEVER BINDING ON THE ANSWER
             (session 121).** s120's `_notes/s120_uncapped_c3.py` finished in **4309 s** (dumps
             `s120_c3_uncapped_{beam,landing}.json`, log `s120c_uncapped.log`): the s119 PAIR lane with

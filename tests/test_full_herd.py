@@ -940,6 +940,42 @@ def test_the_camera_cut_takes_a_share_per_probe_and_one_probe_is_unchanged(env, 
     assert vals <= {0.0, None}
 
 
+def test_the_same_predicate_as_a_requirement_drops_what_the_share_only_sinks(env, hl, box):
+    """**A ``tcs_require`` is a ``tcs_probe``'s other SHAPE, and the shape is the only difference**
+    (session 122) -- the property that makes `extend_cycle`'s ``lok_require`` an A/B rather than a
+    second search.
+
+    Three things, and the third is the one that would silently rot. (1) `as_requirement` asks the SAME
+    question the probe does, so a target the probe refuses is a target the requirement drops -- if the
+    two ever came apart the A/B would be measuring two predicates. (2) Under the requirement EVERY kept
+    target clears, where the share is free to keep refused ones (measured over the standing beam: 43 of
+    78 slots). (3) Default-off INERTNESS: ``tcs_require=None`` must leave the shipped keep byte-identical,
+    because this knob rides in the same function as every banked cut in the beam's provenance."""
+    node = _prologue_node(env)
+    run = node['run']
+    center = F._bearing((run.link.pos_x, run.link.pos_z), (run.tx, run.tz))
+    css = F.derived_target_css(run, span=F.ESCAPE_TCS_SPAN, step=F.ESCAPE_TCS_STEP)
+    kw = dict(half_window=0x2000, step=8, l_windows=((5, 8),), aim_keep=1, tcs_keep=3,
+              target_css=css, require_quality=False, fan_center=center)
+    lok, cam = F.lok_probe_key(hl), F.camera_probe_key()
+
+    share = F.roll_candidates(node, hl, box, tcs_probe=[cam, lok], **kw)
+    req = F.roll_candidates(node, hl, box, tcs_probe=[cam],
+                            tcs_require=F.as_requirement(lok), **kw)
+    # (3) the knob is inert when unused -- the shipped keep is untouched
+    assert [n['knobs']['target_cs'] for n in
+            F.roll_candidates(node, hl, box, tcs_probe=[cam, lok], tcs_require=None, **kw)] == \
+        [n['knobs']['target_cs'] for n in share], "tcs_require=None moved the shipped keep"
+    # (1)/(2) every kept target under the requirement clears, and it is the probe's own verdict
+    assert all(lok(n) == 0.0 for n in req), "a requirement kept a target its own predicate refuses"
+    assert all(F.as_requirement(lok)(n) == (lok(n) is not None) for n in share + req), \
+        "as_requirement is not the probe's own question"
+    # ...and the two shapes are different populations, not more-vs-less strict: the requirement may
+    # surface a target the share never kept (it frees the slots the refused ones held)
+    assert req or not any(lok(n) == 0.0 for n in share), \
+        "the requirement emptied a cell that holds a clearing target"
+
+
 def test_a_beam_node_re_opens_at_its_last_roll_bit_exact(env, hl, box, tmp_path):
     """**`beam_io.split_last_roll`, gated** (session 116): a terminal node re-opened as the PRE-ROLL
     endpoint plus the roll that made it, so the camera questions -- `away_walk.snap_reach` and
@@ -1785,3 +1821,6 @@ def test_the_last_cycles_camera_grid_reaches_the_escapes_snap_window_and_the_cut
     assert 'tcs_escape' in inspect.signature(F.extend_cycle).parameters
     src = inspect.getsource(F.extend_cycle)
     assert 'camera_probe_key()' in src and 'ESCAPE_TCS_SPAN if tcs_escape' in src
+    # ...and the SHAPE of that camera cut is a knob, wired to the same predicate (session 122)
+    assert 'lok_require' in inspect.signature(F.extend_cycle).parameters
+    assert 'as_requirement(lok_probe_key(hl))' in src and 'tcs_require=tcs_require' in src

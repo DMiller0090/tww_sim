@@ -113,14 +113,19 @@ enumerated states - and does **not** predict what they are worth: node 16's wide
 and lets `landing_key`'s own order separate them - an ordering by margin would be a preference nothing
 measured.
 
-A KEEP SHARE, never a filter, because a camera term used as a filter throws away firing states
-(session 73 measured 96% of them). ``tcs_probe`` now takes a SEQUENCE, one share each, because the
-snap bill and the cone are independent orders and neither contains the other. That is the whole of the
-reason: session 116 also argued the share on the grounds that ``dips`` refuses the other half whatever
-the camera does, and session 121 measured that clause to decide no endpoint at all
-([the-dip-budget-is-not-the-lever.md](the-dip-budget-is-not-the-lever.md), and
-[../history/dips-refuses-the-other-half.md](../history/dips-refuses-the-other-half.md) for the retired
-argument).
+A KEEP SHARE, and ``tcs_probe`` takes a SEQUENCE, one share each, because the snap bill and the cone
+are independent orders and neither contains the other. Session 116 gave two REASONS for that shape and
+both have since been measured away: ``dips`` refusing the other half whatever the camera does (session
+121 - it decides no endpoint at all,
+[the-dip-budget-is-not-the-lever.md](the-dip-budget-is-not-the-lever.md) and
+[../history/dips-refuses-the-other-half.md](../history/dips-refuses-the-other-half.md)), and the
+session-73 calibration that a camera filter throws away firing states, which was measured on the SNAP
+BILL and does not transfer to a predicate with no false positives (session 122,
+[../history/the-cone-keep-was-a-share-because-a-filter-throws-away-firing-states.md](../history/the-cone-keep-was-a-share-because-a-filter-throws-away-firing-states.md)).
+The shape ships unchanged on a measured reason instead: as a REQUIREMENT (`full_herd.as_requirement`,
+`extend_cycle`'s ``lok_require``) the same predicate gives an all-firing beam 20% cheaper and returns
+**the same 105.00 at the same endpoint**, so the default stays where the banked provenance is -
+[the-shape-of-a-cut-is-not-its-answer.md](the-shape-of-a-cut-is-not-its-answer.md).
 
 And the screen is **exact**, which session 117 measured rather than assumed: at the two rolls whose
 every reachable state was priced (225 of them), **107 of 107 clearing states fire and 118 of 118

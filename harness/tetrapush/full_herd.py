@@ -916,13 +916,29 @@ def lok_probe_key(hl):
     one. So an ordering by margin would be a preference nothing measured -- every clearing target ties
     at 0.0 and the stable sort leaves `landing_key`'s own order to separate them.
 
-    A KEEP SHARE, never a filter, for `roll_candidates`' ``tcs_probe`` -- the s73 calibration applies
-    unchanged: a camera term as a filter throws away firing states (there, 96% of them). That is the
-    whole reason; session 116 also argued it from ``dips`` refusing the other half whatever the camera
-    does, and session 121 measured that clause to decide NO endpoint (at the 30 dead endpoints of the
-    census it is the sole refusal on 0 of 200038 variants while ``l_ok`` is sole on 55754, and no
-    dip budget revives one) -- `knowledge/strategy/the-dip-budget-is-not-the-lever.md`. Costs two steps
-    per candidate.
+    A KEEP SHARE by default, and ``lok_require`` (`extend_cycle`) is the same predicate as a
+    REQUIREMENT (`as_requirement`). The share was chosen on the s73 calibration -- a camera term as a
+    filter throws away firing states (there, 96% of them) -- plus session 116's second argument from
+    ``dips`` refusing the other half whatever the camera does, and session 121 measured that clause to
+    decide NO endpoint (at the 30 dead endpoints of the census it is the sole refusal on 0 of 200038
+    variants while ``l_ok`` is sole on 55754, and no dip budget revives one) --
+    `knowledge/strategy/the-dip-budget-is-not-the-lever.md`. Costs two steps per candidate.
+
+    **AND THE s73 CALIBRATION IS ABOUT THE SNAP BILL, NOT ABOUT THIS PREDICATE -- BUT THE SHAPE STILL
+    DOES NOT MOVE THE ANSWER** (session 122, both halves measured). 96% of the firing cells fail the
+    BILL, where this one is exact (above) and every state it drops fires nothing: over the 165-survivor
+    population's 33 R2 cells (`_notes/s122_shape_preflight.py`, an emulation self-checked to reproduce
+    the banked keep at 33 of 33) the share spends **54 of its 99 slots** on states that cannot fire
+    while the requirement returns **63 slots, all firing**, 25 of them targets the share never kept --
+    and the 8 cells it empties all sit at a pre-roll node that keeps live cells on another aim, so it
+    drops **zero junction nodes**. Re-cut whole (`_notes/s122_recut_c3.py`, the s119 pair lane with
+    this one knob) the requirement beam is what that predicts -- **63 of 63 terminals clear, 50 of 50
+    probed FIRE** against the share's 27 of 47, in-band **2 -> 6**, deliverers **1 -> 4**, 34 endpoints
+    the share never reached, 0 disagreements at the 23 shared, 20% less wall clock -- and the best
+    DELIVERED is **105.00 at the same endpoint**, unmoved. So the share is not kept for the s73 reason
+    (retired) but because the shapes tie on the answer, and default-off leaves every banked beam's
+    provenance intact; a NEW cut should prefer ``lok_require``.
+    `knowledge/strategy/the-shape-of-a-cut-is-not-its-answer.md`.
 
     **AND IT IS EXACT AS A SCREEN AND INERT AS AN ORDER** (session 117, both measured, and the
     distinction is the whole reason this coexists with `camera_probe_key` rather than replacing it).
@@ -945,10 +961,24 @@ def lok_probe_key(hl):
     return probe
 
 
+def as_requirement(probe):
+    """**A ``tcs_probe`` read as a ``tcs_require`` -- the SAME predicate in the other shape** (session
+    122), so that a shape A/B differs in the shape alone and never in what is being asked.
+
+    A probe reports ``None`` for a camera target it refuses and a sortable for one it accepts; as a
+    share that refusal only sinks the target to the back of one order of several, where as a
+    requirement it drops the target before the keep. Both shapes are worth having and which one is
+    right is a MEASUREMENT, not a preference -- see `lok_probe_key`'s ``lok_require``.
+
+    Returns a callable ``node -> bool`` for `roll_candidates`' ``tcs_require``."""
+    return lambda node: probe(node) is not None
+
+
 def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4, 7), (5, 8)),
                     aim_keep=3, min_roll=20.0, tcs_keep=3, target_css=None,
                     fan_center=None, require_quality=True, key=None, mixed_aims=True,
-                    tcs_key=None, tcs_probe=None, corridor=None, tcs_span=None, tcs_step=None):
+                    tcs_key=None, tcs_probe=None, tcs_require=None, corridor=None,
+                    tcs_span=None, tcs_step=None):
     """The cycle's ROLL stage from a junction endpoint, factored by the separability above.
 
     R1: sweep the reachable aim fan (camera frozen) x the L windows, prune talk-unsafe / weak /
@@ -982,6 +1012,12 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
         (`camera_probe_key`) and the escape's ``l_ok`` cone (`lok_probe_key`), and neither order
         contains the other -- the snap is reachable at 0-6 of ~110 camera states where the cone clears
         at 1-68.
+      * ``tcs_require`` (session 122) is the OTHER shape of the same question -- a callable ``node ->
+        bool`` that drops a camera target before the keep instead of sinking it in one order. A share
+        cannot spend more than its slot; a requirement decides the whole cut, so it belongs only to a
+        predicate measured EXACT at deciding whether the state can fire at all. Its calibration -- and
+        the measurement that the last cycle's ``l_ok`` cone is such a predicate where the snap bill is
+        not -- is in `lok_probe_key`.
 
     ``tcs_span`` / ``tcs_step`` (session 73) widen the grid `derived_target_css` builds, which the LAST
     cycle needs and the shipped `TCS_SPAN` cannot supply: the escape atom's turnaround wants the camera
@@ -1036,14 +1072,17 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
             m = T.metrics(rr, hl, fr)
             if not T.alive(m) or not frame_in_model(rr, walls):
                 continue
+            cand = dict(run=rr, log=log, frames=fr, m=m, quality=None,
+                        knobs=dict(roll_bam=want, aim=aim, l_window=lw, target_cs=tcs,
+                                   roll_speedF=seg['roll_speedF'], jframes=node['jf'],
+                                   junction=node['jv']['kind'], phases=node['jv']['phases']))
+            if tcs_require is not None and not tcs_require(cand):
+                continue                          # this camera target cannot fire -- the OTHER shape
             q = junction_quality(rr, hl, box)
             if q is None and require_quality:     # this camera target strands the plan next cycle
                 continue                          # (a TERMINAL roll has no next cycle to strand)
-            graded.append((q, dict(run=rr, log=log, frames=fr, m=m, quality=q,
-                                   knobs=dict(roll_bam=want, aim=aim, l_window=lw, target_cs=tcs,
-                                              roll_speedF=seg['roll_speedF'], jframes=node['jf'],
-                                              junction=node['jv']['kind'],
-                                              phases=node['jv']['phases']))))
+            cand['quality'] = q
+            graded.append((q, cand))
         if tcs_key is not None:
             graded.sort(key=lambda t: tcs_key(t[1]))
         else:
@@ -1264,7 +1303,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  square_pool=False, corridor=None, arrive_keep=False, target_along=None,
                  resid=None, tcs_landing=False, tcs_square=False, land_keep=False,
                  probe_contact=False, probe_half=None, escape_flip=None, escape_rots=None,
-                 escape_rank=None, tcs_escape=False, cloud_keep=False, cloud_flip=None,
+                 escape_rank=None, tcs_escape=False, lok_require=False, cloud_keep=False,
+                 cloud_flip=None,
                  cloud_rots=None, cloud_cap=None, cloud_fan=None, cloud_stations=None,
                  cloud_exit_runs=None, cloud_exit_step=None, cloud_exit_half=None,
                  delivered_keep=False, verbose=False):
@@ -1481,10 +1521,15 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     # the CAMERA-target cut's key: the landing on the last cycle, the cheap probe mid-chain (s70)
     tcs_key = (landing_key(hl, th_j, resid) if tcs_landing else None)
     tcs_probe = square_probe_key(hl, box, cor_j) if tcs_square else None
+    tcs_require = None
     if tcs_escape:
         # the LAST cycle's camera has two customers the cut never priced: the escape's snap window
         # (s73) and the clause that actually refuses, its ``l_ok`` cone (s116). A keep share each.
         tcs_probe = [camera_probe_key(), lok_probe_key(hl)]
+        if lok_require:
+            # ...or the cone as a REQUIREMENT, the same predicate in the other shape (s122 -- see
+            # `lok_probe_key`'s ``lok_require``). The snap bill keeps its share of what survives.
+            tcs_probe, tcs_require = [camera_probe_key()], as_requirement(lok_probe_key(hl))
     jdead = {}
     for node in nodes:
         ends = junction_beam(node, hl, box, max_frames=max_frames, beam=jn_beam,
@@ -1547,7 +1592,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
         for j in kept:
             for cand in roll_candidates(j, hl, box, aim_keep=aim_keep, half_window=half_window,
                                         step=step, key=key, require_quality=require_quality,
-                                        tcs_key=tcs_key, tcs_probe=tcs_probe, corridor=cor_j,
+                                        tcs_key=tcs_key, tcs_probe=tcs_probe,
+                                        tcs_require=tcs_require, corridor=cor_j,
                                         tcs_span=ESCAPE_TCS_SPAN if tcs_escape else None,
                                         tcs_step=ESCAPE_TCS_STEP if tcs_escape else None):
                 cand['plan'] = list(node.get('plan', [])) + [cand['knobs']]
