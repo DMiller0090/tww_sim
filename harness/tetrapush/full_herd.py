@@ -917,8 +917,12 @@ def lok_probe_key(hl):
     at 0.0 and the stable sort leaves `landing_key`'s own order to separate them.
 
     A KEEP SHARE, never a filter, for `roll_candidates`' ``tcs_probe`` -- the s73 calibration applies
-    unchanged: a camera term as a filter throws away firing states (there, 96% of them), and here the
-    other half of the census is ``dips``, which no camera fixes. Costs two steps per candidate.
+    unchanged: a camera term as a filter throws away firing states (there, 96% of them). That is the
+    whole reason; session 116 also argued it from ``dips`` refusing the other half whatever the camera
+    does, and session 121 measured that clause to decide NO endpoint (at the 30 dead endpoints of the
+    census it is the sole refusal on 0 of 200038 variants while ``l_ok`` is sole on 55754, and no
+    dip budget revives one) -- `knowledge/strategy/the-dip-budget-is-not-the-lever.md`. Costs two steps
+    per candidate.
 
     **AND IT IS EXACT AS A SCREEN AND INERT AS AN ORDER** (session 117, both measured, and the
     distinction is the whole reason this coexists with `camera_probe_key` rather than replacing it).

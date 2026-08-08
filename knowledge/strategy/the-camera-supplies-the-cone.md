@@ -113,10 +113,14 @@ enumerated states - and does **not** predict what they are worth: node 16's wide
 and lets `landing_key`'s own order separate them - an ordering by margin would be a preference nothing
 measured.
 
-A KEEP SHARE, never a filter: the other half of the census is ``dips``, which no camera fixes, and a
-camera term used as a filter throws away firing states (session 73 measured 96% of them). ``tcs_probe``
-now takes a SEQUENCE, one share each, because the snap bill and the cone are independent orders and
-neither contains the other.
+A KEEP SHARE, never a filter, because a camera term used as a filter throws away firing states
+(session 73 measured 96% of them). ``tcs_probe`` now takes a SEQUENCE, one share each, because the
+snap bill and the cone are independent orders and neither contains the other. That is the whole of the
+reason: session 116 also argued the share on the grounds that ``dips`` refuses the other half whatever
+the camera does, and session 121 measured that clause to decide no endpoint at all
+([the-dip-budget-is-not-the-lever.md](the-dip-budget-is-not-the-lever.md), and
+[../history/dips-refuses-the-other-half.md](../history/dips-refuses-the-other-half.md) for the retired
+argument).
 
 And the screen is **exact**, which session 117 measured rather than assumed: at the two rolls whose
 every reachable state was priced (225 of them), **107 of 107 clearing states fire and 118 of 118

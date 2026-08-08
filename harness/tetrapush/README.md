@@ -1710,6 +1710,81 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE UNCAPPED CENSUS IS IN, AND IT IS BRANCH 2: THE CAP WAS NEVER BINDING ON THE ANSWER
+            (session 121).** s120's `_notes/s120_uncapped_c3.py` finished in **4309 s** (dumps
+            `s120_c3_uncapped_{beam,landing}.json`, log `s120c_uncapped.log`): the s119 PAIR lane with
+            ``cap=None`` and ``beam=165``, so every survivor was enumerated rather than the cheapest
+            96. Read with `_notes/s121_read_census.py`.
+            - **165 roll survivors, all enumerated, 99 after dedup in the dump; 81 fire; 3 land
+              in-band and 1 pays both halves. Best DELIVERED over the WHOLE population: 105.00 at
+              node 13 -- the SAME endpoint and the SAME figure as the capped slice.** Best bound
+              93.95, unchanged. So the standing answer is not a property of 58% of the population:
+              **the remaining frames are not in cycle 3's endpoint set at all.**
+            - **THE CAP DID HIDE RECORDS, AND THEY ARE WORSE.** 12 of the 46 firing endpoints in the
+              dump and **1 of the 2 deliverers** were never reported by the capped control -- and the
+              hidden deliverer is node 23 at **117.85**, 12.85 frames off the standing best. (The arc
+              was measured to move a delivered figure by ~1 frame, so it cannot close that.)
+              **Existence is not the branch test -- improvement is**: the first version of the reader
+              printed BRANCH 1 off the mere presence of a new deliverer and was corrected.
+            - **AND IT REPRODUCES ITS CONTROL EXACTLY**: 47 endpoints probed in both lanes, **0
+              disagree** across `fires`/`bound`/`miss`/`total`/`n_atom`/`row_idx`/`knobs`/
+              `d_station`/`arr_frames`/`in_band`/`joint`. The s120 handoff's reproducibility check is
+              discharged.
+            - **A NODE'S GEOMETRY IS NOT AN IDENTITY EITHER** (the reader's own foundation). Session
+              119 retired the node INDEX as an identity and prescribed geometry; that is necessary
+              and not sufficient -- **7 of 64 beam slots are geometry twins** carrying a BIT-identical
+              Tetra endpoint, Link offset and centre-feet (delta exactly 0.0 at full repr) with the
+              same knobs, row and total, and DIFFERENT bounds, because ``offset`` records Link's
+              LATERAL alone and two routes reach one Tetra endpoint with Link at different alongs.
+              The dumped input ``log`` is exact: 64 of 64 unique in both lanes, and all 64 shared
+              between them. Keyed on it the reader reports 0 disagreements pair-vs-pair and 27
+              arc-vs-pair, every one of them in ``exit_bearing`` -- the arc's own knob.
+      - [~] **THE DIP BUDGET IS NOT THE LEVER, AND THE CAP RECORDS A SKIPPED ENDPOINT AS A REFUSED
+            ONE (session 121).** One new truth page,
+            [`knowledge/strategy/the-dip-budget-is-not-the-lever.md`](../../knowledge/strategy/the-dip-budget-is-not-the-lever.md),
+            one migration to
+            [`knowledge/history/dips-refuses-the-other-half.md`](../../knowledge/history/dips-refuses-the-other-half.md)
+            + hub. No library behaviour changed -- one `full_herd.lok_probe_key` docstring corrected
+            where it carried the retired claim.
+            - **``dips``, THE LAST UNMEASURED CLAUSE, IS MEASURED AND IT IS NOT AN AXIS**
+              (`_notes/s121_dips_census.py`, 347 s at 5 procs over **402661** variants at all **99**
+              endpoints of the UNCAPPED census -- the whole population, re-run there after the
+              64-node beam because a finding about a slice is what this session disproved; dump
+              `s121_dips_census_uncapped.json`, log `s121_dips_uncapped.log`). Relaxing `DIP_BUDGET`
+              3 -> 14 (14 IS the largest dip count observed) admits **+39667** variants (+38.7%) and
+              revives **0** of the **53** endpoints that fire nothing. Every dip-only refusal already
+              sits at an endpoint that fires -- ``sole['dips']`` is 39667 across the population and
+              **0** at every dead one. Priced at HELD PUSH (the most
+              ``resid_along`` reachable at each ``freeze_f``; frames alone reads "free" because a
+              short atom separates early only because it pushed less), the bar is worth at most
+              **1.04 frames** anywhere (0.60 at the endpoint that delivers 105.00). **The beam slice said
+              0.78 and "cannot buy a whole frame" -- false on the population by a node the beam does
+              not contain.**
+            - **WHAT REFUSES THE DEAD HALF IS THE CAMERA.** At those 30, `l_ok` fails on **all
+              200038** variants and is SOLE on **55754**; ``dips`` fails on 143805 and is sole on
+              0. `lok_clear` run at all 99 arrivals splits the population **45 of 46** firing against
+              **0 of 53** dead -- 1 false negative, 0 false positives. Five dead endpoints are within
+              10 deg of clearing; nodes 81/92 miss by **1.72 / 1.74 deg**.
+              This retires one of session 116's two reasons for making the camera a share and not a
+              requirement (the other -- a filter throws away firing states -- stands).
+            - **THE CAP'S DUMP CANNOT TELL "NOT MEASURED" FROM "REFUSED"** and 7 of 17 skipped beam
+              slots really fire. The keep is capped at the cheapest 96 by admissible bound and records
+              every skipped survivor as ``fires=False`` with ``bound`` inf beside ``unprobed=True``.
+              Probing all 64 (this session's predicate agrees with the enumeration on **47 of 47** it
+              can check) finds **7 of the 17** hold 1410-3263 firing variants each. Priced with the
+              pair lane's OWN keep (`_notes/s121_price_hidden.py`, control node 13 reproduces its
+              dumped record exactly): all 7 fire, **none delivers**, and their enumerated bounds
+              **107.79 .. 113.36** are the worst in the beam. So on this beam the cap hid real
+              endpoints and no deliverable one -- the screen ranked them expensive and was right.
+            - **AND THE `fires`-FIRST SCREEN IS A DEAD IDEA, MEASURED**: `cloud_landing`
+              short-circuits right after `atom_cloud`, but `atom_cloud` IS the cost (~15 s a node
+              against the whole keep's ~15 s), so screening on `fires` before pricing saves nothing.
+            - **TRAP -- NEVER EDIT A SOURCE FILE WHILE A GATE RUN IS IN FLIGHT.** Many gates here
+              assert on source TEXT (`inspect.getsource`), which resolves `co_firstlineno` against the
+              file on disk at call time. A docstring edit to `full_herd.py` mid-run shifted every line
+              below it and `getsource(extend_cycle)` returned one unrelated line, failing 4
+              `test_cloud_land.py` gates that read as a real regression. Re-run on the settled file:
+              49 passed.
       - [~] **THE REDUCTION IS FIXED AND IT IS NOT THE BINDING ERROR: THE PREDICTOR IS NOT A BOUND,
             AND 69 OF 165 SURVIVORS HAVE NEVER BEEN ENUMERATED (session 120).** Two new truth pages,
             [`knowledge/strategy/minimise-subject-to-the-predicate.md`](../../knowledge/strategy/minimise-subject-to-the-predicate.md)
