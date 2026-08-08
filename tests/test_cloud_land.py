@@ -759,3 +759,204 @@ def test_extend_cycle_hands_the_arc_to_the_keep_and_is_unchanged_without_it():
         assert p['exit_step'].default is None and p['exit_half'].default is None
     # the SCREEN's arc arrives through the fan, never through a bearing argument of its own
     assert 'exit_step' not in inspect.signature(FH.roll_probe).parameters
+
+
+# ------------------------------------------- the REDUCTION: what the screen's minimum is taken over
+
+def test_the_cheapest_atom_owns_the_global_minimum_and_hides_a_LATE_paying_knob():
+    """**The session-119 wall, as an executable gate rather than a remembered measurement.**
+
+    `predict_bound` charges ``n_atom`` 1:1 in frames and the miss it buys at `objective.PUSH_CEILING`,
+    so a short atom landing far out beats a long one landing on the row. Measured over the cycle-3
+    beam, the minimum sat on an ``n_atom`` = 3 member at **64 of 64** endpoints, out of 3 such members
+    in a fan of 75627 -- so ~3 members decided every answer, and a knob whose frames land at the END of
+    the atom (the exit arc, which differentiates members only from length 6 up) moved the bound +0.000
+    at all 64.
+
+    Both halves are gated here on one fan: improving the LONG members alone must leave the global
+    minimum bit-identical, while ``atom_min`` -- the same minimum taken over the lengths that can carry
+    the knob -- must move by exactly what was improved. A screen that cannot express the second cannot
+    see any late-paying axis, whatever table it is handed."""
+    rows = [dict(idx=0, along=900.0, lat=0.0, plan_cost=20)]
+    short = dict(along=0.0, lat=0.0, n_atom=3)                 # lands 20 u out, 3 frames
+    long_ = dict(along=19.0, lat=0.0, n_atom=9)                # lands 1 u out, 9 frames
+    base = CL.predict_bound(880.0, 0.0, 70, [short, long_], rows)
+    assert base['n_atom'] == 3 and base['bound'] == 70 + 3 + 20 + O.remaining_frames(20.0)
+    better = dict(along=20.0, lat=0.0, n_atom=9)               # the late knob: the long member LANDS
+    after = CL.predict_bound(880.0, 0.0, 70, [short, long_, better], rows)
+    assert after['bound'] == base['bound'], "a late-paying knob must be invisible to the global min"
+    assert after['n_atom'] == 3 and after['resid'] == base['resid']
+    lb = CL.predict_bound(880.0, 0.0, 70, [short, long_], rows, atom_min=6)
+    la = CL.predict_bound(880.0, 0.0, 70, [short, long_, better], rows, atom_min=6)
+    assert lb['bound'] == 70 + 9 + 20 + O.remaining_frames(1.0)
+    assert la['bound'] == 99.0 and la['miss'] == 0.0           # exactly the frames it now pays
+    assert la['bound'] < lb['bound'], "the long-atom reduction did not see the knob either"
+
+
+def test_by_atom_is_the_SAME_minimum_taken_per_LENGTH_and_still_exact():
+    """``by_atom`` reports the whole vector instead of one record, which is what makes the argmin's
+    position on the charged axis legible -- the diagnostic session 119 needed and did not have.
+
+    Three identities, because a per-length reduction can go wrong in three ways: the vector's own
+    minimum must BE the global answer (nothing invented, nothing lost), each entry must equal what the
+    same call returns on a fan filtered to that length alone (the per-length prune may not leak an
+    incumbent across classes), and it must be order-independent, which an exact prune guarantees."""
+    rows = [dict(idx=0, along=900.0, lat=0.0, plan_cost=20),
+            dict(idx=1, along=930.0, lat=6.0, plan_cost=19)]
+    fan = [dict(along=a, lat=l, n_atom=k)
+           for k, a, l in ((3, 0.0, 0.0), (3, 12.0, 3.0), (5, 19.0, 0.0), (5, 22.0, -1.0),
+                           (9, 20.0, 0.0), (9, 51.0, 6.0), (12, 20.5, 0.5))]
+    per = CL.predict_bound(880.0, 0.0, 70, fan, rows, by_atom=True)
+    glob = CL.predict_bound(880.0, 0.0, 70, fan, rows)
+    assert sorted(per) == [3, 5, 9, 12]
+    assert min(per.values(), key=lambda v: v['bound']) == glob
+    for k in per:
+        alone = CL.predict_bound(880.0, 0.0, 70, [m for m in fan if m['n_atom'] == k], rows)
+        assert per[k] == alone, "the per-length record is not the length's own minimum"
+    assert CL.predict_bound(880.0, 0.0, 70, fan[::-1], rows, by_atom=True) == per
+    # an empty fan has nothing to say in either shape; no eligible ROW is None in both
+    assert CL.predict_bound(880.0, 0.0, 70, [], rows, by_atom=True) == {}
+    thrown = [dict(m, throw_along=40.0, throw_lat=0.0) for m in fan]
+    assert CL.predict_bound(880.0, 0.0, 70, thrown, rows, by_atom=True, link=(0.0, 0.0),
+                            stations={9: [(0.0, 0.0)]}) is None
+
+
+def test_atom_min_admits_exactly_the_lengths_it_says_and_refuses_to_default():
+    """``atom_min`` is the screen's cheap form of the same reduction, so it must be the vector's
+    minimum over the lengths it admits and nothing else -- including the case where it admits none,
+    which is None (no candidate at that length) and never the global answer quietly returned."""
+    rows = [dict(idx=0, along=900.0, lat=0.0, plan_cost=20)]
+    fan = [dict(along=0.0, lat=0.0, n_atom=3), dict(along=19.0, lat=0.0, n_atom=5),
+           dict(along=20.0, lat=0.0, n_atom=9)]
+    per = CL.predict_bound(880.0, 0.0, 70, fan, rows, by_atom=True)
+    for k in (3, 4, 5, 6, 9):
+        got = CL.predict_bound(880.0, 0.0, 70, fan, rows, atom_min=k)
+        want = min((v for kk, v in per.items() if kk >= k), key=lambda v: v['bound'])
+        assert got == want, "atom_min %d is not the minimum over the lengths it admits" % k
+    assert CL.predict_bound(880.0, 0.0, 70, fan, rows, atom_min=10) is None
+    assert CL.predict_bound(880.0, 0.0, 70, fan, rows, atom_min=3) == \
+        CL.predict_bound(880.0, 0.0, 70, fan, rows)
+
+
+# ----------------------------------------------- the DELIVERED figure, and the share that ranks it
+
+def test_the_delivered_figure_reads_BOTH_records_and_refuses_an_UNSETTLED_one():
+    """`delivered` is the field the objective is denominated in, and it is one function because both
+    of its clauses are errors that were already paid for (session 118).
+
+    ``in_band`` and ``joint`` are DIFFERENT variants, so reading either alone under-reports -- a node's
+    cheapest in-band record can be unsettled while its joint record is settled. And an unsettled
+    arrival owes no finite number of frames at all: it fans an empty walk cloud at `away_walk.WALK_CAP`
+    and reaches no station at any distance, so it may not be quoted."""
+    inb = dict(total=102.0, arr_frames=7.25, settled=False, miss=0.26)
+    jnt = dict(total=105.0, arr_frames=0.0, settled=True, miss=0.47)
+    assert CL.delivered(dict(in_band=inb, joint=jnt)) == 105.0     # NOT 109.25 off the unsettled one
+    assert CL.delivered(dict(in_band=dict(inb, settled=True), joint=jnt)) == 105.0
+    assert CL.delivered(dict(in_band=dict(inb, settled=True, arr_frames=1.5), joint=jnt)) == 103.5
+    assert CL.delivered(dict(in_band=inb, joint=None)) is None
+    assert CL.delivered(dict(in_band=None, joint=None)) is None
+    assert CL.delivered(None) is None and CL.delivered({}) is None
+
+
+def test_the_delivered_SHARE_is_wired_into_the_beam_and_is_OFF_by_default():
+    """The keep half of session 120: every other cloud share reads ``cloud['best']``, which is the
+    minimum-``bound`` variant and therefore short-atom at 64 of 64 endpoints. A share on the delivered
+    field has no such floor, because ``in_band``/``joint`` are min-TOTAL among variants satisfying a
+    predicate rather than minima over an unconstrained fan.
+
+    Off by default, for the module's standing reason: a cut run without it is byte-for-byte the
+    session-119 one. A node with no settled record is UNMEASURED, so it sorts last and keeps its place
+    in the other orders rather than being refused."""
+    import inspect
+    sig = inspect.signature(FH.extend_cycle)
+    assert 'delivered_keep' in sig.parameters and sig.parameters['delivered_keep'].default is False
+    src = inspect.getsource(FH.extend_cycle)
+    assert 'if delivered_keep:' in src and '_CL().delivered' in src
+
+    def key(c):
+        return (CL.delivered(c) is None, CL.delivered(c) or 0.0)
+
+    def settled(t, name):
+        return dict(name=name, in_band=None,
+                    joint=dict(total=t, arr_frames=0.0, settled=True, miss=0.4))
+
+    clouds = [dict(name='none', in_band=None, joint=None), settled(104.0, 'dear'),
+              settled(101.0, 'cheap')]
+    assert [c['name'] for c in sorted(clouds, key=key)] == ['cheap', 'dear', 'none']
+
+
+def test_the_banded_reduction_is_the_predicate_the_KEEP_applies_not_a_trade_against_it():
+    """**The rank half of session 120.** ``bound`` trades the miss against frames at
+    `objective.PUSH_CEILING`, so a 3-frame atom landing 20 u out out-ranks a 10-frame one on the row;
+    `cloud_landing`'s ``in_band``/``joint`` do not trade at all -- they are min-TOTAL among variants
+    that SATISFY a predicate. Predicting that quantity means minimising subject to the predicate.
+
+    Gated on the case that separates them: a cheap member out of band and a dear one inside it. The
+    unbanded call must keep quoting the cheap member (that is its currency, and it is not wrong about
+    it); the banded call must quote the dear one; and with nothing in band at all the answer is None
+    -- an endpoint that cannot be predicted to deliver -- never the unbanded minimum returned quietly.
+    ``owes_nothing`` adds the arrival clause and is a REFUSAL without the stations to price it."""
+    rows = [dict(idx=0, along=900.0, lat=0.0, plan_cost=20)]
+    st = {0: [(900.0, 0.0)]}
+    fan = [dict(along=0.0, lat=0.0, n_atom=3, throw_along=100.0, throw_lat=0.0),
+           dict(along=19.6, lat=0.0, n_atom=9, throw_along=100.0, throw_lat=0.0)]
+    assert CL.predict_bound(880.0, 0.0, 70, fan, rows)['n_atom'] == 3
+    got = CL.predict_bound(880.0, 0.0, 70, fan, rows, band=O.PLACEMENT_BAND)
+    assert got['n_atom'] == 9 and got['miss'] == pytest.approx(0.4, abs=1e-12)
+    assert got['bound'] == 70 + 9 + 20 + O.remaining_frames(got['miss'])
+    # nothing inside the band is None, and that is a statement, not a missing answer
+    far = [dict(along=0.0, lat=0.0, n_atom=3, throw_along=100.0, throw_lat=0.0)]
+    assert CL.predict_bound(880.0, 0.0, 70, far, rows, band=O.PLACEMENT_BAND) is None
+    assert CL.predict_bound(880.0, 0.0, 70, far, rows) is not None
+    # ``owes_nothing`` is a claim about the arrival, so it may not be made without the stations
+    with pytest.raises(ValueError):
+        CL.predict_bound(880.0, 0.0, 70, fan, rows, band=1.0, owes_nothing=True)
+    joint = CL.predict_bound(880.0, 0.0, 70, fan, rows, band=O.PLACEMENT_BAND, link=(800.0, 0.0),
+                             stations=st, owes_nothing=True)
+    assert joint is not None and joint['arr_frames'] == 0.0
+    # ...and it REFUSES the same candidate once its arrival owes something
+    assert CL.predict_bound(880.0, 0.0, 70, fan, rows, band=O.PLACEMENT_BAND, link=(0.0, 0.0),
+                            stations=st, owes_nothing=True) is None
+    assert CL.predict_bound(880.0, 0.0, 70, fan, rows, band=O.PLACEMENT_BAND, link=(0.0, 0.0),
+                            stations=st)['arr_frames'] > 0.0
+
+
+def test_the_band_index_is_exact_and_not_an_approximation_of_the_row_scan():
+    """The banded search looks at 9 grid cells instead of every row, which is the only reason it can
+    run inside a per-aim screen -- a predicate has no incumbent to prune against, so the unindexed
+    scan is the whole fan by the whole row list (~10 s per aim on the shipped fan against ~130 ms).
+
+    A spatial index is exactly the kind of speedup that is allowed to be subtly wrong at the boundary,
+    so it is gated as an IDENTITY against the brute-force banded scan over a randomised layout --
+    including rows placed deliberately at the cell boundary and at the band's own radius."""
+    import random
+    rnd = random.Random(4)
+    rows = ([dict(idx=i, along=rnd.uniform(-40.0, 40.0), lat=rnd.uniform(-40.0, 40.0),
+                  plan_cost=19 + (i % 5)) for i in range(60)]
+            + [dict(idx=100 + j, along=float(a), lat=float(l), plan_cost=20)
+               for j, (a, l) in enumerate([(0.0, 0.0), (1.0, 0.0), (-1.0, 0.0), (0.0, 1.0),
+                                           (2.0, 2.0), (0.9999, 0.0)])])
+    fan = [dict(along=rnd.uniform(-40.0, 40.0), lat=rnd.uniform(-40.0, 40.0),
+                n_atom=3 + (i % 9), throw_along=rnd.uniform(-30.0, 30.0),
+                throw_lat=rnd.uniform(-30.0, 30.0)) for i in range(300)]
+
+    def brute(band):
+        best = None
+        for m in fan:
+            pa, pl = m['along'], m['lat']
+            for r in rows:
+                d = math.hypot(r['along'] - pa, r['lat'] - pl)
+                if d > band:
+                    continue
+                total = 70 + m['n_atom'] + float(r['plan_cost'])
+                b = total + O.remaining_frames(d)
+                if best is None or b < best['bound']:
+                    best = dict(bound=b, miss=d, total=total, row_idx=r['idx'],
+                                n_atom=m['n_atom'], resid=(m['along'], m['lat']),
+                                d_station=None, arr_frames=None)
+        return best
+
+    for band in (0.25, 1.0, 1.0000001, 3.0, 7.5):
+        assert CL.predict_bound(0.0, 0.0, 70, fan, rows, band=band) == brute(band), \
+            "the indexed banded search disagrees with the row scan at band %s" % band
+    assert CL.predict_bound(0.0, 0.0, 70, fan, rows, band=1e-9) is None

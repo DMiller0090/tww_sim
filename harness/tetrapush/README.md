@@ -1710,6 +1710,67 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE REDUCTION IS FIXED AND IT IS NOT THE BINDING ERROR: THE PREDICTOR IS NOT A BOUND,
+            AND 69 OF 165 SURVIVORS HAVE NEVER BEEN ENUMERATED (session 120).** Two new truth pages,
+            [`knowledge/strategy/minimise-subject-to-the-predicate.md`](../../knowledge/strategy/minimise-subject-to-the-predicate.md)
+            (the banded reduction and what it is worth) and
+            [`knowledge/strategy/the-fan-is-not-a-bound.md`](../../knowledge/strategy/the-fan-is-not-a-bound.md)
+            (why it does not fix the rank) + hub x2. Library change in `cloud_land` + `full_herd`,
+            all additive; `predict_bound` gains four reductions and one refusal.
+            - **THE SESSION-119 CROSS-CHECK IS DISCHARGED: NO DISAGREEMENT.** The in-process ``arc``
+              lane finished (16781 s) and reproduces the parallel probe exactly -- 27/64 fire, bound
+              93.95, in-band **2 -> 6**, joint **1 -> 2**, best DELIVERED **105.00 -> 104.00** at miss
+              0.474 u. The apparent "node 13 vs node 14" is a LABEL, not a result: the two lanes'
+              beams are identical except an **exact swap of slots 13/14**, and the winner is the same
+              endpoint (herd 73, along 934.264, lat -10.204, offset +9.632) in both, one frame
+              cheaper under the arc (`n_atom` 11 -> 10, `exit_run` 3 -> 2). A node index is a rank
+              position; compare endpoints across lanes by their geometry.
+            - **THE KEEP SHARE (step 1 of the s119 next step) IS BUILT AND CANNOT BITE.**
+              `extend_cycle`'s ``delivered_keep`` ranks a share of the beam on `cloud_land.delivered`
+              (``total + arr_frames`` over a SETTLED ``in_band``/``joint`` record) instead of on
+              ``best``, which is short-atom at 64 of 64. One line of the s119 arc log settles its
+              value, for free: over all **165** survivors the enumeration found **6 in-band and 2
+              joint**, and the beam it produced holds **exactly those 6 and those 2**. Every
+              deliverable survivor already reaches the beam, so no share of it can add one. Shipped
+              off by default and gated.
+            - **THE SCREEN'S REDUCTION (step 2) IS BUILT, EXACT, 22x CHEAPER -- AND STILL DOES NOT
+              RANK** (`_notes/s120_screen_{keys,rank}.py`, all 64 nodes of the s119 arc beam against
+              that run's own enumerated records; dumps `s120_screen_{keys,rank}.json`).
+              `predict_bound` now takes ``atom_min`` / ``by_atom`` (the minimum per atom LENGTH) and
+              ``band`` / ``owes_nothing`` (minimise subject to the predicate the keep applies, the
+              second a refusal without stations). The two fix different halves: at the beam's
+              best-delivering endpoint (true delivered **104.00**) the standing global minimum reads
+              100.93 (**-3.07**) where ``k>=10`` reads **104.05** (+0.05), while the banded key is
+              what makes the arc visible at all -- **-1.443 .. 0 over 33 of 64 ranks** (joint-banded
+              -7.028), against the global key's `+0.000 at 64 of 64`. It costs **128-147 ms** a call
+              against the global key's **3189 ms**, because a band bounds a distance and therefore
+              indexes: `_band_index` buckets the rows and each member reads 9 cells, not 116 rows
+              (gated as an identity against the brute-force scan, boundary rows included).
+            - **BUT THE RANK IT PRODUCES IS STILL WRONG, AND THE REASON IS THE FAN.** The four
+              endpoints with settled records deliver 104.00 / 106.13 / 106.14 / 111.52; the standing
+              screen ranks them **27 / 16 / 17 / 15** of 64 -- the worst deliverer highest, the best
+              lowest -- and the banded reductions move the best one only to 21st / 23rd. Measured
+              against the enumeration at the 27 firing endpoints, `predict_bound`'s error spans
+              **-0.93 .. +5.11 frames** (mean +1.74) and is **negative at 4 of 27**: the "optimistic
+              by construction" proxy is **not a bound**, and **3 of those 4 are deliverable
+              endpoints**, so it is pessimistic exactly where it matters. It is not the documented
+              -0.53 u/u offset dependence either -- Spearman(error, offset) **-0.135** (vs `t_lat`
+              +0.418, enumerated miss +0.388), so no one-parameter shift repairs it.
+            - **SO THE LEVER IS THE CAP, NOT THE RANK.** The same logs say **69 of 165 survivors were
+              never enumerated** (the keep is capped by wall clock at the cheapest 96 by admissible
+              bound), so in-band 6 and delivered 104.00 are properties of **58%** of the population
+              and the only measure that makes claims has never seen the rest. Running now
+              (`_notes/s120_uncapped_c3.py`, log `_notes/s120c_uncapped.log`): the s119 PAIR lane
+              verbatim with ``cap=None`` and ``beam=165``, so every survivor is enumerated AND
+              dumped -- which also makes any future keep share priceable OFFLINE against that dump
+              instead of costing another cut.
+            - **Gates**: `tests/test_cloud_land.py` +7 (the cheapest atom hides a late knob;
+              ``by_atom`` is the same minimum per length; ``atom_min`` admits exactly what it says;
+              the banded reduction is the keep's predicate; the band index is exact; `delivered`
+              reads both records and refuses an unsettled one; the share is wired and off by
+              default). **128 passed, 6 deselected (10:37)** against s119's 121. Log
+              `_notes/s120_gates.log`. No land-layer source changed, so the land goldens are
+              untouched.
       - [~] **THE ARC IS PLUMBED INTO THE CUT, AND THE CUT STRUCTURALLY CANNOT SEE IT: THE SCREEN'S
             MINIMUM IS PINNED TO THE CHEAPEST ATOM AT 64 OF 64 ENDPOINTS (session 119).** Two new truth
             pages,

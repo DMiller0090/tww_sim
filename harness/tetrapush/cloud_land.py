@@ -410,6 +410,27 @@ def cloud_landing(run0, frames, hl, rows, *, band=None, flip_step=FLIP_STEP, rot
                 in_band=(inb[0] if inb else None), joint=(jnt[0] if jnt else None), front=pf)
 
 
+def delivered(res):
+    """**What a replay of this endpoint actually pays** -- ``total + arr_frames`` over its records --
+    or None when it has proved nothing (session 120).
+
+    The objective is denominated in this and nothing else, so it is one function rather than the
+    arithmetic each caller was doing: the frames the candidate spends plus what its arrival still owes
+    (`arrival_frames`), still owing `entry_reach.hull_scan` at that arrival, which is the standing
+    claim.
+
+    Two clauses, both of them errors that were paid for. ``in_band`` and ``joint`` are DIFFERENT
+    variants -- the cheapest total in band, and the cheapest that also owes nothing -- so a node's
+    ``in_band`` record can be UNSETTLED while its ``joint`` record is settled, and reading either
+    alone under-reports (session 118 quoted a 105.90 that was arithmetic on an unsettled record; the
+    honest figure was 106.62). And an UNSETTLED arrival is not a small error either: it fans an empty
+    walk cloud at `away_walk.WALK_CAP`, so it reaches no station at any distance and cannot be said
+    to owe a finite number of frames."""
+    got = [r['total'] + r['arr_frames'] for k in ('in_band', 'joint')
+           for r in [(res or {}).get(k)] if r and r.get('settled')]
+    return min(got) if got else None
+
+
 def residual_fan(endpoints, hl, *, flip_step=FLIP_STEP, rotate_offs=None, max_frames=18,
                  quantum=1.0, exit_runs=(0,), exit_step=None, exit_half=None):
     """**The atom's residual as the SET it is, measured once** -- the cheap predictor's table.
@@ -509,7 +530,30 @@ def herd_rows(rows, hl, *, default_cost=0.0):
     return out
 
 
-def predict_bound(t_along, t_lat, frames, fan, rows, *, link=None, stations=None):
+def _band_index(rows, cell):
+    """``rows`` bucketed on a ``cell``-wide grid in herd coordinates, so a banded search can look at
+    the 9 cells around a landing instead of at every row.
+
+    Exact rather than approximate, which is the only reason it may be used inside a rank: with the
+    cell equal to the band, a point can be within the band of a row only if that row sits in its own
+    cell or one of the eight touching it."""
+    idx = {}
+    for r in rows:
+        idx.setdefault((int(math.floor(r['along'] / cell)), int(math.floor(r['lat'] / cell)),
+                        ), []).append(r)
+    return idx
+
+
+def _band_rows(idx, cell, pa, pl):
+    ci, cj = int(math.floor(pa / cell)), int(math.floor(pl / cell))
+    for i in (ci - 1, ci, ci + 1):
+        for j in (cj - 1, cj, cj + 1):
+            for r in idx.get((i, j), ()):
+                yield r
+
+
+def predict_bound(t_along, t_lat, frames, fan, rows, *, link=None, stations=None,
+                  atom_min=None, by_atom=False, band=None, owes_nothing=False):
     """**The cheap predictor `cloud_landing` is the exact confirm of**: the best whole-candidate frame
     bound a herd endpoint could reach, over the residual FAN crossed with the rows.
 
@@ -553,8 +597,42 @@ def predict_bound(t_along, t_lat, frames, fan, rows, *, link=None, stations=None
     the roll TERMINAL and called that his arrival, which is not a small error in the direction of
     caution: session 118 measured the terminal gap at 67.6-106.7 u and the same candidates' post-atom
     gap at 159.5-176.3, i.e. the atom roughly DOUBLES what this was pricing. A missing measurement is
-    the module's oldest rule (`station_map`, `arrival_frames`) and it applies to the fan too."""
+    the module's oldest rule (`station_map`, `arrival_frames`) and it applies to the fan too.
+
+    **``atom_min`` / ``by_atom`` are the reduction, and the reduction is what this measure's blind spot
+    lives in** (session 120). ``n_atom`` is charged 1:1 in frames while the miss it buys is charged at
+    `objective.PUSH_CEILING`, so a 3-frame atom landing 20 u out beats a 10-frame one landing on the
+    row, and session 119 measured the consequence: the minimum sits on an ``n_atom`` = 3 member at
+    **64 of 64** endpoints of the cycle-3 beam, out of 3 such members in a fan of 75627. Any knob that
+    pays LATE is then invisible here whatever the fan holds -- the exit arc differentiates members only
+    from ``n_atom`` 6 up (the exit stick is held at the END of the atom), so a 10x larger fan measured
+    along it returns the identical record at 64 of 64 (`the-cheapest-atom-owns-the-screen.md`).
+    ``atom_min`` restricts the fan to members of at least that length, so the long-atom members are
+    compared against each other instead of against a floor they cannot reach; ``by_atom`` returns the
+    whole per-length vector ``{n_atom: record}`` instead of one record, which is what makes the argmin's
+    position on the charged axis legible. The prune stays exact under both -- per length under
+    ``by_atom``, since a member of length ``k`` cannot beat ``frames + k + min(plan_cost)`` either.
+
+    **``band`` / ``owes_nothing`` are the reduction that fixes the RANK**, and the two are a different
+    fix from ``atom_min``: session 120 measured, at the 64 endpoints of the session-119 arc re-cut and
+    against the enumeration's own settled records, that the length restriction corrects the predicted
+    VALUE (at the beam's best-delivering endpoint, ``k>=10`` reads 104.05 against a true delivered
+    104.00, where the global minimum reads 100.93) while leaving the ORDER as wrong as it was -- the
+    global key ranks the four deliverable endpoints 27th, 16th, 17th and 15th of 64 with the WORST
+    deliverer highest and the best lowest. Under the band predicate they rank 7th, 14th, 15th and 26th,
+    which is their true delivered order. The predicate is what the keep applies (`cloud_landing`'s
+    ``in_band``, and with ``owes_nothing`` its ``joint``), so predicting the same quantity means
+    minimising subject to it rather than trading it against `objective.PUSH_CEILING`.
+
+    It costs almost nothing despite having no incumbent to prune with, because a banded search does not
+    need every row: only a row within ``band`` of the landing can be quoted at all, so the rows are
+    bucketed (`_band_index`) and each member looks at 9 cells instead of ~116 rows. And it may return
+    **None** where the unbanded call cannot -- an endpoint no member of the fan is predicted to land in
+    band at any length -- which is a screen in its own right (34 of those 64 endpoints)."""
     hst = None if (link is None or not stations) else stations
+    if owes_nothing and hst is None:
+        raise ValueError("``owes_nothing`` is a claim about the ARRIVAL half, which this call has no"
+                         " way to price: pass `link` and `herd_stations`. Unmeasured is not free")
     if hst is not None and any('throw_along' not in m or 'throw_lat' not in m for m in fan):
         raise ValueError("this fan carries no THROW, so the arrival it prices is Link's roll terminal"
                          " and not his arrival (session 118: the atom roughly doubles the gap)."
@@ -567,15 +645,23 @@ def predict_bound(t_along, t_lat, frames, fan, rows, *, link=None, stations=None
     if not costs:
         return None
     floor = frames + min(costs)
-    best = None
+    bidx = None if band is None else _band_index(rows, float(band))
+    best, per = None, {}
     for m in fan:
-        if best is not None and floor + m['n_atom'] >= best['bound']:
+        k = m['n_atom']
+        if atom_min is not None and k < int(atom_min):
+            continue
+        inc = per.get(k) if by_atom else best
+        if inc is not None and floor + k >= inc['bound']:
             continue                         # cannot be the minimum -- see the docstring's prune
         pa, pl = t_along + m['along'], t_lat + m['lat']
         if hst is not None:
             la = link[0] + m['throw_along']
             ll = link[1] + m['throw_lat']
-        for r in rows:
+        for r in (rows if bidx is None else _band_rows(bidx, float(band), pa, pl)):
+            d = math.hypot(r['along'] - pa, r['lat'] - pl)
+            if band is not None and d > band:
+                continue                     # the predicate the KEEP applies -- see the docstring
             ds = af = None
             if hst is not None:
                 st = hst.get(r.get('idx'))
@@ -583,14 +669,20 @@ def predict_bound(t_along, t_lat, frames, fan, rows, *, link=None, stations=None
                     continue                 # unmeasured is not free -- see `station_map`
                 ds = min(math.hypot(la - q[0], ll - q[1]) for q in st)
                 af = arrival_frames(ds)
-            d = math.hypot(r['along'] - pa, r['lat'] - pl)
-            total = frames + m['n_atom'] + float(r.get('plan_cost', 0))
+                if owes_nothing and af != 0.0:
+                    continue                 # ``joint``: it must owe nothing on either half
+            total = frames + k + float(r.get('plan_cost', 0))
             b = total + O.remaining_frames(d) + (af or 0.0)
-            if best is None or b < best['bound']:
-                best = dict(bound=b, miss=d, total=total, row_idx=r.get('idx'),
-                            n_atom=m['n_atom'], resid=(m['along'], m['lat']),
-                            d_station=ds, arr_frames=af)
-    return best
+            if inc is None or b < inc['bound']:
+                inc = dict(bound=b, miss=d, total=total, row_idx=r.get('idx'),
+                           n_atom=k, resid=(m['along'], m['lat']),
+                           d_station=ds, arr_frames=af)
+        if inc is not None:
+            if by_atom:
+                per[k] = inc
+            else:
+                best = inc
+    return per if by_atom else best
 
 
 def cloud_probe(run, frames, hl, placements, **kw):

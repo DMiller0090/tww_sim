@@ -1262,7 +1262,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  probe_contact=False, probe_half=None, escape_flip=None, escape_rots=None,
                  escape_rank=None, tcs_escape=False, cloud_keep=False, cloud_flip=None,
                  cloud_rots=None, cloud_cap=None, cloud_fan=None, cloud_stations=None,
-                 cloud_exit_runs=None, cloud_exit_step=None, cloud_exit_half=None, verbose=False):
+                 cloud_exit_runs=None, cloud_exit_step=None, cloud_exit_half=None,
+                 delivered_keep=False, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1417,6 +1418,18 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     ``max_frames=18``), so a run that turns it on should size ``cloud_cap`` to match and say what it
     skipped.
 
+    ``delivered_keep`` (session 120) is a share of the beam by the field the OBJECTIVE is denominated
+    in, and it exists because every other cloud share reads ``cloud['best']`` -- the minimum-``bound``
+    variant, which session 119 measured to be an ``n_atom`` = 3 member at 64 of 64 endpoints. ``bound``
+    charges the atom 1:1 in frames and the miss it buys at `objective.PUSH_CEILING`, so the rank is
+    structurally short-atom and a knob that pays late (the exit arc, whose frames land at tails 10-11)
+    cannot appear in it at all. The DELIVERED figure has no such floor: ``in_band``/``joint`` are
+    min-TOTAL among variants that satisfy a predicate rather than minima over an unconstrained fan
+    (`cloud_land.cloud_landing`), so a node whose only deliverable variant is a 10-frame atom is
+    rankable on it. Kept as a share and never as the rank, for `_mixed_beam`'s standing reason -- most
+    nodes have no settled record at all, and a node without one is UNMEASURED, not refused, so it
+    sorts last here and keeps its place in the other orders.
+
     ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) pass the escape atom's two
     unswept knobs and its frames rank through ``escape_keep`` (`escape_probe`, `away_walk.probe`):
     where the conversion frames PUSH her, which on four real arrivals is worth landing 4.90 -> 0.33,
@@ -1565,6 +1578,11 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             if skipped:
                 print("    (cloud keep CAPPED at %d: %d survivors were NOT enumerated -- the floor"
                       " below is the capped slice's, not the population's)" % (cloud_cap, skipped))
+            dl = [d for n in fired for d in [CL.delivered(n['cloud'])] if d is not None]
+            if dl:
+                print("    (%d survivors carry a SETTLED record: best DELIVERED %.2f frames -- what"
+                      " a replay pays, the field the objective is denominated in)"
+                      % (len(dl), min(dl)))
             print("    (cloud-landed %d survivors: %d fire, %d land INSIDE the %.1f u band, %d pay"
                   " BOTH halves; best bound %.2f = %.3f u at total %.1f%s)"
                   % (len(out), len(fired), len(solved), O.PLACEMENT_BAND, len(joint),
@@ -1626,6 +1644,11 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
         # is never cut by the frame rank that averages it away
         orders.append(sorted(out, key=lambda n: (n['cloud']['miss'] is None,
                                                  n['cloud']['miss'] or 0.0)))
+        if delivered_keep:
+            # ...and a share by what a REPLAY of this node pays -- see the docstring
+            dlv = _CL().delivered
+            orders.append(sorted(out, key=lambda n: (dlv(n['cloud']) is None,
+                                                     dlv(n['cloud']) or 0.0)))
     elif escape_keep and out:
         # ...and a share by where the ESCAPE lands her, which is what ends the plan (session 67)
         orders.append(sorted(out, key=lambda n: (n['escape']['miss'] is None,
