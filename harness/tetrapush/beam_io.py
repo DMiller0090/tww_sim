@@ -116,6 +116,36 @@ def split_last_roll(env, node, *, verify=True):
                 roll_frames=len(log) - st)
 
 
+def attribute_parents(children, parents):
+    """**Which node of an EARLIER cycle each terminal descends from** -- by input-log PREFIX, exactly
+    (session 123).
+
+    A chained beam records only terminals, so "what would moving cycle N-1 do to cycle N" has no column
+    to read it off -- and that question decides whether an upstream re-cut is worth its ~1 hour. It
+    needs no re-run: `extend_cycle` APPENDS to a node's delivered log, so a parent's log is a strict
+    prefix of every terminal it produced. Session 123 answered a standing "re-cut cycle 2" this way in
+    minutes, and the answer was no (`knowledge/strategy/the-handoff-along-was-already-spanned.md`).
+
+    Keyed on the log because nothing shallower is an identity here: a node index is a rank position,
+    and geometry is not one either -- 7 of 64 slots of the session-119 beam are twins carrying a
+    bit-identical Tetra endpoint, Link offset and centre-feet with different admissible bounds.
+
+    ``children``/``parents`` are node dicts (anything carrying ``log``) or raw logs. Returns one parent
+    INDEX per child, and RAISES unless each child matches exactly one: an orphan or an ambiguous match
+    means the two beams are not consecutive cycles of one chain, which is never something to paper over
+    by taking the longest match."""
+    plog = [list(p['log']) if isinstance(p, dict) else list(p) for p in parents]
+    out = []
+    for i, c in enumerate(children):
+        clog = list(c['log']) if isinstance(c, dict) else list(c)
+        hit = [j for j, p in enumerate(plog) if len(p) < len(clog) and clog[:len(p)] == p]
+        if len(hit) != 1:
+            raise ValueError('child %d matches %d parents, expected exactly 1 -- these beams are not'
+                             ' consecutive cycles of one chain' % (i, len(hit)))
+        out.append(hit[0])
+    return out
+
+
 def rebuild_beam(env, rec, cycle=-1, hl=None):
     """Rebuild one dumped cycle's nodes as live search nodes, by replaying each log on a fresh
     `FreeRun`. ``cycle`` is 1-based (``-1`` = the last dumped cycle).

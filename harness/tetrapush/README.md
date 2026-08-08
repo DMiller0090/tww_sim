@@ -1710,6 +1710,53 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE ALONG AXIS WAS NEVER A LEVER, AND THE ARRIVAL BILL IS THE ROOM: BOTH s122 OPTIONS
+            ARE ANSWERED, ONE IN THREE MINUTES (session 123).** Two new truth pages,
+            [`knowledge/strategy/the-handoff-along-was-already-spanned.md`](../../knowledge/strategy/the-handoff-along-was-already-spanned.md)
+            and
+            [`knowledge/strategy/the-depth-the-room-asks-for.md`](../../knowledge/strategy/the-depth-the-room-asks-for.md)
+            (the latter SPLIT out rather than grown onto the s115 page), + hub; updates to
+            `the-exit-bearing-buys-the-arrival.md` and `the-separation-is-not-a-suffix.md`. Library:
+            **`beam_io.attribute_parents`** (this session's method, made executable) + its gate.
+            - **OPTION 1 IS DEAD AND THE DUMPS ALWAYS SAID SO** (`_notes/s123_c2_preflight.py map`,
+              seconds, no cut). Attributing all 226 banked cycle-3 terminals to their cycle-2 parents
+              by input-log PREFIX: the population spans along **827.99-984.25** with **6 terminals
+              SHORT of the 876 target**. The "918-971" that motivated the re-cut is the branch off c2
+              nodes 8/9 -- **34 of 63**, not the population. And cycle 2 already exits where it would
+              have to: nodes 0/1 at along **579.19** deliver terminals at **877.88 / 886.82**, on the
+              target, while the earliest exit (569.82) UNDERSHOOTS to 827.99. The ask "hand off 40-90 u
+              earlier" pointed the wrong way.
+            - **BECAUSE THE ALONG IS A TRADE AND THE ARRIVAL IS THE HALF THAT LOSES.** The near-target
+              band's best deliverer is **106.66** -- `total` **99**, two frames UNDER the banked plan,
+              plus **7.66** frames of arrival -- against the winner's 105.00 (`total` 105, arrival
+              zero, an 11-frame atom putting Link 29.2 u from a station).
+            - **AND THE BILL IS THE ROOM, NOT THE SEARCH.** All **268** stations lie in ONE cluster at
+              along **804.70-818.69** while the 116 rows run **879.92-979.86**: every row is
+              **72.3-162.6 u down-line of its own stations** (median 110.6), so delivering needs
+              **61.2-175.2 u** of separation. Over both banked beams (`_notes/s123_sep_vs_arrival.py`)
+              ``sep`` is the strongest predictor of the bill -- corr(``sep``, `d_station`) **-0.697**
+              (require) / **-0.819** (pair), against `n_atom`'s -0.489 / -0.603 -- every free-arrival
+              terminal is one of the deepest, and the beam tops out at **59.4 u**.
+            - **THE HERD CANNOT BUY THE DEPTH EITHER, WHICH CLOSES s115's OPEN HALF**
+              (`_notes/s123_deep_census.py`, 154 s, dump `s123_deep_census.json`). The 7 herd-produced
+              deep terminals (``sep`` 62.4-75.3) fire **0 of 672** each; the 3 deepest FIRING controls
+              fire **226-329**. **6 of 7 have NO sole clause** (`l_ok` + `dips` refuse together, so no
+              single fix revives a variant); the 7th is one camera fix from firing all 672 and lands
+              **52 u short** of the nearest row. Tightest reading: at the SAME endpoint along, ``sep``
+              59.4 fires 329/672 and ``sep`` 62.4 fires **0** with `l_ok` SOLE.
+            - **OPTION 2 PRICED WHOLE: THE ARC IS WORTH ONE FRAME, A FOURTH TIME**
+              (`_notes/s123_arc_at_require.py`, 2464 s at 5 procs, dump `s123_arc_require.json`, read
+              by `_notes/s123_read_arc.py`). At the requirement lane's **50 firing** terminals, with
+              the pair lane re-priced in the same call and asserted against the banked dump --
+              **control 50 of 50** -- in-band **6 -> 10**, joint **1 -> 2**, deliverers **4 -> 7**,
+              best bound 93.95 unchanged, best DELIVERED **105.00 -> 104.00** at the same endpoint.
+              Next best are 105.75 / 106.13 / 111.52, far behind.
+            - **AND THE ARC'S WINDOW IS NOT BINDING** -- s112's standing prescription, run at last.
+              All 7 deliverers' winning `exit_bearing` sits **-22.50 to +11.25 deg** off its nearest
+              centre against a **+-67.5 deg** half-window: **0 of 7 at the edge**. Widening is not an
+              unpriced lever, which is `the-short-atom-is-a-point` read from the other side.
+            - **SO THE BANKED 101 STANDS, by 3 frames**, and the remaining gap is not in the cut, the
+              cut's shape, the handoff along, the arc, or the separation.
       - [x] **THE CAMERA'S SHAPE IS MEASURED AND IT DOES NOT MOVE THE ANSWER EITHER: A 100%-FIRING
             BEAM LANDS THE SAME 105.00 (session 122).** The last lever s121 named -- the last cycle's
             ``l_ok`` keep is a SHARE, so it cannot stop admitting the 53 of 99 endpoints where the

@@ -147,8 +147,15 @@ was cut with it, not a claim this measurement makes.
 Per the standing rule, this predictor still only sizes the cut -- `cloud_landing` at the survivors makes
 the claim (`[[banded-proxy-needs-its-newton]]`).
 
+**The herd-shaped route was tested in session 123 and it closes too**, at the same ``l_ok`` clause and
+at a wall of ~60 u - below even the shallowest depth the room asks for. What the depth is FOR, what
+the beam reaches, and the census of the seven deep endpoints the herd DID produce are on their own
+page: [the-depth-the-room-asks-for.md](the-depth-the-room-asks-for.md).
+
 ## Reading
 
+- [the-depth-the-room-asks-for.md](the-depth-the-room-asks-for.md) -- what the separation is for (the
+  station geometry), and the measurement that closes the herd-shaped route this page left open.
 - [the-endpoint-is-four-numbers.md](the-endpoint-is-four-numbers.md) -- where the specification and its
   92.5-156.8 u separation come from, and the 25.727 u/frame price this page measures.
 - [the-short-atom-is-a-point.md](the-short-atom-is-a-point.md) -- the rigidity that makes the throw a

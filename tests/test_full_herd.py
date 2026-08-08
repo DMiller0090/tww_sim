@@ -1014,6 +1014,49 @@ def test_a_beam_node_re_opens_at_its_last_roll_bit_exact(env, hl, box, tmp_path)
     assert sp['roll_frames'] >= 2
 
 
+def test_a_terminal_is_attributed_to_its_parent_cycle_by_log_prefix(env, hl, box):
+    """**`beam_io.attribute_parents`, gated** (session 123): a chained beam records only terminals, so
+    the transfer between two cycles -- what moving cycle N-1 would do to cycle N -- has no column, and
+    that question decides whether an upstream re-cut is worth its ~1 hour. It is recoverable exactly,
+    because `extend_cycle` APPENDS to a node's log.
+
+    Gated on REAL extensions the library itself produced -- `junction_beam`'s endpoints off a two-node
+    cycle-1 beam, which is the same prefix relation `extend_cycle` hands its terminals, at a fraction
+    of the cost. Every child must attribute to the parent it grew from, and a beam that is NOT the
+    parent must RAISE rather than return a plausible answer: the failure this exists to prevent is a
+    silent mis-pairing that reads as a measurement."""
+    from harness.tetrapush import beam_io
+
+    c1 = F.cycle1_nodes(env, hl, box, beam=2)
+    assert len(c1) >= 2, "need two distinct parents for the attribution to be non-trivial"
+    kids, want = [], []
+    for j, node in enumerate(c1):
+        ends = F._dedup_endpoints(F.junction_beam(node, hl, box, max_frames=8, beam=16, ess_step=2,
+                                                  aim_step=32, keep=10 ** 6))[:3]
+        assert ends, "cycle-1 node %d armed no junction endpoint" % j
+        kids += ends
+        want += [j] * len(ends)
+    assert len(set(want)) == len(c1), "only one parent produced children -- not a real attribution"
+
+    par = beam_io.attribute_parents(kids, c1)
+    assert par == want
+    for child, j in zip(kids, par):
+        assert child['log'][:len(c1[j]['log'])] == c1[j]['log']
+        assert len(child['log']) > len(c1[j]['log']), "a child must extend its parent, not equal it"
+
+    # raw logs are accepted too, and give the identical answer -- the identity is the log, not the dict
+    assert beam_io.attribute_parents([n['log'] for n in kids], [n['log'] for n in c1]) == par
+
+    # not vacuous: an unrelated parent set must RAISE, never attribute
+    with pytest.raises(ValueError):
+        beam_io.attribute_parents(kids, [dict(log=list(kids[0]['log']) + [dict(kids[0]['log'][-1])])])
+    with pytest.raises(ValueError):
+        beam_io.attribute_parents(kids, [])
+    # ...and so must an AMBIGUOUS one: a parent that is itself a prefix of another parent
+    with pytest.raises(ValueError):
+        beam_io.attribute_parents(kids[:1], [c1[par[0]], dict(log=c1[par[0]]['log'][:-1])])
+
+
 def test_the_chain_does_not_require_its_LAST_cycle_to_be_continuable(env, hl):
     """**The session-61 stall, gated.** `junction_quality` asks whether the NEXT junction could
     continue from a roll's endpoint -- so requiring it on the FINAL cycle demands continuability from

@@ -7,7 +7,9 @@ the other half of the problem - what does that cost?
 **Status:** MEASURED (session 118) on the flooded-Hyrule Tetra corner, over the 14 in-band camera
 states the session-117 sweep produced from the session-111 cycle-3 beam. Driver
 `_notes/s118_arrival_scan.py` (phases ``control`` / ``scan`` / ``trace`` / ``arc``), dumps
-`_generated/s106/s118_{arrival_scan,arc,arc_floor}.json`.
+`_generated/s106/s118_{arrival_scan,arc,arc_floor}.json`. RE-PRICED at whole beams in sessions 119
+(`_notes/s119_arc_at_beam.py`, 27 survivors) and 123 (`_notes/s123_arc_at_require.py`, the
+requirement lane's 50, plus the window's own edge check read by `_notes/s123_read_arc.py`).
 **Source:** [`harness/tetrapush/cloud_land.py`](../../harness/tetrapush/cloud_land.py) (`exit_arc`,
 `atom_cloud`'s ``exit_bearings``/``exit_runs``, `arrival_frames`, `station_gap`),
 [`harness/tetrapush/away_walk.py`](../../harness/tetrapush/away_walk.py) (`escape_atom`'s
@@ -129,6 +131,36 @@ like every other candidate here. **The banked 101 stands**, now by 3 frames.
 
 And the reason the arc cannot do more than this from inside a cut is structural, not a resolution
 problem: [the-cheapest-atom-owns-the-screen](the-cheapest-atom-owns-the-screen.md).
+
+## One frame again at a population that shares no endpoints with either
+
+Session 123 ran it at the **whole firing population** of the session-122 requirement lane - 50
+terminals, 34 of them endpoints the share-shaped cut never reached - with the standing pair re-priced
+in the same call and asserted against the banked dump
+(`_notes/s123_arc_at_require.py`, 2464 s at 5 processes):
+
+| at the requirement lane's 50 firing terminals | standing pair | the arc |
+|---|---|---|
+| control: reproduces the banked record | **50 of 50** | - |
+| nodes holding an `in_band` record | 6 | **10** |
+| nodes holding a `joint` record | 1 | **2** |
+| nodes that DELIVER a settled record | 4 | **7** |
+| best `bound` | 93.95 | 93.95 |
+| **best DELIVERED** | 105.00 (tail 3) | **104.00** (tail 2) |
+
+The same one frame, at the same endpoint, off a population that shares 23 endpoints with the lane
+session 119 measured and 27 with nothing. The arc's next-best gains are real and far behind -
+105.75 and 106.13 at the along-886.8 pair, 111.52 at 897.1 - so **104.00 is what this axis is worth,
+now four independent times.**
+
+**And the window is NOT binding**, which retires the standing suspicion that it might be.
+[the-offset-cannot-pay-both](the-offset-cannot-pay-both.md) measured a deep straight-push Link needing
+to point ~90 deg off both arc centres and `half=0x2000` unable to reach it, and prescribed checking
+the winning bearing against the half-window rather than assuming. Checked at all 7 deliverers, the
+winners sit **-22.50 to +11.25 deg** off their nearest centre against a **+-67.5 deg** window:
+**0 of 7 at the edge**. So widening buys nothing here - which is
+[the-short-atom-is-a-point](the-short-atom-is-a-point.md) read from the other side, since every
+winning tail on this beam is short enough that the arrival set has barely opened.
 
 ## The rule
 
