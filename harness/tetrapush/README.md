@@ -1757,6 +1757,31 @@ from scratch. Land the edits first, then gate.
               unpriced lever, which is `the-short-atom-is-a-point` read from the other side.
             - **SO THE BANKED 101 STANDS, by 3 frames**, and the remaining gap is not in the cut, the
               cut's shape, the handoff along, the arc, or the separation.
+            - **AND THEN DERECK RE-AIMED THE WHOLE PROBLEM (end of s123, in conversation). Read this
+              box's numbers as CORRECT ARITHMETIC ON A SUPERSEDED FORMULATION.** Everything above --
+              the arrival bill, the station cluster, the 61.2-175.2 u separation ask, the 230 u follow
+              limit, the five `away_walk.fires` clauses -- exists ONLY because the plan walks AWAY from
+              her and comes back. **Target zero walk-away frames: the herd's LAST ROLL *is* the clip
+              roll.** Link never leaves her; the search becomes ONE condition on ONE frame (at the cut,
+              is Link's overlap steering him through the seam), and the escape/arrival/station/roll-
+              entry stages are deleted rather than optimised. Order (Dereck, "reduce variables"): solve
+              the TERMINAL CONFIGURATION first -- which (Link, Tetra) geometry at the cut frame clips --
+              and only then ask which herd arrives there. Open unknown: the clip wants ~**1.23 u** of
+              overlap at the cut and a herd roll's depth is whatever the plow produces, so the terminal
+              solve has to answer the razor first.
+            - **THE SEARCH HAS BEEN RUNNING 34x SLOWER THAN THE ENGINE IT ALREADY HAS**
+              (`_notes/s123_bench.py`, measured this hardware). `beam_io.rebuild_beam` -> `seeds.
+              make_freerun`, which wires camera + Tetra look/eye + neck and runs the pose FK in Python:
+              **2,915 coupled steps/s (343 us), 74 roll rollouts/s**. `seeds.make_freerun_native`
+              (`LandCore.step_courtyard`, `native_push=1`, the STRIPPED config) measures **99,523
+              steps/s (10.0 us) and 2,583 roll rollouts/s** -- and is already gated 0-ULP against the
+              Python path (`tests/test_freerun_native.py`). So a 100k-aim sweep is **~39 s
+              single-threaded**, not 21 minutes, and s123's own 2464 s arc sweep was ~70 s of work.
+              **Every wall-clock figure in the boxes above is inflated ~35x**; the arithmetic stands,
+              but "too expensive to sweep" was never true. Not a one-line fix: the native config has no
+              camera, so any predicate reading `csangle`/`l_ok`/`target_cs` needs care, and the CUT is
+              Python-only (no cut in `_anmc.pyx`) -- so the split is the module's usual one, **native
+              for the mass sweep, Python for the exact clip confirm**.
       - [x] **THE CAMERA'S SHAPE IS MEASURED AND IT DOES NOT MOVE THE ANSWER EITHER: A 100%-FIRING
             BEAM LANDS THE SAME 105.00 (session 122).** The last lever s121 named -- the last cycle's
             ``l_ok`` keep is a SHARE, so it cannot stop admitting the 53 of 99 endpoints where the
