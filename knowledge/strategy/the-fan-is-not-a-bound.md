@@ -58,6 +58,13 @@ the endpoint's own offset from Tetra - the axis the residual is known to track a
 **-0.135**, against `t_lat` **+0.418** and against the enumerated miss **+0.388**. There is no
 one-parameter shift that turns this fan into that endpoint's fan.
 
+The two cheaper explanations are both ruled out. The fan is measured on the SAME grid the keep
+enumerates (`residual_fan` and `cloud_landing` share `atom_cloud`'s `flip_step`, rotate offsets,
+`max_frames` and tails), so it is not a resolution mismatch. And its 1.0 u dedup cell is worth at most
+`remaining_frames(1.0)` = **0.077 frames**, where the largest pessimism measured is **0.935** - 12x
+the cell, i.e. 12.2 u of miss. What is left is the fan's SIX measurement endpoints, applied at 64
+belonging to a different beam.
+
 ## Nor is the beam's rank the binding constraint
 
 The obvious next fix - rank the last cycle on the DELIVERED field instead of on a short-atom bound -
