@@ -46,6 +46,19 @@ ROUNDTRIP_ROW = (False, 0.001052132498393048, 1.1302613187537531, 0.565132154746
 HERD_TETRA = (-1616.8218994140625, -780.3568115234375)
 HERD_L0 = -68.11412671348236
 
+#: The banked cycle-3 endpoint CLOSEST to the entry curve (s122 require beam node 45, 73 herd frames)
+#: -- a real delivered pair on the genuine side, and where the frame price is pinned.
+ONSIDE_LINK = (-1621.344482421875, -832.6629638671875)
+ONSIDE_TETRA = (-1606.7857666015625, -888.6373291015625)
+ONSIDE_L0 = 14.689594181878682
+
+#: `resid_window` at that pair on the 230 rung, and the residual OUTSIDE it -- one number, repeated,
+#: which is the whole reason a coarse pass can say where the fine one has anything to find.
+ONSIDE_WINDOW = (8.939594181878682, 20.189594181878682)
+NO_CONTACT_RESID = -0.3293846608827907
+ONSIDE_CROSSINGS = [(9.599594181878679, 9.604594181878689),
+                    (11.749594181878685, 11.75459418187868)]
+
 
 @pytest.fixture(scope='module')
 def pf():
@@ -135,3 +148,82 @@ def test_the_solved_entry_is_a_razor_and_the_band_edges_are_the_edges(pf):
     outside = [b['side_lo'] - 1e-5, b['side_hi'] + 1e-5]
     assert all(r[0] for r in pf.sweep(H._items(pf, tetra, entry0, inside)))
     assert not any(r[0] for r in pf.sweep(H._items(pf, tetra, entry0, outside)))
+
+
+# --------------------------------------------------------------------- the rank (session 126)
+
+def test_outside_contact_the_residual_is_one_number(pf):
+    """The claim the coarse window rests on, as a gate rather than an assumption: a roll that never
+    reaches her runs the same trajectory whatever ``side`` is, so its residual is BIT-IDENTICAL
+    everywhere outside contact. That is what makes a 561-sample pass able to say where the 28001-
+    sample one has anything to find -- and it is an equality, not a tolerance."""
+    entry = pf.entry_at(230.0)
+    assert H.resid_window(pf, ONSIDE_TETRA, entry) == ONSIDE_WINDOW
+    far = [ONSIDE_L0 - 70.0, ONSIDE_L0 - 50.0, ONSIDE_WINDOW[0] - 1e-6,
+           ONSIDE_WINDOW[1] + 1e-6, ONSIDE_L0 + 50.0, ONSIDE_L0 + 70.0]
+    rs = pf.sweep(H._items(pf, ONSIDE_TETRA, entry, far))
+    assert [r[1] for r in rs] == [NO_CONTACT_RESID] * len(far)
+    assert (ONSIDE_WINDOW[1] - ONSIDE_WINDOW[0]) < 0.1 * 2 * H.SIDE_SPAN, 'the saving is the point'
+
+
+def test_the_windowed_scan_is_the_full_span_scan(pf):
+    """Same brackets, exactly. The fine samples are taken on the full span's own lattice, so the two
+    paths evaluate bit-identical positions -- at a 1e-4 u acceptance, agreeing to within a step would
+    not be agreeing at all."""
+    entry = pf.entry_at(230.0)
+    assert H.side_crossings(pf, ONSIDE_TETRA, entry, window_step=None) == ONSIDE_CROSSINGS
+    assert H.side_crossings(pf, ONSIDE_TETRA, entry) == ONSIDE_CROSSINGS
+    # ...and at the s124 reference cell, whose contact corridor is ~1 u wide rather than ~11
+    assert (H.side_crossings(pf, REF_TETRA, pf.entry_at(230.0), window_step=None)
+            == H.side_crossings(pf, REF_TETRA, pf.entry_at(230.0)))
+
+
+def test_the_root_curve_is_a_bound_and_says_so(pf):
+    """`entry_roots` skips the f32 band walk, so it can be non-empty where the GENUINE curve is empty
+    -- a bisected root is only a sign change, and whether its neighbourhood clips is what the walk
+    decides. That makes the cheap curve an under-estimate of the gap (what a prune needs) and never a
+    claim about a clip, so the record carries ``roots`` and a quoted plan owes an `entry_locus`
+    confirmation (`[[banded-proxy-needs-its-newton]]`)."""
+    rungs = (230.0,)
+    gr = H.node_gap(pf, ONSIDE_LINK, ONSIDE_TETRA, roots=True, runways=rungs)
+    gl = H.node_gap(pf, ONSIDE_LINK, ONSIDE_TETRA, runways=rungs)
+    assert gr['roots'] is True and gl['roots'] is False
+    assert gr['n'] == 2 and gl['n'] == 0
+    assert gr['gap'] <= gl['gap']
+    # every genuine entry IS a root, so the banded curve can only be a subset of the cheap one
+    full = H.entry_locus(pf, ONSIDE_TETRA)
+    roots = H.entry_roots(pf, ONSIDE_TETRA)
+    assert 0 < len(full) <= len(roots)
+    for b in full:
+        assert min(abs(b['side'] - r['side']) for r in roots) <= H.BAND_HALF
+
+
+def test_an_endpoint_is_priced_in_frames_and_the_wrong_side_is_refused_free(pf):
+    """The last cycle's rank. ``bound`` is the herd frames spent plus the fewest that could still
+    close the gap at the walk cap plus the clip roll's own ``cut_step`` -- admissible on every term,
+    so a beam ranked on it is frame-minimal by construction. And the side prune has to be FREE: an
+    endpoint that parked her on the wrong side is refused on one dot product, without solving a
+    razor, or the rank cannot run at beam scale."""
+    rungs = (230.0,)
+    e = H.endpoint(pf, ONSIDE_LINK, ONSIDE_TETRA, 73, runways=rungs)
+    assert e['onside'] is True and e['l0'] == ONSIDE_L0 and e['n'] == 2
+    assert e['bound'] == 73 + e['gap'] / H.WALK_CAP + pf.cut_step
+    assert H.WALK_CAP == 17.0 and pf.cut_step == 16
+    off = H.endpoint(pf, ONSIDE_LINK, HERD_TETRA, 73, runways=rungs)
+    assert off['refused'] == 'offside' and off['l0'] == HERD_L0
+    assert off['bound'] == float('inf') and off['n'] == 0 and 'locus' not in off
+
+
+def test_the_search_keep_reads_only_fields_this_module_promises():
+    """Anti-drift across the module boundary: `full_herd.extend_cycle`'s ``handoff_keep`` sorts on
+    ``bound``, tie-breaks on ``l0``, shares a keep by ``gap`` and reports ``onside``/``n``. A rename
+    here would silently REORDER a beam rather than fail, which is the worst way for a rank to break."""
+    import inspect
+    from harness.tetrapush import full_herd as FH
+
+    sig = inspect.signature(FH.extend_cycle).parameters
+    for kw in ('handoff_keep', 'handoff_pf', 'handoff_rungs', 'handoff_roots', 'handoff_sign'):
+        assert kw in sig, kw
+    assert FH._HO() is H
+    rec = H.endpoint(H.PairFrame(ES.TAB_FACING, 14, 0), ONSIDE_LINK, HERD_TETRA, 73)
+    assert {'bound', 'l0', 'gap', 'n', 'onside', 'frames'} <= set(rec)

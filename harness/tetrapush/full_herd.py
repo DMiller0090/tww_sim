@@ -485,6 +485,13 @@ def _CL():
     return CL
 
 
+def _HO():
+    """`handoff`, imported on use -- it compiles a coupled roll (`terminal.RollFrame`) on
+    construction, which a beam that asks no terminal question should not pay for."""
+    from harness.tetrapush import handoff as HO
+    return HO
+
+
 def _dedup_endpoints(ends):
     """Collapse endpoints that share BOTH the physics state and the pending delay-1 input. (The
     pending input must stay in the key: two endpoints identical in physics can differ in whether
@@ -1307,7 +1314,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  cloud_flip=None,
                  cloud_rots=None, cloud_cap=None, cloud_fan=None, cloud_stations=None,
                  cloud_exit_runs=None, cloud_exit_step=None, cloud_exit_half=None,
-                 delivered_keep=False, verbose=False):
+                 delivered_keep=False, handoff_keep=False, handoff_pf=None, handoff_rungs=None,
+                 handoff_roots=True, handoff_sign=True, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1474,6 +1482,27 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     nodes have no settled record at all, and a node without one is UNMEASURED, not refused, so it
     sorts last here and keeps its place in the other orders.
 
+    ``handoff_keep`` (session 126) is what the ZERO-WALK-AWAY shape replaces that whole stack with,
+    and the replacement is not a refinement of it -- it is a different question. Every keep above ranks
+    a last-cycle endpoint by where TETRA ends up (the thread, the cloud, the row's stations), because
+    the plan used to be "park her on a coord, walk away, roll back in". Session 123 deleted the walk-away
+    and session 125 measured the consequence: her placement is free inside a wide band and **the razor
+    is on LINK** -- 15 of 127 banked endpoints park her on the genuine side and ALL 15 admit a clip
+    roll, while Link ends the last roll 73-171 u from the nearest genuine entry it needs. So this keep
+    ranks on `handoff.endpoint`: her ``l0`` SIGN first (one dot product, which refuses 112 of 127
+    before any razor work), then the distance from LINK to the genuine entry curve at her own Tetra,
+    priced in frames as ``frames + gap/WALK_CAP + 16``. ~1.5 s per survivor at `handoff.RUNWAYS`,
+    against ~28 s for a cloud enumeration, and it supersedes ``cloud_keep``/``escape_keep``/
+    ``glide_keep`` when on. ``handoff_roots`` picks the admissible curve (`handoff.entry_roots`, the
+    default) over the confirmed one (`handoff.entry_locus`, ~10x dearer); ``handoff_sign`` turns the
+    empirical side prune off to re-measure it; ``handoff_pf`` passes a `handoff.PairFrame` at another
+    facing/thrust/lean, which is not a detail -- the herd's own last-roll aims yield ZERO genuine and
+    the clip roll must be aimed at the corner deliberately.
+
+    Session 107's warning applies to it as it does to every keep here: it sits at the ENDPOINT, so it
+    can only name the least-bad member of a survivor set the per-aim screen already fixed. What it
+    can afford at the screen is the SIGN.
+
     ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) pass the escape atom's two
     unswept knobs and its frames rank through ``escape_keep`` (`escape_probe`, `away_walk.probe`):
     where the conversion frames PUSH her, which on four real arrivals is worth landing 4.90 -> 0.33,
@@ -1599,7 +1628,29 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                 cand['plan'] = list(node.get('plan', [])) + [cand['knobs']]
                 out.append(cand)
     out = _budget_cut(out, cut, budget, 'roll survivors', verbose)
-    if cloud_keep and out:
+    if handoff_keep and out:
+        # THE ZERO-WALK-AWAY SHAPE'S OWN KEEP -- see the docstring's ``handoff_keep``
+        HO = _HO()
+        pf = handoff_pf if handoff_pf is not None else HO.PairFrame()
+        rungs = HO.RUNWAYS if handoff_rungs is None else tuple(handoff_rungs)
+        for n in out:
+            r = n['run']
+            n['handoff'] = HO.endpoint(pf, (r.link.pos_x, r.link.pos_z), (r.tx, r.tz), n['frames'],
+                                       runways=rungs, roots=handoff_roots,
+                                       sign_prune=handoff_sign)
+        # the tie-break is her SIGNED offset, descending: every refused endpoint scores ``inf``, and
+        # among them the ones her last roll nearly carried across are the informative ones
+        out.sort(key=lambda n: (n['handoff']['bound'], -n['handoff']['l0']))
+        if verbose:
+            on = [n for n in out if n['handoff']['onside']]
+            live = [n for n in on if n['handoff']['n']]
+            print("    (handoff-probed %d survivors: %d park her on the genuine side, %d of those"
+                  " admit an entry curve; best bound %s = %s u of gap at %d herd frames)"
+                  % (len(out), len(on), len(live),
+                     ('%.2f' % out[0]['handoff']['bound']) if live else '--',
+                     ('%.2f' % out[0]['handoff']['gap']) if live else '--',
+                     out[0]['frames'] if live else -1))
+    elif cloud_keep and out:
         # the landing MEASURED rather than predicted -- see the docstring's ``cloud_keep``
         CL = _CL()
         # a WALL-CLOCK budget, never a claim about the population: a capped run says what it skipped
@@ -1689,6 +1740,10 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     if align_keep and out:
         # ...and a share by Link's lateral offset from her, the axis that predicts a terminal
         orders.append(sorted(out, key=lambda n: abs(n['m']['lat'])))
+    if handoff_keep and out:
+        # ...and a share by the RAW gap, so an endpoint that reaches the entry curve is never cut by
+        # the frame rank that averages a few units of it away against a whole herd's frames
+        orders.append(sorted(out, key=lambda n: (n['handoff']['gap'], -n['handoff']['l0'])))
     if cloud_keep and out:
         # ...and a share by the MEASURED landing, kept on the raw miss so a band-reaching endpoint
         # is never cut by the frame rank that averages it away

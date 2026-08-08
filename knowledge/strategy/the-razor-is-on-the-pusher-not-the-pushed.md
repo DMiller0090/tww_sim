@@ -95,6 +95,11 @@ pusher's is a 1e-4 u razor.
 
 Floor for the zero-walk-away shape off the banked beams: **73 herd frames + 5 to close the gap at the
 walk cap + 16 of clip roll = 94**, against the banked **101**. That 5 is a floor and not a plan - it
-charges the gap at cap speed with no turnaround and no guarantee the move lands ON the 1e-4 u razor. The
-real lever is upstream: the last cycle can now be searched against `entry_locus` directly, so it can be
-cut to leave the pusher on the curve instead of 74 u past it.
+charges the gap at cap speed with no turnaround and no guarantee the move lands ON the 1e-4 u razor.
+
+Those 73-171 u are **not** a ranking deficit the last cycle can be re-cut to recover: crossing the
+approach line and keeping the pusher's runway are the same resource, measured over 20592 rolls -
+[the-crossing-and-the-runway-are-one-resource.md](the-crossing-and-the-runway-are-one-resource.md)
+carries the current statement of what a herd must hand over and which cycle owes it (the expectation
+this page originally ended on is in
+[history/the-last-cycle-could-be-cut-onto-the-curve.md](../history/the-last-cycle-could-be-cut-onto-the-curve.md)).

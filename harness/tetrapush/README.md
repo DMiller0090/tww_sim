@@ -1710,6 +1710,67 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE LAST CYCLE CANNOT ALSO BE THE TERMINAL -- THE CROSSING AND THE RUNWAY ARE ONE
+            RESOURCE, AND THE BILL BELONGS TO CYCLE 2 (session 126).** The s125 next step is DONE (the
+            terminal predicate is wired in as the last cycle's endpoint rank) and running it says the
+            re-cut cannot succeed as posed: it is not a ranking problem. New truth page
+            [`knowledge/strategy/the-crossing-and-the-runway-are-one-resource.md`](../../knowledge/strategy/the-crossing-and-the-runway-are-one-resource.md),
+            gate [`tests/test_handoff.py`](../../tests/test_handoff.py) (12, 8.9 s, runs by default).
+            - **THE RANK IS WIRED AND AFFORDABLE.** `extend_cycle` takes ``handoff_keep`` -- her ``l0``
+              SIGN first, then `handoff.endpoint`, which prices a herd endpoint as
+              ``frames + gap/WALK_CAP + cut_step``, admissible on every term. Two economies made it a
+              rank rather than a report: `resid_window` (outside contact the residual is ONE NUMBER
+              bit-for-bit, so a 561-sample coarse pass says where the 28001-sample fine one has
+              anything to find -- **identical brackets**, 4-11x) and `entry_roots` (the bisected roots
+              without the f32 band walk, an under-estimate by construction, another 3x). **19 s ->
+              ~1.5 s per endpoint**, against ~28 s for the `cloud_land` stack it replaces.
+            - **AND THE POPULATION IT RANKS IS STRUCTURALLY WRONG.** Over **20592 full-circle rolls**
+              off 3 banked c2 parents (48 armed junction endpoints each, every herd prune off): **51
+              carry her across the approach line, 12366 leave Link at runway >= 190, ZERO do both.**
+              The deepest crossing roll ends at runway **89**; the entry curve starts at 190. Carrying
+              her across means rolling THROUGH her, and that carries Link just as far past the corner.
+            - **THE EXCHANGE RATE, WHICH IS THE USABLE FORM OF IT.** Past ~150 u of runway the best
+              crossing available stops moving at all -- **+80.0..+80.4 u over six hundred units** (that
+              is her FOLLOW, not a plow) -- and below ~100 u it more than doubles (+196.2 at runway
+              0-50). The knee is sharp: runway 89 -> +12.9, runway 107 -> -30.8. So a last roll that
+              keeps the band buys at most **+80.4 u**, and **cycle 2 must hand over ``l0`` >= -80.4**
+              against the **-160.6..-183.4** the banked c2 beam delivers. That is the whole remaining
+              gap, stated one cycle up.
+            - **THE OTHER ROUTE IS PRICED, NOT FREE.** Let the last roll plow her across (+196 u) and
+              walk Link back: measured on all 51 crossing rolls he lands **112-238 u** from the nearest
+              genuine entry (median 217) = **7-14 frames** of retreat before any turn to the roll's
+              facing. All 51 admit an entry curve (s125's "every on-side endpoint clips", re-confirmed
+              on a fresh population); the best is **97.35** frames against the banked **101** and the
+              s125 floor of **94**. That best is a SAMPLING statement -- 48 of 4382-8678 junction
+              endpoints, one ``l_window`` -- not a frontier.
+            - **THE CUT TIMING DOES NOT MOVE THE BAND, BUT IT BUYS 5 FRAMES.** ``thrust`` is the
+              B-press frame and the cut lands at ``thrust + 2``, so a shorter roll looked like the way
+              to walk the entry band down onto the herd. Swept 6..16 at a real crossing endpoint it
+              does not: the band's lower edge stays ~180-220 at every thrust (Link must REACH the
+              corner and brace before the cut -- s124's attractor). What it does buy is ``cut_step``:
+              **thrust 9 cuts at 11**, five frames cheaper than 14, still genuine -- bound **92.50 vs
+              97.35** at the same endpoint. The cheapest single knob measured in this shape, and it was
+              never swept. **The empty rows (6-8, 12, 13, 16) are SCOPED negatives, not refusals**
+              (`knowledge/history/thrust-13-refused-by-geometry.md` is this mistake one axis over): one
+              Tetra, one facing -- solved at thrust 14, and s125 measured that window to be ~one value
+              wide -- lean 0, rungs 30-400, while the arrive-rather-than-slide family sits near
+              ``26 * cut_step``, i.e. 286 u at thrust 9 but **416 u at thrust 14, past the ceiling
+              swept**. A claim about a thrust owes its own facing sweep and a wider ladder.
+            - **AND THE c2 REQUIREMENT IS ON THE CYCLE, NOT ON ITS AIM (preflight, run).**
+              `beam_io.split_last_roll` re-opens each banked c2 terminal at its PRE-ROLL endpoint
+              (0-ULP, re-fired) and the full aim circle from there moves the handoff by **-10.3 to
+              +18.2 u** -- best ``l0`` **-159.4** against the -80.4 needed, and several nodes' best
+              re-aim is WORSE than what they bank. Off that state the roll buys ~+89-118 u of crossing
+              however it is aimed. So the crossing must come from the JUNCTION (where Link repositions
+              without a 400 u commitment), which is exactly what `extend_cycle` searches -- the same
+              conclusion `roll_candidates` reached about the LATERAL one cycle down.
+            - **NEXT: RE-CUT CYCLE 2 AGAINST ``l0``**, at the per-aim SCREEN and not only at the
+              endpoint keep (`tetra_lateral` is one dot product, so unlike the terminal rank it is
+              free there -- and the screen is the cut that decides which endpoints exist, s107). Then
+              let the last cycle spend its length on Link's position instead of on her crossing and
+              re-run this session's endpoint rank on it. Cheap and unexplored beside it: thrust 9-11
+              for the clip roll (5 frames), and a facing sweep AT that thrust (40835 was solved for 14
+              and s125 measured the facing window to be ~one value wide, so thrust 9's is elsewhere).
       - [x] **THE RAZOR IS ON LINK, NOT ON HER -- AND EVERY HERD ENDPOINT THAT PARKS HER ON THE RIGHT
             SIDE ADMITS A CLIP ROLL (session 125).** The chain-back, run: 15 of 127 banked cycle-3
             endpoints leave her on the genuine side of the clip roll's approach line, and **all 15 have

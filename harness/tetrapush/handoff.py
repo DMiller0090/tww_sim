@@ -42,11 +42,16 @@ if _rb not in sys.path:
 
 from harness.tetrapush import entry_search as ES
 from harness.tetrapush import terminal as TM
+from tww_sim.land import LandState
 
 #: The ``side`` bracketing scan. 100x finer than `terminal.LAT_STEP`: the contact corridor is ~1 u
 #: wide, so half-unit brackets straddle it whole (`the-razor-is-on-the-pusher-not-the-pushed.md`).
 SIDE_SPAN = 70.0
 SIDE_STEP = 0.005
+
+#: The COARSE pass that says where the fine one has anything to find -- outside contact no sign
+#: change can hide, the residual being one number bit-for-bit there (`resid_window`).
+WINDOW_STEP = 0.25
 #: The f32 band walk on LINK's axis -- 10x `terminal.BAND_HALF`, the acceptance being wider in ``side``.
 BAND_HALF = 1.2e-3
 BAND_STEP = TM.BAND_STEP
@@ -54,6 +59,9 @@ BAND_STEP = TM.BAND_STEP
 #: The runway rungs `entry_locus` solves on. Outside 190..310 the s124 scan is empty at every along:
 #: shorter and the roll reaches the corner before the cut, longer and it never gets there.
 RUNWAYS = tuple(range(190, 321, 10))
+
+#: The engine's own walk cap, not a restatement -- what a herd endpoint closes the gap at, at best.
+WALK_CAP = LandState.MAX_NSPEED
 
 
 class PairFrame:
@@ -176,19 +184,68 @@ def tetra_lateral(pf, tetra):
     return (tetra[0] - br[0]) * q[0] + (tetra[1] - br[1]) * q[1]
 
 
-def side_crossings(pf, tetra, entry, span=SIDE_SPAN, step=SIDE_STEP):
-    """Every sign change of the razor residual along LINK's lateral axis, as ``(lo, hi)`` brackets,
-    at a fixed Tetra and a fixed approach rung. One batch sweep, centred on her (`tetra_lateral`)."""
-    c = tetra_lateral(pf, tetra)
-    n = int(2 * span / step) + 1
-    sides = [c - span + step * i for i in range(n)]
+def _scan(pf, tetra, entry, sides):
+    """Sign changes of the residual over an explicit ``side`` list, as ``(lo, hi)`` brackets."""
     rs = pf.sweep(_items(pf, tetra, entry, sides))
     out, prev = [], None
     for i, r in enumerate(rs):
         if prev is not None and (prev < 0.0) != (r[1] < 0.0):
             out.append((sides[i - 1], sides[i]))
         prev = r[1]
-    return out
+    return out, rs
+
+
+def resid_window(pf, tetra, entry, span=SIDE_SPAN, step=WINDOW_STEP):
+    """Where along LINK's lateral axis the residual is NOT its no-contact constant -- ``(lo, hi)``
+    padded by one coarse step, or None if the roll never touches her anywhere in the span.
+
+    This is what makes the razor scan a rank rather than a report. A roll that never reaches her runs
+    the same trajectory whatever ``side`` is, so its residual is one value repeated -- measured at a
+    real herd endpoint it reads ``-3.293847e-01`` at both ends of the +-70 u span and varies over only
+    7-25 u of it, so a fine scan spends 28001 samples establishing nothing at most rungs. The window is
+    read off the coarse pass by DIFFERENCE from the value at the span's ends, so it needs no threshold
+    and no tuned width; padding it by a full coarse step keeps the fine scan's first sample outside
+    contact, where its sign is the saturated one. `WINDOW_STEP` 0.25 u puts 28-100 samples inside the
+    narrowest window measured and costs 561, which it saves twentyfold.
+
+    The one thing it assumes is that contact is an INTERVAL in ``side`` -- true by construction (she
+    is a disc and he passes her once) -- and that the coarse step resolves it. Measured windows are
+    7-25 u wide, so 0.25 u is 28-100 samples inside; a window narrower than one coarse step would be
+    50x below anything observed and could not bend the cut onto the seam anyway."""
+    c = tetra_lateral(pf, tetra)
+    n = int(2 * span / step) + 1
+    sides = [c - span + step * i for i in range(n)]
+    rs = pf.sweep(_items(pf, tetra, entry, sides))
+    flat = rs[0][1]
+    if rs[-1][1] != flat:
+        # neither end is the no-contact value, so the window reaches an edge of the span: hand back
+        # the whole span rather than read a window off a moving reference
+        return (sides[0], sides[-1])
+    idx = [i for i, r in enumerate(rs) if r[1] != flat]
+    if not idx:
+        return None
+    return (sides[max(0, idx[0] - 1)], sides[min(n - 1, idx[-1] + 1)])
+
+
+def side_crossings(pf, tetra, entry, span=SIDE_SPAN, step=SIDE_STEP, window_step=WINDOW_STEP):
+    """Every sign change of the razor residual along LINK's lateral axis, as ``(lo, hi)`` brackets,
+    at a fixed Tetra and a fixed approach rung. Batch sweeps, centred on her (`tetra_lateral`).
+
+    Two-stage by default: `resid_window` first, then the fine step INSIDE the window only. The fine
+    samples are taken on the FULL span's own lattice (``c - span + step*i``, the same expression at
+    the same ``i``), so they are bit-identical to the single-pass ones and the two paths return the
+    same brackets exactly rather than nearly -- which at a 1e-4 u acceptance is the only kind of
+    agreement worth claiming. ``window_step=None`` is the single pass, kept as the gate's reference."""
+    c = tetra_lateral(pf, tetra)
+    n = int(2 * span / step) + 1
+    i0, i1 = 0, n - 1
+    if window_step:
+        win = resid_window(pf, tetra, entry, span, window_step)
+        if win is None:
+            return []
+        i0 = max(0, int(math.floor((win[0] - (c - span)) / step)))
+        i1 = min(n - 1, int(math.ceil((win[1] - (c - span)) / step)))
+    return _scan(pf, tetra, entry, [c - span + step * i for i in range(i0, i1 + 1)])[0]
 
 
 def solve_sides(pf, tetra, brackets, iters=TM.BISECT_ITERS):
@@ -231,35 +288,92 @@ def side_band(pf, tetra, entry, side, half=BAND_HALF, step=BAND_STEP):
                 tetra_from_corner=rw - al, facing=pf.facing, thrust=pf.thrust, lean=pf.lean)
 
 
-def entry_locus(pf, tetra, runways=RUNWAYS, span=SIDE_SPAN, step=SIDE_STEP):
-    """**What a herd must hand over, at the Tetra it parked** -- the genuine Link ENTRY positions for
-    a FIXED Tetra, one solved ``side`` per ``runway``, in world XZ."""
+def entry_roots(pf, tetra, runways=RUNWAYS, span=SIDE_SPAN, step=SIDE_STEP,
+                window_step=WINDOW_STEP):
+    """The solved razor curve WITHOUT the f32 band walk -- the RANK, where `entry_locus` is the claim.
+
+    A bisected root is where the cut ray's miss changes sign; a GENUINE entry is a root whose f32
+    neighbourhood actually clips, and the walk that decides which costs 8001 sweeps per root against
+    the ~60 the bisection itself takes. So the roots are the cheap half and they are an ADMISSIBLE
+    one: every genuine entry is a root, so the distance to the nearest root can only UNDERSTATE what a
+    herd has to close, which is what a prune needs (`[[banded-proxy-needs-its-newton]]` -- Newton it
+    onto the razor, here `entry_locus`, before quoting it)."""
     br = []
     for rw in runways:
         e = pf.entry_at(rw)
-        br += [(e, lo, hi) for lo, hi in side_crossings(pf, tetra, e, span, step)]
+        br += [(e, lo, hi) for lo, hi in side_crossings(pf, tetra, e, span, step, window_step)]
     out = []
     for spec, side in zip(br, solve_sides(pf, tetra, br)):
-        b = side_band(pf, tetra, spec[0], side)
+        e = pf.slide(spec[0], side)
+        rw, sd, al, la = pf.coords(e, tetra)
+        out.append(dict(runway=rw, side=side, along=al, lat=la, entry=[e[0], e[1]], base=spec[0],
+                        tetra=[tetra[0], tetra[1]], tetra_from_corner=rw - al,
+                        facing=pf.facing, thrust=pf.thrust, lean=pf.lean))
+    return out
+
+
+def entry_locus(pf, tetra, runways=RUNWAYS, span=SIDE_SPAN, step=SIDE_STEP,
+                window_step=WINDOW_STEP):
+    """**What a herd must hand over, at the Tetra it parked** -- the genuine Link ENTRY positions for
+    a FIXED Tetra, one solved ``side`` per ``runway``, in world XZ."""
+    out = []
+    for r in entry_roots(pf, tetra, runways, span, step, window_step):
+        b = side_band(pf, tetra, r['base'], r['side'])
         if b is not None:
             out.append(b)
     return out
 
 
-def node_gap(pf, link, tetra, **kw):
+def node_gap(pf, link, tetra, roots=False, **kw):
     """How far a real herd endpoint sits from the genuine entry curve at its OWN Tetra.
 
     ``gap`` is the world distance from Link to the nearest genuine entry -- the units a junction has
     to close -- split into ``d_runway`` (along the approach, which a longer slide buys cheaply) and
-    ``d_side`` (the razor axis)."""
-    loc = entry_locus(pf, tetra, **kw)
+    ``d_side`` (the razor axis).
+
+    ``roots`` swaps `entry_locus` for `entry_roots`: the same measurement against the unconfirmed
+    razor curve, ~10x cheaper and an under-estimate by construction. The record says which it is, so
+    a bound is never quoted as a solved entry."""
+    loc = (entry_roots if roots else entry_locus)(pf, tetra, **kw)
     rw, sd, al, la = pf.coords(link, tetra)
     if not loc:
-        return dict(n=0, gap=float('inf'), runway=rw, side=sd, along=al, lat=la, locus=[])
+        return dict(n=0, gap=float('inf'), runway=rw, side=sd, along=al, lat=la, locus=[],
+                    roots=bool(roots))
     best = min(loc, key=lambda b: math.hypot(b['entry'][0] - link[0], b['entry'][1] - link[1]))
     return dict(n=len(loc), gap=math.hypot(best['entry'][0] - link[0], best['entry'][1] - link[1]),
                 d_runway=best['runway'] - rw, d_side=best['side'] - sd, runway=rw, side=sd,
-                along=al, lat=la, best=best, locus=loc)
+                along=al, lat=la, best=best, locus=loc, roots=bool(roots))
+
+
+def endpoint(pf, link, tetra, frames, runways=RUNWAYS, roots=True, sign_prune=True, **kw):
+    """**A herd endpoint priced in FRAMES against the terminal it has to reach** -- the last cycle's
+    rank, and the one thing about an endpoint that the old station/arrival stack cannot say.
+
+    ``bound = frames + gap / WALK_CAP + pf.cut_step``: the herd frames already spent (exact), the
+    fewest in which Link could still close `node_gap` (the walk cap, so an under-estimate), and the
+    clip roll's own 16 (exact, the schedule's ``cut_step``). Admissible on every term, so it ranks a
+    beam frame-minimally and prunes soundly -- and optimistic in two named places: it charges nothing
+    for turning to the roll's facing, and nothing for LANDING on a 1e-4 u razor rather than merely
+    reaching its neighbourhood (`[[banded-proxy-needs-its-newton]]`).
+
+    ``sign_prune`` is the cheap half and it comes first: the genuine set is entirely on one side of
+    the clip roll's approach line (`tetra_lateral` -- ``l0`` +0.57..+51.0 over the solved terminals,
+    +2.50..+13.69 over the 288 tabulated coords), so ONE DOT PRODUCT refuses an endpoint that parked
+    her on the wrong side, where the locus solve costs ~1.5 s. Measured over the banked beams it kills
+    112 of 127 endpoints. It is an EMPIRICAL prune over two independent scans, not a proof, so it is a
+    knob: turn it off to re-measure the claim on a population."""
+    l0 = tetra_lateral(pf, tetra)
+    rw, sd, al, la = pf.coords(link, tetra)
+    rec = dict(l0=l0, onside=l0 > 0.0, runway=rw, side=sd, along=al, lat=la, frames=frames,
+               gap=float('inf'), bound=float('inf'), n=0, roots=bool(roots), best=None)
+    if sign_prune and l0 <= 0.0:
+        return dict(rec, refused='offside')
+    g = node_gap(pf, link, tetra, roots=roots, runways=runways, **kw)
+    if not g['n']:
+        return dict(rec, refused='no-locus')
+    return dict(rec, gap=g['gap'], n=g['n'], best=g['best'], locus=g['locus'],
+                d_runway=g['d_runway'], d_side=g['d_side'],
+                bound=frames + g['gap'] / WALK_CAP + pf.cut_step)
 
 
 # --------------------------------------------------------------------------- CLI
