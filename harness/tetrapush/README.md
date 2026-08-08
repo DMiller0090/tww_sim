@@ -1710,6 +1710,42 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE SEARCH IS ON THE SLOW ENGINE, AND 84% OF A STAGE NEEDS NO CAMERA (session 126,
+            Dereck's directive: "we need to attack this with raw compute").** Measured, three engines
+            in this repo, same coupled courtyard frame:
+            | engine | rate | vs the search |
+            |---|---|---|
+            | `seeds.make_freerun` -- Python step, wired camera/zl1/neck, **what the herd search runs on** | **2431 steps/s** | 1x |
+            | `seeds.make_freerun_native` -- the same frame in C, camera STRIPPED | **106294 steps/s** | **43.7x** |
+            | `ShoveCtx.sweep_par` (`tww_sim/core/_shovec.pyx`) -- compiled roll, parallel | **130137 ROLLS/s = 2.08M frame-steps/s** | **857x** |
+            So the 100k/s Dereck remembers is real and is IN this repo -- it is what the razor solve
+            runs on, and the herd search was never moved onto it. One roll rollout is 7.5-12.5 ms, so
+            a 100k-aim sweep costs **~21 minutes single-threaded**, and every wall-clock figure from
+            s102 on is inflated by that factor. Where the Python step goes: **anim/pose 33%, camera
+            22%, land 9%, zl1 look 9%, push/cc 7%, math 6%, neck 4%.**
+            - **THE SPLIT IS THE OPENING.** At the shipped ``probe_cap=250`` a stage is **junction 16%
+              / roll 84%** (measured on a real c2 node: junction_beam 4622 endpoints in 53 s, then
+              3432 rolls in 25.9 s, scaled to the shipped cap). And a roll is **FACING-LOCKED** -- the
+              main stick is inert for its duration -- so the camera cannot move its trajectory. 84% of
+              a search stage is exactly the workload `ShoveCtx` already does at 130k coupled rolls/s,
+              plow + her follow AI + both CrrPos included.
+            - **THE ORDER, AND WHAT EACH BUYS.** (1) Port the HERD roll onto a ShoveCtx-class kernel
+              (analytic schedule, no cut, batch parallel sweep) -- 84% at ~500x is **~6x per stage**
+              and reuses a kernel that is already 0-ULP-gated. (2) Then the junction's 16%, which is
+              camera-dependent: port `LandCamera` + `NeckLook` + `Zl1Look` into the native step so the
+              whole rollout runs in C -- the 43.7x path, another ~5x, **~25-30x total**. (3)
+              Parallelise whatever stays in Python; a node IS its input log (`beam_io`), so workers
+              rebuild from logs and nothing shared has to be pickled.
+            - **THE GATE COMES FIRST, NOT THE PORT.** A kernel roll must be 0-ULP against
+              `two_roll.roll_segment` on Link pos/facing/travel/speedF/proc + Tetra XZ, seeded from
+              real banked beam nodes, or it is worthless (`[[zero-ulp-tests-only]]`).
+            - **THREE THINGS THE PORT MUST NOT DROP** (all read off `roll_segment`, and all cheap to
+              forget): the roll's **exit csangle** -- the C-stick IS live during the roll, slewing
+              toward ``target_cs``, and the next junction's whole aim alphabet is placed against that
+              exit value, so the trajectory is camera-free but the EXIT STATE is not; ``talk_unsafe``
+              (an A-press that talks to her kills the run); and ``ok``/``roll_speedF`` (the arming
+              predicates the fan prunes on). A kernel that reproduces the path but not these three
+              silently changes which endpoints exist.
       - [~] **THE LAST CYCLE CANNOT ALSO BE THE TERMINAL -- THE CROSSING AND THE RUNWAY ARE ONE
             RESOURCE, AND THE BILL BELONGS TO CYCLE 2 (session 126).** The s125 next step is DONE (the
             terminal predicate is wired in as the last cycle's endpoint rank) and running it says the
