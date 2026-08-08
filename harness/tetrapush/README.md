@@ -1710,6 +1710,52 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE ROLLOUT NOW RUNS IN C, AND THE EYE WAS THE ONLY THING KEEPING IT IN PYTHON
+            (session 127).** s126's next step, done -- but not the way it was written. The port is
+            NOT a ShoveCtx-class baked kernel and the camera did NOT need porting. Two new truth
+            pages, [`knowledge/model/the-eye-was-the-only-thing-in-python.md`](../../knowledge/model/the-eye-was-the-only-thing-in-python.md)
+            and [`knowledge/strategy/the-fan-pays-for-one-camera.md`](../../knowledge/strategy/the-fan-pays-for-one-camera.md).
+            - **THE GATE FIRST, AS ORDERED, AND IT FAILED AS WRITTEN.**
+              [`tests/test_roll_kernel.py`](../../tests/test_roll_kernel.py) (14, 15 s, runs by
+              default) compares a fan kernel to `two_roll.roll_segment` on the WHOLE record -- every
+              returned field plus the endpoint state -- over 4 configs x 6 real seeds x 24 aims,
+              `==` and never a tolerance. The record carries ``followed`` for the same reason it
+              carries ``talk_unsafe``: `two_roll.alive` PRUNES on it through `metrics`, and a kernel
+              that reproduced the endpoint but not the flag would change which rolls survive. One
+              gate asserts the seeds produce BOTH values of each prune field, so none of them is
+              being checked against a constant. Seeds are minted (`fixtures/courtyard_roll_kernel_nodes.json`)
+              as `junction_beam` endpoints AND cycle terminals, because they are not interchangeable:
+              at a junction endpoint the whole fan is talk-SAFE and at a terminal the whole circle
+              TALKS (**143 of 143**, measured), which is the only place the refusal branch can be
+              gated at all.
+            - **WHAT THE MEASUREMENTS SAID, and each one moved the design.** (1) The native step IS
+              the wired step, 0-ULP over whole banked node logs, when csangle and the proc-9 eye are
+              injected. (2) **The csangle sequence through a roll is bit-identical across a full
+              143-aim fan** -- on every node, at every C-stick mode -- so a fan pays for ONE camera;
+              the C-stick target does move it, so this is a lever and not a dead camera. (3) The eye
+              is NOT shareable (143 distinct sequences) and cannot be dropped: her feet instead of her
+              eye moves the re-aim 180 BAM and a node log **123 u**. (4) Link's head-top Y is not
+              aim-independent either (41 classes), and she looks at him every frame of the segment
+              (``f84d == 1``), so no shortcut around her look model exists.
+            - **SO THE BLOCKER WAS TWO MATRICES, AND THEY WERE ALREADY IN C.** `Zl1Look` needs Link's
+              exec-pass ``mHeadTopPos.y``; `NeckLook` needs the cached previous head MATRIX. Joint 15
+              is already posed with the body-Co extras, so ``HEAD_CHAIN`` is ONE concat past the
+              Co-centre chain the engine already walks: `PoseEngine._head_top`/`_head_mtx` +
+              `LandCore.head_top_exec`/`head_mtx_exec`, gated 0-ULP vs `foot_fk` AND vs
+              `from_f0._computed_head_{top,mtx}` frame by frame
+              ([`tests/test_native_head_top.py`](../../tests/test_native_head_top.py), 4). The gate
+              pins the proc-``*_init`` zero-lean CONVENTION, not just the value: the two differ by
+              **1.4 u in x and 3.4 in z on frame 1**, ~100x the razor's acceptance band.
+            - **`seeds.make_freerun_self_eye` -- the coupled frame in C, generating its own eye**
+              (`from_f0._step_native` self-eye mode). 0-ULP vs the wired run on Link, Tetra, the eye
+              and m3564, plus a cloned run ([`tests/test_freerun_self_eye.py`](../../tests/test_freerun_self_eye.py), 4).
+              **2796 -> 10797 steps/s (3.9x)**, and `roll_kernel.roll_fan` does a 143-aim fan in
+              **0.29 s against 1.05 s (3.6x**, 3.2x with the per-node twin+trace setup).
+            - **THE NEXT PORT IS NAMED BY THE RATIO, NOT GUESSED.** Stripped native is 98179 steps/s
+              and self-eye is 10797, so **`Zl1Look` + `NeckLook` are now ~89% of the step** -- worth
+              ~9x more, and nothing else in the frame is worth looking at. Do NOT quote the 98179: it
+              is a DIFFERENT simulation (the feet fallback), and reporting it as the search's speed
+              is reporting a different answer arriving faster.
       - [~] **THE SEARCH IS ON THE SLOW ENGINE, AND 84% OF A STAGE NEEDS NO CAMERA (session 126,
             Dereck's directive: "we need to attack this with raw compute").** Measured, three engines
             in this repo, same coupled courtyard frame:

@@ -142,6 +142,45 @@ def make_freerun_native(env, tetra_at=None):
                    seed_push=seed_push, native_step=True)
 
 
+def make_freerun_self_eye(env, tetra_at=None):
+    """**The search's fast coupled run** (session 127): the native C step with her look model and
+    Link's neck WIRED, so the run generates its own proc-9 re-aim eye instead of being handed one.
+
+    The difference from `make_freerun_native` is what it costs to be faithful. The stripped native run
+    falls the eye back to Tetra's FEET, which moves the re-aim 180 BAM and a banked node log by 123 u
+    -- it is not the wired run. This one is, 0-ULP on Link, Tetra, the eye and m3564
+    (`tests/test_freerun_self_eye.py`), because `LandCore.head_top_exec`/`head_mtx_exec` hand the two
+    models the pose values that used to need the Python FK.
+
+    The ONE thing it does not carry is the camera: `csangle` is injected per `step`. That is a feature
+    for the roll fan -- through a roll the csangle sequence is a per-node constant, so a fan of aims
+    pays for one camera -- and the caller's problem everywhere else."""
+    from harness.tetrapush.from_f0 import FreeRun
+    from tww_sim.core.npc_zl1_look import Zl1Look
+    from tww_sim.land.neck_look import NeckLook
+
+    seed_row = env['cyl'][0]
+    look0 = env['look'][0]
+    if tetra_at is not None:
+        seed_row = json.loads(json.dumps(seed_row))          # deep copy, fixture stays locked
+        seed_row['tetra']['pos'][0] = float(tetra_at[0])
+        seed_row['tetra']['pos'][2] = float(tetra_at[-1])
+        look0 = json.loads(json.dumps(look0))
+        dx = float(tetra_at[0]) - env['cyl'][0]['tetra']['pos'][0]
+        dz = float(tetra_at[-1]) - env['cyl'][0]['tetra']['pos'][2]
+        for key in ('pos', 'eye', 'tattn', 'f74c', 'f758'):
+            if key in look0:
+                look0[key] = [look0[key][0] + dx, look0[key][1], look0[key][2] + dz]
+    m0 = env['m3564']['frames'][0]['m3564'] if 'frames' in env['m3564'] else env['m3564'][0]['m3564']
+    seed = env['seed']
+    seed_push = None if tetra_at is not None else seed_push_f0(env)
+    return FreeRun(seed_row, seed_nspeed=seed['link']['nspeed'],
+                   seed_old_pose=seed.get('old_pose'), computed_pose=True,
+                   zl1=Zl1Look.seed_from_row(look0),
+                   neck=NeckLook(x=m0[0], y=m0[1], z=m0[2]),
+                   seed_push=seed_push, native_step=True)
+
+
 def load_placements(path=None):
     """The 288 genuine Tetra clip coords (`_generated/tetra_placements.tsv`, Dereck 2026-07-21)
     as a list of dicts: ``idx``, ``x``, ``z``, ``dist_wallB``, ``dist_wallA``. The header carries

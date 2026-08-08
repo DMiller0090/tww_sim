@@ -502,6 +502,137 @@ cdef void _co_center_impl(double px, double py, double pz, long long facing, lon
     out[1] = fmuls(0.5, fadds(root_z, cur[11]))
 
 
+# ---- head-top (mHeadTopPos) in one C call -----------------------------------------------------
+# foot_fk.HEAD_CHAIN=[0,1,2,3,4,14,15] in calc order -- the neck chain plus the HEAD joint. SSC is
+# foot_fk.BODY_CO_SSC=(3,4,14) == chain slots 3,4,5; the head (slot 6) is not an SSC joint.
+#
+# WHY THIS EXISTS (session 127): Tetra's `Zl1Look` reads exactly one thing from Link that is not a
+# position -- his exec-pass mHeadTopPos.y (`dNpc_playerEyePos`) -- and her eyePos is what Link's
+# proc-9 re-aim consumes. That single Y is the whole reason a coupled rollout could not run in C:
+# the native step reproduces the wired one 0-ULP when csangle and the eye are injected, csangle is
+# free (a per-node constant across an aim fan), but the eye needed a Python pose FK. It does not
+# any more.
+cdef bint _HEAD_SSC[7]
+_HEAD_SSC[0]=False; _HEAD_SSC[1]=False; _HEAD_SSC[2]=False
+_HEAD_SSC[3]=True;  _HEAD_SSC[4]=True;  _HEAD_SSC[5]=True; _HEAD_SSC[6]=False
+
+#: head_offset (d_a_player_main.cpp:11589) -- foot_fk.HEAD_TOP_OFF.
+cdef double _HEAD_TOP_OFF_X = 40.0
+
+cdef void _head_mtx_impl(double px, double py, double pz, long long facing, long long lean,
+                         long long body_x, long long nlx, long long nly, long long nlz,
+                         double* q7, double* t7, double* s7, double* out) noexcept nogil:
+    """The WORLD head anm matrix (``getAnmMtx(CL_JNT_HEAD_JNT_e)``, out = 3x4 flat) rebuilt from the
+    STORED old pose -- the `_co_center_impl` accumulation carried one joint further. Bit-exact port
+    of `foot_fk.FootFK.head_mtx`. `_head_top_impl` is this plus the head-offset multiply, and the
+    NECK model measures this matrix (the cached previous-frame value) to find its current angles.
+
+    ``q7``/``t7``/``s7`` are flat, chain order [0,1,2,3,4,14,15]. ``body_x`` = the sign-extended
+    -mBodyAngle.z BODY_CHN twist on chain slot 2, exactly as in `_co_center_impl`. ``nlx/nly/nlz``
+    = `NeckLook.local_38()` (m3564.y, m3564.z, m3564.x), the jointBeforeCB HEAD twist: the decomp
+    applies it as TWO quat concats -- Q(x, y, 0) then Q(0, 0, z) -- each SKIPPED when its terms are
+    zero (:353-362), which is not the same matrix as one combined rotation."""
+    cdef long long fc = facing & 0xFFFF, lc = lean & 0xFFFF
+    cdef double c = jma_cos(fc), s = jma_sin(fc), ns = f32(-s)
+    cdef double base[12]
+    base[0] = c;   base[1] = 0.0; base[2] = s;   base[3] = f32(px)
+    base[4] = 0.0; base[5] = 1.0; base[6] = 0.0; base[7] = f32(py)
+    base[8] = ns;  base[9] = 0.0; base[10] = c;  base[11] = f32(pz)
+    cdef double rz[12]
+    cdef double leaned[12]
+    cdef double cz_, sz_
+    if lc != 0:
+        cz_ = jma_cos(lc); sz_ = jma_sin(lc)
+        rz[0] = cz_; rz[1] = f32(-sz_); rz[2] = 0.0; rz[3] = 0.0
+        rz[4] = sz_; rz[5] = cz_;       rz[6] = 0.0; rz[7] = 0.0
+        rz[8] = 0.0; rz[9] = 0.0;       rz[10] = 1.0; rz[11] = 0.0
+        _concat_c(base, rz, leaned)
+        memcpy(base, leaned, 12 * sizeof(double))
+
+    cdef double bufA[12]
+    cdef double bufB[12]
+    cdef double q[4]
+    cdef double tw[4]
+    cdef double q2[4]
+    cdef double m[12]
+    cdef double* cur = bufA
+    cdef double* nxt = bufB
+    cdef double* swp
+    cdef double s0, s1, s2, inv, ps0, ps1, ps2
+    cdef int i
+    memcpy(cur, base, 12 * sizeof(double))
+    for i in range(7):
+        q[0] = q7[i*4+0]; q[1] = q7[i*4+1]; q[2] = q7[i*4+2]; q[3] = q7[i*4+3]
+        if i == 2 and body_x != 0:
+            _euler_to_quat_c(body_x, 0, 0, tw)
+            _quat_concat_c(q, tw, q2)
+            q[0] = q2[0]; q[1] = q2[1]; q[2] = q2[2]; q[3] = q2[3]
+        elif i == 6:
+            if nlx != 0 or nly != 0:
+                _euler_to_quat_c(nlx, nly, 0, tw)
+                _quat_concat_c(q, tw, q2)
+                q[0] = q2[0]; q[1] = q2[1]; q[2] = q2[2]; q[3] = q2[3]
+            if nlz != 0:
+                _euler_to_quat_c(0, 0, nlz, tw)
+                _quat_concat_c(q, tw, q2)
+                q[0] = q2[0]; q[1] = q2[1]; q[2] = q2[2]; q[3] = q2[3]
+        _psmtx_quat_c(q, m)
+        s0 = s7[i*3+0]; s1 = s7[i*3+1]; s2 = s7[i*3+2]
+        m[0] = fmuls(m[0], s0); m[1] = fmuls(m[1], s1); m[2] = fmuls(m[2], s2)
+        m[4] = fmuls(m[4], s0); m[5] = fmuls(m[5], s1); m[6] = fmuls(m[6], s2)
+        m[8] = fmuls(m[8], s0); m[9] = fmuls(m[9], s1); m[10] = fmuls(m[10], s2)
+        if _HEAD_SSC[i]:
+            ps0 = s7[(i-1)*3+0]; ps1 = s7[(i-1)*3+1]; ps2 = s7[(i-1)*3+2]
+            if ps0 != 1.0 or ps1 != 1.0 or ps2 != 1.0:
+                inv = fdivs(1.0, ps0)
+                m[0] = fmuls(m[0], inv); m[1] = fmuls(m[1], inv); m[2] = fmuls(m[2], inv)
+                inv = fdivs(1.0, ps1)
+                m[4] = fmuls(m[4], inv); m[5] = fmuls(m[5], inv); m[6] = fmuls(m[6], inv)
+                inv = fdivs(1.0, ps2)
+                m[8] = fmuls(m[8], inv); m[9] = fmuls(m[9], inv); m[10] = fmuls(m[10], inv)
+        m[3] = f32(t7[i*3+0]); m[7] = f32(t7[i*3+1]); m[11] = f32(t7[i*3+2])
+        _concat_c(cur, m, nxt)
+        swp = cur; cur = nxt; nxt = swp
+    memcpy(out, cur, 12 * sizeof(double))
+
+
+cdef void _head_top_impl(double px, double py, double pz, long long facing, long long lean,
+                         long long body_x, long long nlx, long long nly, long long nlz,
+                         double* q7, double* t7, double* s7, double* out) noexcept nogil:
+    """Link's ``mHeadTopPos`` (out[0..2] = x, y, z): `_head_mtx_impl` then the head-offset multiply
+    (``cMtx_multVec(anmMtx(HEAD), head_offset)``, d_a_player_main.cpp:11592)."""
+    cdef double m[12]
+    _head_mtx_impl(px, py, pz, facing, lean, body_x, nlx, nly, nlz, q7, t7, s7, m)
+    _mv_c(m, _HEAD_TOP_OFF_X, 0.0, 0.0, out)
+
+
+def head_top(double px, double py, double pz, long long facing, long long lean,
+             long long body_x, old_q, old_t, old_s, neck=None):
+    """Link's ``mHeadTopPos`` (x, y, z) rebuilt from the STORED old pose in one native call --
+    bit-exact drop-in for `foot_fk.FootFK.head_top`.
+
+    ``old_q``/``old_t``/``old_s`` are length-7 sequences in chain order [0,1,2,3,4,14,15]. ``neck``
+    = `NeckLook.local_38()` or None (untwisted). Y is the payload (Tetra's look-at reads it as
+    ``dNpc_playerEyePos``); x/z are returned for gating."""
+    cdef double q7[28]
+    cdef double t7[21]
+    cdef double s7[21]
+    cdef int i
+    for i in range(7):
+        q7[i*4+0] = old_q[i][0]; q7[i*4+1] = old_q[i][1]
+        q7[i*4+2] = old_q[i][2]; q7[i*4+3] = old_q[i][3]
+        t7[i*3+0] = old_t[i][0]; t7[i*3+1] = old_t[i][1]; t7[i*3+2] = old_t[i][2]
+        s7[i*3+0] = old_s[i][0]; s7[i*3+1] = old_s[i][1]; s7[i*3+2] = old_s[i][2]
+    cdef long long nlx = 0, nly = 0, nlz = 0
+    if neck is not None:
+        nlx = _s16c(<long long>int(neck[0]) & 0xFFFF)
+        nly = _s16c(<long long>int(neck[1]) & 0xFFFF)
+        nlz = _s16c(<long long>int(neck[2]) & 0xFFFF)
+    cdef double out[3]
+    _head_top_impl(px, py, pz, facing, lean, body_x, nlx, nly, nlz, q7, t7, s7, out)
+    return (out[0], out[1], out[2])
+
+
 def co_center(double px, double py, double pz, long long facing, long long lean,
               long long body_x, old_q, old_t, old_s):
     """Link's body-Co cylinder centre (cx, cz) -- setCollision's root/neck world midpoint -- rebuilt
@@ -1331,6 +1462,72 @@ cdef class PoseEngine:
             t6[4*3+k] = self._oldt_bc[2][k]; s6[4*3+k] = self._olds_bc[2][k]
             t6[5*3+k] = self._oldt_bc[3][k]; s6[5*3+k] = self._olds_bc[3][k]
         _co_center_impl(px, py, pz, facing, lean, body_x, q6, t6, s6, out)
+
+    cdef void _head_chain(self, double* q7, double* t7, double* s7) noexcept nogil:
+        """This engine's posed HEAD chain as flat arrays -- the `_body_co_center` read carried one
+        joint further: chain [0,1,2,3,4,14,15] = foot slots 0,1 (`_oldq[0..1]`) + body_co slots
+        12..16 (`_oldq_bc[0..4]`). Joint 15 is already posed with the body_co extras, so the head
+        costs one more matrix concat and NO extra pose work. Requires `_body_co`."""
+        cdef int k, i
+        for k in range(4):
+            q7[0*4+k] = self._oldq[0][k]
+            q7[1*4+k] = self._oldq[1][k]
+            for i in range(5):
+                q7[(2+i)*4+k] = self._oldq_bc[i][k]
+        for k in range(3):
+            t7[0*3+k] = self._oldt[0][k]; s7[0*3+k] = self._olds[0][k]
+            t7[1*3+k] = self._oldt[1][k]; s7[1*3+k] = self._olds[1][k]
+            for i in range(5):
+                t7[(2+i)*3+k] = self._oldt_bc[i][k]
+                s7[(2+i)*3+k] = self._olds_bc[i][k]
+
+    cdef void _head_top(self, double px, double py, double pz, long long facing,
+                        long long lean, long long body_x,
+                        long long nlx, long long nly, long long nlz,
+                        double* out) noexcept nogil:
+        """Link's exec-pass ``mHeadTopPos`` (out[0..2]) from THIS engine's posed chain."""
+        cdef double q7[28]
+        cdef double t7[21]
+        cdef double s7[21]
+        self._head_chain(q7, t7, s7)
+        _head_top_impl(px, py, pz, facing, lean, body_x, nlx, nly, nlz, q7, t7, s7, out)
+
+    cdef void _head_mtx(self, double px, double py, double pz, long long facing,
+                        long long lean, long long body_x,
+                        long long nlx, long long nly, long long nlz,
+                        double* out) noexcept nogil:
+        """The exec-pass WORLD head anm matrix (out = 3x4 flat) from THIS engine's posed chain --
+        what the NEXT frame's `setNeckAngle` measures its current head angles from."""
+        cdef double q7[28]
+        cdef double t7[21]
+        cdef double s7[21]
+        self._head_chain(q7, t7, s7)
+        _head_mtx_impl(px, py, pz, facing, lean, body_x, nlx, nly, nlz, q7, t7, s7, out)
+
+    def head_top_at(self, double px, double py, double pz, long long facing, long long lean,
+                    long long body_x, neck=None):
+        """`_head_top` from Python -- the gate's handle on it (0-ULP vs `foot_fk.FootFK.head_top`
+        for the pose this engine last posed). ``neck`` = `NeckLook.local_38()` or None."""
+        cdef long long nlx = 0, nly = 0, nlz = 0
+        if neck is not None:
+            nlx = _s16c(<long long>int(neck[0]) & 0xFFFF)
+            nly = _s16c(<long long>int(neck[1]) & 0xFFFF)
+            nlz = _s16c(<long long>int(neck[2]) & 0xFFFF)
+        cdef double out[3]
+        self._head_top(px, py, pz, facing, lean, body_x, nlx, nly, nlz, out)
+        return (out[0], out[1], out[2])
+
+    def head_mtx_at(self, double px, double py, double pz, long long facing, long long lean,
+                    long long body_x, neck=None):
+        """`_head_mtx` from Python as a 3x4 nested tuple -- `foot_fk.FootFK.head_mtx`'s shape."""
+        cdef long long nlx = 0, nly = 0, nlz = 0
+        if neck is not None:
+            nlx = _s16c(<long long>int(neck[0]) & 0xFFFF)
+            nly = _s16c(<long long>int(neck[1]) & 0xFFFF)
+            nlz = _s16c(<long long>int(neck[2]) & 0xFFFF)
+        cdef double m[12]
+        self._head_mtx(px, py, pz, facing, lean, body_x, nlx, nly, nlz, m)
+        return ((m[0], m[1], m[2], m[3]), (m[4], m[5], m[6], m[7]), (m[8], m[9], m[10], m[11]))
 
     def pose_chain(self, int m0, int m1, double f0, double f1, double ratio, double rate,
                    object slots, object oldq, object oldt, object olds,
@@ -2192,6 +2389,7 @@ cdef class LandCore:
     cdef public int state, direction
     cdef public double nspeed, speedF, msd, max_nspeed, roll_frame
     cdef public bint _roll_entered, _l_prev
+    cdef public bint _init_frame            # last step DISPATCHED a proc *_init (zero-lean base)
     cdef public bint _subj_arm, _subj_ended
     cdef int _abtn_prev, _subj_frames, _cdown_run
     cdef double _anim_nspeed
@@ -2846,6 +3044,46 @@ cdef class LandCore:
         self._pend_link_x = pend_link_x; self._pend_link_z = pend_link_z
         self._pend_tetra_x = pend_tetra_x; self._pend_tetra_z = pend_tetra_z
 
+    def head_top_exec(self, neck=None):
+        """Link's exec-pass ``mHeadTopPos`` (x, y, z) for the frame this core LAST stepped -- the
+        twin of `from_f0._computed_head_top`, and the one value Tetra's look model needs from him.
+
+        Same base/lean conventions as the body-Co centre computed in `step_courtyard`: the base takes
+        the DRAW lean (zero on a proc-``*_init`` frame, `_init_frame`) and the BODY_CHN twist takes
+        the post-update lean. ``neck`` = `NeckLook.local_38()` for the head jointBeforeCB twist, or
+        None for untwisted.
+
+        This closes the gap that kept a coupled rollout in Python: `_step_native` reproduces the wired
+        step 0-ULP given csangle and the proc-9 re-aim eye, and the eye is her `Zl1Look` output, which
+        reads exactly this Y (`dNpc_playerEyePos`) and otherwise only positions."""
+        cdef long long body_lean_v = _s16c(<long long>self.m351C) >> 1
+        cdef long long base_lean_v = 0 if self._init_frame else (<long long>self._draw_lean_c)
+        cdef long long nlx = 0, nly = 0, nlz = 0
+        if neck is not None:
+            nlx = _s16c(<long long>int(neck[0]) & 0xFFFF)
+            nly = _s16c(<long long>int(neck[1]) & 0xFFFF)
+            nlz = _s16c(<long long>int(neck[2]) & 0xFFFF)
+        cdef double out[3]
+        self._pe._head_top(self.pos_x, self.pos_y, self.pos_z, self.facing,
+                           base_lean_v & 0xFFFF, -body_lean_v, nlx, nly, nlz, out)
+        return (out[0], out[1], out[2])
+
+    def head_mtx_exec(self, neck=None):
+        """The exec-pass WORLD head anm matrix (3x4) for the frame this core LAST stepped -- the twin
+        of `from_f0._computed_head_mtx`, same conventions as `head_top_exec`. `NeckLook.update`
+        measures the CACHED previous-frame value of this matrix, so the eye chain needs both."""
+        cdef long long body_lean_v = _s16c(<long long>self.m351C) >> 1
+        cdef long long base_lean_v = 0 if self._init_frame else (<long long>self._draw_lean_c)
+        cdef long long nlx = 0, nly = 0, nlz = 0
+        if neck is not None:
+            nlx = _s16c(<long long>int(neck[0]) & 0xFFFF)
+            nly = _s16c(<long long>int(neck[1]) & 0xFFFF)
+            nlz = _s16c(<long long>int(neck[2]) & 0xFFFF)
+        cdef double m[12]
+        self._pe._head_mtx(self.pos_x, self.pos_y, self.pos_z, self.facing,
+                           base_lean_v & 0xFFFF, -body_lean_v, nlx, nly, nlz, m)
+        return ((m[0], m[1], m[2], m[3]), (m[4], m[5], m[6], m[7]), (m[8], m[9], m[10], m[11]))
+
     def pre_seed_courtyard(self, int sx, int sy, int buttons, int triggerL):
         """Seed the delay-1 controller buffer (the input the FIRST step_courtyard acts on) --
         FreeRun.pre_seed_input at input_delay=1."""
@@ -3150,6 +3388,7 @@ cdef class LandCore:
         # below, because both come from the one mpCLModel->calc() per frame. No-op unless the seeded
         # foot deferred (`PoseEngine.set_defer_draw`). Twin of state.py's finish_draw block.
         cdef bint init_frame = self.state != entry_state
+        self._init_frame = init_frame      # `head_top_exec` needs this frame's zero-lean base rule
         self._pe._finish_draw_c(self.pos_x, self.pos_y, self.pos_z, self.facing,
                                 0 if init_frame else <long long>self._draw_lean_c)
         self._set_move_slant_angle_c()

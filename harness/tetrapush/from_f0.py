@@ -63,6 +63,7 @@ from tww_sim.core.fp import f32, fadds
 from tww_sim.core.npc_zl1 import FOLLOW_ENGAGE_DIST
 from tww_sim.core.npc_zl1 import WALL_H as TETRA_WALL_H, WALL_R as TETRA_WALL_R
 from tww_sim.core.cc_push import co_move_pair, WEIGHT_LINK, WEIGHT_TETRA_V5
+from tww_sim.land.attention import LOCK as _ATN_LOCK, RELEASE as _ATN_RELEASE
 from tww_sim.land.land import LandState, FRONT_ROLL, MOVE
 from harness.tetrapush.link_plow import recoil
 from harness.tetrapush.tetra_plow import LINK_CO_R, TETRA_CO_R, _CO_H
@@ -402,9 +403,9 @@ class FreeRun:
         if self.native_step:
             if not self.computed_pose:
                 raise ValueError("native_step needs computed_pose (the fused native pose FK)")
-            if camera is not None or zl1 is not None or neck is not None:
-                raise ValueError("native_step is the STRIPPED search config -- no camera/zl1/neck "
-                                 "(csangle is injected, eye is feet-fallback)")
+            if camera is not None:
+                raise ValueError("native_step cannot drive a LandCamera -- csangle is injected per "
+                                 "step (for a roll fan it is a per-node constant; see roll_kernel)")
             if walls_tetra is not None:
                 raise ValueError("native_step has no Tetra BG pass -- the C engine tracks her as a "
                                  "bare plow point; run the Python path for a walled Tetra")
@@ -632,8 +633,11 @@ class FreeRun:
         Python `self.link` public fields (pos/facing/travel/speedF/state) and `self.tx/self.tz` are
         synced back so the search reads them exactly as in Python mode.
 
-        Returns None when ``record=False`` (the brute force reads ``run.link``/``run.tx`` directly),
-        else the same row dict the Python step returns for the fields the search consumes."""
+        SELF-EYE MODE (session 127): with a wired ``zl1``/``neck`` the eye is not injected at all --
+        the chain runs HERE, off the core's own `head_mtx_exec` / `head_top_exec`, and the run is the
+        wired one 0-ULP (Link, Tetra, the eye, m3564) with only csangle supplied. That is what makes a
+        coupled rollout affordable: the camera is the caller's (and for a roll fan it is a per-node
+        constant), while everything else is C plus two cheap Python models."""
         if csangle is not None:
             self.csangle = csangle
         if isinstance(inp, dict):
@@ -644,11 +648,19 @@ class FreeRun:
             sx = int(t[0]); sy = int(t[1])
             btn = int(t[2]) if len(t) > 2 else 0
             trg = int(t[3]) if len(t) > 3 else 0
+        core = self._core
+        if self.zl1 is not None:
+            if eye is not None:
+                raise ValueError("eye injection and a wired zl1 look model are mutually exclusive")
+            eye = self._eye_next          # the modeled end-of-previous-frame eyePos
         if eye is not None:
             ex, ez, he = float(eye[0]), float(eye[-1]), 1
         else:
             ex = ez = 0.0; he = 0
-        core = self._core
+        # setNeckAngle reads the frame-START m34DE, and her look reads her PRE-plow position --
+        # both must be captured before the core steps (the Python step's own ordering).
+        m34de_neck = int(core.m34de)
+        tetra_pre = (self.tx, self.ty, self.tz)
         sf = core.step_courtyard(sx, sy, btn, trg, int(self.csangle) & 0xFFFF,
                                  0.0, 0.0, ex, ez, he, 0.0, 0.0, 0.0, 0, 1)   # native_push=1
         link = self.link
@@ -671,12 +683,37 @@ class FreeRun:
                     "live Tetra would enter the stt-4 FOLLOW state, which this stt-3 plow model "
                     "does NOT cover; the sim is no longer faithful from this frame on"
                     % (dist, FOLLOW_ENGAGE_DIST))
+
+        # The look chain in the Python step's order (neck, then her execute), off the CORE's posed
+        # chain -- no Python pose FK. knowledge/model/the-eye-was-the-only-thing-in-python.md
+        nk = None
+        if self.neck is not None:
+            look = self.neck.select_look_pos((core.pos_x, core.pos_y, core.pos_z), self._eye_next,
+                                             m34de_neck, core._atn_state in (_ATN_LOCK, _ATN_RELEASE),
+                                             bool(core._atn_list_present))
+            self.neck.update(self._head_mtx, m34de_neck, core.state, look)
+            nk = self.neck.local_38()
+            self._head_mtx = core.head_mtx_exec(nk)
+        if self.zl1 is not None:
+            ht = core.head_top_exec(nk)
+            eye_k, tattn_k = self.zl1.step(
+                pos_pre=tetra_pre, pos_post=(self.tx, self.ty, self.tz),
+                link_pos=(core.pos_x, core.pos_y, core.pos_z), link_head_top_y=ht[1])
+            self._eye_next = eye_k
+            self._tattn = tattn_k
         if not record:
             return None
-        return dict(sim_proc=core.state, sim_facing=core.facing,
-                    sim_shape_z=core.court_shape_z,
-                    sim_link=(core.pos_x, core.pos_z), sim_tetra=(self.tx, self.tz),
-                    speedF=sf)
+        row = dict(sim_proc=core.state, sim_facing=core.facing,
+                   sim_shape_z=core.court_shape_z,
+                   sim_link=(core.pos_x, core.pos_z), sim_tetra=(self.tx, self.tz),
+                   speedF=sf)
+        if self.neck is not None:
+            row['sim_m3564'] = (self.neck.x, self.neck.y, self.neck.z)
+        if self.zl1 is not None:
+            row['sim_eye'] = self._eye_next
+            row['sim_tattn'] = self._tattn
+            row['sim_head_top'] = core.head_top_exec(nk)
+        return row
 
 
 def replay(frames, input_at, entry, upto=None, pre_inputs=None, seed_nspeed=None,
