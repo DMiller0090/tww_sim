@@ -5,8 +5,9 @@ the wrong one? What decides whether a post-roll endpoint can turn out of the tal
 do the endpoints that reach my target all fail the NEXT stage?
 **Status:** measured, session 135. Freeing the herd-line direction from the plow regime
 (`full_herd.in_pursuit_box`'s `axis`) takes cycle 3 off the band-keeping beam from **zero children**
-to **170428 judged** - and every one of them still dies `in_cone`. The binding quantity is the
-EXIT'S SLIDE: over the banked beam, `corr(l0, tangential fraction) = +0.960`. Gate
+to **170428 judged** - and every one of them still dies `in_cone`, because the binding quantity is
+the EXIT'S SLIDE (`corr(l0, tangential fraction) = +0.960` over that beam). On the DEEP-PLOW beam
+the same change is worth **6.9 frames**: bound **100.06 -> 93.17**, 8 of 8 endpoints onside. Gate
 [`tests/test_free_axis.py`](../../tests/test_free_axis.py).
 **Source:** [`harness/tetrapush/full_herd.py`](../../harness/tetrapush/full_herd.py)
 (`in_pursuit_box`, `_frontier_score`, `extend_cycle`'s `free_axis`),
@@ -69,6 +70,26 @@ correlation over 5 points is not a feasibility verdict
 on the same push, in opposite directions, which is the same trade
 [the-crossing-and-the-runway-are-one-resource](the-crossing-and-the-runway-are-one-resource.md)
 found one stage further out.
+
+## The route it does pay on
+
+The band-keeping route is where the clause was named and it is not where the frames were. Run the
+same freed stage over the DEEP-PLOW cycle-2 beam - the one whose crossing s134 measured at bound
+100.06 - and it returns **8 of 8 endpoints onside, all admitting an entry curve**, `l0`
+**+10.41..+38.80**, best **bound 93.17 = 72 herd frames + 87.86 u of gap at the walk cap + 16 of
+cut**. That is under the banked console **101**, under s126's sampled **97.35**, and under the
+[s125 floor of 94](the-razor-is-on-the-pusher-not-the-pushed.md) - which it is allowed to beat
+because that floor's herd term was 73, the all-out-push-to-a-COORD number, and s123/s125 replaced
+that target with a half-plane that is nearer.
+
+Read it as a bound: the gap is charged at cap speed with no turnaround and no guarantee the move
+lands on the 1e-4 u razor, and the roll entry is a separate search. Two things say it is not the
+frontier either - the per-aim screen's fan window is BINDING under the freed axis (`roll_probe`'s
+`fan_edge` reports the furthest surviving aim at 8.34-8.44 deg of an 8.44 deg half-window on every
+parent, so `probe_half` is clipping the population it screens), and the 16 is a thrust-14 cut.
+
+The death counters say the same thing the band-keeping run did, on these parents too: `unarmed`
+**429724**, `in_cone` **314542**, `outbox` **6576**. The box is no longer what refuses anywhere.
 
 ## What to do with it
 

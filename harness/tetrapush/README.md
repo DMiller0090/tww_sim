@@ -1710,11 +1710,13 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
-      - [~] **THE BOX WAS A CAP AND FREEING IT IS NOT ENOUGH: THE CROSSING AND THE ARMING POSTURE
-            ARE BOUGHT WITH THE SAME PUSH (session 135).** Session 134 named `in_pursuit_box`'s
-            direction clause as the measured cap on the band-keeping route and left the free-axis
-            prototype as a monkeypatch. Promoted, gated, and run -- and the run says the clause was
-            *a* cap, not *the* one. One new truth page,
+      - [~] **THE PLAN IS 93.17 AND THE BOX WAS WORTH 6.9 FRAMES -- BUT NOT ON THE ROUTE IT WAS
+            FREED FOR (session 135).** Session 134 named `in_pursuit_box`'s direction clause as the
+            measured cap on the BAND-KEEPING route and left the free-axis prototype as a
+            monkeypatch. Promoted, gated, run -- and on that route the clause was *a* cap and not
+            *the* one (the refusal moves `outbox` -> `in_cone`), while on the DEEP-PLOW route it
+            takes the bound from **100.06 to 93.17**, under the banked console 101, s126's 97.35
+            and the s125 floor of 94. One new truth page,
             [`knowledge/strategy/the-crossing-costs-the-arming-posture.md`](../../knowledge/strategy/the-crossing-costs-the-arming-posture.md).
             - **SHIPPED: the push axis is a PARAMETER, not the herd line.**
               `reposition.AXIS_HERD`/`AXIS_PAIR` + `pair_line`; `full_herd.in_pursuit_box(axis=)`,
@@ -1758,6 +1760,47 @@ from scratch. Land the edits first, then gate.
               reports it, `TOTAL_INCUMBENT` = the banked console **101** is the number to beat, and
               `verdict` accepts a herd over budget whose total wins. Without a measured ``total``
               the verdict is exactly the pre-s135 one.
+            - **AND ON THE DEEP-PLOW BEAM IT IS WORTH 6.9 FRAMES: BOUND 100.06 -> 93.17.** The same
+              cycle-3 stage over s134's re-cut cycle-2 beam (`s134_c3_l0_beam.json` cycle 1, 16
+              nodes, ``l0`` -269.26..-160.62), knobs identical to s134's, axis freed:
+              **8 of 8 endpoints park her ONSIDE and all 8 admit an entry curve** (s134: 6 of 8),
+              ``l0`` **+10.41 .. +38.80**, best **bound 93.17 = 72 herd + 87.86 u of gap at the walk
+              cap + 16 cut** (2606 s). Against the banked console **101**, s134's **100.06**, s126's
+              sampled **97.35** and the s125 floor of **94** -- which it beats because that floor's
+              herd term was 73, the all-out-push-to-a-COORD number, and reaching the half-plane is
+              cheaper than reaching the cluster. Its herd is **72 frames**, inside the old 75 bar,
+              so this winner does not even spend the relaxed rule.
+              **It is a BOUND, not a delivered plan**: the gap is charged at cap speed with no
+              turnaround and no guarantee the move lands on the 1e-4 u razor, and the roll entry is
+              a separate search. Two reasons it is not the frontier either -- the screen's fan
+              window was binding throughout (below), and the 16 is a THRUST-14 cut.
+            - **AND THE BOX IS NO LONGER THE BINDING PRUNE ANYWHERE.** The freed junction's death
+              counters on this beam: ``unarmed`` **429724**, ``aim_followed`` 554159, ``in_cone``
+              **314542**, ``aim_wall`` 89171, ``wall`` 26304, ``outbox`` **6576**. Arming is what
+              refuses now, on the deep-plow parents as on the band-keeping ones.
+            - **AND s134'S CHEAP OPEN ITEM IS ANSWERED -- 3 FRAMES, AT THRUST 11, NOT 9.** The full
+              fine box with NO coarse screen (17 facings x 1540 cells a thrust): thrust 9 gives
+              **133 genuine / 0 unbroken**, thrust 10 **46 / 0**, thrust 11 **53 / 1**. So s126's
+              4.85-frame thrust-9 hope is dead on the fine box, and a family exists one rung up.
+              It is a FAMILY, not a razor: walked at 5-10 BAM it holds unbroken cells across
+              **facings 40600-40670** (one gap at 40630), one or two cells a rung, every one
+              ``genuine_confirmed`` with ``break_frames`` 0 and a lat window 3e-5..1.2e-4 u wide.
+              ``cut_step`` **13 against thrust 14's 16 = 3 frames off the cut term** of every plan
+              that uses it. The gap term must be re-solved at the new `handoff_pf`, so no other rung
+              of the bound carries over -- in particular a shorter runway is NOT yet a shorter walk,
+              it is a different entry point and the gap is what prices it.
+            - **AND `terminal.RUNWAY`'S FLOOR WAS CLIPPING THAT FAMILY.** Re-scanned over runways
+              **60-200**, its lowest unbroken cell is at runway **130**, under the shipped box's
+              first rung of 140, and it spans **130-160** -- so session 126's "the genuine band's
+              lower edge parks at ~180-200 whatever the thrust" is a THRUST-14 statement, not a
+              general one. Nothing unbroken exists below 130 over the widened floor, so 130 is the
+              family's own edge and not the box's.
+            - **THE SCREEN'S FAN WINDOW IS NOW BINDING.** With the axis freed the junction yields
+              **6850-8662 unique endpoints** a parent against s134's 4292, and `roll_probe`'s
+              ``fan_edge`` reports the furthest surviving aim at **8.39-8.43 deg of the 8.44 deg
+              half-window** on every parent -- so ``probe_half=0x600`` is clipping the population it
+              screens. Widen it with the axis, or the freed stage is measured through the old
+              window (`[[infeasible-needs-proof]]`).
       - [~] **THE CROSSING WAS A CUT, NOT A REACHABILITY -- AND THE HERD PUSHES 64 DEG OFF THE AXIS
             THE ENDGAME IS DENOMINATED IN (session 134).** Session 126 reduced the endgame to one
             number, ``l0 >= -80.4`` handed over by cycle 2 against the -183.41 it delivers, and nine
