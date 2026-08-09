@@ -1742,6 +1742,25 @@ from scratch. Land the edits first, then gate.
               delta +71.93 deg and fails all three. Freed to its coordinate-free content the stage
               returns **21x more surviving rolls** and moves a coarse two-parent frontier
               **-136.00 -> -120.71**. Real, but the pool and the keeps are the bigger lever.
+            - **END TO END, THE CHAIN CROSSES THE LINE FOR THE FIRST TIME -- AND THE BOX IS WHAT CAPS
+              IT.** Cycle 3 off the re-cut beam: **6 of 8 endpoints ONSIDE, best ``l0`` +38.92 at 77
+              frames, all 6 admitting an entry curve**, against s133's -56.66 / ``onside=False`` /
+              ``gap=inf``. Best **bound 100.06** = 77 herd + 120.00 u of gap at the walk cap + 16 cut
+              (banked console 101, s125 floor 94, s126's sampled plow-then-walk-back 97.35). Read the
+              ROUTE: the winners' last roll buys **+199.5 u in 29 f**, the deep-PLOW regime, so Link
+              ends 120 u out and owes the retreat -- and cycle 2 handed over **-160.62**, under the
+              bar, and crossed anyway. **The -80.4 bar is a condition on the BAND-KEEPING crossing,
+              not on crossing at all.**
+            - **AND THE BAND-KEEPING ROUTE IS REACHED AND THEN REFUSED, BY ONE CLAUSE.** Dropping
+              ``require_quality`` takes cycle 2 to **``l0`` -51.75 at 52 f**, past the bar. Cycle 3
+              off those states returns **ZERO survivors, every child ``outbox`` at generation 1** --
+              the junction never starts. They fail ONLY the direction clauses: separations **58.84 /
+              63.86 / 64.64 u**, dead centre in the human's own **40.4-85.2 u** plow band, against
+              ``max_lat`` 17.99 (they read -35.51 / -49.24 / -58.57) and ``max_delta`` 21.35 deg (they
+              read -37.13 / -49.63 / -66.52). Ordinary plow pairs pointing 37-67 deg off the herd
+              line. So `in_pursuit_box` is the measured cap on the plan, and the free-axis prototype
+              (`_notes/s134_free_axis.py`, 21x more surviving rolls) is the next step -- as a gated
+              knob, NOT a widened ``max_delta`` (`[[no-overtuned-constants]]`).
             - **AND A KEEP THAT REACHES TWO OF THREE CUTS IS ONE THE THIRD UNDOES.** The CHAINED
               re-cut with the pool and the screen alone hands over **-160.62 at 48 f**, against the
               -90.39 the same stage's population screens. Diagnosed, not guessed: re-opening each kept

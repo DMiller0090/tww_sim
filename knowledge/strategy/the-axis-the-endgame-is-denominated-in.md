@@ -81,6 +81,39 @@ Those keeps are not wrong - they are HERD constraints, and by the last two cycle
 herding to do. See [the-handoff-along-was-already-spanned](the-handoff-along-was-already-spanned.md)
 for the earlier form of the same question.
 
+## End to end: the chain crosses, and the cage is what caps it
+
+With the axis at all three cuts, cycle 3 parks her on the genuine side for the first time -- **6 of 8
+endpoints `onside`, best `l0` +38.92 at 77 frames, all 6 admitting an entry curve**, where the same
+chain previously returned `onside=False` and `gap=inf`. Best `bound` **100.06** = 77 herd + 120.00 u
+of gap at the walk cap + 16 cut, against the banked console 101 and the
+[s125 floor](the-crossing-and-the-runway-are-one-resource.md) of 94.
+
+But read which ROUTE it found. The winners' last roll buys **+199.5 u in 29 frames** -- the deep-plow
+regime, not the +80.4 band-keeping one -- so Link ends 120 u past the corner and owes the retreat.
+Cycle 2 handed over **-160.62**, well under the -80.4 bar, and crossed anyway: **the bar is a
+condition on the BAND-KEEPING crossing specifically**, not on crossing at all.
+
+The band-keeping route is reachable at cycle 2 and then stops dead. Dropping `require_quality`
+(`junction_quality` asking whether the next junction can still herd) takes cycle 2 to **`l0` -51.75
+at 52 frames**, past the bar. Cycle 3 off those states returns **zero survivors, every child killed
+`outbox` at generation 1** -- the junction never starts. And the reason is the direction assertion,
+measured:
+
+| cycle-2 state | `lead` | herd `lat` | `delta` | separation | in box |
+|---|---|---|---|---|---|
+| `l0` -51.75 | -41.87 | **-49.24** | **-49.63 deg** | 64.64 | False |
+| `l0` -63.15 | -46.91 | **-35.51** | **-37.13 deg** | 58.84 | False |
+| `l0` -160.62 | -58.19 | +9.55 | +9.32 deg | 58.97 | True |
+
+Every one of them sits at a separation of **58.8-64.6 u -- dead centre in the human's own recorded
+40.4-85.2 u plow band**. They are ordinary plow pairs. What disqualifies them is only that the
+separation vector points 37-67 deg off the herd line, against a `max_lat` of 17.99 u and a
+`max_delta` of 21.35 deg.
+
+So the cage is not a safety margin the endgame is abusing; it is the herd-line assumption, and it is
+what caps the plan at the plow-then-walk-back route.
+
 ## The general shape
 
 **When the target changes shape, sweep the keeps that were calibrated to the old one.** The herd
