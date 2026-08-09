@@ -522,17 +522,28 @@ class FreeRun:
         with the same inputs as its parent stays bit-identical (gated `tests/test_search.py`).
 
         Everything else is a scalar or an immutable tuple (pos points, pends, the cached head
-        matrix, the raw-input dict which `step` never mutates) -- shared by reference is correct."""
+        matrix, the raw-input dict which `step` never mutates) -- shared by reference is correct.
+
+        **What a NATIVE run does not have to copy** (session 133, and it is over half the clone).
+        Moving a model into the C frame leaves its Python object behind as a SEED, and a seed is
+        shared, not deep-copied: `link._foot` is the f0 pose the core replaced (9.5 us) and, under
+        ``native_look``, `zl1` and `neck` are the objects `LandCore.seed_look` was built from and
+        that the C frame steps in their place (6.7 us). Each is shared only on the path that
+        provably never writes it -- `self.link` is a field-holder the native step syncs scalars
+        into, and the native-look branch of `_step_native` calls `core.look_check()` where the wired
+        one would run both models. The camera is NOT in that list: it still runs in Python after the
+        frame, so it is state and it is cloned."""
         c = FreeRun.__new__(FreeRun)
-        c.link = self.link.clone()
+        native = self._core is not None
+        c.link = self.link.clone(share_foot=native)
         c.computed_pose = self.computed_pose
         c.tx, c.tz, c.ty = self.tx, self.tz, self.ty
         c.walls_tetra = self.walls_tetra          # immutable mesh, shared by reference
         c.camera = self.camera.clone() if self.camera is not None else None
         c._native_look = self._native_look        # before any look property is read or written
-        c.zl1 = self.zl1.clone() if self.zl1 is not None else None
+        c.zl1 = (self.zl1 if (self.zl1 is None or self._native_look) else self.zl1.clone())
         c._eye_next = self._eye_next
-        c.neck = self.neck.clone() if self.neck is not None else None
+        c.neck = (self.neck if (self.neck is None or self._native_look) else self.neck.clone())
         c._head_mtx = self._head_mtx
         c._tattn = self._tattn
         c._prev_raw = self._prev_raw

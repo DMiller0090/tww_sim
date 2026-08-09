@@ -10,8 +10,8 @@ and at partial magnitudes as well as full.
 from tww_sim.land.plan_land import _primitives as P
 
 
-def _uncached(*a, **kw):
-    return P.stick_for_bearing.__wrapped__(*a, **kw)
+def _uncached(theta, cs=0, msd=1.0):
+    return P._stick_for_m34dc.__wrapped__((int(theta) - int(cs)) & 0xFFFF, msd)
 
 
 def test_the_memo_is_the_function():
@@ -41,8 +41,12 @@ def test_the_sweep_reaches_the_clamp_search():
 
 def test_a_second_call_is_the_same_object():
     """It is a cache and not a re-run: the tuple is returned, not rebuilt."""
-    P.stick_for_bearing.cache_clear()
+    P._stick_for_m34dc.cache_clear()
     a = P.stick_for_bearing(0x2345, 0x1111, 1.0)
     b = P.stick_for_bearing(0x2345, 0x1111, 1.0)
     assert a is b
-    assert P.stick_for_bearing.cache_info().hits >= 1
+    assert P._stick_for_m34dc.cache_info().hits >= 1
+    # ...and the key is the DIFFERENCE, so a shifted pair with the same difference hits too
+    hits = P._stick_for_m34dc.cache_info().hits
+    assert P.stick_for_bearing(0x2345 + 0x300, 0x1111 + 0x300, 1.0) is a
+    assert P._stick_for_m34dc.cache_info().hits == hits + 1

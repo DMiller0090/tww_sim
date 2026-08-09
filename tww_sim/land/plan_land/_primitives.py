@@ -61,7 +61,6 @@ def dist2d(state, tx, tz):
     return math.hypot(tx - state.pos_x, tz - state.pos_z)
 
 
-@functools.lru_cache(maxsize=8192)
 def stick_for_bearing(theta_s16, csangle=0, msd=1.0):
     """Inverse of the walk want-target: an (sx, sy) whose camera-relative walk target
     `m34E8 = m34DC + csangle` equals the world bearing `theta_s16`. With a frozen camera
@@ -70,8 +69,17 @@ def stick_for_bearing(theta_s16, csangle=0, msd=1.0):
     `msd` (0..1) sets the target mStickDistance = min(hypot(dz)/54, 1): 1.0 = full deflection
     (walk cap 17); a small msd creeps (the speed cap is msd*(17*msd) = 17*msd^2, so msd~0.06 is
     ~0.06 u/frame) -- used by `reach_precise` for the sub-unit final approach. The dead-zoned
-    magnitude is msd*54; the dead zone (15) is added back per axis so `_deadzone` recovers it."""
-    m34dc = (int(theta_s16) - int(csangle)) & 0xFFFF          # m34E8 = m34dc + csangle
+    magnitude is msd*54; the dead zone (15) is added back per axis so `_deadzone` recovers it.
+
+    The bearing and the camera enter ONLY as their difference, so the memo is keyed on that (see
+    `_stick_for_m34dc`) -- a caller sweeping a fixed bearing ladder under a moving camera, or a
+    moving bearing under a fixed one, hits the same cells either way."""
+    return _stick_for_m34dc((int(theta_s16) - int(csangle)) & 0xFFFF, msd)
+
+
+@functools.lru_cache(maxsize=16384)
+def _stick_for_m34dc(m34dc, msd=1.0):
+    """`stick_for_bearing` in its own coordinate: the walk want-target relative to the camera."""
     stick_s16 = (m34dc - 0x8000) & 0xFFFF                     # m34dc = stickAngle + 0x8000
     phi = math.radians(stick_s16 / 65536.0 * 360.0)          # stick_angle_deg convention
     # Dead-zoned magnitude for a target mStickDistance: full (msd>=1) -> the true corner (255/1);

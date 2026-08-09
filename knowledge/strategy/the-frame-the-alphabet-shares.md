@@ -5,11 +5,12 @@ do the children actually differ? Five sessions of porting made a stage 13.6x fas
 barely moved; what did I mis-measure? How do I check that the stage I optimised is still the
 expensive one?
 **Status:** `full_herd.junction_beam` steps ONE frame per node per generation instead of one per
-child, and the beam is unchanged endpoint for endpoint
+child, prunes the node rather than the child, and clones only what a native run does not already
+hold in C -- the beam unchanged endpoint for endpoint
 ([`tests/test_native_junction.py`](../../tests/test_native_junction.py),
 [`tests/test_fork_pending.py`](../../tests/test_fork_pending.py)). With the nodes on the C step and
-the arming probe camera-free, the junction stage is **53.8 s -> 8.9 s** on one banked cycle-2
-parent. Numbers in [the accounting](#the-accounting).
+the arming probe camera-free, the junction stage is **53.8 s -> 4.4 s (12.2x)** on one banked
+cycle-2 parent. Numbers in [the accounting](#the-accounting).
 **Source:** [`harness/tetrapush/from_f0.py`](../../harness/tetrapush/from_f0.py)
 (`FreeRun.fork_pending`, `set_pending_input`),
 [`harness/tetrapush/full_herd.py`](../../harness/tetrapush/full_herd.py) (`_expand`),
@@ -86,11 +87,11 @@ The junction stage on one banked cycle-2 parent, shipped knobs, before and after
 
 | | before | after |
 |---|---|---|
-| the stage | 20.02 s (native) / 53.8 s (wired nodes) | **8.67 s** |
-| `FreeRun.step` | 10.96 s, 91561 calls @ 119.7 us | 0.61 s, 26860 calls @ 22.5 us |
-| `FreeRun.clone` | 5.04 s (24.6%) | 5.00 s (**58.4%**) |
-| `junction_gates` | 5.78 s | 2.01 s |
-| `junction_alphabet` | 1.49 s @ 6.28 ms | 0.57 s @ 2.40 ms |
+| the stage | 20.02 s (native) / 53.8 s (wired nodes) | **4.4 s** |
+| `FreeRun.step` | 10.96 s, 91561 calls @ 119.7 us | 0.58 s, 26978 calls @ 21.7 us |
+| `FreeRun.clone` | 5.04 s, 91516 calls @ 54.7 us | 1.4 s, 71477 calls @ 19.7 us |
+| `junction_gates` | 5.78 s | 1.37 s |
+| `junction_alphabet` | 1.49 s @ 6.28 ms | 0.62 s @ 2.60 ms |
 
 Three cuts, and the third is the cheapest: `beam_io.rebuild_beam` built its nodes with
 `seeds.make_freerun(env)`, whose `native` defaults to False. A banked beam is how cycles 2 and 3 are
@@ -106,9 +107,38 @@ a FIXED bearing ladder once per node per generation. It is a pure function retur
 tuple, so the memo is exact rather than an approximation
 ([`tests/test_stick_for_bearing_cache.py`](../../tests/test_stick_for_bearing_cache.py)).
 
+## A seed is shared, not deep-copied
+
+Moving a model into the C frame leaves its Python object behind, and what it leaves behind is a
+SEED. `FreeRun.clone` was still deep-copying three of them every time: `link._foot` is the f0 pose
+the core replaced (**9.5 us**, two thirds of the `LandState` clone) and, under `native_look`, `zl1`
+and `neck` are the objects `LandCore.seed_look` was built from and that the C frame steps in their
+place (**6.7 us**). Each is shared only on the path that provably never writes it - the native step
+syncs scalars into a field-holder `LandState` and calls `core.look_check()` where the wired one runs
+both models. A native clone is **30.8 -> 12.2 us**; the wired one is untouched at 27.4.
+
+The camera is deliberately NOT on that list. It still runs in Python after the frame, so it is
+state, and it is cloned.
+
+**The general shape:** after a port, audit what the old object is still copying. The model moved;
+the copy did not.
+
+## The prune belongs to the node
+
+`followed` / `wall` / `outbox` kill most children, and all three read positions and the follow flag
+- fields of the shared frame. So the verdict is the NODE's: `_shared_frame` steps it once, and a
+node that fails costs **zero** child clones (91516 -> 71477 a stage). Gated as the claim rather than
+the consequence - every child's verdict must equal the shared frame's, on both engines.
+
 ## What is next, and it is named by the table
 
-`FreeRun.clone` is now **58% of the stage** - 91516 clones at 54.7 us, of which only 4622 survive to
-be endpoints. Most of those clones exist to be pruned by `followed` / `wall` / `outbox`, and every
-one of those predicates reads the SHARED frame, so they can be decided once per node rather than
-once per child. The clone is the thing to defer, not the step.
+Of the 4.4 s left: `FreeRun.clone` ~1.4 s, `junction_gates` ~1.37 s, `junction_alphabet` ~0.62 s,
+`FreeRun.step` ~0.58 s. The two structural ones left, both bigger changes than anything above:
+
+* **~26.5k arming probes each cost a clone plus a step**, and only ~24 children per generation
+  survive the frontier keep. The probe's frame IS that child's next frame (both act on its pending
+  letter), so the beam computes each child's next frame twice.
+* **`junction_alphabet` is one `stick_for_bearing` call**: the toward-Tetra full-deflection stick,
+  whose bearing genuinely moves per node, so it takes the clamp search every time (2.6 ms). The memo
+  is keyed on the bearing MINUS the camera - already normalised - so what is left needs a faster
+  decode, not a better key.

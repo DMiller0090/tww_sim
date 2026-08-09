@@ -1744,15 +1744,32 @@ from scratch. Land the edits first, then gate.
             - **AND THE CHEAPEST CUT WAS A STALE DEFAULT**: `beam_io.rebuild_beam` built its nodes
               with `seeds.make_freerun(env)`, `native=False` -- so the campaign's dominant stage ran
               on the **411 us** Python step, because a camera-carrying run could not be native until
-              s131 and the default outlived its reason. **DELIVERED, one banked cycle-2 parent,
-              same endpoints 0-ULP: 53.8 s -> 8.9 s (5.98x).** Gates
+              s131 and the default outlived its reason.
+            - **THEN THE CLONE, which the first three cuts promoted to 58% of the stage.** A port
+              leaves the Python object behind as a SEED and `FreeRun.clone` was still deep-copying
+              three of them: `link._foot` is the f0 pose the core replaced (**9.5 us**, two thirds
+              of the `LandState` clone) and, under ``native_look``, `zl1`/`neck` are what
+              `LandCore.seed_look` was built from (**6.7 us**). Shared only where the path provably
+              never writes them (`LandState.clone(share_foot=)` refuses when `_core` is set). A
+              native clone **30.8 -> 12.2 us**; the wired one untouched at 27.4. The camera is
+              deliberately NOT in that list -- it runs in Python after the frame, so it is state.
+              **After a port, audit what the old object is still copying.**
+            - **AND THE PRUNE BELONGS TO THE NODE**: `followed`/`wall`/`outbox` all read the shared
+              frame, so `_shared_frame` decides them once and a dead node costs ZERO child clones
+              (**91516 -> 71477**). Gated as the claim (every child's verdict == the shared frame's,
+              both engines), not as its consequence.
+            - **DELIVERED, one banked cycle-2 parent, same endpoints 0-ULP: 53.8 s -> 4.4 s
+              (12.2x)**; the cycle 52.6 s -> 4.8 s. Gates
               [`tests/test_fork_pending.py`](../../tests/test_fork_pending.py) (6),
-              [`tests/test_native_junction.py`](../../tests/test_native_junction.py) (5 + 1 slow),
+              [`tests/test_native_junction.py`](../../tests/test_native_junction.py) (6 + 1 slow),
               [`tests/test_stick_for_bearing_cache.py`](../../tests/test_stick_for_bearing_cache.py) (3).
-            - **NEXT IS NAMED BY THE TABLE, NOT BY A GUESS**: `FreeRun.clone` is now **58.4%** of the
-              stage (91516 at 54.7 us) and only **4622** survive to be endpoints. The prunes that
-              kill the rest -- `followed` / `wall` / `outbox` -- all read the SHARED frame, so they
-              can be decided once per node. **Defer the clone, not the step.**
+            - **WHAT IS LEFT, and both are bigger changes than any above.** Of the 4.4 s: clone
+              ~1.4, `junction_gates` ~1.37, alphabet ~0.62, step ~0.58. (a) ~26.5k arming probes
+              each cost a clone + a step while only ~24 children a generation survive the frontier
+              keep -- and the probe's frame IS that child's next frame, so the beam computes it
+              twice. (b) The alphabet is ONE `stick_for_bearing`: the toward-Tetra full stick, whose
+              bearing genuinely moves per node, so it takes the 2.6 ms clamp search every time. The
+              memo is already keyed on bearing MINUS camera, so that one needs a faster decode.
       - [x] **THE GATE WAS 29 MINUTES BECAUSE MOST OF ITS COST WAS NOT TESTS AT ALL -- IT IS NOW
             1:07, AND THE 2-MINUTE RULE IS MACHINE-CHECKED (session 132).** Dereck's steer, and then
             his hard rule: the per-session suite must never exceed 2 minutes, and a functionality test

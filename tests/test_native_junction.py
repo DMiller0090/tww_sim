@@ -21,6 +21,7 @@ import pytest
 
 from harness.tetrapush import beam_io as BIO
 from harness.tetrapush import full_herd as F
+from harness.tetrapush import search as S
 from harness.tetrapush import seeds as SD
 from harness.tetrapush import two_roll as T
 from harness.tetrapush.from_f0 import FreeRun
@@ -155,6 +156,39 @@ def test_expand_on_a_wired_run_is_clone_and_step(env, rec):
                 r.link.speedF, int(r.link.state), r.tx, r.tz, int(r.csangle)) \
             == (want.link.pos_x, want.link.pos_z, int(want.link.facing), int(want.link.travel),
                 want.link.speedF, int(want.link.state), want.tx, want.tz, int(want.csangle))
+
+
+def test_the_prune_verdict_is_the_nodes_and_not_the_childs(env, rec):
+    """`junction_beam` decides `followed` / `wall` / `outbox` ONCE per node and drops a dead one
+    without materialising a child. That is only sound because all three read the shared frame -- so
+    gate exactly that: every child's verdict equals the one taken off the shared frame, on BOTH
+    engines, over a real alphabet at several states."""
+    hl = HerdLine.from_env(env)
+    box = F.pursuit_box(env, hl)
+    walls = F.O.courtyard_walls()
+
+    def verdict(r):
+        return ('followed' if r._follow_warned else
+                'wall' if not F.O.frame_is_wall_free(r.link.pos_x, r.link.pos_z, r.tx, r.tz,
+                                                     walls) else
+                'outbox' if not F.in_pursuit_box(r, hl, box) else None)
+
+    checked = 0
+    for native in (True, False):
+        node = _node(env, rec, native)
+        run = node['run']
+        for _gen in range(3):
+            letters = [dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
+                            triggerL=255 if l else 0, substickX=T.CSTICK_NEUTRAL, substickY=0)
+                       for (sx, sy) in list(F.junction_alphabet(run, hl, ess_step=1,
+                                                                aim_step=64))[:8]
+                       for l in (0, 1)]
+            want = verdict(F._shared_frame(run, letters[0]))
+            kids = F._expand(run, letters)
+            assert all(verdict(r) == want for r in kids)
+            checked += len(kids)
+            run = kids[0]
+    assert checked > 40
 
 
 @pytest.mark.slow

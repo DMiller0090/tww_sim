@@ -594,6 +594,21 @@ def _expand(run, letters):
     return out
 
 
+def _shared_frame(run, letter):
+    """The frame a node's whole alphabet shares, stepped once -- what the SHARED prunes read.
+
+    `junction_beam` kills most children on `followed` / `wall` / `outbox`, and all three read only
+    Link's and Tetra's positions and the follow flag: fields of the shared frame, identical across
+    the alphabet. So the verdict is the NODE's, and a node that fails it can be dropped whole
+    without materialising a single child (~23k of 65k children a stage). Any letter serves, since
+    the delivered one cannot touch its own frame -- see `_expand`."""
+    if run.native_step:
+        return run.fork_pending([letter])[0]
+    r = run.clone()
+    r.step(letter)
+    return r
+
+
 def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step=16,
                   keep=12, collect=None, dead=None, per_state=4, aim_share=True, corridor=None):
     """**The junction as a per-frame BEAM, not an enumerated family.** The atom is one frame's
@@ -650,17 +665,22 @@ def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step
                        for (sx, sy) in junction_alphabet(nd['run'], hl, ess_step=ess_step,
                                                          aim_step=aim_step)
                        for l in (0, 1)]
+            if not letters:
+                continue
+            # the prunes below are the SHARED frame's, so they are decided once for the node and a
+            # dead one costs no children at all (`_shared_frame`)
+            probe = _shared_frame(nd['run'], letters[0])
+            # counted separately on purpose: "the beam emptied" is only diagnosable if the
+            # regime, the walls and the posture box are distinguishable afterwards.
+            why = ('followed' if probe._follow_warned else
+                   'wall' if not O.frame_is_wall_free(probe.link.pos_x, probe.link.pos_z,
+                                                      probe.tx, probe.tz, walls) else
+                   'outbox' if not in_pursuit_box(probe, hl, box) else None)
+            if why is not None:
+                dead[why] = dead.get(why, 0) + len(letters)
+                continue
             for d, r in zip(letters, _expand(nd['run'], letters)):
                 sx, sy, l = d['stickX'], d['stickY'], 1 if d['triggerL'] else 0
-                # counted separately on purpose: "the beam emptied" is only diagnosable if the
-                # regime, the walls and the posture box are distinguishable afterwards.
-                why = ('followed' if r._follow_warned else
-                       'wall' if not O.frame_is_wall_free(r.link.pos_x, r.link.pos_z,
-                                                          r.tx, r.tz, walls) else
-                       'outbox' if not in_pursuit_box(r, hl, box) else None)
-                if why is not None:
-                    dead[why] = dead.get(why, 0) + 1
-                    continue
                 jf = nd['jf'] + 1
                 tag = (round(r.link.pos_x, 1), round(r.link.pos_z, 1), r.link.facing >> 5,
                        round(r.link.speedF, 2), r.link.state, sx, sy, l)

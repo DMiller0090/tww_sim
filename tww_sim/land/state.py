@@ -215,7 +215,18 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
                    self.csangle, self.state, self.nspeed, self.speedF, float(self._cam.scale))
         return core
 
-    def clone(self):
+    def clone(self, share_foot=False):
+        """A deep copy that keeps stepping bit-exactly, mid-walk included.
+
+        ``share_foot`` -- share the anim engine by reference rather than state-copying it. It is
+        two thirds of this clone (9.5 us of 14.4), and it is dead weight for exactly one caller:
+        a `from_f0.FreeRun` on the C engine keeps its `LandState` as a FIELD-HOLDER synced from
+        `LandCore`, never calls `step` on it, and so leaves `_foot` at the f0 seed pose forever.
+        Refused when `_core` is set, because there the foot IS the engine the core poses through
+        and sharing it would alias two runs onto one pose."""
+        if share_foot and self._core is not None:
+            raise ValueError("share_foot is for a state that never steps its own anim engine; this "
+                             "one drives a LandCore through _foot._core")
         s = LandState.__new__(LandState)
         s.__dict__.update(self.__dict__)
         s._inbuf = list(self._inbuf)
@@ -229,7 +240,7 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         # State-copy the stateful anim engine so the clone continues BIT-EXACTLY even MID-WALK (the
         # old path rebuilt fresh at rest, valid only pre-walk). FootSpeedF.clone carries the toe stream.
         if self._foot is not None:
-            s._foot = self._foot.clone()
+            s._foot = self._foot if share_foot else self._foot.clone()
         # The native LandCore aliases the SAME PoseEngine as the clone's _foot; copy its physics +
         # camera state over that state-copied engine (was rebuilt fresh -> mid-walk anim was lost).
         if self._core is not None and s._foot is not None and getattr(s._foot, "_core", None) is not None:
