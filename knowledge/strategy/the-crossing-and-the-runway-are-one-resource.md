@@ -1,18 +1,22 @@
 # The crossing and the runway are one resource: why the last herd cycle cannot also be the terminal
 
 **Answers:** My terminal solve says which pair clips and my herd's last cycle lands nowhere near it -
-is that a ranking problem or a structural one? What must the SECOND-to-last cycle hand over? Can I move
-the entry band by cutting the roll earlier (pressing B sooner)? How do I make a razor-scale terminal
+is that a ranking problem or a structural one? What must the SECOND-to-last cycle hand over? Is that
+requirement a constant of the problem, or does it move when I change the terminal? Can I move the
+entry band by cutting the roll earlier (pressing B sooner)? How do I make a razor-scale terminal
 predicate cheap enough to rank a whole beam on?
 **Status:** MEASURED (session 126) on the flooded-Hyrule Tetra corner at facing 40835, over **20592
 full-circle rolls** fired from 3 banked cycle-2 endpoints (48 armed junction endpoints each, every herd
 prune off). 51 rolls carry her across the approach line; 12366 leave the pusher at or beyond the entry
 band's near edge (1866 inside it); **zero do both** - the deepest crossing roll ends at runway 89. The
 exchange rate is the finding: a roll that keeps the band buys at most **+80.4 u** of crossing.
+RE-PROJECTED into the thrust-11 family (session 137), where it is **-76.87 .. -77.83** - the bar
+belongs to its terminal, and the structure survives the move.
 **Source:** [`harness/tetrapush/handoff.py`](../../harness/tetrapush/handoff.py) (`resid_window`,
-`entry_roots`, `endpoint`), the beam keep in
+`entry_roots`, `endpoint`, `crossing_bar`), the beam keep in
 [`harness/tetrapush/full_herd.py`](../../harness/tetrapush/full_herd.py) (`extend_cycle`'s
-`handoff_keep`), gate [`tests/test_handoff.py`](../../tests/test_handoff.py) (12); continues
+`handoff_keep`), bank `fixtures/courtyard_crossing_bar.json`, gate
+[`tests/test_handoff.py`](../../tests/test_handoff.py) (14); continues
 [the-razor-is-on-the-pusher-not-the-pushed.md](the-razor-is-on-the-pusher-not-the-pushed.md).
 
 ---
@@ -71,6 +75,36 @@ that it parks the pusher at runway -48..89, then walk him back. Measured on ever
 pusher lands **112-238 u** from the nearest genuine entry (median 217), i.e. **7-14 frames** of retreat
 at the walk cap, before any turn to the roll's facing. The banked cycle-3 beam's best is 73.7 u, so
 neither route is free; the difference is that the first one has somewhere to spend the search.
+
+## The bar belongs to its terminal, and it re-derives without firing a roll
+
+`-80.4` is a max over a roll population read in ONE frame, so it is a property of that terminal and not
+of the problem. It outlived its thrust: the number was measured at facing 40835 / thrust 14 and kept
+being printed beside thrust-11 screens two sessions after the plan moved there.
+
+It needs no re-run to correct. `l0` and `runway` are affine projections of banked WORLD positions -
+`tetra_lateral` is a dot against `pf.q` about `pf.brace` - and the census stores every roll's two XZ
+pairs, so all 20592 rolls re-read in any frame exactly. The re-projection returns **-80.44** at the
+frame it was measured in, and that is what licenses reading it anywhere else:
+
+| terminal | `cut_step` | bar | best band-keeping roll |
+|---|---|---|---|
+| facing 40835, thrust 14 | 16 | **-80.44** | runway 240.1, `l0` -80.2 |
+| facing 40600, thrust 11 | 13 | -76.87 | runway 234.6, `l0` -76.6 |
+| facing 40660, thrust 11 | 13 | **-77.83** | runway 234.6, `l0` -76.6 |
+
+**The shorter roll's bar is HARDER, by 2.6 u, at exactly the terminal that saved 3.35 frames** - which
+is the direction to expect and the reason to measure it rather than carry the number forward. The
+crossing plateau moves with it and keeps its shape (`+80.0..+80.4` becomes `+77.5..+77.8` across six
+hundred units of runway), and the structural claim survives whole: 67 rolls cross instead of 51, and
+every one of them still leaves the pusher at runway <= 89, so **zero still do both**.
+
+Two things follow for anything that quotes it. The bar is **flat in where the band's near edge is
+drawn** - swept over near edges 130..220 it does not move a digit, because the roll that sets it sits
+~75 u inside the band - so the runway floor and the bar are independent knobs and the session-136 floor
+move cannot have touched it. And an unmeasured terminal has **no bar**: `handoff.crossing_bar(pf)`
+returns `None` rather than a neighbour's number, since a plausible bar with no population behind it is
+the defect, not the fallback.
 
 ## Cutting the roll earlier does not move the band
 

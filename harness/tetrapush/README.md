@@ -1710,6 +1710,54 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE WINDOW BOUND THE SCREEN AND NOT THE PLAN -- 89.82 STANDS, AND THE BAR BELONGS TO
+            ITS TERMINAL (session 137).** Session 136's two ordered items, both answered, both
+            negative in the useful way: the fan window it measured is real and it is not worth a
+            frame, and the ``-80.4`` it flagged as a stale annotation has moved AGAINST us. Both
+            owning KB pages updated;
+            [`the-crossing-and-the-runway-are-one-resource.md`](../../knowledge/strategy/the-crossing-and-the-runway-are-one-resource.md)
+            and
+            [`the-window-binds-on-the-parents-that-produce.md`](../../knowledge/strategy/the-window-binds-on-the-parents-that-produce.md).
+            - **THE RE-SEARCH AT ``max_delta``: THE FRONTIER DOUBLES, THE BOUND DOES NOT MOVE.**
+              Same beam, same terminal, ``probe_half`` dropped so `probe_contact` supplies the
+              measured +-21.35 deg and no new constant enters (`_notes/s137_c3_maxdelta.py`, 2741 s,
+              `_generated/s106/s137_c3_maxdelta_t11_f40660.json`). Roll survivors **426 -> 504**,
+              best screened ``l0`` on the producing parent **+71.77 -> +146.32**, best-of-beam
+              ``l0`` **+42.11 -> +55.40** -- and **bound 89.82 = 72 herd + 81.89 u of gap + 13 cut,
+              bit-identical to s136's**. Six of the eight nodes come back unchanged including the
+              winner; the two that moved are the high-crossing corner, which improved a real
+              **6.16 frames** (103.00 -> 96.84) and is still seven behind.
+            - **BECAUSE THE SCREEN'S RANK AND THE STAGE'S OBJECTIVE ARE DIFFERENT AXES.** ``l0`` is
+              the CYCLE-2 requirement's axis; cycle 3 is priced ``frames + gap/walk cap + cut_step``
+              and its winner is a LOW-crossing endpoint that wins on a short gap. The s126 exchange
+              rate governs cycle 3's own beam too -- buying crossing costs gap -- so a knob can move
+              the ``l0`` frontier a long way without touching the bound.
+            - **AND IT NAMES THE REFUSAL, ON BYTE-IDENTICAL COUNTERS.** Across two very different
+              screens the five junction counters that matter do not move a single count: ``unarmed``
+              **429724**, ``in_cone`` **314542**, ``outbox`` 6576, ``wall`` 26304, ``ENDPOINT``
+              73070, with only the fan-dependent ``aim_followed`` (341777 -> 885403) and
+              ``unrollable`` (874 -> 90) changing. **Arming is what refuses, and no screen knob has
+              ever touched it.** The window is now cleared as a lever (widest survivor 16.41-19.49
+              deg inside a 21.35 deg box, so the box holds a rung the population does not use) and
+              so is the runway floor.
+            - **THE ``-80.4`` BAR IS A TERMINAL'S, NOT THE PROBLEM'S: -77.83 AT THRUST 11.** It
+              needed no re-run -- ``l0`` and ``runway`` are affine projections of banked WORLD
+              positions, so s126's 20592-roll census re-reads in any frame exactly
+              (`_notes/s137_bar_thrust11.py`). The re-projection returns **-80.44** at the frame it
+              was measured in, which licenses the rest: the thrust-11 family sits at **-76.87 ..
+              -77.83**, i.e. **2.6 u harder at the terminal that just saved 3.35 frames**. The
+              structure survives whole (67 rolls cross instead of 51; every one still leaves Link at
+              runway <= 89, so **zero still do both**). Banked over 11 terminals
+              (`fixtures/courtyard_crossing_bar.json`), read through the new `handoff.crossing_bar`,
+              and the stale literal is gone from `full_herd.py`'s screen print -- an UNMEASURED
+              terminal now prints "NOT MEASURED" rather than a neighbour's number. Gate
+              `tests/test_handoff.py::test_the_crossing_bar_belongs_to_its_terminal_and_an_unmeasured_one_says_so`.
+              The bar is also **flat in where the band's near edge is drawn** (swept 130..220 it does
+              not move a digit), so the floor and the bar are independent knobs.
+            - **AND THE FLOOR WAS PRICED BEFORE THE SEARCH SO THE RESULT WOULD BE READABLE**
+              (`_notes/s137_floor_price.py`): s136 searched at a 170 floor and this ran at the
+              shipped 160, worth **0.00 frames** on these endpoints -- the winner's entry curve sits
+              at runway 179, clear of both. So the null result is the window's alone.
       - [~] **THE PLAN IS 89.82: THE CUT IS WORTH 3.35 FRAMES AND THE SEARCH ONLY CONFIRMS THE
             RE-PRICE (session 136).** Session 135 left three ordered items; all three are answered.
             The thrust-11 terminal is the frames, the fan window it named IS binding and now has a

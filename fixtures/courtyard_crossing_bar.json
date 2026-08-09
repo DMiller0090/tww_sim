@@ -1,0 +1,221 @@
+{
+ "source": "_notes/s137_bar_thrust11.py (session 137)",
+ "census": "_generated\\s126\\s126_aim_reach_cross.json",
+ "measured_at": {
+  "facing": 40835,
+  "thrust": 14
+ },
+ "n_rolls": 20592,
+ "n_parents": 3,
+ "band_edges_swept": [
+  130,
+  140,
+  150,
+  160,
+  170,
+  180,
+  190,
+  200,
+  220
+ ],
+ "records": [
+  {
+   "facing": 40835,
+   "thrust": 14,
+   "cut_step": 16,
+   "bar": -80.4358553223137,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2339,
+   "n_cross": 51,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 240.09482267484051,
+    "l0": -80.18003858859603,
+    "frames": 78
+   }
+  },
+  {
+   "facing": 40600,
+   "thrust": 11,
+   "cut_step": 13,
+   "bar": -76.8733044690234,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2408,
+   "n_cross": 67,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 232.62554851625177,
+    "l0": -75.22688848585082,
+    "frames": 78
+   }
+  },
+  {
+   "facing": 40610,
+   "thrust": 11,
+   "cut_step": 13,
+   "bar": -77.1120917418084,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2399,
+   "n_cross": 67,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 233.1273691580858,
+    "l0": -75.55836201603162,
+    "frames": 78
+   }
+  },
+  {
+   "facing": 40620,
+   "thrust": 11,
+   "cut_step": 13,
+   "bar": -77.1120917418084,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2399,
+   "n_cross": 67,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 233.1273691580858,
+    "l0": -75.55836201603162,
+    "frames": 78
+   }
+  },
+  {
+   "facing": 40640,
+   "thrust": 11,
+   "cut_step": 13,
+   "bar": -77.58913200112877,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2406,
+   "n_cross": 67,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 234.12938694140888,
+    "l0": -76.2207892020412,
+    "frames": 78
+   }
+  },
+  {
+   "facing": 40645,
+   "thrust": 11,
+   "cut_step": 13,
+   "bar": -77.58913200112877,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2406,
+   "n_cross": 67,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 234.12938694140888,
+    "l0": -76.2207892020412,
+    "frames": 78
+   }
+  },
+  {
+   "facing": 40650,
+   "thrust": 11,
+   "cut_step": 13,
+   "bar": -77.58913200112877,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2406,
+   "n_cross": 67,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 234.12938694140888,
+    "l0": -76.2207892020412,
+    "frames": 78
+   }
+  },
+  {
+   "facing": 40655,
+   "thrust": 11,
+   "cut_step": 13,
+   "bar": -77.58913200112877,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2406,
+   "n_cross": 67,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 234.12938694140888,
+    "l0": -76.2207892020412,
+    "frames": 78
+   }
+  },
+  {
+   "facing": 40660,
+   "thrust": 11,
+   "cut_step": 13,
+   "bar": -77.82737507321876,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2382,
+   "n_cross": 67,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 234.6295603569493,
+    "l0": -76.55173037550584,
+    "frames": 78
+   }
+  },
+  {
+   "facing": 40665,
+   "thrust": 11,
+   "cut_step": 13,
+   "bar": -77.82737507321876,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2382,
+   "n_cross": 67,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 234.6295603569493,
+    "l0": -76.55173037550584,
+    "frames": 78
+   }
+  },
+  {
+   "facing": 40670,
+   "thrust": 11,
+   "cut_step": 13,
+   "bar": -77.82737507321876,
+   "band_lo": 160,
+   "band_hi": 320,
+   "n_band": 2382,
+   "n_cross": 67,
+   "flat_over_edges": true,
+   "setter": {
+    "parent": 8,
+    "aim": 25845,
+    "runway": 234.6295603569493,
+    "l0": -76.55173037550584,
+    "frames": 78
+   }
+  }
+ ]
+}

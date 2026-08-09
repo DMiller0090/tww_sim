@@ -242,6 +242,34 @@ def test_the_runway_box_does_not_clip_the_entry_curve():
     assert len({r['beam'] for r in bank['records']}) == 2, 'one beam is not a population'
 
 
+def test_the_crossing_bar_belongs_to_its_terminal_and_an_unmeasured_one_says_so():
+    """**A bar is a max over a roll population read in ONE frame** -- session 126's -80.4 was measured
+    at facing 40835 / thrust 14 and then printed beside thrust-11 screens for two sessions. It moves:
+    a shorter roll carries her less far, so the thrust-11 family sits at **-76.87 .. -77.83**, 2.6 u
+    AGAINST us at the terminal that saved 3.35 frames.
+
+    Gates the three things that make the bank usable rather than another literal: the reference
+    terminal still re-derives session 126's own number (the re-projection is exact, so this is what
+    licenses reading the census in any other frame); every thrust-11 bar is HARDER than it; and an
+    unmeasured terminal returns ``None`` instead of a neighbour's number, since a plausible bar with
+    no population behind it is the defect being replaced. Static against
+    `fixtures/courtyard_crossing_bar.json` (`_notes/s137_bar_thrust11.py`)."""
+    with open(os.path.join(_REPO, 'fixtures', 'courtyard_crossing_bar.json')) as f:
+        bank = json.load(f)
+    assert bank['n_rolls'] == 20592 and bank['measured_at'] == {'facing': 40835, 'thrust': 14}
+    ref = H.crossing_bar(H.PairFrame(facing=40835, thrust=14))
+    assert ref is not None and round(ref, 1) == -80.4, ref     # session 126's published number
+    t11 = {(r['facing'], r['thrust']): r for r in bank['records'] if r['thrust'] == 11}
+    assert len(t11) == 10, sorted(t11)                         # the s135 unbroken family, entire
+    for key, rec in t11.items():
+        got = H.crossing_bar(H.PairFrame(facing=key[0], thrust=key[1]))
+        assert got == rec['bar'] and ref < got < 0.0, (key, ref, got)
+        # ...and the bar does not depend on where the runway band's near edge is drawn: the roll that
+        # sets it sits deep inside the band, which is why the s136 floor move cannot have touched it
+        assert rec['flat_over_edges'] and rec['setter']['runway'] > rec['band_lo'] + 50.0, rec
+    assert H.crossing_bar(H.PairFrame(facing=40835, thrust=9)) is None, 'unmeasured must be None'
+
+
 def test_the_search_keep_reads_only_fields_this_module_promises():
     """Anti-drift across the module boundary: `full_herd.extend_cycle`'s ``handoff_keep`` sorts on
     ``bound``, tie-breaks on ``l0``, shares a keep by ``gap`` and reports ``onside``/``n``. A rename

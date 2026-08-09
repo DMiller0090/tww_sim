@@ -378,7 +378,10 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     `handoff.tetra_lateral` any surviving roll DELIVERS, her offset from the clip roll's approach
     line, where the genuine side is positive. Session 126 measured the whole remaining gap in this
     one number: the last roll buys at most **+80.4 u** of crossing while keeping Link's runway band,
-    so cycle 2 must hand over ``l0 >= -80.4`` against the -149..-264 the banked beam delivers. It is
+    so cycle 2 must hand over ``l0 >= -80.4`` against the -149..-264 the banked beam delivers. That
+    bar belongs to the TERMINAL it was measured at, not to the problem -- a shorter roll carries her
+    less far, and at the thrust-11 family it is **-76.87 .. -77.83** (s137). Read it through
+    `handoff.crossing_bar(pf)`, which returns the bar for the frame in play or ``None``. It is
     ONE DOT PRODUCT on the delivered Tetra -- free beside the rollout that already happened -- where
     the endpoint keep it complements (`extend_cycle`'s ``handoff_keep``) costs ~1.5 s a survivor and,
     per session 107's standing warning, can only reorder the set this screen already fixed.
@@ -1842,10 +1845,14 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                   "half-window)" % (len(scored), len(uniq), ed * _BAM_DEG,
                                     scored[0][0]['fan_half'] * _BAM_DEG))
             if l0_keep:
-                # the SCREENED frontier, which is what the cut below gets to choose from
+                # the SCREENED frontier the cut below chooses from, against THIS terminal's own bar
+                # (s137): the bar moves with the terminal, so a literal here quotes the wrong one
                 l0s = [p['l0_max'] for p, _e in scored if p['l0_max'] is not None]
+                bar = _HO().crossing_bar(pf_j) if pf_j is not None else None
                 print("    (screened l0 %+.2f .. %+.2f over %d endpoints; the bar cycle 2 must hand"
-                      " over is -80.4)" % (min(l0s), max(l0s), len(l0s)) if l0s else
+                      " over is %s)" % (min(l0s), max(l0s), len(l0s),
+                                        ('%+.2f' % bar) if bar is not None
+                                        else 'NOT MEASURED at this terminal') if l0s else
                       "    (screened l0: none)")
         for j in kept:
             for cand in roll_candidates(j, hl, box, aim_keep=aim_keep, half_window=half_window,

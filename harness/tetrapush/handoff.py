@@ -63,6 +63,11 @@ RUNWAYS = tuple(range(160, 321, 10))
 #: The engine's own walk cap, not a restatement -- what a herd endpoint closes the gap at, at best.
 WALK_CAP = LandState.MAX_NSPEED
 
+#: What a band-keeping last roll can BUY, per terminal (s137). Read it through `crossing_bar`, never
+#: as a literal -- the bar moves with the terminal, which is how -80.4 outlived its thrust.
+BAR_FIXTURE = os.path.join(_rb, 'fixtures', 'courtyard_crossing_bar.json')
+_BARS = None
+
 
 class PairFrame:
     """One compiled (facing, thrust, lean) read in the 4-coordinate handoff frame.
@@ -182,6 +187,33 @@ def tetra_lateral(pf, tetra):
     -- this cost session 125 a wrong answer before the span was re-centred)."""
     q, br = pf.q, pf.brace
     return (tetra[0] - br[0]) * q[0] + (tetra[1] - br[1]) * q[1]
+
+
+def crossing_bar(pf):
+    """The ``l0`` cycle 2 must hand over for THIS terminal, or ``None`` if it is not measured.
+
+    Session 126 reduced the endgame to one number -- a band-keeping last roll buys at most **+80.4 u**
+    of crossing, so cycle 2 must hand over ``l0 >= -80.4`` -- and that number was a THRUST-14 one that
+    then got printed beside thrust-11 screens for two sessions. It is not a constant of the problem: a
+    shorter roll carries her less far, and the bar is a max over a roll population read in ``pf``'s own
+    frame, so it moves with the terminal (measured: **-80.44** at facing 40835 / thrust 14 against
+    **-76.87 .. -77.83** across the thrust-11 family -- 2.6 u AGAINST us at the terminal that saved
+    3.35 frames).
+
+    Re-derived, not re-measured: ``l0`` and ``runway`` are affine projections of banked WORLD
+    positions, so session 126's 20592-roll census re-reads in any frame exactly
+    (`fixtures/courtyard_crossing_bar.json`, `_notes/s137_bar_thrust11.py`). The re-projection
+    reproduces the -80.4 at the frame it was measured in, which is what licenses the rest.
+
+    An UNMEASURED terminal returns ``None`` and the caller says so. Falling back to a neighbour's bar
+    is the exact defect this replaces -- a plausible number with no population behind it."""
+    global _BARS
+    if _BARS is None:
+        import json
+        with open(BAR_FIXTURE) as fh:
+            _BARS = {(r['facing'], r['thrust']): r for r in json.load(fh)['records']}
+    rec = _BARS.get((int(pf.facing), int(pf.thrust)))
+    return None if rec is None else rec['bar']
 
 
 def _scan(pf, tetra, entry, sides):

@@ -4,13 +4,15 @@
 actually clipping anything, or is that just the tail? How wide should a per-aim fan be? I sampled two
 parents to size a knob cheaply and got a clean answer - is it the right one? Why did widening a
 screen's window change nothing on the parents I checked? How wide should a swept range be so it
-proves its own edge?
+proves its own edge? **My screen's frontier doubled and the plan did not move - what does that mean?**
 **Status:** measured, session 136, over 5 parents of the deep-plow cycle-2 beam at
 `pursuit_box`'s `max_delta` (±21.35 deg, the recorded regime). The window session 135 flagged
 (`probe_half=0x600`, ±8.44 deg) **is** binding: **28.4%** of surviving aims live outside it, the best
 screened `l0` goes **+117.58 -> +140.76**, and **306 of 1250** endpoints take their best `l0` from
 outside. The survivor population's own edge is **~16.4 deg**. The same trap on `handoff.RUNWAYS` cost
 2 rungs of the gap term; floor 190 -> 160, gated. Driver `_notes/s136_fan_width.py`.
+RE-SEARCHED at `max_delta` (session 137, `_notes/s137_c3_maxdelta.py`, 2741 s): the bound is
+**unchanged at 89.82** - the window bound the SCREEN and not the PLAN.
 **Source:** [`harness/tetrapush/full_herd.py`](../../harness/tetrapush/full_herd.py) (`roll_probe`'s
 `fan_center`/`half_window`/`fan_edge`, `extend_cycle`'s `probe_half`/`probe_contact`/`probe_step`),
 [`harness/tetrapush/handoff.py`](../../harness/tetrapush/handoff.py) (`RUNWAYS`, `entry_roots`).
@@ -96,13 +98,49 @@ The general form, which is [the s135 lesson](the-crossing-costs-the-arming-postu
 positively: **a swept range should hold one rung the population does not use.** Then the sweep proves
 its own edge every time it runs, and no session has to remember to re-check it.
 
+## And the re-search says it bound the screen, not the plan
+
+The warning below was the right one to make, and the answer is a negative result worth as much as the
+measurement that prompted it. Re-searched at `max_delta` with the runway floor at the shipped 160 and
+every other knob held (session 137, 2741 s), against session 136's identical search at ±8.44 deg:
+
+| | ±8.44 deg | ±21.35 deg (`max_delta`) |
+|---|---|---|
+| roll survivors | 426 | **504** |
+| best screened `l0`, producing parent | +71.77 | **+146.32** |
+| endpoints parking her onside | 102 | 99 |
+| best-of-beam `l0` | +42.11 | **+55.40** |
+| **best bound** | **89.82** | **89.82** |
+
+**The frontier the screen ranks by doubled and the objective did not move a digit.** Six of the
+beam's eight nodes come back byte-identical, including the winner at `l0` +15.48 / gap 81.89. The two
+that changed are the high-crossing corner, and they genuinely improved - `l0` +42.11 -> +55.40, bound
+103.00 -> **96.84**, six frames - but that corner started thirteen frames behind and is still seven
+behind. The extra recall was spent entirely where the plan is not.
+
+The reason is that the screen's rank and the stage's objective are different axes. `l0` is the
+CYCLE-2 requirement's axis - the bar in
+[the-crossing-and-the-runway-are-one-resource](the-crossing-and-the-runway-are-one-resource.md) - while
+cycle 3 is priced as `frames + gap/walk cap + cut_step`. The winner is a LOW-crossing endpoint that
+wins on a short gap, and the same exchange rate that governs cycle 2 governs cycle 3's own beam:
+buying crossing costs gap. So a knob that improves the frontier in `l0` can improve it a long way
+without touching the bound.
+
+Two things this pins for the next lever. The window and the runway floor are both now **cleared** and
+neither can be blamed again: the fan's widest survivor reads 16.41-19.49 deg inside a 21.35 deg box,
+so the box holds a rung the population does not use. And the junction's death counters come back
+**byte-identical on the five that matter** - `unarmed` **429724**, `in_cone` **314542**, `outbox`
+6576, `wall` 26304, `ENDPOINT` 73070 - with only the fan-dependent ones moving (`aim_followed`
+341777 -> 885403, `unrollable` 874 -> 90). Arming is what refuses, it refused exactly as hard under
+both windows, and no screen knob has ever touched it.
+
 ## What it does not say
 
 This measures the SCREEN's recall, not the plan. A wider window changes which endpoints the roll
 stage gets to choose from; whether that reaches the bound is a re-search, not an inference - the same
-warning [the-fan-is-not-a-bound](the-fan-is-not-a-bound.md) makes about every optimistic cut. The
-`l0` numbers above are `roll_probe`'s per-aim delivery, and the endgame's bar is a property of what
-cycle 2 hands over, not of the best aim in a screen.
+warning [the-fan-is-not-a-bound](the-fan-is-not-a-bound.md) makes about every optimistic cut, and
+above is the re-search that settled it here. The `l0` numbers are `roll_probe`'s per-aim delivery, and
+the endgame's bar is a property of what cycle 2 hands over, not of the best aim in a screen.
 
 The cost is real and linear in the width: 0.59-1.48 s an endpoint at 21.35 deg against ~0.5 at 8.44,
 so the whole cycle-3 stage runs about **2.5x** longer. That is the price of the recall, and
