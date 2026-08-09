@@ -82,6 +82,7 @@ from harness.tetrapush import seeds
 from harness.tetrapush import objective as O
 from harness.tetrapush import search as S
 from harness.tetrapush import two_roll as T
+from harness.tetrapush import roll_kernel as RK
 from harness.tetrapush.reposition import HerdLine, ESS_DOWN
 from harness.tetrapush.steered_reposition import _bearing, _s16
 from harness.tetrapush.from_f0 import _computed_center, cc_push_pair
@@ -985,7 +986,7 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                     aim_keep=3, min_roll=20.0, tcs_keep=3, target_css=None,
                     fan_center=None, require_quality=True, key=None, mixed_aims=True,
                     tcs_key=None, tcs_probe=None, tcs_require=None, corridor=None,
-                    tcs_span=None, tcs_step=None):
+                    tcs_span=None, tcs_step=None, env=None, twin=None):
     """The cycle's ROLL stage from a junction endpoint, factored by the separability above.
 
     R1: sweep the reachable aim fan (camera frozen) x the L windows, prune talk-unsafe / weak /
@@ -1032,25 +1033,58 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
     values for that cycle are `ESCAPE_TCS_SPAN` / `ESCAPE_TCS_STEP`, the roll's own measured slew reach
     (see those constants); mid-chain the defaults are unchanged.
 
+    ``env`` / ``twin`` (session 129) run R1 -- and ONLY R1 -- on `roll_kernel`'s fan instead of one
+    wired `roll_segment` per aim. It is the screen's own economy made explicit: the fan is where 84%
+    of a stage goes (s126), every run it makes is DISCARDED (only ``(want, aim, lw)`` survives the
+    cut), and the csangle a roll commits does not depend on the aim -- so a fan of ~90 aims pays for
+    one camera and ~90 native rollouts. R2 stays wired because its survivors ARE their runs: the
+    candidate carries one forward and `junction_quality` steps it. Pass ``env`` to have the twin
+    built per node (`roll_kernel.node_twin`), or ``twin`` directly if the caller already holds one.
+    Gated stage-for-stage against the wired path in `tests/test_fan_stage.py`; the records
+    themselves are gated in `tests/test_roll_kernel.py`.
+
     Returns the surviving post-roll nodes (each ``dict(run, log, frames, m, knobs, quality)``)."""
     out = []
     r1 = []
     walls = O.courtyard_walls()
     key = rank_key() if key is None else key
     center = hl.bearing_bam() if fan_center is None else int(fan_center)
-    for (want, aim) in T.roll_facing_fan(node['run'], center, half_window, step):
-        for lw in l_windows:
-            rr = node['run'].clone()
-            seg = T.roll_segment(rr, aim, target_cs=None, l_window=lw)
-            if seg['talk_unsafe'] or not seg['ok'] or seg['roll_speedF'] is None \
-                    or seg['roll_speedF'] < min_roll:
-                continue
-            fr = node['frames'] + seg['frames']
-            m = T.metrics(rr, hl, fr)
-            if not T.alive(m) or not frame_in_model(rr, walls):
-                continue
-            r1.append(dict(k=key(rr, fr, m), want=want, aim=aim, lw=lw, m=m,
-                           along=hl.along(rr.tx, rr.tz), lat=hl.lateral(rr.tx, rr.tz)))
+    fan = T.roll_facing_fan(node['run'], center, half_window, step)
+    if twin is None and env is not None:
+        twin = RK.node_twin(env, node['log'], check=node['run'])
+    if twin is not None:
+        # fan per L WINDOW, then walked in the wired path's (aim, lw) order -- the keep below is a
+        # STABLE sort, so order decides ties: knowledge/strategy/a-screen-needs-a-record-not-a-run.md
+        aims = [a for _w, a in fan]
+        per_lw = [RK.roll_fan(node['run'], aims, l_window=lw, target_cs=None, fast=twin)
+                  for lw in l_windows]
+        for i, (want, aim) in enumerate(fan):
+            for lw, recs in zip(l_windows, per_lw):
+                rec = recs[i]
+                if rec['talk_unsafe'] or not rec['ok'] or rec['roll_speedF'] is None \
+                        or rec['roll_speedF'] < min_roll:
+                    continue
+                rv = RK.RecordRun(rec)
+                fr = node['frames'] + rec['frames']
+                m = T.metrics(rv, hl, fr)
+                if not T.alive(m) or not frame_in_model(rv, walls):
+                    continue
+                r1.append(dict(k=key(rv, fr, m), want=want, aim=aim, lw=lw, m=m,
+                               along=hl.along(rv.tx, rv.tz), lat=hl.lateral(rv.tx, rv.tz)))
+    else:
+        for (want, aim) in fan:
+            for lw in l_windows:
+                rr = node['run'].clone()
+                seg = T.roll_segment(rr, aim, target_cs=None, l_window=lw)
+                if seg['talk_unsafe'] or not seg['ok'] or seg['roll_speedF'] is None \
+                        or seg['roll_speedF'] < min_roll:
+                    continue
+                fr = node['frames'] + seg['frames']
+                m = T.metrics(rr, hl, fr)
+                if not T.alive(m) or not frame_in_model(rr, walls):
+                    continue
+                r1.append(dict(k=key(rr, fr, m), want=want, aim=aim, lw=lw, m=m,
+                               along=hl.along(rr.tx, rr.tz), lat=hl.lateral(rr.tx, rr.tz)))
     r1.sort(key=lambda t: t['k'])
     # the mixed aim keep, and where it does and does not fire: see the docstring
     if mixed_aims and len(r1) > int(aim_keep):
@@ -1315,7 +1349,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  cloud_rots=None, cloud_cap=None, cloud_fan=None, cloud_stations=None,
                  cloud_exit_runs=None, cloud_exit_step=None, cloud_exit_half=None,
                  delivered_keep=False, handoff_keep=False, handoff_pf=None, handoff_rungs=None,
-                 handoff_roots=True, handoff_sign=True, verbose=False):
+                 handoff_roots=True, handoff_sign=True, env=None, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1622,7 +1656,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             for cand in roll_candidates(j, hl, box, aim_keep=aim_keep, half_window=half_window,
                                         step=step, key=key, require_quality=require_quality,
                                         tcs_key=tcs_key, tcs_probe=tcs_probe,
-                                        tcs_require=tcs_require, corridor=cor_j,
+                                        tcs_require=tcs_require, corridor=cor_j, env=env,
                                         tcs_span=ESCAPE_TCS_SPAN if tcs_escape else None,
                                         tcs_step=ESCAPE_TCS_STEP if tcs_escape else None):
                 cand['plan'] = list(node.get('plan', [])) + [cand['knobs']]
@@ -1825,7 +1859,7 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
                     jv=dict(kind='prologue', phases=[]))
         cands = roll_candidates(node, hl, box, half_window=half_window, step=step,
                                 l_windows=l_windows, aim_keep=aim_keep, fan_center=center,
-                                tcs_keep=tcs_keep, key=key, corridor=cor)
+                                tcs_keep=tcs_keep, key=key, corridor=cor, env=env)
         for c in cands:
             c['knobs']['nflip'] = nflip
             c['plan'] = [c['knobs']]
@@ -1996,7 +2030,7 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                              probe_contact=probe_contact, probe_half=probe_half,
                              escape_flip=escape_flip, escape_rots=escape_rots,
                              escape_rank=escape_rank,
-                             verbose=verbose)
+                             env=env, verbose=verbose)
         beams.append(nodes)
         if verbose and nodes:
             n = nodes[0]

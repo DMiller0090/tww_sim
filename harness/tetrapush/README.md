@@ -1710,6 +1710,48 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE SCREEN IS ON THE FAN KERNEL, AND IT NEVER NEEDED RUNS AT ALL -- 66% OF THE STAGE
+            IS NOW C (session 129).** s128's next step, done. One new truth page,
+            [`knowledge/strategy/a-screen-needs-a-record-not-a-run.md`](../../knowledge/strategy/a-screen-needs-a-record-not-a-run.md).
+            - **WHAT THE STAGE ACTUALLY KEEPS.** `roll_candidates`' R1 is ~74% of the stage's
+              rollouts and its whole output is three ``(want, aim, l_window)`` triples -- every
+              `FreeRun` it builds is DISCARDED. The prunes and the rank in between read nine fields
+              (Link XZ/facing/travel/speedF/proc, Tetra XZ, csangle, the follow flag), and
+              `segment_record` already carries all nine, so `roll_kernel.RecordRun` presents a record
+              in the shape a run is read in and `two_roll.metrics` / `alive` / `frame_in_model` /
+              `rank_key` run over fan records UNCHANGED. R2 stays wired on purpose: its survivors ARE
+              their runs (the candidate carries one to the next cycle, `junction_quality` steps it).
+            - **THE ACCOUNTING, COUNTED FIRST** (so it does not move with machine load) -- one
+              cycle-1 roll stage at the shipped knobs: **6719 wired steps -> 2251 wired + 4566
+              native**. At the s128 engine rates that predicts ~17x on R1 and ~2.8x on the stage, and
+              the idle clock agrees: **3.000 s -> 1.078 s (2.78x)**, same 5 candidates. The look-pair
+              lesson on schedule -- what is left does not get cheaper, so quote the stage. **All 2251
+              remaining wired steps are R2.**
+            - **THE GATE, AND THE SEED THAT MAKES IT MEAN ANYTHING.**
+              [`tests/test_fan_stage.py`](../../tests/test_fan_stage.py) (8, ~19 s) compares the
+              STAGE fan-on vs fan-off -- same candidates, same order, same knobs, endpoints `==`.
+              The obvious seeds are the wrong ones: off every banked cycle-2 junction endpoint the
+              stage returns NOTHING at any thinning (from ~40-70 u behind her a ~205 u `FRONT_ROLL`
+              ends 231-253 u away, past `FOLLOW_ENGAGE_DIST`, and `alive` prunes on ``followed``;
+              the few that stay inside end AHEAD of her and die on ``lead``), so both paths agreed
+              about nothing. The firing seed is cycle 1's own PROLOGUE node -- state 2 plus one
+              L-held flip frame, 5 candidates -- and the gate asserts the comparison is non-vacuous.
+            - **TWO TRAPS THAT ARE NOT ABOUT PHYSICS.** (1) The screen's sort is STABLE, so ties
+              break by insertion order, and the fan evaluates per L WINDOW while the wired loop walks
+              (aim, window) -- the fan path walks the wired order deliberately, and the gate squeezes
+              both keeps to 1 so that order decides the whole output. (2) A twin is exact about
+              whatever state it reaches: the replay-from-log premise held (a banked endpoint replays
+              to the position and camera the fixture recorded from the search's own run) but
+              `node_twin(check=)` now asserts it at RUNTIME, since a log that stopped reconstructing
+              its node would make every record bit-exact about a state the search never visits.
+            - **THE STOPGAP STAYS, MEASURED.** s128 wanted `full_herd` to RECORD csangle as it steps
+              rather than replay for it. The replay is one log (~55 frames) against a screen of ~216
+              roll segments, so it is a few percent of the stage it feeds -- and the recorder is a
+              change to every log-append site with clone/branch semantics. Not worth it yet.
+            - **NEXT IS NAMED BY THE MODULE'S OWN GATED FACT**: `target_cs_is_exit_only` -- inside a
+              roll the camera target changes nothing but the camera -- so R2's 25 rollouts per kept
+              aim are the SAME physics 25 times, differing only in the exit tail. A shared-body
+              kernel, not a fan, and it needs its own divergence-frame gate.
       - [x] **THE LOOK PAIR IS IN THE C FRAME TOO -- THE COUPLED STEP IS 6.8x AND A ROLL FAN 18x
             (session 128).** s127's next step, done. One new truth page,
             [`knowledge/model/porting-the-look-pair.md`](../../knowledge/model/porting-the-look-pair.md).

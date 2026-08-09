@@ -70,6 +70,39 @@ def segment_record(seg, run):
                 tetra=(run.tx, run.tz), followed=bool(run._follow_warned))
 
 
+class _RecordLink(object):
+    """The Link half of a `segment_record`, named the way a `FreeRun`'s is."""
+    __slots__ = ('pos_x', 'pos_z', 'facing', 'travel', 'speedF', 'state')
+
+    def __init__(self, t):
+        (self.pos_x, self.pos_z, self.facing, self.travel, self.speedF, self.state) = t
+
+
+class RecordRun(object):
+    """**A `segment_record` in the shape a run is read in** -- what lets the search's SCREEN stage
+    run off fan records without a live `FreeRun` behind each aim.
+
+    The screen (`full_herd.roll_candidates`' R1) fires the whole aim fan, ranks it, keeps three, and
+    THROWS EVERY RUN AWAY -- it carries only ``(want, aim, l_window)`` forward. What it reads in
+    between is `two_roll.metrics`, `two_roll.alive`, `full_herd.frame_in_model` and the beam's
+    `rank_key`, and between them they touch exactly nine fields: Link's XZ / facing / travel /
+    speedF / proc, Tetra's XZ, the csangle and the follow flag. `segment_record` already carries all
+    nine, so those functions run here unchanged rather than being re-expressed against records --
+    which is the point: a second expression of a prune is a second thing to keep in step.
+
+    Deliberately NOT a `FreeRun` stand-in. It cannot step, and any consumer that reaches for
+    something a record does not carry raises `AttributeError` at that line instead of quietly
+    reading a stale or defaulted value."""
+    __slots__ = ('link', 'tx', 'tz', 'csangle', '_follow_warned', 'record')
+
+    def __init__(self, rec):
+        self.record = rec
+        self.link = _RecordLink(rec['link'])
+        self.tx, self.tz = rec['tetra']
+        self.csangle = int(rec['exit_cs'])
+        self._follow_warned = bool(rec['followed'])
+
+
 def reference_fan(run, aims, *, l_window=(5, 8), target_cs=None, hold=1, a_hold=2, post=ESS_DOWN):
     """**The contract, stated slowly**: `two_roll.roll_segment` on a fresh clone per aim.
 
@@ -165,6 +198,33 @@ def self_eye_twin(env, log, cs_trace, native_look=True):
     for i, d in enumerate(log):
         run.step(d, csangle=(cs_trace[i - 1] if i else None))
     return run
+
+
+def node_twin(env, log, native_look=True, check=None):
+    """**The fan's seed for a search node, in one call** -- the wired camera replay plus the native
+    twin it feeds (`wired_csangle_trace` + `self_eye_twin`).
+
+    This is the stopgap the s128 handoff named: one WIRED replay of the node's log per node, where
+    recording the csangle as the node steps would cost nothing. Session 129 measured what it is
+    worth before building the recorder, and the answer is to keep the stopgap -- the replay is one
+    log (~55 frames) against a screen of ~200 roll segments, so it is a few percent of the stage it
+    feeds, and the recorder is a wide change to every log-append site for that.
+
+    ``check`` -- the node's own wired run. Passing it turns the premise this rests on into a runtime
+    assertion instead of a hope: a node whose log does not reconstruct it (a stage that touched its
+    run outside the log, a truncated or re-based log) would otherwise hand the fan a twin at a
+    DIFFERENT state, and every record would then be bit-exact about a state the search never
+    reaches. It costs eight float comparisons against a replay that just ran."""
+    twin = self_eye_twin(env, log, wired_csangle_trace(env, log), native_look=native_look)
+    if check is not None:
+        got = (twin.link.pos_x, twin.link.pos_z, int(twin.link.facing), int(twin.link.travel),
+               twin.link.speedF, int(twin.link.state), twin.tx, twin.tz)
+        want = (check.link.pos_x, check.link.pos_z, int(check.link.facing), int(check.link.travel),
+                check.link.speedF, int(check.link.state), check.tx, check.tz)
+        if got != want:
+            raise ValueError("node twin is not at the node's state -- the log does not reconstruct "
+                             "this run (%d frames)\n  twin %r\n  node %r" % (len(log), got, want))
+    return twin
 
 
 def roll_fan(run, aims, *, l_window=(5, 8), target_cs=None, hold=1, a_hold=2, post=ESS_DOWN,
