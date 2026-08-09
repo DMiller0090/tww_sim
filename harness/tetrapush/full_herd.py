@@ -85,7 +85,6 @@ from harness.tetrapush import two_roll as T
 from harness.tetrapush import roll_kernel as RK
 from harness.tetrapush.reposition import HerdLine, ESS_DOWN
 from harness.tetrapush.steered_reposition import _bearing, _s16
-from harness.tetrapush.from_f0 import _computed_center, cc_push_pair
 from harness.tetrapush.tetra_plow import LINK_CO_R, TETRA_CO_R
 from tww_sim.land.land import FRONT_ROLL
 from tww_sim.land.constants import WAIT, FREE_WAIT
@@ -1826,7 +1825,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
 def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x2000, step=4,
                  l_windows=((5, 8), (4, 7), (6, 9)), aim_keep=4, beam=8,
                  tcs_keep=3, rank='bound', budget=None, placements=None,
-                 square_keep=False, sq_cap=24, corridor=None, verbose=False):
+                 square_keep=False, sq_cap=24, corridor=None, verbose=False, native=True):
     """Cycle 1 from state 2, FACTORED like every later cycle (`roll_candidates`) rather than as the
     s42 full aim x tcs cross product -- same search space, ~20x fewer rollouts (159 s -> 10 s for
     the identical 13.147 u/f best).
@@ -1857,7 +1856,13 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
 
     A keep and never a rank, as always: whatever the frame bound likes best is still kept. And the
     probe never promotes an exit that cannot roll -- `junction_square_probe` returns None there, which
-    sorts last rather than infinitely square."""
+    sorts last rather than infinitely square.
+
+    ``native`` (session 131, on by default) seeds the chain with a run whose camera is driven from
+    the C core (`seeds.make_freerun(native=True)`), so every node the chain carries steps in C. It is
+    ONE knob for the whole chain because a node's run is what the later stages step: the junction,
+    `junction_quality`'s glides and the roll exit tails all inherit it. 0-ULP identical either way
+    (`tests/test_native_camera.py`); False is the pre-s131 engine, and what a comparison runs."""
     dtm = seeds.dtm_input_at(env)
     key = rank_key(rank, placements, hl)
     cut = key if rank == 'bound' else rank_key('bound', placements)
@@ -1865,7 +1870,7 @@ def cycle1_nodes(env, hl, box, *, nflips=(1, 2, 3), flip_msd=1.0, half_window=0x
     cor = O.push_corridor(hl, rows_c) if corridor is None else corridor
     out = []
     for nflip in nflips:
-        base = seeds.make_freerun(env)
+        base = seeds.make_freerun(env, native=native)
         base.pre_seed_input(dtm(0))
         blog = []
         fb = _bearing((base.link.pos_x, base.link.pos_z), (base.tx, base.tz))
@@ -1920,7 +1925,7 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
                square_keep=True, c1_square=True, handoff=True, corridor=None,
                last_arrive=True, last_landing=True, mid_square=False, land_keep=False,
                probe_step=24, probe_contact=False, probe_half=None, escape_flip=None,
-               escape_rots=None, escape_rank=None, last_camera=True, verbose=False):
+               escape_rots=None, escape_rank=None, last_camera=True, native=True, verbose=False):
     """**The full-herd chain**: cycle 1 from state 2 (`cycle1_nodes`), then ``ncycles - 1``
     applications of `extend_cycle`, every cycle sweeping its OWN derived `target_cs` grid.
 
@@ -2011,7 +2016,7 @@ def chain_herd(env, hl, *, ncycles=3, c1_beam=8, beam=8, jn_keep=6, aim_keep=3,
         nodes = cycle1_nodes(env, hl, box, step=c1_step, beam=c1_beam, aim_keep=aim_keep + 1,
                              rank=rank, budget=budget, placements=rows, corridor=corridor,
                              square_keep=c1_square, tcs_keep=(10 ** 6 if c1_square else 3),
-                             verbose=verbose)
+                             native=native, verbose=verbose)
     beams = [nodes]
     if verbose and nodes:
         print("  cycle 1: %d nodes, best %.3f u/f, bound %.1f f (%.1f s)"
@@ -2159,7 +2164,7 @@ def _centre_feet(run):
     once it is >= `CO_RADII_BAR` (80 u) the push is zero and she is frozen on her coord. The centre
     leads the feet by a pose-dependent ~17 u, so the feet can be well inside 80 while the centre is
     at the bar."""
-    cx = _computed_center(run.link, init_frame=False)
+    cx = run.co_center()
     return math.hypot(cx[0] - run.tx, cx[-1] - run.tz)
 
 
@@ -2760,17 +2765,12 @@ def synthetic_hot_arrival(env, hl, coord_idx=241, *, d_short=40.0, feet=64.0, la
     is byte-unchanged (those recipes never run the atom).
     Returns a ``placed`` node (``dict(run, log=[], frames=0))``."""
     from harness.tetrapush.reposition import seed_to_untarget
-    import tww_sim.core.fp as fp
     placements, _ = seeds.load_placements()
     p = placements[coord_idx]
     tx = float(p['x']) - d_short * hl.dx + lat_off * hl.px
     tz = float(p['z']) - d_short * hl.dz + lat_off * hl.pz
     run, _aim = seed_to_untarget(env)                       # the hot post-untarget EBS
-    run.link.pos_x = fp.f32(tx - feet * hl.dx)
-    run.link.pos_z = fp.f32(tz - feet * hl.dz)
-    run.tx, run.tz = fp.f32(tx), fp.f32(tz)
-    cx = _computed_center(run.link, init_frame=False)
-    run.pend_link, run.pend_tetra = cc_push_pair(cx, (run.tx, run.tz))
+    run.place_link(tx - feet * hl.dx, tz - feet * hl.dz, tetra=(tx, tz))
     run._follow_warned = False
     if snap_camera:
         # the camera a real arrival's last roll would have delivered -- see the docstring
@@ -2815,9 +2815,8 @@ def synthetic_frozen_arrival(env, hl, coord_idx=241, *, target_cf=88.0, lat_off=
         raise ValueError("momentum must be 'rest' or 'ebs'")
 
     def place(feet):
-        run.link.pos_x = fp.f32(tx - feet * hl.dx + lat_off * hl.px)
-        run.link.pos_z = fp.f32(tz - feet * hl.dz + lat_off * hl.pz)
-        run.tx, run.tz = fp.f32(tx), fp.f32(tz)
+        run.place_link(tx - feet * hl.dx + lat_off * hl.px,
+                       tz - feet * hl.dz + lat_off * hl.pz, tetra=(tx, tz))
 
     lo, hi = 60.0, 150.0                                 # centre_feet is monotone in feet
     for _ in range(44):
@@ -2828,8 +2827,6 @@ def synthetic_frozen_arrival(env, hl, coord_idx=241, *, target_cf=88.0, lat_off=
         else:
             hi = mid
     place(0.5 * (lo + hi))
-    cx = _computed_center(run.link, init_frame=False)
-    run.pend_link, run.pend_tetra = cc_push_pair(cx, (run.tx, run.tz))
     run._follow_warned = False
     return dict(run=run, log=[], frames=0, plan=[])
 

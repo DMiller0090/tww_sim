@@ -260,7 +260,7 @@ deliberately unported.
 | `../anim/extract_zl1.py` | Extract Tetra's `zl.bdl` skeleton + the stt-3 BCKs (wait03/look/wait) from `Zl.arc` (TWW-JP) to the gitignored `_generated/anim/zl1_{skeleton,anims}.json` -- the `core.npc_zl1_look` FK data (same policy as Link's `parse_bck`/`parse_bmd`). |
 | `fixtures/courtyard_m3564.json` | Session-21 live ground truth (single-stepped f0..f44, baked from `_notes/tetrapush-m3564_probe.py`): Link's head-look `m3564` + `m34DE`/`m34C3`/`m34E2` + `mHeadTopPos` per frame. The `tests/test_neck_look.py` gate + the `NeckLook` f0 seed. Pinned the m34DE frame-START timing + the (3, 0x1000, 0x100) chase knobs (the f0..f5 decay). |
 | `onestep_divergence.py` | **The 0-ULP divergence diagnostic** (session 24; console push session 27; f1 closed session 29): reset the sim to the EXACT captured state[k-1] each frame, feed the console push (`cc_push_pair` on the model exec centre; f1 = the deterministic perop ΔTetra seed push), step once, report the per-axis sim-vs-live position divergence in ULP + abs-u. The human-readable form of `tests/test_from_f0.py::test_onestep_pos_bit_exact_from_exact_state`. Now prints **0 ULP on every frame f1..43**. CLI `python -m harness.tetrapush.onestep_divergence`. |
-| `seeds.py` | **The planner SEED FACTORY** (session 22, restored session 28, f1-closed session 29): `make_freerun` builds the fully self-contained `FreeRun` (camera + Zl1 look + NeckLook wired, no injections -- the session-21 gate config) from the locked fixtures, now passing the exact f0->f1 seed push (`seed_push_f0` = the perop ΔTetra) so the rollout is 0-ULP in POSITION from f1 (verified: the `make_freerun` self-contained rollout is 0-ULP vs perop over the whole DTM window); `load_placements` loads the 288 genuine `tetra_placements.tsv` coords; `dtm_input_at` is the movie-window input accessor; `load_env` loads the fixture set (incl. `perop`). `make_freerun(tetra_at=)` re-seats Tetra's seed for clean no-contact template rollouts (falls back to the settled-centre approximation, since the recorded push no longer applies). Pure fixture plumbing (no model content). |
+| `seeds.py` | **The planner SEED FACTORY** (session 22, restored session 28, f1-closed session 29): `make_freerun` builds the fully self-contained `FreeRun` (camera + Zl1 look + NeckLook wired, no injections -- the session-21 gate config) from the locked fixtures, now passing the exact f0->f1 seed push (`seed_push_f0` = the perop ΔTetra) so the rollout is 0-ULP in POSITION from f1 (verified: the `make_freerun` self-contained rollout is 0-ULP vs perop over the whole DTM window); `load_placements` loads the 288 genuine `tetra_placements.tsv` coords; `dtm_input_at` is the movie-window input accessor; `load_env` loads the fixture set (incl. `perop`). `make_freerun(tetra_at=)` re-seats Tetra's seed for clean no-contact template rollouts (falls back to the settled-centre approximation, since the recorded push no longer applies). **Session 131** added `make_freerun(native=)`: the SAME wired configuration on the C step, with the camera driven from `LandCore.attn_y` (0-ULP either way, `tests/test_native_camera.py`); `cycle1_nodes(native=True)` hands it to the whole chain. Pure fixture plumbing (no model content). |
 | `primitives.py` | **The planner PRIMITIVE LAYER** (session 22, restored session 28): decomposes the bit-exact `FreeRun` window into the search's reusable pieces -- `window_records` (the instrumented rollout: per frame proc/speedF/facing/feet/exec-centre/recoil/plow/depth), `find_cycles` (the cycle spans), `cycle_template` (one cycle in the AIM frame -- foot term + exec-centre offset), and `input_macro`/`macro_inputs` (the cycle's raw-input pattern, stick bytes abstracted so a cycle re-aims to any world angle via `plan_land._primitives.stick_for_bearing`). CLI prints the cycle table + rigidity + the drift diagnostic. Gated `tests/test_planner_primitives.py` (structural). |
 | `search.py` | **The exact aim-per-cycle SEARCH foundation** (session 30): `rollout(env, aims)` stitches re-aimed push-cycle macros (`canonical_cycle` = the 26-frame roll-to-roll unit) through the 0-ULP `FreeRun` (C-stick pinned DOWN; main stick re-aimed per frame from the LIVE csangle; the aim is NOMINAL, the achieved landing is read back). `FreeRun.clone` (~0.025 ms, shares anim tables) is the beam branch; `reach_one_cycle` maps the per-cycle reach (the RESONANCE at the recorded aim, ~324 u); `beam_search` is the clone-branched beam ranked by nearest-genuine-coord dist, regime-pruned, each candidate a real FreeRun rollout. CLI `python -m harness.tetrapush.search {selfcheck\|reach\|sweep\|chain\|herd\|turnaround}` -- `selfcheck` proves the 0-ULP round-trip, `herd` shows the CONTINUOUS overlap-push, `chain` reproduces the old re-aimed-macro cycle-chaining blocker, and **`turnaround`** (session 31) reproduces the FRAME-MINIMAL turnaround-roll finding (`cyc1_to_untarget` + `turnaround_reroll`: the A-roll re-rolls THROUGH Tetra from the grounded post-untarget MOVE with no lock/cone gate; an immediate re-roll GRAZES min_ovl ~66 vs the human oracle's DEEP ~40, so the search knob is the minimal camera-assisted reposition, `[[tetrapush-frame-minimal]]`). Gated `tests/test_search.py` (0-ULP: recorded replay, macro re-aim, clone; structural: clean cycle, resonance, beam cycle-1, turnaround-roll fires). |
 | `reposition.py` | **The FRAME-MINIMAL reposition primitives** (session 33; Dereck's live steers): `HerdLine` (herd axis + `lead`/`on_line_ok` = the STEER-#1 past-Tetra prune, Link must stay behind her), `l_release_early` (STEER-#2/#3: release the mid-roll lock-L 1 frame early -> a 1-frame untarget tier -> the backslide retains **-25.727** vs the human's -25.454), `turnaround` (the 1-frame INSTANT 180 facing-snap out of the EBS via a precise csangle, `move.py:115`, speed preserved), and `frame_min_reroll` (turnaround -> proc-7 flip -> talk-safe +26 roll, a ~3-frame reposition vs the human's ~10). CLI `python -m harness.tetrapush.reposition {verify\|retain\|chain}` -- `verify` shows the human stays 40-85 u behind Tetra, `retain` shows the -25.727 retention, `chain` runs the frame-minimal cycles (currently OVERSHOOTS -- the roll leaves Link ~15 u off-line: the on-line reposition SEARCH is the open blocker). Gated `tests/test_reposition.py` (5). |
@@ -1710,6 +1710,63 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE CAMERA RUNS ON THE C FRAME, AND THE THING IN THE WAY WAS A GUARD -- THE STAGE
+            NOW TAKES ZERO WIRED STEPS (session 131).** s130's next step, done. One new truth page,
+            [`knowledge/model/the-camera-on-the-native-frame.md`](../../knowledge/model/the-camera-on-the-native-frame.md).
+            - **THE EXPORT WAS NOT THE BLOCKER, AND ONE PROBE SAID SO** (`_notes/s131_attn_y.py`).
+              Four handoffs queued the port behind ``attn_y`` = `fadds(92.5, ff.base[1][3])`.
+              Measured over 90 frames across procs 6/7/9/30 that row **is** Link's world Y exactly
+              (the lean concat has a zero translation column, so it cannot touch row 1), `m35C4`
+              and `m35B8` both read 0.0, and his Y never moves -- **one distinct value** all
+              window. What actually kept every camera-carrying run in Python was a `ValueError` in
+              `FreeRun.__init__` saying the native step cannot drive a `LandCamera`, true only
+              because nobody had wired one into `_step_native`. Measure the value a queued port
+              waits on BEFORE building it.
+            - **EXPORTED ANYWAY, FROM THE ENGINE THAT DREW THE FRAME.** `LandCore.attn_y` reads
+              `PoseEngine._base` live rather than hardcoding a constant: the row is
+              `setAttentionPos`'s (`d_a_player_main.cpp:10271`), so a ground model that ever makes
+              Y move carries the camera with it. The gate asserts it against the WIRED `FootFK`'s
+              own base row per frame -- the claim is "the C base tracks the Python one", not
+              "92.5 + Y is 92.5 + Y", which would pass by construction.
+            - **ONE EXPRESSION, TWO PATHS.** `FreeRun._run_camera` is the camera Run for both step
+              paths; they differ only in where pos/facing/`attn_y`/lock come from. It surfaced a
+              real trap on the WIRED path: its camera, her look and his neck all run AFTER the row,
+              so `step(record=False)` silently froze three models that are STATE. Documented as a
+              precondition since s34, now enforced -- and the native path keeps `record` meaning
+              only "build a row", since there the look pair is inside the frame and the camera
+              after it.
+            - **DELIVERED, counted then clocked idle** (same stage, same knobs, same prologue as
+              the s130 row): **1029 wired + 9083 native -> 0 wired + 10112 native**, 0.681 s ->
+              **0.354 s (1.9x)**, **13.6x** against the all-wired stage, same five candidates. The
+              camera model runs exactly as often either way (1731 steps) -- only the frame around
+              it moved. `seeds.make_freerun(native=)` is the whole switch; `cycle1_nodes(native=)`
+              (on by default) hands it to the chain, since a node's run is what every later stage
+              steps.
+            - **MOVING THE ENGINE MOVED WHAT ``run.link`` MEANS, AND A GATE CAUGHT IT.** On a
+              native run that `LandState` is a FIELD-HOLDER synced from the core, so
+              `run.link.pos_x = ...` is a silent no-op and `_computed_center(run.link)` answers off
+              the **f0 SEED pose**. Both now go through the run -- `FreeRun.co_center()` asks
+              whichever engine posed the frame, `FreeRun.place_link()` is the teleport recipe
+              (move, re-centre, rebuild the pending push) driven through that engine's owner, and
+              the three copies of that recipe (two synthetic beds + the freeze-bar gate) are one.
+              `LandCore.co_center_exec` is the second export. **A correction deliberately NOT made
+              here:** every run-level caller reads the centre with ``init_frame=False`` while the
+              core knows the frame's true `*_init` flag (~1.7 u apart on an init frame), so the
+              export takes an OVERRIDE and the port reproduces the approximation exactly rather
+              than smuggling a search-visible change into a perf port.
+            - **WHAT IS LEFT IS NOT WHAT THE BIGGEST PER-CALL NUMBER SAYS.** A `LandCamera.step` is
+              **44.0 us** against a whole coupled frame's **10.9 us** (C 8.2 + a 2.7 us Python
+              wrapper) -- 4x -- but priced against the stage it runs in: frames **31%** (10112),
+              camera **21%** (1731), and **~48% is the stage's own Python glue** (clones, per-frame
+              input dicts, prunes, metrics, sorts). The C engine is now a minority of its own search
+              stage, and the move that takes the top two TOGETHER is stepping frames in C rather
+              than one Python call per frame (`CourtyardFleet`) -- which needs the camera in C to
+              carry a camera run, so they are one piece of work. **Trap:** cProfile charged
+              `_step_native` 13.2 us of own time per frame; timed in a loop the wrapper is 2.7 --
+              price a hot call with a loop, not a profile. Gate
+              [`tests/test_native_camera.py`](../../tests/test_native_camera.py) (12), which
+              counts the stage's wired steps as a claim of its own so a silent fallback to Python
+              cannot pass by being the reference.
       - [x] **THE CAMERA-TARGET PASS SHARES THE ROLL, AND THE BRANCH IS READ OFF THE ROLL RATHER
             THAN SET (session 130).** s129's next step, done. One new truth page,
             [`knowledge/strategy/the-shared-roll-body.md`](../../knowledge/strategy/the-shared-roll-body.md).

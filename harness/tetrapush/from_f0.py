@@ -425,9 +425,6 @@ class FreeRun:
         if self.native_step:
             if not self.computed_pose:
                 raise ValueError("native_step needs computed_pose (the fused native pose FK)")
-            if camera is not None:
-                raise ValueError("native_step cannot drive a LandCamera -- csangle is injected per "
-                                 "step (for a roll fan it is a per-node constant; see roll_kernel)")
             if walls_tetra is not None:
                 raise ValueError("native_step has no Tetra BG pass -- the C engine tracks her as a "
                                  "bare plow point; run the Python path for a walled Tetra")
@@ -550,6 +547,51 @@ class FreeRun:
         c._core = self._core.clone(self._core.pe.clone_state()) if self._core is not None else None
         return c
 
+    def co_center(self, init_frame=False):
+        """Link's exec-pass body-Co centre for the frame THIS RUN last stepped -- off whichever
+        engine posed it (`_computed_center` wired, `LandCore.co_center_exec` native).
+
+        Read it through here and never off ``run.link`` directly: on a native run that `LandState`
+        is a field-holder whose `_foot` still carries the f0 SEED pose, so `_computed_center(run.link)`
+        returns a centre for a frame the run left long ago -- silently, and only in the low digits
+        of everything that consumes it.
+
+        ``init_frame`` defaults to False on BOTH paths, which is what every run-level caller has
+        always passed. On a frame that dispatched a proc ``*_init`` that is an approximation (the
+        exec base carries no lean there, worth ~1.7 u at the seed frame) and the native engine knows
+        the true flag -- but correcting it would move search-visible numbers, so it is a separate
+        change from this port and not one smuggled into it."""
+        if self._core is not None:
+            return self._core.co_center_exec(init_frame=init_frame)
+        return _computed_center(self.link, init_frame=init_frame)
+
+    def place_link(self, x, z, *, tetra=None, init_frame=False):
+        """**Teleport the coupled state** -- move Link (and optionally Tetra), then rebuild the
+        pending CC push from the MOVED pose, which is what `step` would have left.
+
+        This is the poke recipe the synthetic beds and the freeze-bar gate each used to spell out,
+        and it has to live here because a NATIVE run's `self.link` is a field-holder synced FROM the
+        C core: writing `run.link.pos_x` on one is a silent no-op, and computing its Co centre off
+        `link._foot` reads the SEED's f0 pose rather than the frame it last stepped. Both engines
+        are driven through their own owner here -- the core's `pos_x`/`co_center_exec` or the
+        `LandState`'s -- so a bed built this way steps identically on either.
+
+        ``init_frame`` matches `_computed_center`: True when the last frame dispatched a proc
+        ``*_init`` (the exec base carries no lean there)."""
+        x, z = f32(x), f32(z)
+        if tetra is not None:
+            self.tx, self.tz = f32(tetra[0]), f32(tetra[-1])
+        self.link.pos_x, self.link.pos_z = x, z
+        if self._core is not None:
+            self._core.pos_x, self._core.pos_z = x, z
+            self._core._tetra_x, self._core._tetra_z = self.tx, self.tz
+        cx = self.co_center(init_frame=init_frame)
+        self.pend_link, self.pend_tetra = cc_push_pair(cx, (self.tx, self.tz))
+        if self._core is not None:
+            self._core._pend_link_x, self._core._pend_link_z = self.pend_link
+            self._core._pend_tetra_x, self._core._pend_tetra_z = self.pend_tetra
+        return cx
+
     def pre_seed_input(self, inp):
         """Seed the delay-1 controller buffer (the input the FIRST `step` acts on)."""
         self.link._inbuf = [_step_args(inp)]
@@ -569,13 +611,21 @@ class FreeRun:
         ``record=False`` -- the SEARCH fast path: advance the coupled state (physics + computed
         exec-centre push, both actors' positions 0-ULP identical to ``record=True``) but skip the
         ``sim_cyl`` settled-centre DIAGNOSTIC and the per-frame row dict (the brute force reads
-        ``run.link`` / ``run.tx`` directly). Requires ``computed_pose`` and no wired camera/zl1/neck
-        (search runs stripped -- geometry-exact per the s34 handoff). Returns None.
+        ``run.link`` / ``run.tx`` directly). Returns None. On the WIRED path it requires
+        ``computed_pose`` and no wired camera/zl1/neck (search runs stripped -- geometry-exact per
+        the s34 handoff) and now says so rather than silently skipping three models that are STATE:
+        the sub-models run after the row here, so a wired run stepped this way would quietly freeze
+        its csangle and its eye. The native path has no such rule -- there the look pair runs inside
+        the frame and the camera after it, both regardless of ``record``.
 
         Native-step mode (`native_step=True`) drives the whole coupled frame in C
         (`LandCore.step_courtyard`, native_push=1) -- see `_step_native`."""
         if self._core is not None:
             return self._step_native(inp, csangle=csangle, eye=eye, record=record)
+        if not record and (self.camera is not None or self.zl1 is not None
+                           or self.neck is not None):
+            raise ValueError("record=False is the stripped fast path -- on the wired step it skips "
+                             "the camera / zl1 / neck, which are state, not diagnostics")
         link = self.link
         if csangle is not None:
             if self.camera is not None:
@@ -687,21 +737,32 @@ class FreeRun:
                     raise ValueError("tattn injection and a wired zl1 look model are mutually "
                                      "exclusive")
                 self._tattn = (tattn[0], tattn[1], tattn[2])
-            locked = link._atn.locked
-            if locked and self._tattn is None:
-                raise ValueError("the sim's attention lock is engaged but no tattn (the locked "
-                                 "actor's attention_info.position) was ever injected")
-            attn_y = float(fadds(f32(92.5), f32(link._foot.ff.base[1][3])))
-            cam_link = dict(pos=(link.pos_x, link.pos_y, link.pos_z), facing=link.facing,
-                            attn_pos=(link.pos_x, attn_y, link.pos_z))
-            attn = dict(truth=locked, lockon=locked,
-                        target_attn=self._tattn if locked else None)
-            self.csangle = self.camera.step(cam_pad(acted_raw), cam_link, attn)
+            self._run_camera(acted_raw, link.pos_x, link.pos_y, link.pos_z, link.facing,
+                             link._atn.locked,
+                             float(fadds(f32(92.5), f32(link._foot.ff.base[1][3]))), row)
+        return row
+
+    def _run_camera(self, acted_raw, pos_x, pos_y, pos_z, facing, locked, attn_y, row):
+        """The camera Run at the end of a frame -- ONE expression of it, for both step paths.
+
+        The wired step and the native one differ only in where the four arguments come from (the
+        Python `LandState` / the C core), never in the law, so a native run commits the csangle the
+        wired one does by construction rather than by a copy kept in step. ``attn_y`` is Link's
+        `attention_info.position` Y: the wired path takes it off the posed `FootFK` base, the
+        native one off `LandCore.attn_y` -- the same `setAttentionPos` row, read from whichever
+        engine drew the frame."""
+        if locked and self._tattn is None:
+            raise ValueError("the sim's attention lock is engaged but no tattn (the locked "
+                             "actor's attention_info.position) was ever injected")
+        cam_link = dict(pos=(pos_x, pos_y, pos_z), facing=facing,
+                        attn_pos=(pos_x, attn_y, pos_z))
+        attn = dict(truth=locked, lockon=locked, target_attn=self._tattn if locked else None)
+        self.csangle = self.camera.step(cam_pad(acted_raw), cam_link, attn)
+        if row is not None:
             row['sim_csangle'] = self.csangle
             row['sim_attn_y'] = attn_y
             # published so a camera can be walked off this frame's arguments: roll_kernel.SharedBody
             row['sim_cam_in'] = (cam_link, attn)
-        return row
 
     def _step_native(self, inp, csangle=None, eye=None, record=True):
         """The NATIVE search fast path: one `LandCore.step_courtyard(native_push=1)` call, then a few
@@ -722,9 +783,22 @@ class FreeRun:
         NATIVE-LOOK MODE (session 128): those two models are no longer Python. They were measured at
         91% of the coupled step, so `step_courtyard` now runs them itself and this method becomes one
         C call plus the field sync -- the eye chain is inside the frame where it belongs (her eyePos
-        arms the NEXT frame's proc-9 re-aim), and the look state is read through the live views."""
+        arms the NEXT frame's proc-9 re-aim), and the look state is read through the live views.
+
+        WIRED-CAMERA MODE (session 131): with a ``camera`` the run drives it here too, off
+        `LandCore.attn_y` and the core's own pos/facing/lock -- so csangle is committed inside the
+        native run instead of being injected into it, and a whole node chain (the junction, its
+        quality glides, the roll exit tails) runs on the C step. The camera model itself stays
+        Python: it is one step per frame against a whole coupled frame, and `_run_camera` is the
+        one expression both paths call."""
         if csangle is not None:
+            if self.camera is not None:
+                raise ValueError("csangle injection and a wired camera are mutually exclusive")
             self.csangle = csangle
+        if self.camera is not None and self._prev_raw is None:
+            raise ValueError("camera mode needs pre_seed_input (the camera reads the delay-1 pad)")
+        acted_raw = self._prev_raw
+        self._prev_raw = inp
         if isinstance(inp, dict):
             sx = int(inp['stickX']); sy = int(inp['stickY'])
             btn = int(inp.get('buttons', 0)); trg = int(inp.get('triggerL', 0))
@@ -797,19 +871,22 @@ class FreeRun:
                 link_pos=(core.pos_x, core.pos_y, core.pos_z), link_head_top_y=ht[1])
             self._eye_next = eye_k
             self._tattn = tattn_k
-        if not record:
-            return None
-        row = dict(sim_proc=core.state, sim_facing=core.facing,
-                   sim_shape_z=core.court_shape_z,
-                   sim_link=(core.pos_x, core.pos_z), sim_tetra=(self.tx, self.tz),
-                   speedF=sf)
-        if self.neck is not None:
-            row['sim_m3564'] = (self.neck.x, self.neck.y, self.neck.z)
-        if self.zl1 is not None:
-            row['sim_eye'] = self._eye_next
-            row['sim_tattn'] = self._tattn
-            if not self._native_look:
-                row['sim_head_top'] = core.head_top_exec(nk)
+        row = None
+        if record:
+            row = dict(sim_proc=core.state, sim_facing=core.facing,
+                       sim_shape_z=core.court_shape_z,
+                       sim_link=(core.pos_x, core.pos_z), sim_tetra=(self.tx, self.tz),
+                       speedF=sf)
+            if self.neck is not None:
+                row['sim_m3564'] = (self.neck.x, self.neck.y, self.neck.z)
+            if self.zl1 is not None:
+                row['sim_eye'] = self._eye_next
+                row['sim_tattn'] = self._tattn
+                if not self._native_look:
+                    row['sim_head_top'] = core.head_top_exec(nk)
+        if self.camera is not None:
+            self._run_camera(acted_raw, core.pos_x, core.pos_y, core.pos_z, core.facing,
+                             core._atn_state in (_ATN_LOCK, _ATN_RELEASE), core.attn_y, row)
         return row
 
 

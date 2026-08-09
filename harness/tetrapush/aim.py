@@ -104,7 +104,7 @@ def push_step(run):
 
     Returns ``dict(mag, ux, uz, centre_feet, reserve, x, z)`` -- ``ux/uz`` the WORLD ejection unit
     (None at zero range), ``x/z`` the predicted next Tetra position."""
-    c = _computed_center(run.link, init_frame=False)
+    c = run.co_center()
     dx, dz = run.tx - c[0], run.tz - c[-1]
     d = math.hypot(dx, dz)
     reserve = CO_RADII_BAR - d
@@ -273,7 +273,7 @@ def centre_lat_needed(run, hl, thread):
 
     Returns ``dict(gap, lat_now, lat_lo, lat_hi, delta)`` -- the window's two admissible centre
     laterals and the SMALLEST signed move that enters it (0 when already inside)."""
-    c = _computed_center(run.link, init_frame=False)
+    c = run.co_center()
     ca, cl = hl.along(c[0], c[-1]), hl.lateral(c[0], c[-1])
     ta, tl = hl.along(run.tx, run.tz), hl.lateral(run.tx, run.tz)
     gap = ta - ca                                    # + = the centre is UP-herd (behind) her

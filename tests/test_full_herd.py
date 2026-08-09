@@ -1239,21 +1239,22 @@ def test_freeze_bar_is_the_co_radii_sum(env, hl, box):
     take one neutral step, and assert the measured ejection tracks `(80 - centre_feet)/2` below the
     bar and is ZERO at/above it. No tuned constant -- the bar IS `LINK_CO_R + TETRA_CO_R`."""
     import math
-    from harness.tetrapush import from_f0
 
     nodes = F.cycle1_nodes(env, hl, box, beam=2)
     placed = F.terminal_targeting(nodes, hl, max_frames=3, beam=6)['best']
 
     def place_link(feet):
         """Move a fresh clone's Link to `feet` u from Tetra along the current line, recompute the
-        pending push from the moved pose (as `step` does). Returns the clone + its centre_feet."""
+        pending push from the moved pose (as `step` does). Returns the clone + its centre_feet.
+
+        Through `FreeRun.place_link` because the bed's run may be on either engine: on a native one
+        a direct `r.link.pos_x = ...` is a silent no-op (the `LandState` is a field-holder synced
+        FROM the core) and the centre would come off the f0 seed pose."""
         r = placed['run'].clone()
         tx, tz = r.tx, r.tz
         d0 = math.hypot(r.link.pos_x - tx, r.link.pos_z - tz)
         ux, uz = (r.link.pos_x - tx) / d0, (r.link.pos_z - tz) / d0
-        r.link.pos_x, r.link.pos_z = tx + ux * feet, tz + uz * feet
-        cx = from_f0._computed_center(r.link, init_frame=False)
-        r.pend_link, r.pend_tetra = from_f0.cc_push_pair(cx, (r.tx, r.tz))
+        r.place_link(tx + ux * feet, tz + uz * feet)
         return r, F._centre_feet(r)
 
     def at_cf(target):

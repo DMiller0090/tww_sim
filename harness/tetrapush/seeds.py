@@ -72,7 +72,7 @@ def dtm_input_at(env):
     return lambda k: frames[k]['inp']
 
 
-def make_freerun(env, tetra_at=None):
+def make_freerun(env, tetra_at=None, native=False):
     """Build the fully self-contained `FreeRun` at the state-2 f0 seed: computed centres, wired
     `LandCamera` (seeded from the oracle block), wired `Zl1Look` (look-fixture f0), wired
     `NeckLook` (m3564-fixture f0) -- the exact session-21 gate configuration. The caller must
@@ -80,7 +80,15 @@ def make_freerun(env, tetra_at=None):
 
     ``tetra_at`` -- optional (x, z): re-seat Tetra's seed position (clean-rollout mode for
     template extraction; her plow point AND her look model's position both move so the look
-    dynamics stay self-consistent). Default = the true state-2 position."""
+    dynamics stay self-consistent). Default = the true state-2 position.
+
+    ``native`` (session 131) -- the SAME configuration on the C step: the coupled frame and both
+    look models run in `LandCore.step_courtyard` and the camera is driven from the core's own
+    `attn_y` / pos / facing / lock instead of from a Python `LandState`. This is what makes a
+    fully-wired run cheap -- everything the search steps with a camera (the junction, its quality
+    glides, the roll exit tails) had to stay Python while a camera and the native step were
+    mutually exclusive. Same answer 0-ULP, gated frame by frame in `tests/test_native_camera.py`.
+    Default off, so every existing caller and every wired-vs-native gate keeps its reference."""
     from harness.tetrapush.from_f0 import FreeRun
     from tww_sim.core.camera.land_cam import LandCamera, seed_from_block
     from tww_sim.core.npc_zl1_look import Zl1Look
@@ -111,7 +119,8 @@ def make_freerun(env, tetra_at=None):
     seed_push = None if tetra_at is not None else seed_push_f0(env)
     return FreeRun(seed_row, seed_nspeed=seed['link']['nspeed'],
                    seed_old_pose=seed.get('old_pose'), computed_pose=True,
-                   camera=cam, zl1=zl1, neck=neck, seed_push=seed_push)
+                   camera=cam, zl1=zl1, neck=neck, seed_push=seed_push,
+                   native_step=bool(native), native_look=bool(native))
 
 
 def make_freerun_native(env, tetra_at=None):

@@ -55,8 +55,7 @@ def link_co_centre(run):
     """Link's exec Co centre at a run's current state -- the point the plow laws measure from
     (`from_f0._computed_center`). It LEADS his feet by 21.253 u at the console arrival, which is why
     a screen run on his feet is wrong by more than the thing it is screening for."""
-    from harness.tetrapush.from_f0 import _computed_center
-    return _computed_center(run.link)
+    return run.co_center()
 
 
 def contact_at_arrival(centre, placement):

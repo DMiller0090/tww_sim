@@ -163,14 +163,18 @@ def camera_trace(run, aim, *, l_window=(5, 8), target_cs=None, hold=1, a_hold=2,
     return dict(csangle=cs, substick=subs)
 
 
-def wired_csangle_trace(env, log):
-    """The per-frame csangle a wired `FreeRun` commits while replaying ``log`` -- what a self-eye
-    twin has to be handed to reach the same state, since it carries no camera.
+def wired_csangle_trace(env, log, native=True):
+    """The per-frame csangle a camera-carrying `FreeRun` commits while replaying ``log`` -- what a
+    self-eye twin has to be handed to reach the same state, since it carries no camera.
 
-    One wired replay per NODE (not per aim), and the search already pays an equivalent one to have
-    the node at all; `full_herd` can record this as it steps instead of replaying."""
+    One replay per NODE (not per aim), and the search already pays an equivalent one to have the
+    node at all; `full_herd` can record this as it steps instead of replaying.
+
+    ``native`` (session 131) runs that replay on the C step (`seeds.make_freerun(native=True)`),
+    which a camera run could not do before. The name still says wired because the VALUE is the
+    wired one -- 0-ULP, gated in `tests/test_native_camera.py` -- and False is the pre-s131 path."""
     from harness.tetrapush import seeds as SD
-    run = SD.make_freerun(env)
+    run = SD.make_freerun(env, native=bool(native))
     run.pre_seed_input(SD.dtm_input_at(env)(0))
     out = []
     for d in log:

@@ -3045,6 +3045,22 @@ cdef class LandCore:
         """sim_shape_z: shape_angle.z = s16(m351C) >> 1 (the lean the from_f0 gate asserts)."""
         return _s16c(<long long>self.m351C) >> 1
 
+    @property
+    def attn_y(self):
+        """Link's `attention_info.position` Y -- what the camera reads him at.
+
+        `setAttentionPos` (d_a_player_main.cpp:10271, right after setCollision) builds it as
+        ``f32(92.5 + baseTR[1][3])``, so the term is the pose engine's OWN base row and this
+        reads it there rather than re-deriving it beside the engine. That row is set by
+        `_set_pos_c` on whatever the frame last drew at, which is exactly the base the wired
+        `FootFK` carries -- and it is the last camera argument a native run could not supply.
+
+        In the courtyard regime the row is Link's constant world Y (flat floor, no m35C4 walk
+        lift, no m35B8 ground decay -- measured over procs 6/7/9/30, one distinct value). It is
+        exported live anyway: the camera should read the base from the engine that owns it, so a
+        ground model landing later moves this without touching the camera."""
+        return fadds(f32(92.5), self._pe._base[7])
+
     def seed_courtyard(self, PoseEngine pe, double pos_y, long long m351c, int atn_state,
                        double tetra_x, double tetra_z,
                        double pend_link_x=0.0, double pend_link_z=0.0,
@@ -3064,6 +3080,29 @@ cdef class LandCore:
         self._tetra_z = tetra_z
         self._pend_link_x = pend_link_x; self._pend_link_z = pend_link_z
         self._pend_tetra_x = pend_tetra_x; self._pend_tetra_z = pend_tetra_z
+
+    def co_center_exec(self, init_frame=None):
+        """Link's exec-pass body-Co centre (cx, cz) for the frame this core LAST stepped -- the twin
+        of `from_f0._computed_center`, and what a caller has to recompute the CC push pair after
+        moving him.
+
+        Same base/lean conventions as `head_top_exec` and as the centre `step_courtyard` builds
+        internally: the base takes the DRAW lean (zero on a proc-``*_init`` frame) and the BODY_CHN
+        twist the post-update one. It exists because a native run's Python `LandState` is a
+        field-holder whose pose is the SEED's -- computing the centre off it would silently use an
+        f0 pose (see `FreeRun.place_link`).
+
+        ``init_frame`` -- None uses the flag this core recorded for the frame it stepped, which is
+        the true one. Pass True/False to OVERRIDE it: `_computed_center` takes that flag as an
+        argument and every run-level caller passes False, so the override is what lets the two
+        engines be compared for equality rather than one of them being quietly more correct."""
+        cdef long long body_lean_v = _s16c(<long long>self.m351C) >> 1
+        cdef bint init_f = self._init_frame if init_frame is None else <bint>bool(init_frame)
+        cdef long long base_lean_v = 0 if init_f else (<long long>self._draw_lean_c)
+        cdef double out[2]
+        self._pe._body_co_center(self.pos_x, self.pos_y, self.pos_z, self.facing,
+                                 base_lean_v & 0xFFFF, -body_lean_v, out)
+        return (out[0], out[1])
 
     def head_top_exec(self, neck=None):
         """Link's exec-pass ``mHeadTopPos`` (x, y, z) for the frame this core LAST stepped -- the

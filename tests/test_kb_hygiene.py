@@ -42,8 +42,9 @@ _STRIKE = re.compile(r"~~[^~]+~~")
 _OBSOLETE_HEADING = re.compile(r"^#{1,6}\s+.*\b(obsolete|deprecated|superseded)\b", re.IGNORECASE | re.MULTILINE)
 _STATUS_HISTORICAL = re.compile(r"status:\s*historical", re.IGNORECASE)
 # repo-relative code path (optionally with a single {a,b,c} brace group), e.g.
-# tww_sim/land/plan_land.py  or  tww_sim/core/anim/{fk,quat}.py
-_CODEPATH = re.compile(r"\b((?:tww_sim|tests|harness|viz|fixtures)/[\w./-]*(?:\{[\w,]+\})?[\w./-]*\.py)")
+# tww_sim/land/plan_land.py, tww_sim/core/anim/{fk,quat}.py, tww_sim/core/anim/_anmc.pyx
+_CODEPATH = re.compile(
+    r"\b((?:tww_sim|tests|harness|viz|fixtures)/[\w./-]*(?:\{[\w,]+\})?[\w./-]*\.(?:pyx|pxi|py))")
 
 
 def _kb_pages() -> list[Path]:
