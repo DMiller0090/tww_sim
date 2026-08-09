@@ -1710,6 +1710,53 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE PLAN IS 89.82: THE CUT IS WORTH 3.35 FRAMES AND THE SEARCH ONLY CONFIRMS THE
+            RE-PRICE (session 136).** Session 135 left three ordered items; all three are answered.
+            The thrust-11 terminal is the frames, the fan window it named IS binding and now has a
+            measured width, and the runway box under the gap term was clipping the entry curve.
+            One new truth page,
+            [`knowledge/strategy/the-window-binds-on-the-parents-that-produce.md`](../../knowledge/strategy/the-window-binds-on-the-parents-that-produce.md).
+            - **THE NUMBER: 93.17 -> 89.82**, re-searched with `handoff_pf` at the session-135
+              unbroken family (facing **40660**, thrust **11**, ``cut_step`` **13**), every other
+              knob identical to s135's: **8 of 8 endpoints onside**, all admitting an entry curve,
+              **bound 89.82 = 72 herd + 81.89 u of gap at the walk cap + 13 cut** (1696 s,
+              `_notes/s136_c3_t11.log`, beam `_generated/s106/s136_c3_t11_f40660.json`). Under the
+              banked console **101**, s135's 93.17, s126's sampled 97.35 and the s125 floor of 94.
+              Still a BOUND on the same two counts: the gap is charged at cap speed with no
+              turnaround, and the roll entry is a separate search.
+            - **AND THE RE-SEARCH ADDS NOTHING OVER THE RE-PRICE, WHICH IS THE FINDING.** Re-pricing
+              s135's OWN eight endpoints in the new frame (`_notes/s136_thrust11_price.py`) gives
+              **89.81** and the whole unbroken family is FLAT -- 89.81 at facings 40600/40610/40620,
+              89.82 at 40640-40670, ``gap`` 81.77..81.89 -- and the re-search returns the same
+              winner, the same gap and the same ``l0`` **+15.48**. So the 3.35 frames are the
+              TERMINAL, not the herd: the cut term gives 3 and the shorter roll's own curve gives
+              the rest. The junction death counters come back byte-identical to s135's
+              (``in_cone`` 314542, ``outbox`` 6576, ``unarmed`` 429724), which is the same statement
+              -- the terminal reorders the keeps and never touches the junction.
+            - **THE FAN WINDOW IS BINDING, AND THE WIDTH IS MEASURED.** s135 inferred it from
+              ``fan_edge`` alone; swept at `pursuit_box`'s ``max_delta`` (+-21.35 deg) with the
+              endpoint pool held fixed, **28.4%** of surviving aims live outside the shipped 8.44
+              deg, the best screened ``l0`` goes **+117.58 -> +140.76** (+23.17 u), **306 of 1250**
+              endpoints take their best ``l0`` from outside it, and the population's own edge is
+              **~16.4 deg** (the 16-24 band holds 77 aims of 34639, at a third the ``l0``).
+              **AND THE CHEAP PARENTS SAY THE OPPOSITE**: parents 0-1, whose junctions return ~1258
+              endpoints against 8510-8662, put 0.6-1.4% outside the window and every one of those
+              aims strictly dominated. Sample parents by what they CONTRIBUTE, not by what they cost.
+            - **`handoff.RUNWAYS`' FLOOR WAS CLIPPING THE GAP TERM** -- the OTHER runway box, never
+              examined, floored at **190** on an s124 scan reported empty below it. Solved directly
+              over rungs 60..320 the entry curve reaches rung **170**, so the floor cut two usable
+              rungs: worth **+0.15 frames** at thrust 14 and **+0.29** at thrust 11. Shipped at
+              **160** -- one rung below the measured edge, so a hit on the first rung is the curve
+              speaking and not the box -- banked (`fixtures/courtyard_entry_locus_floor.json`) and
+              gated (`tests/test_handoff.py::test_the_runway_box_does_not_clip_the_entry_curve`).
+              **AND ONE BEAM WAS NOT A POPULATION HERE EITHER**: a floor set from the s135 beam
+              alone, whose endpoints bottom out at 180, came straight back clipping on the s136
+              beam, whose endpoints reach 170 -- the re-search's own self-check caught it. The bank
+              spans both beams at both terminals (32 records).
+            - **NOTE the printed ``-80.4`` bar is a THRUST-14 number** still being shown beside
+              thrust-11 screens. The run is self-consistent (``l0``, `l0_keep` and the sign prune all
+              ride the thrust-11 `PairFrame`); only that annotation is stale. What the shorter roll
+              actually buys in crossing is unmeasured.
       - [~] **THE PLAN IS 93.17 AND THE BOX WAS WORTH 6.9 FRAMES -- BUT NOT ON THE ROUTE IT WAS
             FREED FOR (session 135).** Session 134 named `in_pursuit_box`'s direction clause as the
             measured cap on the BAND-KEEPING route and left the free-axis prototype as a

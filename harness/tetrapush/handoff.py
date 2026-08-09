@@ -56,9 +56,9 @@ WINDOW_STEP = 0.25
 BAND_HALF = 1.2e-3
 BAND_STEP = TM.BAND_STEP
 
-#: The runway rungs `entry_locus` solves on. Outside 190..310 the s124 scan is empty at every along:
-#: shorter and the roll reaches the corner before the cut, longer and it never gets there.
-RUNWAYS = tuple(range(190, 321, 10))
+#: The runway rungs `entry_locus` solves on: one rung below the curve's own measured floor of 170, so
+#: a first-rung hit is the curve speaking (`the-window-binds-on-the-parents-that-produce.md`, s136).
+RUNWAYS = tuple(range(160, 321, 10))
 
 #: The engine's own walk cap, not a restatement -- what a herd endpoint closes the gap at, at best.
 WALK_CAP = LandState.MAX_NSPEED

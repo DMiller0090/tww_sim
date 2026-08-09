@@ -13,6 +13,7 @@ one is gated here rather than trusted:
 Values are pinned from `repr`, never hand-written (`[[zero-ulp-tests-only]]`, and the s124 trap of
 padding `%.9f` output with invented digits).
 """
+import json
 import math
 import os
 import sys
@@ -213,6 +214,32 @@ def test_an_endpoint_is_priced_in_frames_and_the_wrong_side_is_refused_free(pf):
     off = H.endpoint(pf, ONSIDE_LINK, HERD_TETRA, 73, runways=rungs)
     assert off['refused'] == 'offside' and off['l0'] == HERD_L0
     assert off['bound'] == float('inf') and off['n'] == 0 and 'locus' not in off
+
+
+def test_the_runway_box_does_not_clip_the_entry_curve():
+    """**The rung range has to be the CURVE's edge, not the box's** -- session 135's `terminal.RUNWAY`
+    lesson applied to the other runway box. `RUNWAYS` floored at 190 on the strength of an s124 scan
+    reported empty below it; solved directly over rungs 60..320 the locus reaches rung **170**, so the
+    old floor cut two usable rungs (worth 0.15 frames at thrust 14, 0.29 at thrust 11).
+
+    Asserts the shipped floor sits strictly BELOW every runway the banked sweep found, so a future
+    narrowing fails here rather than silently shortening every gap the chain-back prices -- and that
+    it is only ONE rung below, so the range is not padded past what was measured. The bank spans BOTH
+    cycle-3 beams because one is not a population: the s135 endpoints bottom out at 180 and the s136
+    ones reach 170, so a floor set from the first alone came back clipping on the second. Static
+    against the bank; the solve is `_notes/s136_bank_runway_floor.py` (~8 min), never at test time."""
+    with open(os.path.join(_REPO, 'fixtures', 'courtyard_entry_locus_floor.json')) as f:
+        bank = json.load(f)
+    assert bank['records'] and bank['swept_floor'] < H.RUNWAYS[0], 'the bank must probe below the box'
+    lo = min(r['runway_lo'] for r in bank['records'])
+    assert lo == bank['lowest_runway']
+    # the box holds exactly one rung below the curve's own floor: below it nothing was found over a
+    # sweep reaching 60, and a hit on RUNWAYS[0] is then the CURVE speaking rather than the box
+    assert H.RUNWAYS[0] < lo < H.RUNWAYS[1], (H.RUNWAYS[:2], lo)
+    # ...and nothing the sweep found lies outside the shipped range at either end
+    assert max(r['runway_hi'] for r in bank['records']) <= H.RUNWAYS[-1]
+    assert {(r['facing'], r['thrust']) for r in bank['records']} == {(40835, 14), (40660, 11)}
+    assert len({r['beam'] for r in bank['records']}) == 2, 'one beam is not a population'
 
 
 def test_the_search_keep_reads_only_fields_this_module_promises():
