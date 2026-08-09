@@ -15,6 +15,12 @@ LIVE-FAITHFUL STICKS (hard-won): full deflection (255/1) and neutral (128,128) a
 partial magnitude (msd 0.3-0.7) is bit-exact; but the sim's msd = min(hypot/54, 1) CAPS, so near-full
 raw sticks (e.g. 128,197) read 1.0 in the sim while live PADClamp gives ~0.96 -- NEVER emit that
 ambiguous cap-boundary cell. `stick_for_bearing` emits the true corner for msd>=1 and msd*54 below it.
+It is MEMOISED (session 133): when the octagon clamp moves the analytic candidate the inverse falls
+into a byte-neighborhood scan of up to 529 clamped decodes -- **2.8 ms a call** against ~30 us when
+the analytic byte lands -- and its callers ask the same question repeatedly (`full_herd.junction_alphabet`
+walks a FIXED bearing ladder once per node per generation, half the alphabet's cost and 17% of a
+junction stage). The function is pure (it reads only module constants) and returns an immutable
+tuple, so a bounded `lru_cache` is exact, not an approximation.
 
 CLAMP-AWARE INVERSE: the decode (`main_stick_decode`) now runs the PADClamp octagon clamp, which shifts a
 near-full OFF-AXIS byte's decoded angle by up to ~167 s16. The analytic byte below assumes the naive
@@ -24,6 +30,7 @@ target (hard-filtered to the requested magnitude band). On-axis / inside the oct
 so the analytic candidate is returned unchanged (cardinals + partial creeps stay bit-identical).
 """
 from __future__ import annotations
+import functools
 import math
 import struct
 
@@ -54,6 +61,7 @@ def dist2d(state, tx, tz):
     return math.hypot(tx - state.pos_x, tz - state.pos_z)
 
 
+@functools.lru_cache(maxsize=8192)
 def stick_for_bearing(theta_s16, csangle=0, msd=1.0):
     """Inverse of the walk want-target: an (sx, sy) whose camera-relative walk target
     `m34E8 = m34DC + csangle` equals the world bearing `theta_s16`. With a frozen camera

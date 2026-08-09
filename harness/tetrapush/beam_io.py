@@ -146,20 +146,28 @@ def attribute_parents(children, parents):
     return out
 
 
-def rebuild_beam(env, rec, cycle=-1, hl=None):
+def rebuild_beam(env, rec, cycle=-1, hl=None, native=True):
     """Rebuild one dumped cycle's nodes as live search nodes, by replaying each log on a fresh
     `FreeRun`. ``cycle`` is 1-based (``-1`` = the last dumped cycle).
 
     The returned dicts carry ``run``/``log``/``frames``/``plan``/``m`` -- what `extend_cycle`,
     `terminal_targeting` and `confirm_plan` consume -- plus ``dumped`` (the recorded metrics), so a
-    caller can assert the rebuild against them rather than trusting it."""
+    caller can assert the rebuild against them rather than trusting it.
+
+    ``native`` (session 133, ON) builds them on the C step. This function is how cycles 2 and 3 are
+    actually searched -- a banked beam is re-opened here and extended -- and until s131 a run
+    carrying a camera could not be native at all, so it was wired by necessity and stayed wired by
+    default afterwards. Measured on one banked cycle-2 parent, the junction stage that consumes
+    these nodes: **53.8 s wired, 20.0 s native, the same endpoints 0-ULP** (411 us a step against
+    120). Pass False for the pre-s133 engine; `tests/test_native_junction.py` gates the two against
+    each other rather than leaving the equality to the flag's docstring."""
     from harness.tetrapush.reposition import HerdLine
     hl = HerdLine.from_env(env) if hl is None else hl
     dtm = seeds.dtm_input_at(env)
     beam = rec['cycles'][cycle if cycle < 0 else cycle - 1]
     out = []
     for nd in beam:
-        run = seeds.make_freerun(env)
+        run = seeds.make_freerun(env, native=bool(native))
         run.pre_seed_input(dtm(0))
         for d in nd['log']:
             run.step(d)

@@ -600,6 +600,58 @@ class FreeRun:
             a = _step_args(inp)
             self._core.pre_seed_courtyard(a[0], a[1], a[2], a[3])
 
+    def set_pending_input(self, inp):
+        """Replace the delay-1 pending input WITHOUT stepping -- `pre_seed_input` mid-run.
+
+        The other half of `fork_pending`, and separate because it is the part that has to be right:
+        a run's pending input lives in the C core's own buffer, so writing `link._inbuf` alone would
+        leave the engine acting on the old letter. `LandCore.pre_seed_courtyard` is the setter for
+        that buffer and does not care whether the run has stepped (it writes `_cbuf` and the flag;
+        the two C-stick slots it also writes are never read on the courtyard path)."""
+        a = _step_args(inp)
+        self.link._inbuf = [a]
+        self._prev_raw = inp
+        if self._core is not None:
+            self._core.pre_seed_courtyard(a[0], a[1], a[2], a[3])
+
+    def fork_pending(self, inputs, csangle=None, eye=None, tattn=None):
+        """**One frame, N children**: step this frame ONCE and hand it to every pending input.
+
+        A search that expands a node by a whole input alphabet -- `full_herd.junction_beam`'s
+        generation is 274 children off one node -- steps the SAME frame once per letter today,
+        because the obvious loop is clone-and-step. At `input_delay=1` it does not have to: the
+        delivered input is written to the delay buffer and **nothing in the frame reads it**. On the
+        native path that is structural rather than empirical -- inside `_anmc`'s
+        `_step_courtyard_nogil` the incoming ``sx``/``sy``/``buttons``/``triggerL`` appear in exactly
+        two places, the signature and the `_cbuf` write -- so the frame is a function of the state
+        alone and the children differ only in what they have PENDING. (Measured beside the proof, on
+        a real junction beam: all 274 children of a node land in one physics class and one csangle
+        class, at every generation.)
+
+        So the frame runs once and each child is a clone of it carrying its own letter. Returns one
+        run per input, in order, each bit-identical to ``clone()`` then ``step(inp)`` -- which is
+        what `tests/test_fork_pending.py` asserts field by field, since the whole value of this is
+        that it is not an approximation.
+
+        Native runs only. The wired `LandState.step` buffers the same way, but its buffer is not
+        this module's to reach into and the search that needs this is native by construction.
+        ``record`` is not offered: every child's row would be the same row (it is a function of the
+        shared frame), and a caller that wants it should step normally."""
+        inputs = list(inputs)
+        if not inputs:
+            return []
+        if self._core is None:
+            raise ValueError("fork_pending is the native path's primitive -- the wired step's "
+                             "delay buffer belongs to LandState (use clone() + step() per input)")
+        base = self.clone()
+        base.step(inputs[0], csangle=csangle, eye=eye, tattn=tattn, record=False)
+        out = [base]
+        for inp in inputs[1:]:
+            child = base.clone()
+            child.set_pending_input(inp)
+            out.append(child)
+        return out
+
     def step(self, inp, csangle=None, eye=None, center=None, tattn=None, record=True):
         """Advance one game frame on raw input ``inp``. ``csangle``/``eye``/``tattn`` as in the
         class doc; ``center`` = an injected SETTLED Co centre for this frame's outgoing push (the

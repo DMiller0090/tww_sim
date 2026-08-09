@@ -739,8 +739,11 @@ def junction_gates(jr, hl, frames, *, min_preroll=17.0):
     if abs(jr.link.speedF) < 15.0:
         return 'stalled'
     probe = jr.clone()
+    # A probe has no NEXT frame, so it needs no camera (the look pair stays -- her eye steers the
+    # re-aim, and so the speedF read below): knowledge/strategy/the-frame-the-alphabet-shares.md
+    probe.camera = None
     probe.step(dict(stickX=128, stickY=128, buttons=0, triggerL=0,
-                    substickX=CSTICK_NEUTRAL, substickY=0))
+                    substickX=CSTICK_NEUTRAL, substickY=0), csangle=int(jr.csangle))
     if probe.link.speedF < min_preroll:
         return 'unarmed'
     return None

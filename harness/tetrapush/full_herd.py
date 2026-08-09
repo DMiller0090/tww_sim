@@ -572,6 +572,28 @@ def _armable_square(hl, corridor):
     return aim, (lambda n: aim(n) + _cone_deficit(n['run']) * _BAM_DEG)
 
 
+def _expand(run, letters):
+    """**One junction node's children**: the shared frame once, then a run per pending letter.
+
+    A generation expands each live node by its whole alphabet -- 274 children off one node at the
+    shipped knobs -- and the obvious loop steps that same frame 274 times. It does not have to: at
+    `input_delay=1` the delivered letter is buffered and cannot touch its own frame, so the children
+    are one frame carrying 274 different pending inputs (`FreeRun.fork_pending`, which holds the
+    proof and the gate). Measured on a real beam: all 274 land in one physics class and one csangle
+    class, at every generation, and the stage is 53% `FreeRun.step`.
+
+    A wired run keeps clone-and-step -- the delay buffer is `LandState`'s there, and the search this
+    serves is native."""
+    if run.native_step:
+        return run.fork_pending(letters)
+    out = []
+    for d in letters:
+        r = run.clone()
+        r.step(d)
+        out.append(r)
+    return out
+
+
 def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step=16,
                   keep=12, collect=None, dead=None, per_state=4, aim_share=True, corridor=None):
     """**The junction as a per-frame BEAM, not an enumerated family.** The atom is one frame's
@@ -623,40 +645,40 @@ def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step
         nxt, seen = [], set()
         for nd in live:
             # the alphabet is state-dependent (the arming stick aims at Tetra from HERE)
-            for (sx, sy) in junction_alphabet(nd['run'], hl, ess_step=ess_step,
-                                              aim_step=aim_step):
-                for l in (0, 1):
-                    r = nd['run'].clone()
-                    d = dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
-                             triggerL=255 if l else 0, substickX=T.CSTICK_NEUTRAL, substickY=0)
-                    r.step(d)
-                    # counted separately on purpose: "the beam emptied" is only diagnosable if the
-                    # regime, the walls and the posture box are distinguishable afterwards.
-                    why = ('followed' if r._follow_warned else
-                           'wall' if not O.frame_is_wall_free(r.link.pos_x, r.link.pos_z,
-                                                              r.tx, r.tz, walls) else
-                           'outbox' if not in_pursuit_box(r, hl, box) else None)
-                    if why is not None:
-                        dead[why] = dead.get(why, 0) + 1
-                        continue
-                    jf = nd['jf'] + 1
-                    tag = (round(r.link.pos_x, 1), round(r.link.pos_z, 1), r.link.facing >> 5,
-                           round(r.link.speedF, 2), r.link.state, sx, sy, l)
-                    if tag in seen:
-                        continue
-                    seen.add(tag)
-                    cand = dict(run=r, log=nd['log'] + [d], jf=jf)
-                    nxt.append(cand)
-                    why = T.junction_gates(r, hl, node['frames'] + jf)
-                    dead[why or 'ENDPOINT'] = dead.get(why or 'ENDPOINT', 0) + 1
-                    if why is None:
-                        e = dict(cand)
-                        e['m'] = T.metrics(r, hl, node['frames'] + jf)
-                        e['frames'] = node['frames'] + jf
-                        e['jv'] = dict(kind='beam', phases=T._fit_phases(e['log'][-jf:]))
-                        ends.append(e)
-                        if collect is not None:
-                            collect.append(e)
+            letters = [dict(stickX=sx, stickY=sy, buttons=S.PAD_L if l else 0,
+                            triggerL=255 if l else 0, substickX=T.CSTICK_NEUTRAL, substickY=0)
+                       for (sx, sy) in junction_alphabet(nd['run'], hl, ess_step=ess_step,
+                                                         aim_step=aim_step)
+                       for l in (0, 1)]
+            for d, r in zip(letters, _expand(nd['run'], letters)):
+                sx, sy, l = d['stickX'], d['stickY'], 1 if d['triggerL'] else 0
+                # counted separately on purpose: "the beam emptied" is only diagnosable if the
+                # regime, the walls and the posture box are distinguishable afterwards.
+                why = ('followed' if r._follow_warned else
+                       'wall' if not O.frame_is_wall_free(r.link.pos_x, r.link.pos_z,
+                                                          r.tx, r.tz, walls) else
+                       'outbox' if not in_pursuit_box(r, hl, box) else None)
+                if why is not None:
+                    dead[why] = dead.get(why, 0) + 1
+                    continue
+                jf = nd['jf'] + 1
+                tag = (round(r.link.pos_x, 1), round(r.link.pos_z, 1), r.link.facing >> 5,
+                       round(r.link.speedF, 2), r.link.state, sx, sy, l)
+                if tag in seen:
+                    continue
+                seen.add(tag)
+                cand = dict(run=r, log=nd['log'] + [d], jf=jf)
+                nxt.append(cand)
+                why = T.junction_gates(r, hl, node['frames'] + jf)
+                dead[why or 'ENDPOINT'] = dead.get(why or 'ENDPOINT', 0) + 1
+                if why is None:
+                    e = dict(cand)
+                    e['m'] = T.metrics(r, hl, node['frames'] + jf)
+                    e['frames'] = node['frames'] + jf
+                    e['jv'] = dict(kind='beam', phases=T._fit_phases(e['log'][-jf:]))
+                    ends.append(e)
+                    if collect is not None:
+                        collect.append(e)
         # the frontier keep: shares by turn-out-of-the-cone AND by squareness, capped per physics
         # state so no single state can take the whole beam (see the docstring -- session 68)
         if not nxt:

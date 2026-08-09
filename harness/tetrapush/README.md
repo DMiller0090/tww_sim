@@ -1710,6 +1710,49 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE STAGE FIVE SESSIONS WERE SPENT ON IS NOW 2% OF A CYCLE, AND A NODE'S 274 CHILDREN
+            ARE ONE FRAME (session 133).** The queued next step was another ROLL-stage port
+            (`CourtyardFleet`). Measured before building it -- s131's own lesson, applied to the
+            profile that named the port rather than to the port. One new truth page,
+            [`knowledge/strategy/the-frame-the-alphabet-shares.md`](../../knowledge/strategy/the-frame-the-alphabet-shares.md).
+            - **THE RATIO THAT AIMED s127-s131 WAS STALE BY CONSTRUCTION.** s126 measured a cycle at
+              **junction 16% / roll 84%** and the roll then got 13.6x faster. Re-measured on one
+              banked cycle-2 parent (`_notes/s133_junction_cost.py`): **junction 99.2% / roll 0.8%**
+              as shipped, 95.5 / 4.5 with the junction native. The queued fleet port addressed
+              **2%** of a cycle. Re-measure the split after any port big enough to be worth doing.
+            - **AND THE "~48% GLUE" WAS A MISATTRIBUTION** (`_notes/s133_stage_split.py`). Timed by
+              section, the roll stage's prunes, metrics, sorts and keeps are **2.0%**; what the s131
+              row called glue is per-frame Python inside the sections, and 52.8% of that stage is
+              four camera-bearing R2 blocks against 44.9% for the fan.
+            - **A CAMERA-BEARING NATIVE STEP IS 120.6 us AND THE C FRAME IS 10.8 OF IT**
+              (`_notes/s133_step_anatomy.py`, `s133_camera_anatomy.py`): `LandCamera.step` **80.1 us
+              at a junction state** (46.2 at a roll state -- the junction's stick is live every
+              frame), `cam_pad` 8.3, the recorded row 7.3. The camera is **66% of a junction step**
+              and the junction is 98% of a cycle.
+            - **THE CHILDREN OF A JUNCTION NODE ARE ONE FRAME, AND IT IS STRUCTURAL.** Inside
+              `_step_courtyard_nogil` the incoming `sx`/`sy`/`buttons`/`triggerL` appear in exactly
+              two places -- the signature and the `_cbuf` write -- so at `input_delay=1` a delivered
+              letter is buffered and never read by its own frame. Measured beside the proof: all
+              **274** children land in ONE physics class and ONE csangle class at every generation.
+              `FreeRun.fork_pending` steps it once and hands it to every pending letter
+              (`full_herd._expand`): steps **91516 -> 26815**, the beam identical endpoint for
+              endpoint. What is left is the arming probe, which is genuinely per child.
+            - **A PROBE HAS NO NEXT FRAME**, so `two_roll.junction_gates` steps its arming clone with
+              the camera detached and this frame's csangle injected -- bit-identical, and it drops an
+              80 us model from ~26.5k probes. The look pair STAYS: her eye steers the proc-7/9 re-aim
+              and therefore the `speedF` the gate reads, while the camera feeds nothing it looks at.
+            - **AND THE CHEAPEST CUT WAS A STALE DEFAULT**: `beam_io.rebuild_beam` built its nodes
+              with `seeds.make_freerun(env)`, `native=False` -- so the campaign's dominant stage ran
+              on the **411 us** Python step, because a camera-carrying run could not be native until
+              s131 and the default outlived its reason. **DELIVERED, one banked cycle-2 parent,
+              same endpoints 0-ULP: 53.8 s -> 8.9 s (5.98x).** Gates
+              [`tests/test_fork_pending.py`](../../tests/test_fork_pending.py) (6),
+              [`tests/test_native_junction.py`](../../tests/test_native_junction.py) (5 + 1 slow),
+              [`tests/test_stick_for_bearing_cache.py`](../../tests/test_stick_for_bearing_cache.py) (3).
+            - **NEXT IS NAMED BY THE TABLE, NOT BY A GUESS**: `FreeRun.clone` is now **58.4%** of the
+              stage (91516 at 54.7 us) and only **4622** survive to be endpoints. The prunes that
+              kill the rest -- `followed` / `wall` / `outbox` -- all read the SHARED frame, so they
+              can be decided once per node. **Defer the clone, not the step.**
       - [x] **THE GATE WAS 29 MINUTES BECAUSE MOST OF ITS COST WAS NOT TESTS AT ALL -- IT IS NOW
             1:07, AND THE 2-MINUTE RULE IS MACHINE-CHECKED (session 132).** Dereck's steer, and then
             his hard rule: the per-session suite must never exceed 2 minutes, and a functionality test
