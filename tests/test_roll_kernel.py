@@ -65,14 +65,19 @@ def nodes():
     return env, rec, [_rebuild(env, nd) for nd in rec['nodes']]
 
 
-@pytest.fixture(scope='module')
-def twins(nodes):
-    """One self-eye twin per seed, built from the node's log + its wired camera trace."""
+@pytest.fixture(scope='module', params=[True, False], ids=['native_look', 'python_look'])
+def twins(request, nodes):
+    """One twin per seed, built from the node's log + its wired camera trace.
+
+    Parameterized over BOTH engines on purpose: `native_look` (session 128) runs her look model and
+    Link's neck inside the C step at 6.8x, and the claim that it is the same simulation should be
+    gated where it is used -- against `two_roll.roll_segment` on the whole record -- and not only in
+    its own unit gate."""
     env, rec, runs = nodes
     out = []
     for nd in rec['nodes']:
         cs = RK.wired_csangle_trace(env, nd['log'])
-        out.append(RK.self_eye_twin(env, nd['log'], cs))
+        out.append(RK.self_eye_twin(env, nd['log'], cs, native_look=request.param))
     return out
 
 

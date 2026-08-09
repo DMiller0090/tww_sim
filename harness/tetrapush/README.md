@@ -1710,6 +1710,50 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE LOOK PAIR IS IN THE C FRAME TOO -- THE COUPLED STEP IS 6.8x AND A ROLL FAN 18x
+            (session 128).** s127's next step, done. One new truth page,
+            [`knowledge/model/porting-the-look-pair.md`](../../knowledge/model/porting-the-look-pair.md).
+            - **THE GATE FIRST, AND IT FAILED AS WRITTEN.**
+              [`tests/test_native_zl1_look.py`](../../tests/test_native_zl1_look.py) (7, 0.9 s)
+              diffs a fully-native run against `make_freerun_self_eye` frame by frame: physics, the
+              eye, m3564, and her WHOLE hidden state -- the joint chase angles and their clamped
+              targets, every timer, the McaMorf ctrl, and **the morf's per-joint old-pose store**,
+              which is the one that matters: it is rewritten every frame and only reaches the eye
+              through the NEXT blend, so a wrong store is silent for a frame and then diverges.
+              Sensitivity checked rather than assumed -- a 1-BAM perturbation of an armed constant
+              diverges at frame 10 (hers) and frame 3 (the neck's).
+            - **THE RECORDED WINDOW DOES NOT EXERCISE HER, so the gate runs a long one too.** Over
+              the 45 movie frames ``f84d == 1`` on every frame and ``f7b8`` is seeded at **116**, so
+              the look-around anim switch, the morf blend it starts, the wrap flag and the RNG
+              horizon are ALL past the end of the fixture. `test_the_long_window_actually_exercises_her`
+              asserts that coverage, so none of those four fields is being compared to a constant.
+            - **THE SPLIT, MEASURED FIRST (s127's own habit).** Her `Zl1Look` **77.5%** of the step,
+              `NeckLook` **13.4%**, the C core itself **9.1%** -- and inside her frame `_pose_eye` is
+              71% (`pose_locals` alone 52%). So the port is mostly a DATA move: her keyframe bank
+              becomes C-resident (`Zl1AnimData`) the way Link's `AnimData` already is.
+              [`tww_sim/core/anim/_zl1c.pxi`](../../tww_sim/core/anim/_zl1c.pxi), `include`d into
+              `_anmc.pyx` because it runs inside `_step_courtyard_nogil`.
+            - **DELIVERED 6.8x, NOT THE 9x THE RATIO NAMED, and the gap is worth keeping.**
+              **9279 -> 62682 steps/s**; the look pair went **97.4 -> 5.6 us/frame**. A ratio of
+              "X is 89% of the step" assumes the ported X is free -- it is not (still 35% after),
+              and the stripped run's 96k is a ceiling you approach and never reach.
+            - **THE FAN, WHERE THE SEARCH ACTUALLY SPENDS.** `roll_kernel.self_eye_twin` defaults to
+              the native-look twin, so `roll_fan` gets it directly: on the s127 unit a 143-aim fan is
+              **1.05 s (wired) -> 0.29 s (s127) -> 0.057 s**; on the full 5600-aim `roll_aim_fan`
+              grid **41.0 s -> 2.24 s (18.3x)**, records `==` the reference. `test_roll_kernel` now
+              runs its whole 14-gate record comparison on BOTH engines (23 tests) rather than
+              inheriting the claim.
+            - **THE PARALLEL PATH IS ALREADY DE-RISKED.** The chain is nogil, so
+              `CourtyardFleet.run_par` carries it bit-identical to sequential -- gated, with a
+              deliberately WIDE csangle spread: at a 1-BAM spread eight cores land on three distinct
+              Link positions, Tetra does not move differently at all, and every eye comes out
+              identical, so a fleet gate seeded like that would pass without the look chain running.
+            - **TWO TRAPS THE 0-ULP GATE CAUGHT-BY-DESIGN.** (1) The models reach `absXZ` through
+              `collision.fsqrt` = a CORRECTLY-ROUNDED sqrt, while the native engine also carries
+              `_sqrtf_c` (the MSL `frsqrte`+3-Newton `std::sqrtf`); they agree to ~2^-32, the exact
+              size that survives a plausibility check. (2) Her non-morf pose is
+              `J3DGetTranslateRotateMtx` off the EULER while storing the euler->quat for the next
+              morf -- not the same matrix in the low bits, so the two paths cannot be merged.
       - [x] **THE ROLLOUT NOW RUNS IN C, AND THE EYE WAS THE ONLY THING KEEPING IT IN PYTHON
             (session 127).** s126's next step, done -- but not the way it was written. The port is
             NOT a ShoveCtx-class baked kernel and the camera did NOT need porting. Two new truth

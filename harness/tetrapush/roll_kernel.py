@@ -18,6 +18,11 @@ roll: everything a roll needs from the camera is a property of the NODE, not of 
 143 aims pays for one camera and 143 physics rollouts, not 143 of each. Measured on a real junction
 endpoint's own 143-aim fan: **1.05 s -> 0.29 s (3.6x)**, 3.2x including the per-node setup.
 
+**Session 128 moved the two look models into the C frame as well** (`seeds.make_freerun_native_look`,
+`knowledge/model/porting-the-look-pair.md`), which is what `self_eye_twin` now builds by default:
+the same 143-aim fan is **0.057 s**. Everything below is unchanged -- the economy is the same, the
+per-aim rollout just got 6.8x cheaper.
+
 WHAT THE PORT RESTS ON, all measured in session 127 and all gated in `tests/test_roll_kernel.py`
 rather than trusted:
 
@@ -140,8 +145,14 @@ def wired_csangle_trace(env, log):
     return out
 
 
-def self_eye_twin(env, log, cs_trace):
-    """A `make_freerun_self_eye` run at the state ``log`` reaches -- the fan's seed.
+def self_eye_twin(env, log, cs_trace, native_look=True):
+    """A fully-native run at the state ``log`` reaches -- the fan's seed.
+
+    ``native_look`` (session 128, the default) runs her look model and Link's neck INSIDE the C step
+    instead of in Python beside it: **9279 -> 62682 steps/s**, the same answer 0-ULP
+    (`tests/test_native_zl1_look.py`). Pass False for the s127 `make_freerun_self_eye` twin -- the
+    gate below runs BOTH, because "the fast one is the slow one" is the claim this module rests on
+    and it should be checked, not inherited.
 
     The camera is injected a frame late by construction: step ``i`` reads the csangle committed at
     the end of step ``i-1`` (`from_f0.FreeRun.step`'s own convention), which is why `wired_csangle_trace`
@@ -149,7 +160,7 @@ def self_eye_twin(env, log, cs_trace):
     looks plausible -- so `tests/test_roll_kernel.py` checks the twin against the wired node 0-ULP
     before any fan runs off it."""
     from harness.tetrapush import seeds as SD
-    run = SD.make_freerun_self_eye(env)
+    run = (SD.make_freerun_native_look(env) if native_look else SD.make_freerun_self_eye(env))
     run.pre_seed_input(SD.dtm_input_at(env)(0))
     for i, d in enumerate(log):
         run.step(d, csangle=(cs_trace[i - 1] if i else None))
@@ -194,7 +205,9 @@ def roll_fan(run, aims, *, l_window=(5, 8), target_cs=None, hold=1, a_hold=2, po
         roll_speedF = roll_facing = None
         seen = False
         for k in range(T.MAX_ROLL_FRAMES + 1):
-            rr.step(stream(k), csangle=(cs0 if k == 0 else seg_cs[k - 1]))
+            # record=False: the fan reads the endpoint off `rr`, never the row, and building it
+            # costs three live reads of the C look state per frame (session 128).
+            rr.step(stream(k), csangle=(cs0 if k == 0 else seg_cs[k - 1]), record=False)
             frames += 1
             if rr.link.state == T.FRONT_ROLL:
                 seen = True

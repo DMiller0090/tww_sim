@@ -2377,6 +2377,13 @@ cdef double _cstick_posy_c(int csx, int csy) noexcept nogil:
     return posy
 
 
+# Tetra's look-at head + Link's neck, resident in C -- the two models that generate the proc-9
+# re-aim eye, and (measured s128) 91% of the coupled courtyard step. Kept in its own file because
+# it is a distinct subsystem, `include`d rather than imported because `LandCore` runs it INSIDE
+# `_step_courtyard_nogil` and so needs its C state in this translation unit.
+include "_zl1c.pxi"
+
+
 cdef class LandCore:
     """C-resident LandState physics engine. Holds a reference to the shared PoseEngine (for speedF) and
     owns all per-frame physics/stick/camera state. `setup` seeds it; `step` advances one frame and
@@ -2414,6 +2421,11 @@ cdef class LandCore:
     cdef bint _has_cbuf
     cdef bint _court_locked                 # mpAttnActorLockOn != NULL (courtyard; False in walk step)
     cdef public bint low_life               # checkRestHPAnime's life half (seeded; wait-stop-pose.md)
+    # --- the look pair, run INSIDE the frame (session 128): her Zl1Look + Link's NeckLook ---
+    cdef Zl1LookCore _zl1
+    cdef NeckLookCore _neck
+    cdef bint _has_look                     # both wired -> the step generates its own proc-9 eye
+    cdef public double _tetra_y             # her world Y (setMtx/setAttention; constant here)
 
     @property
     def pe_phase(self):
@@ -2485,6 +2497,10 @@ cdef class LandCore:
         self._has_cbuf = False
         self._court_locked = False
         self.low_life = False
+        self._zl1 = None
+        self._neck = None
+        self._has_look = False
+        self._tetra_y = 0.0
         for i in range(6):
             self._cbuf[i] = 128 if i == 0 or i == 1 or i == 4 or i == 5 else 0
 
@@ -2524,6 +2540,11 @@ cdef class LandCore:
         c._pend_tetra_x = self._pend_tetra_x; c._pend_tetra_z = self._pend_tetra_z
         c._court_locked = self._court_locked; c._has_cbuf = self._has_cbuf
         c.low_life = self.low_life
+        # the look pair: each clones its own state (the fan branches a node into an aim fan).
+        c._zl1 = self._zl1.clone() if self._zl1 is not None else None
+        c._neck = self._neck.clone() if self._neck is not None else None
+        c._has_look = self._has_look
+        c._tetra_y = self._tetra_y
         for j in range(6):
             c._cbuf[j] = self._cbuf[j]
         return c
@@ -3084,6 +3105,53 @@ cdef class LandCore:
                            base_lean_v & 0xFFFF, -body_lean_v, nlx, nly, nlz, m)
         return ((m[0], m[1], m[2], m[3]), (m[4], m[5], m[6], m[7]), (m[8], m[9], m[10], m[11]))
 
+    def seed_look(self, Zl1AnimData data, zl1, neck, head_mtx, double tetra_y):
+        """Wire the look pair INTO the step (session 128): from here `step_courtyard` runs her
+        `Zl1Look` and Link's `NeckLook` itself and generates its own proc-9 re-aim eye, instead of
+        being handed one per frame.
+
+        `zl1`/`neck` are the SEEDED Python models (`core.npc_zl1_look.Zl1Look`,
+        `land.neck_look.NeckLook`) -- the one place the two representations meet, so a native run
+        starts from the same fixture the wired one does. `head_mtx` is the f0 exec head matrix (what
+        f1's setNeckAngle measures), `tetra_y` her world Y. The seed eye is armed as this frame's
+        re-aim target, so the first step reads it exactly as the injected mode did."""
+        self._zl1 = Zl1LookCore(data)
+        self._zl1.seed_from(zl1)
+        self._neck = NeckLookCore()
+        self._neck.seed(neck, head_mtx)
+        self._tetra_y = tetra_y
+        self._has_look = True
+        self._atn_eye_x = self._zl1._eye[0]
+        self._atn_eye_z = self._zl1._eye[2]
+        self._has_eye = True
+
+    @property
+    def has_look(self):
+        """True when the look pair runs inside the step (`seed_look` was called)."""
+        return bool(self._has_look)
+
+    def zl1_snapshot(self):
+        """Her whole hidden state (see `Zl1LookCore.snapshot`) -- what the 0-ULP gate diffs."""
+        return self._zl1.snapshot()
+
+    def neck_snapshot(self):
+        """m3564 as (x, y, z)."""
+        return self._neck.snapshot()
+
+    @property
+    def look_eye(self):
+        """Her eyePos as the step last computed it -- the value THIS core's next frame re-aims at."""
+        return self._zl1.eye
+
+    @property
+    def look_tattn(self):
+        """Her `attention_info.position` (the camera's lock target) from the last step."""
+        return self._zl1.tattn
+
+    def look_check(self):
+        """Raise whatever the Python look model would have (the nogil step sets a flag instead)."""
+        self._zl1.check()
+
     def pre_seed_courtyard(self, int sx, int sy, int buttons, int triggerL):
         """Seed the delay-1 controller buffer (the input the FIRST step_courtyard acts on) --
         FreeRun.pre_seed_input at input_delay=1."""
@@ -3232,7 +3300,13 @@ cdef class LandCore:
             # injected mode: overwrite the tracked Tetra + the incoming recoil from the caller.
             self._tetra_x = tetra_x; self._tetra_z = tetra_z
             self._pend_link_x = pend_link_x; self._pend_link_z = pend_link_z
-        self._atn_eye_x = eye_x; self._atn_eye_z = eye_z; self._has_eye = has_eye != 0
+        if not self._has_look:
+            self._atn_eye_x = eye_x; self._atn_eye_z = eye_z; self._has_eye = has_eye != 0
+        # setNeckAngle reads the frame-START m34DE, and her lookBack reads her PRE-plow position --
+        # both must be captured before anything below moves them (the Python step's own ordering).
+        cdef long long m34de_start = self.m34de
+        cdef double tetra_pre_x = self._tetra_x
+        cdef double tetra_pre_z = self._tetra_z
         self.csangle = csangle & 0xFFFF
         self._set_stick_data(asx, asy)
         # Frame-START proc (this frame's mCurProc before any dispatch/_roll_init mutation): the
@@ -3412,6 +3486,37 @@ cdef class LandCore:
                             120, 0x8C, push)
             self._pend_link_x = push[0]; self._pend_link_z = push[1]
             self._pend_tetra_x = push[2]; self._pend_tetra_z = push[3]
+
+        # --- the look pair, in the Python step's order: neck, then her whole execute frame -------
+        # (session 128; knowledge/model/the-look-pair-in-c.md). The neck measures the CACHED
+        # previous-frame head matrix and the frame-START m34DE; her look then runs off the head
+        # matrix and mHeadTopPos this frame's neck twist produces, and her eyePos arms the NEXT
+        # frame's proc-9 re-aim -- which is the whole reason this belongs inside the frame.
+        cdef double hm[12]
+        cdef double ht[3]
+        cdef bint look_ok
+        if self._has_look:
+            look_ok = self._neck._select_look_pos_c(
+                self.pos_x, self.pos_z, self._zl1._eye[0], self._zl1._eye[2],
+                m34de_start, True, self._atn_locked(), self._atn_list_present)
+            self._neck._update_c(m34de_start, self.state, look_ok,
+                                 self._zl1._eye[0], self._zl1._eye[1], self._zl1._eye[2])
+            body_lean_v = _s16c(<long long>self.m351C) >> 1
+            base_lean_v = 0 if init_frame else (<long long>self._draw_lean_c)
+            # ONE chain walk, not two: `_head_top_impl` IS `_head_mtx_impl` plus the head-offset
+            # multiply (d_a_player_main.cpp:11592), so deriving the top from the matrix here is the
+            # same value by construction and saves a full 7-joint FK every frame.
+            self._pe._head_mtx(self.pos_x, self.pos_y, self.pos_z, self.facing,
+                               base_lean_v & 0xFFFF, -body_lean_v,
+                               self._neck._y, self._neck._z, self._neck._x, hm)
+            _mv_c(hm, _HEAD_TOP_OFF_X, 0.0, 0.0, ht)
+            memcpy(&self._neck._head_mtx[0], hm, 12 * sizeof(double))
+            self._zl1._step_c(tetra_pre_x, tetra_pre_z,
+                              self._tetra_x, self._tetra_y, self._tetra_z,
+                              self.pos_x, self.pos_z, ht[1])
+            self._atn_eye_x = self._zl1._eye[0]
+            self._atn_eye_z = self._zl1._eye[2]
+            self._has_eye = True
         return sf_native
 
 

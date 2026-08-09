@@ -64,6 +64,8 @@ TURN_STEP_POS = 0x0180           # field_5C: mMaxTurnStep when field_0x7BC >= 0 
 TURN_STEP_NEG = 0x1000           # mMaxTurnStep (HIO): selected when field_0x7BC < 0
 LOOK_TURN_VEL = 0x0800           # field_18: lookAtTarget_2 r27 (body-turn step; blocked by r28 here)
 PLAYER_EYE_Y_OFF = -20.0         # dNpc_playerEyePos(-20.0f) (lookBack :1223)
+JNT_CHASE = (4, 4)               # lookAtTarget_2's cLib_addCalcAngleL (scale, min_step); max = turn_step
+RND_FLOOR = 0x5A                 # the rnd(0x5A, 0xB4) floor held at the RNG horizon (see _optn_1)
 
 # --- anim numbers (bckResID table) + prm rows used in this regime (setAnm/setAnm_NUM) ----------
 ANM_WAIT03 = 8                   # setStt(3) -> setAnm tbl[3] = {bck 8, morf 8.0, speed 1.0, LOOP}
@@ -245,8 +247,10 @@ class Zl1JntCtrl:
                 head_t, bbone_t = self._turn_backbone2head(delta_y)
         self.f2e = head_t
         self.f32 = bbone_t
-        self.angles[0][1] = cLib_addCalcAngleL(self.angles[0][1], head_t, 4, self.turn_step, 4)
-        self.angles[1][1] = cLib_addCalcAngleL(self.angles[1][1], bbone_t, 4, self.turn_step, 4)
+        self.angles[0][1] = cLib_addCalcAngleL(self.angles[0][1], head_t,
+                                               JNT_CHASE[0], self.turn_step, JNT_CHASE[1])
+        self.angles[1][1] = cLib_addCalcAngleL(self.angles[1][1], bbone_t,
+                                               JNT_CHASE[0], self.turn_step, JNT_CHASE[1])
 
         if self.trn and not no_body_turn:
             # the mbTrn body-turn branch (cLib_addCalcAngleS on current.angle.y + follow_current)
@@ -262,8 +266,10 @@ class Zl1JntCtrl:
         bb_x = self._chk_lim(rem, 1, 0)
         self.f2c = head_x
         self.f30 = bb_x
-        self.angles[0][0] = cLib_addCalcAngleL(self.angles[0][0], head_x, 4, self.turn_step, 4)
-        self.angles[1][0] = cLib_addCalcAngleL(self.angles[1][0], bb_x, 4, self.turn_step, 4)
+        self.angles[0][0] = cLib_addCalcAngleL(self.angles[0][0], head_x,
+                                               JNT_CHASE[0], self.turn_step, JNT_CHASE[1])
+        self.angles[1][0] = cLib_addCalcAngleL(self.angles[1][0], bb_x,
+                                               JNT_CHASE[0], self.turn_step, JNT_CHASE[1])
         return angle_y
 
 
@@ -478,7 +484,7 @@ class Zl1Look:
                     # the game re-seeds 7B8 = rnd(0x5A, 0xB4) from the GLOBAL RNG stream --
                     # unmodelable offline; flag the horizon and hold the rnd floor (class doc).
                     self._set_anm(ANM_WAIT03)
-                    self.f7b8 = 0x5A
+                    self.f7b8 = RND_FLOOR
                     self.rng_horizon = True
             self.f84d = 0
             return

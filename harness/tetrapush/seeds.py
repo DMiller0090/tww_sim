@@ -142,7 +142,25 @@ def make_freerun_native(env, tetra_at=None):
                    seed_push=seed_push, native_step=True)
 
 
-def make_freerun_self_eye(env, tetra_at=None):
+def make_freerun_native_look(env, tetra_at=None):
+    """**The whole coupled frame in C** (session 128) -- `make_freerun_self_eye` with her look model
+    and Link's neck moved INSIDE the native step instead of driven from Python beside it.
+
+    s127 left those two in Python because they are what generates the proc-9 re-aim eye. Measured at
+    the start of s128 they were **91% of the coupled step** (her 77.5%, the neck 13.4%, the C core
+    itself 9.1%) -- the entire remaining win, and the reason nothing else in the frame was worth
+    porting.
+
+    Identical answer, and that is gated rather than asserted: `tests/test_native_zl1_look.py` diffs
+    this run against the self-eye one frame by frame -- physics, the eye, m3564, and her whole hidden
+    state including the morf's per-joint old-pose store -- over the recorded window AND over a long
+    one that actually fires her look-around anim. Same seed path (it IS `make_freerun_self_eye`, one
+    flag on), same csangle injection, same clone semantics. `self.zl1` stays the SEED object; the
+    live state is read through `_eye_next` / `neck` / `zl1_snapshot()`."""
+    return make_freerun_self_eye(env, tetra_at=tetra_at, native_look=True)
+
+
+def make_freerun_self_eye(env, tetra_at=None, native_look=False):
     """**The search's fast coupled run** (session 127): the native C step with her look model and
     Link's neck WIRED, so the run generates its own proc-9 re-aim eye instead of being handed one.
 
@@ -154,7 +172,10 @@ def make_freerun_self_eye(env, tetra_at=None):
 
     The ONE thing it does not carry is the camera: `csangle` is injected per `step`. That is a feature
     for the roll fan -- through a roll the csangle sequence is a per-node constant, so a fan of aims
-    pays for one camera -- and the caller's problem everywhere else."""
+    pays for one camera -- and the caller's problem everywhere else.
+
+    ``native_look`` moves the two look models INTO the C frame as well; see
+    `make_freerun_native_look`, which is this with the flag on."""
     from harness.tetrapush.from_f0 import FreeRun
     from tww_sim.core.npc_zl1_look import Zl1Look
     from tww_sim.land.neck_look import NeckLook
@@ -178,7 +199,7 @@ def make_freerun_self_eye(env, tetra_at=None):
                    seed_old_pose=seed.get('old_pose'), computed_pose=True,
                    zl1=Zl1Look.seed_from_row(look0),
                    neck=NeckLook(x=m0[0], y=m0[1], z=m0[2]),
-                   seed_push=seed_push, native_step=True)
+                   seed_push=seed_push, native_step=True, native_look=native_look)
 
 
 def load_placements(path=None):

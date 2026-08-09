@@ -74,6 +74,24 @@ from harness.tetrapush.tetra_plow import LINK_CO_R, TETRA_CO_R, _CO_H
 _NATIVE_CONSTS_ARMED = [False]
 
 
+def _arm_look_consts(N):
+    """Hand the C look pair its tuning values FROM the Python models (session 128).
+
+    Every number the native `Zl1Look`/`NeckLook` port uses is read out of `core.npc_zl1_look` /
+    `land.neck_look` here rather than re-declared in the .pxi -- one canonical value per constant
+    (`knowledge/reference/constants.md`), and a change to a Python model cannot leave a stale copy
+    compiled into C behind it."""
+    from tww_sim.core import npc_zl1_look as Z
+    from tww_sim.land import neck_look as NL
+    N.init_zl1_consts(Z.CHAIN, Z.Zl1JntCtrl._MAX, Z.Zl1JntCtrl._MIN,
+                      Z.TURN_STEP_POS, Z.TURN_STEP_NEG, Z.JNT_CHASE, Z.EYE_OFF,
+                      Z.ATTN_Y_OFF, Z.PLAYER_EYE_Y_OFF, Z.ANM_MORF, Z.ANM_SPEED,
+                      Z.ANM_WAIT03, Z.ANM_LOOK, Z.RND_FLOOR)
+    N.init_neck_consts(NL._FLG80_PROCS, NL._FLG8M_PROCS, NL.LOOK_CONE_HALF, NL.CHASE,
+                       NL.PITCH_MAX, NL.PITCH_MIN, NL.YAW_CLAMP,
+                       NL.EYE_OFFSET, NL.HEAD_CENTER_OFFSET)
+
+
 def _bits(x):
     return struct.unpack('<I', struct.pack('<f', float(x)))[0]
 
@@ -353,7 +371,7 @@ class FreeRun:
 
     def __init__(self, seed_row, *, seed_nspeed=None, seed_old_pose=None, computed_pose=True,
                  camera=None, zl1=None, neck=None, seed_push=None, native_step=False,
-                 walls_tetra=None):
+                 walls_tetra=None, native_look=False):
         e = seed_row
         self.link = _seed_link(e, e['csangle'], seed_nspeed=seed_nspeed)
         self.computed_pose = bool(computed_pose)
@@ -367,6 +385,9 @@ class FreeRun:
         self.ty = e['tetra']['pos'][1]
         self.walls_tetra = walls_tetra
         self.camera = camera
+        # native-look mode moves BOTH look models into the C frame; the `_eye_next`/`_tattn`/`neck`
+        # properties then read the core, so this must be set before either is touched.
+        self._native_look = bool(native_look)
         # zl1 (a seeded Zl1Look) replaces the eye + tattn injections -- see the class doc.
         self.zl1 = zl1
         if zl1 is not None and not self.computed_pose:
@@ -409,7 +430,55 @@ class FreeRun:
             if walls_tetra is not None:
                 raise ValueError("native_step has no Tetra BG pass -- the C engine tracks her as a "
                                  "bare plow point; run the Python path for a walled Tetra")
+            if self._native_look and (zl1 is None or neck is None):
+                raise ValueError("native_look needs BOTH look models to seed from (zl1= and neck=)")
             self._core = self._build_core()
+        elif self._native_look:
+            raise ValueError("native_look is the C step running the look pair itself -- it needs "
+                             "native_step=True")
+
+    # --- live views on the C look state; `_live` is False while `_build_core` still seeds off these
+    # same attributes. Why read rather than mirror: knowledge/model/porting-the-look-pair.md
+    @property
+    def _live(self):
+        return self._native_look and self._core is not None
+
+    @property
+    def _eye_next(self):
+        return self._core.look_eye if self._live else self.__eye
+
+    @_eye_next.setter
+    def _eye_next(self, v):
+        self.__eye = v
+
+    @property
+    def _tattn(self):
+        return self._core.look_tattn if self._live else self.__tattn
+
+    @_tattn.setter
+    def _tattn(self, v):
+        self.__tattn = v
+
+    @property
+    def neck(self):
+        """Link's `NeckLook`. In native-look mode this is the SEED object, refreshed from the core
+        on access -- read `.x/.y/.z` freely; it is not what the frame steps."""
+        n = self.__neck
+        if self._live and n is not None:
+            n.x, n.y, n.z = self._core.neck_snapshot()
+        return n
+
+    @neck.setter
+    def neck(self, v):
+        self.__neck = v
+
+    def zl1_snapshot(self):
+        """Her whole hidden look state. Native-look runs step the C copy, so `self.zl1` stays the
+        SEED object (refreshing all of it every frame would cost more than the port saved) -- this is
+        the live read, and what the 0-ULP gate diffs against the Python model."""
+        if not self._native_look:
+            raise ValueError("zl1_snapshot is the native-look read; this run steps `self.zl1`")
+        return self._core.zl1_snapshot()
 
     def _build_core(self):
         """Build + seed the native `LandCore` for this seeded (f0) FreeRun -- the Stage-1 seeding
@@ -425,6 +494,7 @@ class FreeRun:
         if not _NATIVE_CONSTS_ARMED[0]:
             N.land_init_consts(_LAND_CONSTS)
             N.init_anim_consts(NATIVE_META_MAX, NATIVE_META_ATTR, NATIVE_HIO)
+            _arm_look_consts(N)
             _NATIVE_CONSTS_ARMED[0] = True
         link = self.link
         code2idx = [link._foot.ff._anim_idx[name] for name in ANIM_ORDER]
@@ -437,6 +507,13 @@ class FreeRun:
                             self.pend_link[0], self.pend_link[1],
                             self.pend_tetra[0], self.pend_tetra[1])
         core.low_life = link.low_life        # checkRestHPAnime's seeded half (wait-stop-pose.md)
+        if self._native_look:
+            # the look pair moves INTO the C frame here; `zl1`/`neck` are the SEED from now on and
+            # the live state is the core's (knowledge/model/porting-the-look-pair.md)
+            from tww_sim.core.npc_zl1_look import load as _zl1_load, CHAIN, ANM_NAME, ANM_WAIT03, ANM_LOOK
+            anms, _sk = _zl1_load()
+            data = N.zl1_anim_data(anms, CHAIN, ANM_NAME[ANM_WAIT03], ANM_NAME[ANM_LOOK])
+            core.seed_look(data, self.zl1, self.neck, self._head_mtx, self.ty)
         return core
 
     def clone(self):
@@ -454,6 +531,7 @@ class FreeRun:
         c.tx, c.tz, c.ty = self.tx, self.tz, self.ty
         c.walls_tetra = self.walls_tetra          # immutable mesh, shared by reference
         c.camera = self.camera.clone() if self.camera is not None else None
+        c._native_look = self._native_look        # before any look property is read or written
         c.zl1 = self.zl1.clone() if self.zl1 is not None else None
         c._eye_next = self._eye_next
         c.neck = self.neck.clone() if self.neck is not None else None
@@ -637,7 +715,12 @@ class FreeRun:
         the chain runs HERE, off the core's own `head_mtx_exec` / `head_top_exec`, and the run is the
         wired one 0-ULP (Link, Tetra, the eye, m3564) with only csangle supplied. That is what makes a
         coupled rollout affordable: the camera is the caller's (and for a roll fan it is a per-node
-        constant), while everything else is C plus two cheap Python models."""
+        constant), while everything else is C plus two cheap Python models.
+
+        NATIVE-LOOK MODE (session 128): those two models are no longer Python. They were measured at
+        91% of the coupled step, so `step_courtyard` now runs them itself and this method becomes one
+        C call plus the field sync -- the eye chain is inside the frame where it belongs (her eyePos
+        arms the NEXT frame's proc-9 re-aim), and the look state is read through the live views."""
         if csangle is not None:
             self.csangle = csangle
         if isinstance(inp, dict):
@@ -652,15 +735,22 @@ class FreeRun:
         if self.zl1 is not None:
             if eye is not None:
                 raise ValueError("eye injection and a wired zl1 look model are mutually exclusive")
-            eye = self._eye_next          # the modeled end-of-previous-frame eyePos
-        if eye is not None:
-            ex, ez, he = float(eye[0]), float(eye[-1]), 1
-        else:
+        if self._native_look:
+            # The core holds the eye and advances it itself; nothing to capture or inject.
             ex = ez = 0.0; he = 0
-        # setNeckAngle reads the frame-START m34DE, and her look reads her PRE-plow position --
-        # both must be captured before the core steps (the Python step's own ordering).
-        m34de_neck = int(core.m34de)
-        tetra_pre = (self.tx, self.ty, self.tz)
+            m34de_neck = None
+            tetra_pre = None
+        else:
+            if self.zl1 is not None:
+                eye = self._eye_next      # the modeled end-of-previous-frame eyePos
+            if eye is not None:
+                ex, ez, he = float(eye[0]), float(eye[-1]), 1
+            else:
+                ex = ez = 0.0; he = 0
+            # setNeckAngle reads the frame-START m34DE, and her look reads her PRE-plow position --
+            # both must be captured before the core steps (the Python step's own ordering).
+            m34de_neck = int(core.m34de)
+            tetra_pre = (self.tx, self.ty, self.tz)
         sf = core.step_courtyard(sx, sy, btn, trg, int(self.csangle) & 0xFFFF,
                                  0.0, 0.0, ex, ez, he, 0.0, 0.0, 0.0, 0, 1)   # native_push=1
         link = self.link
@@ -686,15 +776,19 @@ class FreeRun:
 
         # The look chain in the Python step's order (neck, then her execute), off the CORE's posed
         # chain -- no Python pose FK. knowledge/model/the-eye-was-the-only-thing-in-python.md
+        # In native-look mode the core already ran both models inside the frame; raise here whatever
+        # the Python one would have (the nogil step can only set a flag).
         nk = None
-        if self.neck is not None:
+        if self._native_look:
+            core.look_check()
+        elif self.neck is not None:
             look = self.neck.select_look_pos((core.pos_x, core.pos_y, core.pos_z), self._eye_next,
                                              m34de_neck, core._atn_state in (_ATN_LOCK, _ATN_RELEASE),
                                              bool(core._atn_list_present))
             self.neck.update(self._head_mtx, m34de_neck, core.state, look)
             nk = self.neck.local_38()
             self._head_mtx = core.head_mtx_exec(nk)
-        if self.zl1 is not None:
+        if self.zl1 is not None and not self._native_look:
             ht = core.head_top_exec(nk)
             eye_k, tattn_k = self.zl1.step(
                 pos_pre=tetra_pre, pos_post=(self.tx, self.ty, self.tz),
@@ -712,7 +806,8 @@ class FreeRun:
         if self.zl1 is not None:
             row['sim_eye'] = self._eye_next
             row['sim_tattn'] = self._tattn
-            row['sim_head_top'] = core.head_top_exec(nk)
+            if not self._native_look:
+                row['sim_head_top'] = core.head_top_exec(nk)
         return row
 
 

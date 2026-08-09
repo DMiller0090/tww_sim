@@ -155,6 +155,7 @@ you can triage in one glance.
 
 ### Model - land
 - **A fast engine for my sim already exists and my search does not use it - what is actually blocking it? My profile spreads the cost over five subsystems so no single port pays, is that real / how do I pick what to export from a C engine / why is the fastest configuration not the one to quote?** → [model/the-eye-was-the-only-thing-in-python.md](model/the-eye-was-the-only-thing-in-python.md)
+- **My profile says one model is 89% of a step - do I get 9x back by porting it? How do I port a STATEFUL anim model into C without silently changing it / what must a 0-ULP gate compare when the model has a long memory / why does my recorded window not exercise the thing I ported?** → [model/porting-the-look-pair.md](model/porting-the-look-pair.md)
 - **How does the land sim accumulate position (f32) / the `Y171` partial regime / the 7 red ULP tests?** → [model/land-sim.md](model/land-sim.md)
 - **How does floors mode follow a sloped floor (Phase G) / the zero atan cell / m35B8 / m35C4 (setStepsOffset) / field_0x030 / what does a floors anchor seed carry?** → [model/ground-model.md](model/ground-model.md)
 - **How does the land planner reach a target (x,z) / the live-valid stick set / the C-up freeze to z=2000 / seam-clip vs RTA bars?** → [model/land-planner.md](model/land-planner.md)
