@@ -268,7 +268,7 @@ def junction_alphabet(run, hl, *, ess_step=4, aim_step=64):
 
 def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_window=0x2800,
                dead=None, corridor=None, target_along=None, thread=None, resid=None,
-               fan_center=None, fan=None, rows=None, stations=None, collect=None):
+               fan_center=None, fan=None, rows=None, stations=None, pf=None, collect=None):
     """**Is this junction endpoint ROLLABLE at all, how STRAIGHT can its roll be, where does it
     ARRIVE, and where would the ESCAPE land from it?** -- an aim sweep, returning
     ``dict(rate, off, off_rate, along, n, arrive, over, land, land_frames, land_off, land_over,
@@ -344,6 +344,18 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     other half cannot be paid. Given a `cloud_land.herd_stations` map and a fan carrying the THROW
     (session 114's rigid Link displacement, `cloud_land.residual_fan`), the predictor prices both
     (`cloud_land.predict_bound`), and ``cloud_d_station``/``cloud_arr`` report the arrival it chose.
+
+    ``pf`` (session 134) is the axis the ENDGAME is denominated in, brought forward to the cut that
+    decides which endpoints exist. A `handoff.PairFrame` here reports ``l0_max`` -- the largest
+    `handoff.tetra_lateral` any surviving roll DELIVERS, her offset from the clip roll's approach
+    line, where the genuine side is positive. Session 126 measured the whole remaining gap in this
+    one number: the last roll buys at most **+80.4 u** of crossing while keeping Link's runway band,
+    so cycle 2 must hand over ``l0 >= -80.4`` against the -149..-264 the banked beam delivers. It is
+    ONE DOT PRODUCT on the delivered Tetra -- free beside the rollout that already happened -- where
+    the endpoint keep it complements (`extend_cycle`'s ``handoff_keep``) costs ~1.5 s a survivor and,
+    per session 107's standing warning, can only reorder the set this screen already fixed.
+    ``l0_off``/``l0_along`` are the delivering roll's own squareness and arrival, so what the
+    crossing costs on the other axes is legible rather than inferred.
 
     ``sep`` -- Link's separation from Tetra ALONG the herd line (``-lead``, so + = he is behind her) --
     rides along free because the sweep already computes the metrics, and it is reported rather than
@@ -427,6 +439,8 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
             land = A.thread_miss(la, ll, thread)['miss']
             lframes = O.thread_frames(la, ll, thread)
         sep = -m['lead']                     # + = Link is BEHIND her, the pursuit side
+        # the endgame's own axis, one dot product on the Tetra this roll delivered (s134)
+        l0 = None if pf is None else _HO().tetra_lateral(pf, (rr.tx, rr.tz))
         cloud = None
         if fan and rows:
             # the CLOUD form of the same axis: cheapest whole candidate over fan x rows, microseconds
@@ -440,7 +454,7 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
         if collect is not None:
             collect.append(dict(along=al, lat=lat, off=off, over=over, rate=m['per_frame'],
                                 link_lat=m['lat'], sep=sep, aim=aim, want=_want, jf=endpoint['jf'],
-                                land=land, land_frames=lframes,
+                                land=land, land_frames=lframes, l0=l0, frames=m['frames'],
                                 cloud_bound=(cloud['bound'] if cloud else None),
                                 cloud_miss=(cloud['miss'] if cloud else None),
                                 cloud_d_station=(cloud['d_station'] if cloud else None),
@@ -451,6 +465,7 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
                         arrive=None if over is None else abs(over), over=over,
                         land=land, land_frames=lframes, land_off=off, land_over=over,
                         sep_max=sep, cloud_sep=sep,
+                        l0_max=l0, l0_off=off, l0_along=al,
                         cloud_bound=(cloud['bound'] if cloud else None),
                         cloud_miss=(cloud['miss'] if cloud else None),
                         cloud_row=(cloud['row_idx'] if cloud else None),
@@ -469,6 +484,8 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
         if land is not None and land < best['land']:
             best['land'], best['land_frames'] = land, lframes
             best['land_off'], best['land_over'] = off, over
+        if l0 is not None and l0 > best['l0_max']:
+            best['l0_max'], best['l0_off'], best['l0_along'] = l0, off, al
         if cloud is not None and (best['cloud_bound'] is None
                                   or cloud['bound'] < best['cloud_bound']):
             best['cloud_bound'], best['cloud_miss'] = cloud['bound'], cloud['miss']
@@ -1328,7 +1345,7 @@ def _state_tag(run):
             round(run.link.speedF, 2), round(run.tx, 1), round(run.tz, 1), int(run.csangle) >> 5)
 
 
-def _probe_pool(ends, cap, sq_key=None, tag=None, spread=True, jf_spread=False):
+def _probe_pool(ends, cap, sq_key=None, tag=None, spread=True, jf_spread=False, l0_key=None):
     """**Which endpoints get roll-probed when there are more than ``cap`` of them.**
 
     `extend_cycle` takes the first ``cap`` of `junction_beam`'s return, and session 70 measured that
@@ -1365,6 +1382,21 @@ def _probe_pool(ends, cap, sq_key=None, tag=None, spread=True, jf_spread=False):
     The conclusion the numbers point at is not a better cut here: squareness that survives to a
     continuable roll is a property of the cycle EXIT, and that is one stage further up.
 
+    ``l0_key`` (session 134) is a share by the axis the ENDGAME is denominated in -- her offset from
+    the clip roll's approach line (`handoff.tetra_lateral`) at the endpoint, descending. Both orders
+    above are blind to it, and the cap makes that decisive rather than cosmetic: a real cycle-1
+    parent yields **4292** unique endpoints of which **250 (5.8%)** are screened at all, chosen by
+    flatness and junction-frame band. Measured over the eight banked parents, the screened
+    population's best DELIVERED ``l0`` is **-90.39** against a beam that hands over **-183.41**, so
+    what the stage produces and what its cuts keep differ by 93 u on the one number session 126
+    reduced the whole endgame to. This is the earliest place that axis can be asked for, and it is
+    free -- one dot product per endpoint, no rollout.
+
+    An endpoint's own ``l0`` is NOT a predictor of what its roll delivers (session 126's trap: two
+    cycle-2 nodes at an identical -183.41 reach -27.10 and +19.65), which is exactly why it is a
+    share and never the order: it buys the screen a look at the endpoints the other two orders
+    structurally never show it, and `roll_probe` then decides.
+
     ``spread=False`` is that one stage up (`junction_square_probe`, session 69): the same prefix +
     squareness mix with NO per-state cap. Where this function's job is to pick endpoints to CARRY, the
     probe's job is to score an exit, and there the cap is what lies -- measured on three real exits,
@@ -1373,11 +1405,13 @@ def _probe_pool(ends, cap, sq_key=None, tag=None, spread=True, jf_spread=False):
     single pools are worse than the mix in one direction or the other (prefix-only
     ``1.34 / none / 27.02``, squarest-only ``none / 141.83 / 14.67``)."""
     ends = list(ends)
-    if len(ends) <= int(cap) or (sq_key is None and not jf_spread):
+    if len(ends) <= int(cap) or (sq_key is None and not jf_spread and l0_key is None):
         return ends[:int(cap)]
     orders = [ends]
     if sq_key is not None:
         orders.append(sorted(ends, key=sq_key))
+    if l0_key is not None:
+        orders.append(sorted(ends, key=l0_key))
     if jf_spread:
         # the junction-frame bands, round-robin: the i-th of every jf before the (i+1)-th of any
         seen = {}
@@ -1410,7 +1444,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  cloud_rots=None, cloud_cap=None, cloud_fan=None, cloud_stations=None,
                  cloud_exit_runs=None, cloud_exit_step=None, cloud_exit_half=None,
                  delivered_keep=False, handoff_keep=False, handoff_pf=None, handoff_rungs=None,
-                 handoff_roots=True, handoff_sign=True, env=None, verbose=False):
+                 handoff_roots=True, handoff_sign=True, l0_keep=False, env=None, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1598,6 +1632,23 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     can only name the least-bad member of a survivor set the per-aim screen already fixed. What it
     can afford at the screen is the SIGN.
 
+    ``l0_keep`` (session 134) is that warning acted on, and it is ``handoff_keep``'s axis moved to
+    the two cuts UPSTREAM of it -- the probe pool (`_probe_pool`'s ``l0_key``) and the per-aim screen
+    (`roll_probe`'s ``pf`` -> ``l0_max``). Session 126 reduced the whole remaining endgame to one
+    number, ``l0 >= -80.4`` handed over by cycle 2, and measured cycle 2 handing over -183.41. What
+    this stage's population actually reaches was never asked until now: screened over the eight
+    banked cycle-1 parents it is **-90.39**, 10 u short of the bar and 93 u better than the beam
+    keeps. So the gap was mostly a CUT, not a reachability -- the endpoints that cross are the ones
+    riding 25-50 u off the push corridor at a positive lateral, and ``corridor_keep`` / ``square_keep``
+    are the orders that refuse exactly those. Those keeps are not wrong; they are HERD constraints,
+    and by the last two cycles there is no more herding to do (session 123 deleted the walk-away,
+    session 125 moved the razor onto Link). Kept as a share for `_mixed_beam`'s standing reason, so
+    whatever is best by ``rank`` still survives.
+
+    Why it belongs at the screen and not only at the endpoint: ``l0`` is ONE DOT PRODUCT on a Tetra
+    the rollout already produced, where `handoff.endpoint`'s locus solve is ~1.5 s a survivor. The
+    axis is affordable exactly where the set is decided.
+
     ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) pass the escape atom's two
     unswept knobs and its frames rank through ``escape_keep`` (`escape_probe`, `away_walk.probe`):
     where the conversion frames PUSH her, which on four real arrivals is worth landing 4.90 -> 0.33,
@@ -1645,6 +1696,11 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     # the CAMERA-target cut's key: the landing on the last cycle, the cheap probe mid-chain (s70)
     tcs_key = (landing_key(hl, th_j, resid) if tcs_landing else None)
     tcs_probe = square_probe_key(hl, box, cor_j) if tcs_square else None
+    # the endgame's frame, built ONCE if either customer wants it (the endpoint keep or the screen)
+    pf_j = ((handoff_pf if handoff_pf is not None else _HO().PairFrame())
+            if (handoff_keep or l0_keep) else None)
+    l0_key = ((lambda e: -_HO().tetra_lateral(pf_j, (e['run'].tx, e['run'].tz)))
+              if l0_keep else None)
     tcs_require = None
     if tcs_escape:
         # the LAST cycle's camera has two customers the cut never priced: the escape's snap window
@@ -1666,13 +1722,14 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                 print("    (probing %d of %d unique endpoints -- capped)"
                       % (probe_cap, len(uniq)))
             uniq = _probe_pool(uniq, probe_cap, sq_key if square_pool else None,
-                               jf_spread=arrive_keep)
+                               jf_spread=arrive_keep, l0_key=l0_key)
         rdead = {}
         scored = [(p, e) for p, e in ((roll_probe(e, hl, step=probe_step, dead=rdead,
                                                  corridor=cor_j, target_along=target_along,
                                                  thread=th_land, resid=resid,
                                                  fan=cloud_fan, rows=(rows_j if cloud_fan else None),
                                                  stations=cloud_stations,
+                                                 pf=(pf_j if l0_keep else None),
                                                  **pkw), e)
                                       for e in uniq) if p is not None]
         scored.sort(key=lambda t: -t[0]['rate'])
@@ -1697,6 +1754,11 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             orders.append([e for _p, e in sorted(scored, key=lambda t: (t[0]['cloud_bound'] is None,
                                                                        t[0]['cloud_bound']
                                                                        or 0.0))])
+        if l0_keep and scored:
+            # ...and a share by how far ACROSS the clip roll's approach line the roll carries her --
+            # the endgame's own axis, at the cut that decides which endpoints exist (s134)
+            orders.append([e for _p, e in sorted(scored, key=lambda t: (t[0]['l0_max'] is None,
+                                                                       -(t[0]['l0_max'] or 0.0)))])
         if len(orders) > 1:
             kept = _mixed_beam(orders, int(jn_keep),
                                ident=lambda e: (_physics_tag(e['run']), e['log'][-1]['stickX'],
@@ -1713,6 +1775,12 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
             print("    (%d of %d endpoints roll; furthest surviving aim %.2f deg of the %.2f deg "
                   "half-window)" % (len(scored), len(uniq), ed * _BAM_DEG,
                                     scored[0][0]['fan_half'] * _BAM_DEG))
+            if l0_keep:
+                # the SCREENED frontier, which is what the cut below gets to choose from
+                l0s = [p['l0_max'] for p, _e in scored if p['l0_max'] is not None]
+                print("    (screened l0 %+.2f .. %+.2f over %d endpoints; the bar cycle 2 must hand"
+                      " over is -80.4)" % (min(l0s), max(l0s), len(l0s)) if l0s else
+                      "    (screened l0: none)")
         for j in kept:
             for cand in roll_candidates(j, hl, box, aim_keep=aim_keep, half_window=half_window,
                                         step=step, key=key, require_quality=require_quality,
@@ -1726,7 +1794,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     if handoff_keep and out:
         # THE ZERO-WALK-AWAY SHAPE'S OWN KEEP -- see the docstring's ``handoff_keep``
         HO = _HO()
-        pf = handoff_pf if handoff_pf is not None else HO.PairFrame()
+        pf = pf_j
         rungs = HO.RUNWAYS if handoff_rungs is None else tuple(handoff_rungs)
         for n in out:
             r = n['run']

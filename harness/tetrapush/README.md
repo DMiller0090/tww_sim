@@ -1710,6 +1710,50 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE CROSSING WAS A CUT, NOT A REACHABILITY -- AND THE HERD PUSHES 64 DEG OFF THE AXIS
+            THE ENDGAME IS DENOMINATED IN (session 134).** Session 126 reduced the endgame to one
+            number, ``l0 >= -80.4`` handed over by cycle 2 against the -183.41 it delivers, and nine
+            sessions read that as 103 u of unreachable distance. It is mostly a CUT. One new truth
+            page,
+            [`knowledge/strategy/the-axis-the-endgame-is-denominated-in.md`](../../knowledge/strategy/the-axis-the-endgame-is-denominated-in.md).
+            - **THE TWO GRADIENTS ARE NOT EQUAL, AND THAT IS THE WHOLE FINDING.** ``l0`` is linear in
+              her herd coordinates -- ``0.43448*along + 0.90068*lat - 411.99`` -- so a unit of
+              LATERAL push buys **2.07x** what a unit of down-herd push buys, and a unit along the
+              pair frame's own ``q`` buys 1.0 against the herd's 0.43. The herd line is **64.25 deg**
+              off ``q``. Not a bug in the line: it aims at the genuine-coord centroid and the 288
+              coords ARE on it (herd along 937.5-984.1, lat -2.3..+7.9). What changed is the target
+              -- s123 deleted the walk-away and s125 moved the razor onto Link, so the ask is a
+              HALF-PLANE plus a pair alignment, and a half-plane is reached fastest along its normal.
+            - **WHAT THE STAGE PRODUCES AND WHAT ITS CUTS KEEP DIFFER BY 93 u.** Screened over the
+              eight banked cycle-1 parents (contact fan, 250 endpoints each) the population's best
+              DELIVERED ``l0`` is **-90.39**; the beam hands over **-263.83..-149.08**. With the axis
+              at the probe POOL as well, one parent at 1000 endpoints reaches **-63.15** and **26 of
+              737 rolls clear the -80.4 bar**. The bar is met. Two structural reasons it was not
+              before: the pool screens **250 of 4292 (5.8%)** by a flatness prefix and a jf spread,
+              both blind to the axis; and the crossing rolls ride **25-86 u off the push corridor**
+              at a positive lateral (the winner: along 620.6, **lat +88.0**, jf 11), which is exactly
+              what ``corridor_keep``/``align_keep``/``square_keep`` rank against. Those keeps are
+              HERD constraints and the last two cycles are no longer herding.
+            - **THE PLOW CAGE IS THREE HERD-RELATIVE PREDICATES, AND ONLY THE DIRECTION BINDS.**
+              `in_pursuit_box` (lead band + lateral band + bearing within 21.35 deg of the herd
+              bearing), `two_roll.alive` and `_frontier_score`. At the banked cycle-1 exit the pair is
+              **58.91 u** apart -- inside the human's own recorded **40.4-85.2 u** plow band -- and in
+              the box on the herd axis, while on ``q`` the same state reads lead -18.28 / lat +56.00 /
+              delta +71.93 deg and fails all three. Freed to its coordinate-free content the stage
+              returns **21x more surviving rolls** and moves a coarse two-parent frontier
+              **-136.00 -> -120.71**. Real, but the pool and the keeps are the bigger lever.
+            - **SHIPPED**: `roll_probe(pf=)` -> ``l0_max``/``l0_off``/``l0_along`` (one dot product on
+              the Tetra the rollout already produced), `_probe_pool(l0_key=)`, `extend_cycle
+              (l0_keep=)`, all additive and default OFF. Gate
+              [`tests/test_l0_screen.py`](../../tests/test_l0_screen.py) (7 + 1 slow) against a banked
+              artefact [`fixtures/courtyard_l0_screen_nodes.json`](../../fixtures/courtyard_l0_screen_nodes.json).
+            - **AND THE CLIP ROLL'S THRUST IS NOT FREE AFTER ALL.** s126 quoted thrust 9 at bound
+              92.50 vs 97.35 (4.85 frames). Swept thrust 9/10/11 x a 61-value facing ladder at 5 BAM
+              on a coarse 135-cell box: the facing window WIDENS from s125's one value (thrust 14) to
+              **12-23 facings**, but **ZERO of them admit an UNBROKEN family** -- contact breaks
+              before the cut, so the cheap thrust is not a zero-walk-away plan. The coarse box
+              under-samples ~3x against the fine one (thrust 14 reads 5/1 here vs 15/13 fine), so this
+              is a SCREEN result and the fine box is what would settle it.
       - [x] **THE STAGE FIVE SESSIONS WERE SPENT ON IS NOW 2% OF A CYCLE, AND A NODE'S 274 CHILDREN
             ARE ONE FRAME (session 133).** The queued next step was another ROLL-stage port
             (`CourtyardFleet`). Measured before building it -- s131's own lesson, applied to the
