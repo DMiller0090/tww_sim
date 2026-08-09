@@ -1649,6 +1649,15 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     the rollout already produced, where `handoff.endpoint`'s locus solve is ~1.5 s a survivor. The
     axis is affordable exactly where the set is decided.
 
+    It is a share at THREE cuts, and the third was measured to be load-bearing: a chained run with
+    the pool and the screen alone handed over **-160.62** where the same stage's screened population
+    reaches **-90.39**. The roll stage was exonerated -- re-opening each kept node at its own
+    pre-roll endpoint, `roll_candidates` delivered exactly what that endpoint's screen promised
+    (0.00 u lost at three of four, and one node BEAT its screen by 4.73 u on a wider fan) -- so what
+    dropped the high-``l0`` survivors was the FINAL beam cut, which sorts on the frame rank and had
+    no share for the axis. A keep that only reaches two of three cuts is a keep the third one
+    undoes.
+
     ``escape_flip`` / ``escape_rots`` / ``escape_rank`` (session 72) pass the escape atom's two
     unswept knobs and its frames rank through ``escape_keep`` (`escape_probe`, `away_walk.probe`):
     where the conversion frames PUSH her, which on four real arrivals is worth landing 4.90 -> 0.33,
@@ -1903,6 +1912,11 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     if align_keep and out:
         # ...and a share by Link's lateral offset from her, the axis that predicts a terminal
         orders.append(sorted(out, key=lambda n: abs(n['m']['lat'])))
+    if l0_keep and out:
+        # ...and a share by how far ACROSS the approach line the cycle actually left her, which the
+        # frame rank cannot see and the endpoint keep alone does not survive (s134 -- the docstring)
+        orders.append(sorted(out, key=lambda n: -_HO().tetra_lateral(pf_j, (n['run'].tx,
+                                                                            n['run'].tz))))
     if handoff_keep and out:
         # ...and a share by the RAW gap, so an endpoint that reaches the entry curve is never cut by
         # the frame rank that averages a few units of it away against a whole herd's frames

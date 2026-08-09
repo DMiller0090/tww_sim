@@ -1742,9 +1742,18 @@ from scratch. Land the edits first, then gate.
               delta +71.93 deg and fails all three. Freed to its coordinate-free content the stage
               returns **21x more surviving rolls** and moves a coarse two-parent frontier
               **-136.00 -> -120.71**. Real, but the pool and the keeps are the bigger lever.
+            - **AND A KEEP THAT REACHES TWO OF THREE CUTS IS ONE THE THIRD UNDOES.** The CHAINED
+              re-cut with the pool and the screen alone hands over **-160.62 at 48 f**, against the
+              -90.39 the same stage's population screens. Diagnosed, not guessed: re-opening each kept
+              node at its own pre-roll endpoint (`beam_io.split_last_roll`) and re-screening it,
+              `roll_candidates` delivers exactly what that endpoint promised -- **0.00 u lost at 3 of
+              4, one node +4.73 u** on the wider fan -- and the kept nodes' endpoints screen at
+              ``l0_max`` -165..-269. So the beam is carrying LOW-``l0`` endpoints and the leak is the
+              FINAL beam cut, which sorts on the frame rank. An ``l0`` share now sits there too.
             - **SHIPPED**: `roll_probe(pf=)` -> ``l0_max``/``l0_off``/``l0_along`` (one dot product on
               the Tetra the rollout already produced), `_probe_pool(l0_key=)`, `extend_cycle
-              (l0_keep=)`, all additive and default OFF. Gate
+              (l0_keep=)` -- a share at the POOL, the SCREEN and the BEAM cut -- all additive and
+              default OFF. Gate
               [`tests/test_l0_screen.py`](../../tests/test_l0_screen.py) (7 + 1 slow) against a banked
               artefact [`fixtures/courtyard_l0_screen_nodes.json`](../../fixtures/courtyard_l0_screen_nodes.json).
             - **AND THE CLIP ROLL'S THRUST IS NOT FREE AFTER ALL.** s126 quoted thrust 9 at bound

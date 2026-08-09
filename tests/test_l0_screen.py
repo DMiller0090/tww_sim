@@ -239,3 +239,27 @@ def test_extend_cycle_builds_no_pair_frame_unless_a_customer_asks():
     assert 'l0_key=l0_key' in src
     sig = inspect.signature(F.extend_cycle).parameters
     assert sig['l0_keep'].default is False
+
+
+def test_the_axis_reaches_all_three_cuts():
+    """**A keep that reaches two of three cuts is one the third undoes** -- session 134, measured.
+
+    A chained re-cut carrying the axis at the POOL and the SCREEN only handed over **-160.62** where
+    the same stage's screened population reaches **-90.39**. The roll stage was exonerated by
+    re-opening every kept node at its own pre-roll endpoint: `roll_candidates` delivered exactly what
+    that endpoint's screen promised (0.00 u lost at three of four, one node +4.73 u on the wider
+    fan). What dropped the high-``l0`` survivors was the FINAL beam cut, which sorts on the frame
+    rank -- the kept nodes' own endpoints screened at ``l0_max`` -165..-269, so the beam was carrying
+    LOW-``l0`` endpoints rather than high-``l0`` ones whose rolls under-delivered.
+
+    Gated by source because that is where the claim lives -- a cut silently losing its share is
+    exactly the failure this cost a run to find, and it does not show up as an exception."""
+    import inspect
+    src = inspect.getsource(F.extend_cycle)
+    assert src.count('if l0_keep and scored:') == 1, 'the SCREEN share'
+    assert src.count('if l0_keep and out:') == 1, 'the BEAM-cut share'
+    assert 'l0_key=l0_key' in src, 'the POOL share'
+    # the beam-cut share must sit in the same ``orders`` list the other keeps share
+    tail = src[src.index('orders = [out]'):]
+    assert 'if l0_keep and out:' in tail
+    assert tail.index('if l0_keep and out:') < tail.index('if handoff_keep and out:')
