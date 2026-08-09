@@ -58,6 +58,7 @@ import math
 import struct
 import warnings
 
+from tww_sim.core.camera.land_cam import pad_from_raw
 from tww_sim.core.collision import acch_crr_pos
 from tww_sim.core.fp import f32, fadds
 from tww_sim.core.npc_zl1 import FOLLOW_ENGAGE_DIST
@@ -690,15 +691,16 @@ class FreeRun:
             if locked and self._tattn is None:
                 raise ValueError("the sim's attention lock is engaged but no tattn (the locked "
                                  "actor's attention_info.position) was ever injected")
-            from tww_sim.core.camera.land_cam import pad_from_raw
             attn_y = float(fadds(f32(92.5), f32(link._foot.ff.base[1][3])))
             cam_link = dict(pos=(link.pos_x, link.pos_y, link.pos_z), facing=link.facing,
                             attn_pos=(link.pos_x, attn_y, link.pos_z))
             attn = dict(truth=locked, lockon=locked,
                         target_attn=self._tattn if locked else None)
-            self.csangle = self.camera.step(pad_from_raw(_raw_dict(acted_raw)), cam_link, attn)
+            self.csangle = self.camera.step(cam_pad(acted_raw), cam_link, attn)
             row['sim_csangle'] = self.csangle
             row['sim_attn_y'] = attn_y
+            # published so a camera can be walked off this frame's arguments: roll_kernel.SharedBody
+            row['sim_cam_in'] = (cam_link, attn)
         return row
 
     def _step_native(self, inp, csangle=None, eye=None, record=True):
@@ -924,6 +926,15 @@ def _raw_dict(inp):
                 triggerL=int(t[3]) if len(t) > 3 else 0,
                 substickX=int(t[4]) if len(t) > 4 else 128,
                 substickY=int(t[5]) if len(t) > 5 else 128)
+
+
+def cam_pad(inp):
+    """The `LandCamera` pad for a raw controller input -- the camera's whole view of the controller.
+
+    Public, and used by `step` itself, so a caller that walks a camera outside a `FreeRun` (a
+    `roll_kernel` tcs family drives one over a shared body's arguments) reads the pad through the
+    same expression the run does rather than a second copy of it."""
+    return pad_from_raw(_raw_dict(inp))
 
 
 def _step_args(inp):

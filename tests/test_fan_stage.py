@@ -1,5 +1,9 @@
-"""**The gate for the fan kernel INSIDE the herd search's roll stage** (session 129) -- written
+"""**The gate for the kernels INSIDE the herd search's roll stage** (sessions 129-130) -- written
 before the wiring, and failing.
+
+Two kernels now, one per half of the stage: `roll_kernel`'s fan under R1 (the aim screen, s129) and
+its `SharedBody` under R2 (the camera-target pass, s130). ``env`` turns both on, so each is ALSO
+run alone here -- otherwise two ports could cancel, and a failure would not name its half.
 
 `roll_kernel` is already gated against `two_roll.roll_segment` on the whole record
 (`tests/test_roll_kernel.py`). What is NOT gated by that, and is the entire risk of putting it in
@@ -206,7 +210,7 @@ def _both(node, hl, box, env, **kw):
     kw.setdefault('l_windows', GATE_LW)
     if 'center' in node:
         kw.setdefault('fan_center', node['center'])
-    ref = F.roll_candidates(node, hl, box, **kw)
+    ref = F.roll_candidates(node, hl, box, shared_body=False, **kw)
     fan = F.roll_candidates(node, hl, box, env=env, **kw)
     return ref, fan
 
@@ -300,6 +304,45 @@ def test_the_seed_exercises_both_branches_of_the_screen(env, hl, box, prologue):
             pruned += 1
     assert kept and pruned, 'the seed fan is all-survivors or all-pruned (kept %d, pruned %d)' \
                             % (kept, pruned)
+
+
+def test_each_kernel_carries_the_stage_on_its_own(env, hl, box, prologue):
+    """**R1 and R2 are separate ports and are gated separately** (session 130).
+
+    ``env`` turns both on at once, so a stage comparison with it would pass if the two kernels'
+    errors cancelled -- and, worse, would not say which one moved. R1 is `roll_kernel`'s fan; R2 is
+    the shared roll body. Each is run alone against the fully wired stage, and both together
+    against it, so a regression names its own half."""
+    kw = dict(half_window=GATE_HALF, step=GATE_STEP, l_windows=GATE_LW,
+              fan_center=prologue['center'])
+    wired = F.roll_candidates(prologue, hl, box, shared_body=False, **kw)
+    assert wired, 'the prologue produced no candidate -- the comparison would be vacuous'
+    r1_only = F.roll_candidates(prologue, hl, box, env=env, shared_body=False, **kw)
+    r2_only = F.roll_candidates(prologue, hl, box, shared_body=True, **kw)
+    both = F.roll_candidates(prologue, hl, box, env=env, **kw)
+    assert _cands(r1_only) == _cands(wired), 'the fan alone moved the stage'
+    assert _cands(r2_only) == _cands(wired), 'the shared body alone moved the stage'
+    assert _cands(both) == _cands(wired)
+
+
+def test_the_shared_body_really_runs_on_this_seed(env, hl, box, prologue):
+    """The R2 comparison above is only worth something if a shared body actually FORMS here -- an
+    aim that talks, or one whose roll never fires, silently falls back to the wired path and the
+    equality would then be two names for the same code. Checked on the aims the screen keeps."""
+    kw = dict(half_window=GATE_HALF, step=GATE_STEP, l_windows=GATE_LW,
+              fan_center=prologue['center'])
+    kept = F.roll_candidates(prologue, hl, box, shared_body=False, **kw)
+    assert kept
+    seen = 0
+    for c in kept:
+        body = RK.SharedBody(prologue['run'], c['knobs']['aim'],
+                             l_window=tuple(c['knobs']['l_window']))
+        assert body.ok, 'no shared body for a kept aim %r' % (c['knobs']['aim'],)
+        assert 1 < body.branch < c['frames'] - prologue['frames'], \
+            'the body shares everything or nothing (branch %d of %d segment frames)' \
+            % (body.branch, c['frames'] - prologue['frames'])
+        seen += 1
+    assert seen
 
 
 def test_the_screen_order_survives_the_fan_being_evaluated_per_l_window(stage_keep1):

@@ -1710,6 +1710,49 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE CAMERA-TARGET PASS SHARES THE ROLL, AND THE BRANCH IS READ OFF THE ROLL RATHER
+            THAN SET (session 130).** s129's next step, done. One new truth page,
+            [`knowledge/strategy/the-shared-roll-body.md`](../../knowledge/strategy/the-shared-roll-body.md).
+            - **THE DIVERGENCE FRAME, MEASURED FIRST** (the s129 handoff's own condition). Over the
+              real 25-value grid x 5 aims x 3 L windows the physics is bit-identical for **17 of a
+              22-frame segment**, and the first frame that differs is exactly the first frame after
+              the `FRONT_ROLL` block -- so `roll_kernel.SharedBody` reads its ``branch`` off the
+              roll's own end as it steps, and is right for whatever THIS node's roll is.
+              [`tests/test_tcs_kernel.py`](../../tests/test_tcs_kernel.py) gates both halves
+              separately: SAFETY (no frame before it depends on the target, any target) and
+              TIGHTNESS (some target diverges AT it -- per aim it can be later, or never, when the
+              roll ends in proc 6 with Link stopped and there is nothing left to steer).
+            - **ONE BODY'S CAMERA ARGUMENTS SERVE THE WHOLE FAMILY, PAST THE DIVERGENCE.** They are
+              Link's pose and the attention, so they are shared -- and measured, they reproduce
+              every target's committed csangle 0-ULP over the WHOLE segment, including frames where
+              that target's physics has already diverged (`FreeRun`'s "csangle is
+              position-independent in this regime", cashed in). `camera_walks` walks them as a
+              PREFIX TREE -- targets that have delivered the same C-stick bytes share one camera
+              object -- **775 camera steps -> 529**. `FreeRun.step` now publishes the arguments as
+              ``sim_cam_in`` so the walk reads the pad and the law through the run's own expression.
+            - **THE FAN WOULD HAVE BEEN THE WRONG LEVER TWICE, AND ONE OF THEM ONLY SHOWED UP
+              BECAUSE A GREEN GATE WAS CHECKED FOR VACUITY.** (1) Fanning over camera targets is a
+              LOSS: a camera trace is ~32 wired steps against the 20-step rollout it replaces.
+              (2) A native endpoint cannot be stepped by the next stage -- `junction_quality`
+              scored IDENTICALLY on native and wired endpoints, 250 of 250, and that was **two
+              `None`s 250 times** (`scored: 0/25` on this node). The states behind the tie differ:
+              a centred C-stick does NOT freeze csangle on the spot, the camera chases for several
+              frames, so the six-frame glide off a frozen-csangle endpoint is not the wired one
+              (1 of 25, 0.009 u). The same wrong assumption, taken as a walk shortcut, collapses
+              775 camera steps to 10 and is off by 178 BAM at frame 5.
+            - **WHAT IT COST AND WHAT IS LEFT** (counted, at the aim step s129's row was measured
+              at, so the rows compare): **2251 wired + 4566 native -> 1030 wired + 4566 native +
+              701 camera-only**, **1.088 s -> 0.629 s (1.73x)**, 4.82x against the all-wired stage,
+              same five candidates. At `cycle1_nodes`' own shipped aim step (twice the fan) the
+              same stage is 11235 -> 1030 wired and 4.871 s -> 0.719 s (**6.78x**) -- R2's cost
+              does not grow with the fan. **654 of the surviving 1030 wired steps (63%) are
+              `junction_quality`**, 376 the bodies and tails.
+            - The port is a DROP-IN: what comes out is a genuine wired run at the genuine endpoint,
+              so `junction_quality`, the ``tcs_probe``/``tcs_key`` orders and the next cycle's
+              junction are untouched, and it works on EVERY cycle rather than only plainly-ranked
+              ones. ``shared_body`` defaults to on wherever ``env``/``twin`` already is;
+              [`tests/test_fan_stage.py`](../../tests/test_fan_stage.py) now runs R1 and R2 alone
+              as well as together, so two ports cannot cancel and a failure names its half.
       - [x] **THE SCREEN IS ON THE FAN KERNEL, AND IT NEVER NEEDED RUNS AT ALL -- 66% OF THE STAGE
             IS NOW C (session 129).** s128's next step, done. One new truth page,
             [`knowledge/strategy/a-screen-needs-a-record-not-a-run.md`](../../knowledge/strategy/a-screen-needs-a-record-not-a-run.md).

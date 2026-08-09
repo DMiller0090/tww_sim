@@ -986,7 +986,7 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                     aim_keep=3, min_roll=20.0, tcs_keep=3, target_css=None,
                     fan_center=None, require_quality=True, key=None, mixed_aims=True,
                     tcs_key=None, tcs_probe=None, tcs_require=None, corridor=None,
-                    tcs_span=None, tcs_step=None, env=None, twin=None):
+                    tcs_span=None, tcs_step=None, env=None, twin=None, shared_body=None):
     """The cycle's ROLL stage from a junction endpoint, factored by the separability above.
 
     R1: sweep the reachable aim fan (camera frozen) x the L windows, prune talk-unsafe / weak /
@@ -1033,20 +1033,34 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
     values for that cycle are `ESCAPE_TCS_SPAN` / `ESCAPE_TCS_STEP`, the roll's own measured slew reach
     (see those constants); mid-chain the defaults are unchanged.
 
-    ``env`` / ``twin`` (session 129) run R1 -- and ONLY R1 -- on `roll_kernel`'s fan instead of one
-    wired `roll_segment` per aim. It is the screen's own economy made explicit: the fan is where 84%
-    of a stage goes (s126), every run it makes is DISCARDED (only ``(want, aim, lw)`` survives the
-    cut), and the csangle a roll commits does not depend on the aim -- so a fan of ~90 aims pays for
-    one camera and ~90 native rollouts. R2 stays wired because its survivors ARE their runs: the
-    candidate carries one forward and `junction_quality` steps it. Pass ``env`` to have the twin
-    built per node (`roll_kernel.node_twin`), or ``twin`` directly if the caller already holds one.
-    Gated stage-for-stage against the wired path in `tests/test_fan_stage.py`; the records
-    themselves are gated in `tests/test_roll_kernel.py`.
+    ``env`` / ``twin`` (session 129) run R1 on `roll_kernel`'s fan instead of one wired
+    `roll_segment` per aim. It is the screen's own economy made explicit: the fan is where 84% of a
+    stage goes (s126), every run it makes is DISCARDED (only ``(want, aim, lw)`` survives the cut),
+    and the csangle a roll commits does not depend on the aim -- so a fan of ~90 aims pays for one
+    camera and ~90 native rollouts. Pass ``env`` to have the twin built per node
+    (`roll_kernel.node_twin`), or ``twin`` directly if the caller already holds one.
+
+    ``shared_body`` (session 130; defaults to on whenever ``env``/``twin`` is passed) runs R2 off
+    `roll_kernel.SharedBody` -- one wired roll per aim, then a camera walk and an exit tail per
+    camera target, instead of ~25 whole wired rolls. R2 could not take the fan for the reason the
+    s129 box gives (its survivors ARE their runs: the candidate carries one forward and
+    `junction_quality` steps it), and it does not need to: `target_cs_is_exit_only` says the
+    targets share the roll itself, so what is re-run is only the ~5 frames after it, and what comes
+    out is a genuine wired run. Reaching for the fan here instead would have been the wrong lever
+    twice over -- a native endpoint cannot be stepped by `junction_quality` (measured s130: the
+    camera does not stop the moment the C-stick centres, so the glide off a frozen-csangle endpoint
+    differs), and fanning over targets costs a camera trace per target, which is more than the
+    rollout it replaces.
+
+    Both are gated stage-for-stage against the wired path, and independently, in
+    `tests/test_fan_stage.py`; the records themselves are gated in `tests/test_roll_kernel.py` and
+    `tests/test_tcs_kernel.py`.
 
     Returns the surviving post-roll nodes (each ``dict(run, log, frames, m, knobs, quality)``)."""
     out = []
     r1 = []
     walls = O.courtyard_walls()
+    use_shared = (env is not None or twin is not None) if shared_body is None else bool(shared_body)
     key = rank_key() if key is None else key
     center = hl.bearing_bam() if fan_center is None else int(fan_center)
     fan = T.roll_facing_fan(node['run'], center, half_window, step)
@@ -1102,10 +1116,16 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                                   step=TCS_STEP if tcs_step is None else int(tcs_step))
                if target_css is None else target_css)
         graded = []
+        # R2 off the shared roll body: one wired roll, then a camera per target and its exit tail
+        body = RK.SharedBody(node['run'], aim, l_window=lw) if use_shared else None
+        walk = RK.camera_walks(body, css) if body is not None and body.ok else None
         for tcs in css:
-            rr = node['run'].clone()
             log = list(node['log'])
-            seg = T.roll_segment(rr, aim, target_cs=tcs, l_window=lw, log=log)
+            if walk is not None:
+                seg, rr = RK.tcs_segment(body, walk, tcs, log=log)
+            else:
+                rr = node['run'].clone()
+                seg = T.roll_segment(rr, aim, target_cs=tcs, l_window=lw, log=log)
             if seg['talk_unsafe'] or not seg['ok'] or seg['roll_speedF'] is None \
                     or seg['roll_speedF'] < min_roll:
                 continue

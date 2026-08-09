@@ -51,6 +51,7 @@ contract instead of a kernel against a hand-copied expectation.
 """
 from harness.tetrapush import search as S
 from harness.tetrapush import two_roll as T
+from harness.tetrapush.from_f0 import cam_pad
 from harness.tetrapush.reposition import ESS_DOWN
 
 
@@ -225,6 +226,147 @@ def node_twin(env, log, native_look=True, check=None):
             raise ValueError("node twin is not at the node's state -- the log does not reconstruct "
                              "this run (%d frames)\n  twin %r\n  node %r" % (len(log), got, want))
     return twin
+
+
+# --------------------------------------------------------------------------- the tcs family (R2)
+
+class SharedBody(object):
+    """**One aim's roll, up to the frame its camera target could first have changed it** -- the body
+    a whole `target_cs` family shares, stepped once.
+
+    `full_herd.roll_candidates`' R2 re-runs the same roll under ~25 camera targets, and
+    `full_herd.target_cs_is_exit_only` already says what that buys: inside a roll the camera target
+    changes nothing but the camera. Measured over the real grid (session 130) the physics is
+    bit-identical for **17 of a 22-frame segment** and the first frame that differs is the first
+    frame after the `FRONT_ROLL` block -- so ``branch`` is read off the roll's own end rather than
+    set to a number, and the shared part is whatever this node's roll turns out to be.
+
+    Carries the per-frame `LandCamera.step` arguments (`FreeRun.step`'s own ``sim_cam_in``), which
+    are pose and physics and therefore shared, and one snapshot of the run at ``branch``.
+
+    ``ok`` False means this aim has no shared body to offer -- it talks, or no roll ever fires, or
+    the segment ended inside the roll -- and the caller runs the wired path for it."""
+    __slots__ = ('stream', 'args', 'branch', 'snap', 'entry_cs', 'prev_raw', 'camera',
+                 'roll_speedF', 'roll_facing', 'talk_unsafe', 'ok', 'refused')
+
+    def __init__(self, run, aim, *, l_window=(5, 8), hold=1, a_hold=2, post=ESS_DOWN):
+        self.stream = T.roll_stream(tuple(aim), hold=hold, a_hold=a_hold, l_window=l_window,
+                                    post=post)
+        self.entry_cs = int(run.csangle)
+        self.prev_raw = run._prev_raw
+        self.camera = run.camera
+        self.args, self.branch, self.snap = [], None, None
+        self.roll_speedF = self.roll_facing = None
+        self.refused = refused_record(run)
+        self.talk_unsafe = bool(S.a_press_is_talk(
+            run, dict(self.stream(0), substickX=T.CSTICK_NEUTRAL, substickY=0)))
+        self.ok = False
+        if self.talk_unsafe or run.camera is None:
+            return
+        rr = run.clone()
+        seen = False
+        for k in range(T.MAX_ROLL_FRAMES + 1):
+            prev = rr.clone()
+            row = rr.step(dict(self.stream(k), substickX=T.CSTICK_NEUTRAL, substickY=0))
+            self.args.append(row['sim_cam_in'])
+            if rr.link.state == T.FRONT_ROLL:
+                seen = True
+                if self.roll_speedF is None:
+                    self.roll_speedF, self.roll_facing = rr.link.speedF, rr.link.facing
+            elif seen:
+                self.branch, self.snap, self.ok = k, prev, True
+                break
+
+
+def camera_walks(body, target_css):
+    """**Every camera target's own csangle, from ONE body's arguments** -- the camera model alone,
+    no physics, walked as a PREFIX TREE.
+
+    Two measured facts make this the whole of what a tcs costs before the branch. The camera's
+    arguments are Link's pose and the attention, so they are the shared body's (session 130 gated
+    the stronger form: they reproduce every target's committed csangle even PAST the divergence,
+    which is `FreeRun`'s own "csangle is position-independent in this regime"). And two targets that
+    have delivered the same C-stick bytes so far are at the same camera state, so they walk together
+    and split only when `two_roll.slew_substick` first tells them apart -- 775 camera steps become
+    529 on the shipped grid, and the group is one camera object, not one per member.
+
+    (The tempting third cut is wrong and was measured wrong: a centred C-stick does NOT freeze
+    csangle on the spot -- the camera keeps chasing for a few frames -- so a target whose stick has
+    gone neutral still has to be stepped. `two_roll.slew_substick`'s "neutral FREEZES csangle" is
+    the steady state, not the transient.)
+
+    Returns ``{target_cs: (camera, csangle, substicks)}`` at the branch frame: the camera AFTER the
+    body's last shared frame, the csangle it committed there, and the C-stick byte delivered on each
+    shared frame."""
+    D = int(body.branch)
+    pads = {}
+
+    def pad(k, sub):
+        p = pads.get((k, sub))
+        if p is None:
+            p = pads[(k, sub)] = cam_pad(body.prev_raw if k < 0 else
+                                         dict(body.stream(k), substickX=sub, substickY=0))
+        return p
+
+    groups = [dict(cam=body.camera.clone(), cs=body.entry_cs, prev=None,
+                   mem=list(target_css), subs=[])]
+    for k in range(D):
+        nxt = []
+        for g in groups:
+            cs2 = int(g['cam'].step(pad(k - 1, g['prev']), *body.args[k]))
+            by = {}
+            for tcs in g['mem']:
+                by.setdefault(T.slew_substick(g['cs'], tcs), []).append(tcs)
+            first = True
+            for sub, mem in by.items():
+                cam = g['cam'] if first else g['cam'].clone()
+                first = False
+                nxt.append(dict(cam=cam, cs=cs2, prev=sub, mem=mem, subs=g['subs'] + [sub]))
+        groups = nxt
+    out = {}
+    for g in groups:
+        for tcs in g['mem']:
+            out[tcs] = (g['cam'], g['cs'], tuple(g['subs']))
+    return out
+
+
+def tcs_segment(body, walk, tcs, *, log=None):
+    """**`two_roll.roll_segment` for one camera target, off the shared body** -- the shared frames
+    are not re-run, only the exit tail is.
+
+    The branch swaps this target's camera into a clone of the body's snapshot, and with it the
+    csangle and the delivered input the camera acts on next (it reads the pad one frame late). The
+    stored state a wrong branch would carry is the stick want-angle `m34E8`, and it is recomputed
+    from the stick and the csangle every non-neutral frame -- so the swap is complete, which is what
+    session 130 measured: 250 of 250 branched records `==` the wired ones.
+
+    Returns the `roll_segment` dict and the branched run; ``log`` is extended with every delivered
+    input of the WHOLE segment, shared frames included, so the caller's node log is the same log the
+    wired path would have appended."""
+    cam, cs, subs = walk[tcs]
+    D = int(body.branch)
+    if log is not None:
+        log.extend(dict(body.stream(k), substickX=subs[k], substickY=0) for k in range(D))
+    rr = body.snap.clone()
+    rr.camera = cam.clone()
+    rr.csangle = cs
+    rr._prev_raw = (dict(body.stream(D - 1), substickX=subs[D - 1], substickY=0) if D
+                    else body.prev_raw)
+    frames = D
+    roll_speedF, roll_facing = body.roll_speedF, body.roll_facing
+    for k in range(D, T.MAX_ROLL_FRAMES + 1):
+        d = dict(body.stream(k), substickX=T.slew_substick(rr.csangle, tcs), substickY=0)
+        if log is not None:
+            log.append(dict(d))
+        rr.step(d)
+        frames += 1
+        if rr.link.state == T.FRONT_ROLL:
+            if roll_speedF is None:
+                roll_speedF, roll_facing = rr.link.speedF, rr.link.facing
+        elif rr.link.state == 6:
+            break
+    return dict(ok=True, talk_unsafe=False, roll_speedF=roll_speedF, roll_facing=roll_facing,
+                frames=frames, exit_cs=rr.csangle), rr
 
 
 def roll_fan(run, aims, *, l_window=(5, 8), target_cs=None, hold=1, a_hold=2, post=ESS_DOWN,
