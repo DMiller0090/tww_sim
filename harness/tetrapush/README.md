@@ -1763,6 +1763,17 @@ from scratch. Land the edits first, then gate.
               [`tests/test_fork_pending.py`](../../tests/test_fork_pending.py) (6),
               [`tests/test_native_junction.py`](../../tests/test_native_junction.py) (6 + 1 slow),
               [`tests/test_stick_for_bearing_cache.py`](../../tests/test_stick_for_bearing_cache.py) (3).
+            - **AND THE SEARCH PATH WAS RUN BEFORE HANDING IT OVER, which put the starting line on
+              record.** Cycle-2 parents hand over ``l0`` **-183.41** (reproducing s126 exactly);
+              cycle 3 reaches **-56.66** at 70 frames on the shipped screen and **-27.10** at 74 on
+              s126's contact screen (``probe_contact=True, probe_step=1, probe_half=0x600``, 3x the
+              time) -- **all `onside=False`**. So the last roll already buys **+126..+156 u**, past
+              the +80.4 s126 measured as the band-keeping cap, and still lands short of the line.
+              **-27.10 is the number a cycle-2 re-cut has to move.** TRAP worth an hour:
+              `extend_cycle` at BARE defaults returns **zero** survivors here (250/250
+              ``unrollable``) -- not a regression (identical on both engines), it just needs what
+              `chain_herd` passes it (the handoff ``corridor``, its ``resid``, ``target_along``,
+              ``arrive_keep``).
             - **WHAT IS LEFT, and both are bigger changes than any above.** Of the 4.4 s: clone
               ~1.4, `junction_gates` ~1.37, alphabet ~0.62, step ~0.58. (a) ~26.5k arming probes
               each cost a clone + a step while only ~24 children a generation survive the frontier
