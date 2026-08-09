@@ -83,7 +83,7 @@ from harness.tetrapush import objective as O
 from harness.tetrapush import search as S
 from harness.tetrapush import two_roll as T
 from harness.tetrapush import roll_kernel as RK
-from harness.tetrapush.reposition import HerdLine, ESS_DOWN
+from harness.tetrapush.reposition import AXIS_HERD, AXIS_PAIR, HerdLine, ESS_DOWN
 from harness.tetrapush.steered_reposition import _bearing, _s16
 from harness.tetrapush.tetra_plow import LINK_CO_R, TETRA_CO_R
 from tww_sim.land.land import FRONT_ROLL
@@ -223,9 +223,28 @@ def pursuit_box(env, hl, margin=1.5):
                 lead_hi=max(leads) / margin, max_delta=max(deltas) * margin)
 
 
-def in_pursuit_box(run, hl, box):
-    """Is this coupled state inside the measured pursuit regime (`pursuit_box`)?"""
+def in_pursuit_box(run, hl, box, axis=AXIS_HERD):
+    """Is this coupled state inside the measured pursuit regime (`pursuit_box`)?
+
+    **``axis`` IS WHAT CAPPED THE PLAN (session 135), and it is one assumption, not a constant.**
+    The three clauses say: Link is 26.8-127.8 u behind her, within 18.0 u of the push line, and
+    bearing to her within 21.35 deg of it. Read on `AXIS_HERD` all three are measured against ONE
+    fixed world direction, which also asserts that the direction he pushes IS the direction the herd
+    wants. By the last two cycles that is false and load-bearing: session 134's band-keeping cycle-2
+    beam (``l0`` -51.75, past the -80.4 bar) died here at generation 1 with separations 58.8 / 63.9 /
+    64.6 u -- dead centre in the human's own recorded 40.4-85.2 u plow band -- against ``max_lat``
+    17.99 (it read -35.5 / -49.2 / -58.6) and ``max_delta`` 21.35 deg (-37.1 / -49.6 / -66.5).
+    Ordinary plow pairs pointing 37-67 deg off the herd line.
+
+    On `AXIS_PAIR` the identical predicate is read about the pair's own push axis
+    (`reposition.pair_line`), where ``lead`` is minus the separation and the lateral and bearing
+    terms are zero by construction -- so it collapses to the human's measured SEPARATION band and
+    costs one hypot. Nothing is widened and no constant is invented (`[[no-overtuned-constants]]`);
+    the equality with the full three-clause form about `pair_line` is the gate, not a claim
+    (`tests/test_free_axis.py`)."""
     lx, lz, tx, tz = run.link.pos_x, run.link.pos_z, run.tx, run.tz
+    if axis == AXIS_PAIR:
+        return -box['lead_hi'] <= math.hypot(lx - tx, lz - tz) <= -box['lead_lo']
     lead = hl.lead(lx, lz, tx, tz)
     if not (box['lead_lo'] <= lead <= box['lead_hi']):
         return False
@@ -234,15 +253,23 @@ def in_pursuit_box(run, hl, box):
     return abs(_s16(_bearing((lx, lz), (tx, tz)) - hl.bearing_bam())) <= box['max_delta']
 
 
-def human_in_box(env, hl, box=None):
+def human_in_box(env, hl, box=None, axis=AXIS_HERD):
     """Containment for the regime gate (`[[search-space-contains-human]]`): the recorded human must
     sit inside the pursuit box on EVERY frame of his window -- the box is read off him, so this
-    asserts the margin logic never inverts. Returns ``dict(ok, outside)``."""
+    asserts the margin logic never inverts. Returns ``dict(ok, outside)``.
+
+    It is the containment test for ``axis`` too, and the one that says a freed direction is still HIS
+    regime: on `AXIS_PAIR` the clauses that survive are the separation band, and his own separation
+    never leaves 40.4-85.2 u."""
     box = pursuit_box(env, hl) if box is None else box
     hb = hl.bearing_bam()
     outside = []
     for r in S.rollout_recorded(env, upto=45)['rows']:
         lx, lz, tx, tz = r['link'][0], r['link'][-1], r['tetra'][0], r['tetra'][-1]
+        if axis == AXIS_PAIR:
+            if not (-box['lead_hi'] <= math.hypot(lx - tx, lz - tz) <= -box['lead_lo']):
+                outside.append(r['f'])
+            continue
         lead = hl.lead(lx, lz, tx, tz)
         lat = abs(hl.lateral(lx, lz) - hl.lateral(tx, tz))
         delta = abs(_s16(_bearing((lx, lz), (tx, tz)) - hb))
@@ -268,7 +295,8 @@ def junction_alphabet(run, hl, *, ess_step=4, aim_step=64):
 
 def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_window=0x2800,
                dead=None, corridor=None, target_along=None, thread=None, resid=None,
-               fan_center=None, fan=None, rows=None, stations=None, pf=None, collect=None):
+               fan_center=None, fan=None, rows=None, stations=None, pf=None, axis=AXIS_HERD,
+               collect=None):
     """**Is this junction endpoint ROLLABLE at all, how STRAIGHT can its roll be, where does it
     ARRIVE, and where would the ESCAPE land from it?** -- an aim sweep, returning
     ``dict(rate, off, off_rate, along, n, arrive, over, land, land_frames, land_off, land_over,
@@ -423,7 +451,7 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
                                                  walls) else None)
         if why is None:
             m = T.metrics(rr, hl, endpoint['frames'] + seg['frames'])
-            if not T.alive(m):
+            if not T.alive(m, axis=axis):
                 why = 'offline'
         if why is not None:
             dead[why] = dead.get(why, 0) + 1
@@ -548,9 +576,14 @@ def _physics_tag(run):
             round(run.link.speedF, 2), run.link.state)
 
 
-def _frontier_score(hl):
+def _frontier_score(hl, pf=None):
     """The junction frontier's ranking: get Link's facing OUT of the +-90 deg talk/target cone
     first (that is the gate that blocks arming), then hug the herd line.
+
+    ``pf`` (a `handoff.PairFrame`, session 135) replaces the second order with the axis the endgame
+    is denominated in -- her ``l0``, one dot product. It goes with `AXIS_PAIR`: with the direction
+    freed, "hug the herd line" has no customer left to serve, and the last two cycles are not
+    herding. The cone order is untouched, because arming is what a junction is for.
 
     Ranking on |lat| ALONE is myopic in exactly the wrong direction -- the flattest states are the
     ones still facing Tetra, which can never arm, so they crowd out the productive branch. Measured:
@@ -561,6 +594,14 @@ def _frontier_score(hl):
     greedy walk that maximises TURN RATE, and the turn is what swings Link's ~17 u exec-centre lead
     laterally -- so it degrades the push aim monotonically (kept aim -12 -> -20 -> -26 -> -34 -> -41
     over five generations off a real cycle-1 exit). See `junction_beam`."""
+    if pf is not None:
+        HO = _HO()
+
+        def score_l0(n):
+            r = n['run']
+            return (_cone_deficit(r), -HO.tetra_lateral(pf, (r.tx, r.tz)))
+        return score_l0
+
     def score(n):
         r = n['run']
         lat = abs(hl.lateral(r.link.pos_x, r.link.pos_z) - hl.lateral(r.tx, r.tz))
@@ -627,7 +668,8 @@ def _shared_frame(run, letter):
 
 
 def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step=16,
-                  keep=12, collect=None, dead=None, per_state=4, aim_share=True, corridor=None):
+                  keep=12, collect=None, dead=None, per_state=4, aim_share=True, corridor=None,
+                  axis=AXIS_HERD, pf=None):
     """**The junction as a per-frame BEAM, not an enumerated family.** The atom is one frame's
     (stick, L): each generation extends every live node by the whole alphabet
     (`junction_alphabet`), prunes anything that leaves the pursuit box, dedups by state, and keeps
@@ -692,7 +734,7 @@ def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step
             why = ('followed' if probe._follow_warned else
                    'wall' if not O.frame_is_wall_free(probe.link.pos_x, probe.link.pos_z,
                                                       probe.tx, probe.tz, walls) else
-                   'outbox' if not in_pursuit_box(probe, hl, box) else None)
+                   'outbox' if not in_pursuit_box(probe, hl, box, axis) else None)
             if why is not None:
                 dead[why] = dead.get(why, 0) + len(letters)
                 continue
@@ -706,7 +748,7 @@ def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step
                 seen.add(tag)
                 cand = dict(run=r, log=nd['log'] + [d], jf=jf)
                 nxt.append(cand)
-                why = T.junction_gates(r, hl, node['frames'] + jf)
+                why = T.junction_gates(r, hl, node['frames'] + jf, axis=axis)
                 dead[why or 'ENDPOINT'] = dead.get(why or 'ENDPOINT', 0) + 1
                 if why is None:
                     e = dict(cand)
@@ -720,7 +762,7 @@ def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step
         # state so no single state can take the whole beam (see the docstring -- session 68)
         if not nxt:
             break
-        orders = [sorted(nxt, key=_frontier_score(hl))]
+        orders = [sorted(nxt, key=_frontier_score(hl, pf))]
         if aim_share:
             orders.append(sorted(nxt, key=aim_only))
             orders.append(sorted(nxt, key=aim_cone))
@@ -738,7 +780,7 @@ def junction_beam(node, hl, box, *, max_frames=12, beam=24, ess_step=1, aim_step
     return flat + rest[:int(keep) // 2]
 
 
-def junction_quality(run, hl, box, *, frames=6, sticks=None):
+def junction_quality(run, hl, box, *, frames=6, sticks=None, axis=AXIS_HERD):
     """**The cheap CONTINUABILITY predictor** for a post-roll endpoint -- the thing that ranks a
     `target_cs`, which exists only to set up the next junction.
 
@@ -763,7 +805,7 @@ def junction_quality(run, hl, box, *, frames=6, sticks=None):
         for _ in range(int(frames)):
             r.step(dict(stickX=st[0], stickY=st[1], buttons=0, triggerL=0,
                         substickX=T.CSTICK_NEUTRAL, substickY=0))
-            if not frame_in_model(r, walls) or not in_pursuit_box(r, hl, box):
+            if not frame_in_model(r, walls) or not in_pursuit_box(r, hl, box, axis):
                 break
             inbox += 1
         if inbox < 2:
@@ -1044,7 +1086,8 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                     aim_keep=3, min_roll=20.0, tcs_keep=3, target_css=None,
                     fan_center=None, require_quality=True, key=None, mixed_aims=True,
                     tcs_key=None, tcs_probe=None, tcs_require=None, corridor=None,
-                    tcs_span=None, tcs_step=None, env=None, twin=None, shared_body=None):
+                    tcs_span=None, tcs_step=None, env=None, twin=None, shared_body=None,
+                    axis=AXIS_HERD):
     """The cycle's ROLL stage from a junction endpoint, factored by the separability above.
 
     R1: sweep the reachable aim fan (camera frozen) x the L windows, prune talk-unsafe / weak /
@@ -1139,7 +1182,7 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                 rv = RK.RecordRun(rec)
                 fr = node['frames'] + rec['frames']
                 m = T.metrics(rv, hl, fr)
-                if not T.alive(m) or not frame_in_model(rv, walls):
+                if not T.alive(m, axis=axis) or not frame_in_model(rv, walls):
                     continue
                 r1.append(dict(k=key(rv, fr, m), want=want, aim=aim, lw=lw, m=m,
                                along=hl.along(rv.tx, rv.tz), lat=hl.lateral(rv.tx, rv.tz)))
@@ -1153,7 +1196,7 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                     continue
                 fr = node['frames'] + seg['frames']
                 m = T.metrics(rr, hl, fr)
-                if not T.alive(m) or not frame_in_model(rr, walls):
+                if not T.alive(m, axis=axis) or not frame_in_model(rr, walls):
                     continue
                 r1.append(dict(k=key(rr, fr, m), want=want, aim=aim, lw=lw, m=m,
                                along=hl.along(rr.tx, rr.tz), lat=hl.lateral(rr.tx, rr.tz)))
@@ -1189,7 +1232,7 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                 continue
             fr = node['frames'] + seg['frames']
             m = T.metrics(rr, hl, fr)
-            if not T.alive(m) or not frame_in_model(rr, walls):
+            if not T.alive(m, axis=axis) or not frame_in_model(rr, walls):
                 continue
             cand = dict(run=rr, log=log, frames=fr, m=m, quality=None,
                         knobs=dict(roll_bam=want, aim=aim, l_window=lw, target_cs=tcs,
@@ -1197,7 +1240,7 @@ def roll_candidates(node, hl, box, *, half_window=0x2800, step=8, l_windows=((4,
                                    junction=node['jv']['kind'], phases=node['jv']['phases']))
             if tcs_require is not None and not tcs_require(cand):
                 continue                          # this camera target cannot fire -- the OTHER shape
-            q = junction_quality(rr, hl, box)
+            q = junction_quality(rr, hl, box, axis=axis)
             if q is None and require_quality:     # this camera target strands the plan next cycle
                 continue                          # (a TERMINAL roll has no next cycle to strand)
             cand['quality'] = q
@@ -1444,7 +1487,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  cloud_rots=None, cloud_cap=None, cloud_fan=None, cloud_stations=None,
                  cloud_exit_runs=None, cloud_exit_step=None, cloud_exit_half=None,
                  delivered_keep=False, handoff_keep=False, handoff_pf=None, handoff_rungs=None,
-                 handoff_roots=True, handoff_sign=True, l0_keep=False, env=None, verbose=False):
+                 handoff_roots=True, handoff_sign=True, l0_keep=False, free_axis=False,
+                 env=None, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1645,6 +1689,17 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     session 125 moved the razor onto Link). Kept as a share for `_mixed_beam`'s standing reason, so
     whatever is best by ``rank`` still survives.
 
+    ``free_axis`` (session 135) is the clause underneath all of that, and it is the measured CAP on
+    the plan rather than another share. It swaps `in_pursuit_box`, `two_roll.alive` and
+    `_frontier_score` from the herd line to the pair's own push axis (`reposition.AXIS_PAIR`) --
+    every measured number kept, one assumption dropped. Session 134 got cycle 2 to ``l0`` -51.75 at
+    52 frames, past the -80.4 bar the whole endgame was reduced to, and cycle 3 off those states
+    returned ZERO survivors with every child ``outbox`` at generation 1: they fail ONLY the direction
+    clauses, at separations 58.8-64.6 u that sit dead centre in the human's own recorded plow band.
+    Freed, the same stage returns 21x more surviving rolls. It is a PRUNE, so unlike every keep here
+    it changes what exists rather than what is chosen -- and it composes with ``l0_keep``, which is
+    then what picks among the states the freed prune admits.
+
     Why it belongs at the screen and not only at the endpoint: ``l0`` is ONE DOT PRODUCT on a Tetra
     the rollout already produced, where `handoff.endpoint`'s locus solve is ~1.5 s a survivor. The
     axis is affordable exactly where the set is decided.
@@ -1707,7 +1762,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     tcs_probe = square_probe_key(hl, box, cor_j) if tcs_square else None
     # the endgame's frame, built ONCE if either customer wants it (the endpoint keep or the screen)
     pf_j = ((handoff_pf if handoff_pf is not None else _HO().PairFrame())
-            if (handoff_keep or l0_keep) else None)
+            if (handoff_keep or l0_keep or free_axis) else None)
+    jaxis = AXIS_PAIR if free_axis else AXIS_HERD
     l0_key = ((lambda e: -_HO().tetra_lateral(pf_j, (e['run'].tx, e['run'].tz)))
               if l0_keep else None)
     tcs_require = None
@@ -1723,7 +1779,8 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     for node in nodes:
         ends = junction_beam(node, hl, box, max_frames=max_frames, beam=jn_beam,
                              ess_step=ess_step, aim_step=aim_step, keep=10 ** 6, dead=jdead,
-                             per_state=per_state, aim_share=aim_share, corridor=cor_j)
+                             per_state=per_state, aim_share=aim_share, corridor=cor_j,
+                             axis=jaxis, pf=(pf_j if free_axis else None))
         uniq = _dedup_endpoints(ends)
         if len(uniq) > int(probe_cap):
             # never a silent truncation: say what was dropped
@@ -1738,7 +1795,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                                                  thread=th_land, resid=resid,
                                                  fan=cloud_fan, rows=(rows_j if cloud_fan else None),
                                                  stations=cloud_stations,
-                                                 pf=(pf_j if l0_keep else None),
+                                                 pf=(pf_j if l0_keep else None), axis=jaxis,
                                                  **pkw), e)
                                       for e in uniq) if p is not None]
         scored.sort(key=lambda t: -t[0]['rate'])
@@ -1793,7 +1850,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
         for j in kept:
             for cand in roll_candidates(j, hl, box, aim_keep=aim_keep, half_window=half_window,
                                         step=step, key=key, require_quality=require_quality,
-                                        tcs_key=tcs_key, tcs_probe=tcs_probe,
+                                        tcs_key=tcs_key, tcs_probe=tcs_probe, axis=jaxis,
                                         tcs_require=tcs_require, corridor=cor_j, env=env,
                                         tcs_span=ESCAPE_TCS_SPAN if tcs_escape else None,
                                         tcs_step=ESCAPE_TCS_STEP if tcs_escape else None):

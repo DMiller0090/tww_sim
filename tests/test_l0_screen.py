@@ -234,7 +234,7 @@ def test_extend_cycle_builds_no_pair_frame_unless_a_customer_asks():
     by the object happening to be cheap today."""
     import inspect
     src = inspect.getsource(F.extend_cycle)
-    assert 'if (handoff_keep or l0_keep) else None' in src
+    assert 'if (handoff_keep or l0_keep or free_axis) else None' in src
     assert 'pf=(pf_j if l0_keep else None)' in src
     assert 'l0_key=l0_key' in src
     sig = inspect.signature(F.extend_cycle).parameters

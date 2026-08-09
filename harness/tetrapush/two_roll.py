@@ -72,7 +72,7 @@ import math
 from harness.tetrapush import seeds
 from harness.tetrapush import search as S
 from harness.tetrapush import primitives as P
-from harness.tetrapush.reposition import HerdLine, on_line_ok, ESS_DOWN
+from harness.tetrapush.reposition import (AXIS_HERD, AXIS_PAIR, HerdLine, on_line_ok, ESS_DOWN)
 from harness.tetrapush.steered_reposition import _s16, _bearing
 from tww_sim.core.mathlib import main_stick_decode
 from tww_sim.land.land import FRONT_ROLL, LandState
@@ -650,8 +650,16 @@ def metrics(run, hl, frames):
                 followed=run._follow_warned)
 
 
-def alive(m, *, max_lead=-2.0, max_lat=60.0):
-    """Aggressive prune: never overtake Tetra, stay near the herd line, stay in the plow regime."""
+def alive(m, *, max_lead=-2.0, max_lat=60.0, axis=AXIS_HERD):
+    """Aggressive prune: never overtake Tetra, stay near the herd line, stay in the plow regime.
+
+    ``axis`` (session 135) is the frame the last two clauses are asserted in (`reposition.pair_line`).
+    On ``AXIS_PAIR`` they are the SAME two clauses about the pair's own push axis, where ``lead`` is
+    minus the separation and the lateral offset is zero -- so "never overtake her" becomes "stay at
+    least ``|max_lead|`` u off her" and "stay near the line" is satisfied by construction. Nothing is
+    widened; the direction the pair is pushing stops being asserted to be the herd's."""
+    if axis == AXIS_PAIR:
+        return (not m['followed']) and m['dist'] >= abs(max_lead)
     return (not m['followed']) and m['lead'] <= max_lead and abs(m['lat']) <= max_lat
 
 
@@ -716,7 +724,7 @@ def cycle1_candidates(env, hl, *, half_window=0x2000, step=1, nflips=(1, 2, 3),
 
 # --------------------------------------------------------------------------- the 2-roll chain
 
-def junction_gates(jr, hl, frames, *, min_preroll=17.0):
+def junction_gates(jr, hl, frames, *, min_preroll=17.0, axis=AXIS_HERD):
     """The hard junction-endpoint gates (stage 1 of the chain): in the plow regime, on-line-behind
     (`alive`), Tetra OUT of Link's +-90 deg facing cone (the precondition for BOTH the talk-safe
     roll-A and the proc-7 re-target flip), still near contact, the EBS glide retained, and
@@ -725,11 +733,16 @@ def junction_gates(jr, hl, frames, *, min_preroll=17.0):
     The flip fires when a toward-Tetra stick ACTS inside proc 7, which (delay-1) needs L delivered
     two junction frames back and the toward stick one back -- the human's own f26/f27 pattern; a
     junction whose pending inputs cannot produce it only ever rolls at +5. Mutates nothing (probes
-    a clone). Returns the failure name or None."""
+    a clone). Returns the failure name or None.
+
+    ``axis`` is forwarded to `alive` and nothing else here: every other clause is already about the
+    PAIR (the cone, the 100 u contact bound, the armed speedF), which is why this gate keeps its
+    whole content when the direction is freed -- and why a freed box cannot produce an endpoint 128 u
+    away from her."""
     if jr._follow_warned:
         return 'followed'
     m = metrics(jr, hl, frames)
-    if not alive(m):
+    if not alive(m, axis=axis):
         return 'offline'
     tb = _bearing((jr.link.pos_x, jr.link.pos_z), (jr.tx, jr.tz))
     if abs(_s16(jr.link.facing - tb)) <= 0x4000:

@@ -1710,6 +1710,54 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE BOX WAS A CAP AND FREEING IT IS NOT ENOUGH: THE CROSSING AND THE ARMING POSTURE
+            ARE BOUGHT WITH THE SAME PUSH (session 135).** Session 134 named `in_pursuit_box`'s
+            direction clause as the measured cap on the band-keeping route and left the free-axis
+            prototype as a monkeypatch. Promoted, gated, and run -- and the run says the clause was
+            *a* cap, not *the* one. One new truth page,
+            [`knowledge/strategy/the-crossing-costs-the-arming-posture.md`](../../knowledge/strategy/the-crossing-costs-the-arming-posture.md).
+            - **SHIPPED: the push axis is a PARAMETER, not the herd line.**
+              `reposition.AXIS_HERD`/`AXIS_PAIR` + `pair_line`; `full_herd.in_pursuit_box(axis=)`,
+              `human_in_box(axis=)`, `junction_beam(axis=, pf=)`, `junction_quality(axis=)`,
+              `roll_probe(axis=)`, `roll_candidates(axis=)`, `_frontier_score(pf=)`,
+              `two_roll.alive(axis=)`, `junction_gates(axis=)` and `extend_cycle(free_axis=)`, which
+              wires one axis into all three of its prune sites. Default OFF at every seam. In the
+              pair's frame ``lead`` is minus the separation and the lateral and bearing terms are
+              zero by construction, so the box collapses to the human's own **26.8-127.8 u**
+              separation band and costs one hypot. **Nothing is widened**
+              (`[[no-overtuned-constants]]`): gate
+              [`tests/test_free_axis.py`](../../tests/test_free_axis.py) (8 + 1 slow) proves the
+              collapsed form IS the three-clause predicate about `pair_line` over the banked states
+              and 50000 swept geometries, that the human is still inside it on every recorded frame,
+              and that it is **not a superset** (a far-lead corner at the full 18 u lateral is 129 u
+              apart and the freed band refuses it).
+            - **IT UNBLOCKS THE PRUNE: 0 CHILDREN -> 170428 JUDGED.** Cycle 3 off the band-keeping
+              cycle-2 beam (``l0`` -51.75 at 52 f, `_generated/s106/s134_c3_noquality_beam.json`
+              cycle 1) went from *every child `outbox` at generation 1* to a junction that runs --
+              and then dies whole on the NEXT gate, ``in_cone``: 170428 children judged, zero
+              endpoints, 13 s.
+            - **AND THE REAL QUANTITY IS THE EXIT'S SLIDE.** The arming gate is
+              ``|facing - bearing_to_tetra| > 90 deg`` and it has two terms. From these exits Link's
+              EBS backslide is **96-99% TANGENTIAL** to the line to her, so the bearing runs at
+              **15-19 deg a frame** while he turns; best-in-beam cone deficit goes **86.0, 70.6,
+              69.0, 69.4, 72.3, 76.3** and the beam is empty, with separation **64.6 -> 111.7 u**
+              against the band's 127.8 ceiling. The herd-passing control at ``l0`` -152.14 slides
+              **7% tangential**, its bearing moves 1.8 deg a frame, and its deficit closes
+              **83.0 -> 48.2 -> 14.6 -> 0.0** in three generations and holds for nine more.
+            - **THE TWO ARE ONE RESOURCE, MEASURED.** Over the banked beam: past the bar tangential
+              **80-99%** and bearing 10.4-19.0 deg/f, short of it **3-36%** and 0.7-3.4 deg/f,
+              ``corr(l0, tangential fraction)`` = **+0.960**. Not a coincidence -- ``l0`` is bought
+              at 2.07x by LATERAL push, and a lateral push is one delivered ACROSS the line between
+              the bodies, which is exactly the momentum that leaves the pair rotating. Read it as
+              the mechanism, not a law: 16 endpoints of one beam are ~5 distinct states
+              (`[[infeasible-needs-proof]]`).
+            - **DERECK'S STEER, IN `objective.py`:** *"more than 75 herd frames is acceptable if it
+              saves time overall."* Rule 2 is now about the TOTAL -- session 60 wrote the 2-frame
+              budget when the plan WAS the herd, and s123/s125 replaced the ending, so a plan costs
+              herd + the gap Link must still close at the walk cap + the cut. `score_plan(total=)`
+              reports it, `TOTAL_INCUMBENT` = the banked console **101** is the number to beat, and
+              `verdict` accepts a herd over budget whose total wins. Without a measured ``total``
+              the verdict is exactly the pre-s135 one.
       - [~] **THE CROSSING WAS A CUT, NOT A REACHABILITY -- AND THE HERD PUSHES 64 DEG OFF THE AXIS
             THE ENDGAME IS DENOMINATED IN (session 134).** Session 126 reduced the endgame to one
             number, ``l0 >= -80.4`` handed over by cycle 2 against the -183.41 it delivers, and nine

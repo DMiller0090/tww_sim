@@ -21,7 +21,17 @@ him to a FIXED clip entry (`full_herd.walk_to_entry` / `place_on_thread` / `dece
      position/angle for the recorded solution is a SEPARATE search, run afterwards -- so no frame
      of this plan may be spent positioning Link for the clip.
   2. **This is a TAS: frames are the objective.** Maximum acceptable timeloss versus an all-out
-     push is `TIMELOSS_BUDGET` frames, `TIMELOSS_PREFERRED` preferred.
+     push is `TIMELOSS_BUDGET` frames, `TIMELOSS_PREFERRED` preferred -- **on the TOTAL, and the
+     herd is no longer the whole of it** (Dereck, session 135: "more than 75 herd frames is
+     acceptable if it saves time overall"). Session 60 wrote that budget when the plan WAS the herd:
+     push her onto a coord and stop, so herd frames and plan frames were the same number. Sessions
+     123 and 125 replaced the ending -- there is no walk-away, and the razor moved onto Link -- so a
+     plan now costs herd frames PLUS the gap Link still has to close to the clip entry PLUS the cut
+     (`handoff.endpoint`'s ``bound``, `TOTAL_INCUMBENT` the banked console number to beat). At the
+     walk cap that gap is ~17 u a frame, so a herd frame that removes 17 u of it is free and one
+     that removes more is a gain. `verdict` therefore accepts a plan whose TOTAL wins even when its
+     herd is over budget; ``within_budget`` is still reported, because on the old ending it was the
+     total and it is still the right thing to quote about the herd alone.
   3. **The terminal keeps its speed, because the ESCAPE ATOM must fire from it** (session 65 --
      this supersedes the s60 "1-frame 180" reading, which s64 falsified: the negation flips travel
      AND the speed sign, so a bare 180 is the LAUNCH, not the escape). The real escape is Dereck's
@@ -73,6 +83,10 @@ PUSH_CEILING = ROLL_SPEED_CAP / 2.0
 # cost over an all-out push that ignores where exactly she lands.
 TIMELOSS_BUDGET = 2
 TIMELOSS_PREFERRED = 1
+
+# The INCUMBENT total, in frames: the banked console plan (`[[tetrapush-dtm-delivery]]`), which is
+# what a candidate has to beat end to end. Measured, not a spec -- see rule 2 in the module docstring.
+TOTAL_INCUMBENT = 101
 
 
 def frame_floor(env, placements=None, hl=None):
@@ -590,7 +604,7 @@ def along_floor(t_along, thread, *, recovery=None, band=PLACEMENT_BAND):
 
 
 def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMENT_BAND, run=None,
-               atom_kw=None):
+               atom_kw=None, total=None):
     """Score a plan against the whole objective. ``rows`` is a list of per-frame dicts carrying
     ``sim_link``/``sim_tetra``/``sim_facing``/``speedF`` (the `FreeRun.step(record=True)` shape) or
     the ``link``/``tetra`` shape `search.rollout` emits.
@@ -613,7 +627,14 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
 
     ``complete`` guards the frame comparison: a plan that has not put Tetra on a coord has not
     finished, so its frame count is not yet comparable to the floor (the recorded 2-cycle window
-    would otherwise read as 29 frames UNDER an all-out push simply by stopping early)."""
+    would otherwise read as 29 frames UNDER an all-out push simply by stopping early).
+
+    ``total`` (session 135) is the plan's whole cost in frames when the caller has measured one --
+    for the zero-walk-away shape that is `handoff.endpoint`'s ``bound``, herd + the gap Link must
+    still close at the walk cap + the cut. It is what rule 2 is really about (see the module
+    docstring); nothing here computes it, because the herd stage cannot see the endgame's bill and a
+    plausible-looking guess at it is worse than no column. Without it ``beats_incumbent`` is False
+    and the verdict is exactly the pre-s135 one."""
     hl = HerdLine.from_env(env) if hl is None else hl
     walls = courtyard_walls() if walls is None else walls
     rows_p = placements if placements is not None else seeds.load_placements()[0]
@@ -666,6 +687,7 @@ def score_plan(env, rows, *, hl=None, placements=None, walls=None, band=PLACEMEN
         thread_bound=thread_cost(frames, t_along, t_lat, th, ready=term['ready']),
         within_budget=complete and timeloss <= TIMELOSS_BUDGET,
         within_preferred=complete and timeloss <= TIMELOSS_PREFERRED,
+        total=total, beats_incumbent=(total is not None and total < TOTAL_INCUMBENT),
         herd=hl.along(tx, tz), rate=hl.along(tx, tz) / frames if frames else 0.0,
         placement_dist=pd, placement_idx=near['idx'], complete=complete, band=band,
         tetra_along=t_along, tetra_lat=t_lat,
@@ -702,9 +724,14 @@ def replay_and_score(env, log, **kw):
 
 def verdict(sc):
     """The one-line pass/fail: on a coord, inside the frame budget, wall-free, in-regime, and
-    leaving Link moving for the 1-frame 180."""
-    return (sc['complete'] and sc['within_budget'] and sc['wall_ok']
-            and sc['regime_ok'] and sc['terminal_ok'])
+    leaving Link moving for the escape atom.
+
+    The frame clause is rule 2's, and rule 2 is about the TOTAL (session 135): a herd over the
+    2-frame budget passes when the plan it belongs to beats `TOTAL_INCUMBENT` end to end, which is
+    the only comparison a speedrun cares about. Scored without a ``total`` this is exactly the
+    pre-s135 test, so nothing already gated moves."""
+    return (sc['complete'] and (sc['within_budget'] or sc.get('beats_incumbent'))
+            and sc['wall_ok'] and sc['regime_ok'] and sc['terminal_ok'])
 
 
 # --------------------------------------------------------------------------- CLI
@@ -771,10 +798,14 @@ def _cmd_score(env):
 
 
 def _print_score(sc):
-    print("  frames %d (floor %d) -> timeloss %+d   %s"
+    print("  HERD frames %d (floor %d) -> timeloss %+d   %s"
           % (sc['frames'], sc['floor'], sc['timeloss'],
              "WITHIN BUDGET" if sc['within_budget'] else
              "OVER BUDGET" if sc['complete'] else "n/a -- herd INCOMPLETE"))
+    if sc.get('total') is not None:
+        print("  TOTAL %.2f frames against the banked console %d   %s"
+              % (sc['total'], TOTAL_INCUMBENT,
+                 "BEATS IT" if sc['beats_incumbent'] else "does not beat it"))
     print("  herd %.2f u @ %.3f u/frame   placement %.3f u from coord idx %d"
           % (sc['herd'], sc['rate'], sc['placement_dist'], sc['placement_idx']))
     print("  frame bound %.1f (`plan_bound`) / %.1f (`thread_cost`, lateral at its own rate)"

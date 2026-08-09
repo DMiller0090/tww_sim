@@ -107,6 +107,24 @@ class HerdLine:
         return int(math.atan2(self.dx, self.dz) / (2.0 * math.pi) * 65536.0) & 0xFFFF
 
 
+#: The FRAME the plow regime is asserted in -- the herd line, or the pair's own push axis
+#: (`pair_line`). knowledge/strategy/the-crossing-costs-the-arming-posture.md
+AXIS_HERD = 'herd'
+AXIS_PAIR = 'pair'
+
+
+def pair_line(lx, lz, tx, tz):
+    """**The pair's own push axis, as a `HerdLine`**: origin at Tetra, ``down`` the unit vector from
+    Link toward her -- the direction he is actually pushing, whatever the herd wants.
+
+    This is the object a regime predicate means by ``AXIS_PAIR``, and it is what the gate compares
+    the fast collapsed forms against (`tests/test_free_axis.py`): in this frame ``lead`` is exactly
+    minus the separation, the lateral offset between the two is zero and the bearing from Link to her
+    IS the axis bearing, so a box read off the human collapses to his measured SEPARATION band alone.
+    That collapse is why the hot paths do not build this object per frame."""
+    return HerdLine((tx, tz), (tx - lx, tz - lz))
+
+
 def on_line_ok(lx, lz, tx, tz, hl, *, min_behind=2.0, max_lateral=60.0):
     """The steer-#1 prune predicate for one frame: Link must stay BEHIND Tetra on the herd line
     (``lead <= -min_behind``, i.e. never overtake her) and roughly ON the line (|lateral offset

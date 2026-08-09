@@ -85,6 +85,35 @@ def test_the_budget_is_dereck_s_two_frame_spec(env):
     assert (f['frames_int'], f['preferred'], f['budget']) == (73, 74, 75)
 
 
+def test_rule_2_is_about_the_total_and_the_herd_is_no_longer_all_of_it(env):
+    """**Dereck's steer, session 135: "more than 75 herd frames is acceptable if it saves time
+    overall."**
+
+    Session 60's budget was written when the plan WAS the herd -- push her onto a coord and stop --
+    so herd frames and plan frames were the same number and `TIMELOSS_BUDGET` was a total. Sessions
+    123 and 125 replaced the ending: no walk-away, and the razor on Link, so a plan costs herd frames
+    plus the gap Link must still close plus the cut (`handoff.endpoint`'s ``bound``). At the walk cap
+    a frame buys ~17 u of that gap, so a longer herd that lands her better can be a shorter PLAN.
+
+    Gated on both sides, because the risk here is a rule that quietly stops binding: with no measured
+    ``total`` the verdict is exactly the pre-s135 one, and with one the budget clause is the total's."""
+    rows = [dict(sim_link=(-1900.0, -1000.0), sim_tetra=(-2100.0, -1050.0), speedF=20.0)]
+    base = dict(complete=True, within_budget=False, wall_ok=True, regime_ok=True, terminal_ok=True)
+    assert not O.verdict(dict(base, total=None, beats_incumbent=False))
+    assert not O.verdict(dict(base, total=float(O.TOTAL_INCUMBENT), beats_incumbent=False))
+    assert O.verdict(dict(base, total=100.06, beats_incumbent=True))
+    assert O.verdict(dict(base, within_budget=True, total=None, beats_incumbent=False))
+    # ...and the other four rules still veto whatever the total says
+    for veto in ('complete', 'wall_ok', 'regime_ok', 'terminal_ok'):
+        assert not O.verdict(dict(base, total=90.0, beats_incumbent=True, **{veto: False})), veto
+    # the column is only ever what the caller measured: `score_plan` does not invent one
+    sc = O.score_plan(env, rows)
+    assert sc['total'] is None and sc['beats_incumbent'] is False
+    sc = O.score_plan(env, rows, total=100.06)
+    assert sc['total'] == 100.06 and sc['beats_incumbent'] is True
+    assert O.TOTAL_INCUMBENT == 101, 'the banked console plan is the number to beat'
+
+
 def test_the_push_ceiling_is_a_sustained_rate_not_a_per_frame_law(env):
     """**Session 61, measured off the human's own recording**: `PUSH_CEILING` (13.0 u/frame) is the
     STEADY STATE of the CC split, and single frames beat it badly.
