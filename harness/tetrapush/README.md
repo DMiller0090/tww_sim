@@ -1710,6 +1710,44 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **`unarmed` IS THE ALPHABET, NOT THE WALL -- AND THE BOUND IS 80% HERD (session 138).**
+            Session 137's ordered item, answered, and it retires the counter nine sessions have read
+            as the refusal. One new truth page,
+            [`the-biggest-death-counter-was-the-alphabet.md`](../../knowledge/strategy/the-biggest-death-counter-was-the-alphabet.md);
+            the stale inference corrected on
+            [`the-window-binds-on-the-parents-that-produce.md`](../../knowledge/strategy/the-window-binds-on-the-parents-that-produce.md).
+            - **THE CENSUS, AND ITS SELF-CHECK.** `_notes/s138_unarmed_census.py` runs the cycle-3
+              JUNCTION STAGE ONLY over the same 16 parents at the same knobs, with `full_herd._expand`
+              and `two_roll.junction_gates` wrapped so every child reports its arming probe, its cone
+              margin and the letter it carries -- streamed into histograms, never a 429k-row dump.
+              124 s, and it reproduces `unarmed` **429724** to the count, so the population is the
+              search's own (`_notes/s138_unarmed_census.{log,json}`).
+            - **THE BYTE-IDENTITY WAS PLUMBING, NOT A MECHANIC.** `probe_half` and `handoff.RUNWAYS`
+              are ROLL-stage / chain-back arguments and `extend_cycle` passes NEITHER into
+              `junction_beam`, so the junction is a deterministic function of the parents and the
+              alphabet and answers twice the same **by construction**. Before reading a counter's
+              stability as a wall, check the knob reaches the stage that raises it.
+            - **THE REFUSAL IS TWO POPULATIONS AND NEITHER IS A LEVER.** **97.77%** (420144) never
+              flip at all -- probe speedF -26..-10, a **28-unit** hard floor that is FLAT across all
+              12 generations -- and **2.23%** (9580) flip and land under the bar. Best refused
+              **+16.998**, worst armed **+17.000**, nothing in between. Three of 16 parents produce
+              ZERO endpoints and their refusals top out at -11.4, so no threshold reaches them either.
+            - **THE BAR IS THE DECOMP'S KNEE AND ITS PRICE IS EXACT.** `_roll_init` is
+              `clamp(speedF*1.5 + 0.5, 5, 26)`, so `min_preroll = 17.0` is where the clamp SATURATES,
+              and each 1.0 of deficit costs exactly **1.5 u/frame** of roll. Relaxing to +16.0 admits
+              5677 children at <=5.8% weaker rolls -- **+7.8% endpoints into a pool that already
+              discards 97.1%** (1258-9604 endpoint children a producing parent, `probe_cap` takes
+              **250**). The gate above the pool cannot matter while the pool is the cut. Gate
+              `tests/test_arming_bar.py` pins the knee and the 1.5 u/f slope.
+            - **AND A PENDING L ARMS NOTHING -- 36535 of 251397 EITHER WAY, to the count.** Decomp
+              says why: `chaseAttention` only acquires inside the +-90 deg front cone and every child
+              at this probe is OUT of it by the `in_cone` gate immediately above. The lock that routes
+              the flip is INHERITED; arming is a posture carried in, never bought on the last frame.
+              The toward-Tetra stick raises the rate 14.53% -> **36.80%** and decides nothing.
+            - **THE ARITHMETIC THAT SHOULD AIM THE NEXT SESSION: 89.82 = 72 herd + 4.82 gap + 13
+              cut.** (81.89 u at the 17.0 u/f walk cap.) Every screen-side knob priced since s135 --
+              window, runway floor, probe pool, `l0` frontier -- acts on the GAP term alone, which is
+              **5.4%** of the bound. The herd is **80%**.
       - [~] **THE WINDOW BOUND THE SCREEN AND NOT THE PLAN -- 89.82 STANDS, AND THE BAR BELONGS TO
             ITS TERMINAL (session 137).** Session 136's two ordered items, both answered, both
             negative in the useful way: the fan window it measured is real and it is not worth a

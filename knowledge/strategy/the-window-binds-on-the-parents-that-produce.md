@@ -131,8 +131,14 @@ neither can be blamed again: the fan's widest survivor reads 16.41-19.49 deg ins
 so the box holds a rung the population does not use. And the junction's death counters come back
 **byte-identical on the five that matter** - `unarmed` **429724**, `in_cone` **314542**, `outbox`
 6576, `wall` 26304, `ENDPOINT` 73070 - with only the fan-dependent ones moving (`aim_followed`
-341777 -> 885403, `unrollable` 874 -> 90). Arming is what refuses, it refused exactly as hard under
-both windows, and no screen knob has ever touched it.
+341777 -> 885403, `unrollable` 874 -> 90).
+
+That byte-identity was read here as arming refusing equally hard under both screens. It is not
+evidence of that: `probe_half` is a ROLL-stage argument and `extend_cycle` never passes it into
+`junction_beam`, so the junction answers twice the same **by construction**, and session 138's census
+shows `unarmed` admits 73070 endpoints into a pool that takes 250 - see
+[the-biggest-death-counter-was-the-alphabet](the-biggest-death-counter-was-the-alphabet.md), which
+also prices the bar and names the pool as the cut that is actually binding.
 
 ## What it does not say
 
