@@ -139,6 +139,7 @@ def _load_hyrule_1727():
     return tris, link_y, old, new
 
 
+@pytest.mark.slow
 def test_hyrule_1727_f32_clip_anchor():
     """Live-confirmed Hyrule seam clip at (-1727,-990) reproduced in the model as an f32 anchor.
     Ground truth (handoff-06d, live): old~(-1692.31,-955.02) -> new~(-1727.37,-990.66), disp~49.99,

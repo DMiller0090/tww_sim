@@ -1710,6 +1710,43 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [x] **THE GATE WAS 29 MINUTES BECAUSE MOST OF ITS COST WAS NOT TESTS AT ALL -- IT IS NOW
+            1:07, AND THE 2-MINUTE RULE IS MACHINE-CHECKED (session 132).** Dereck's steer, and then
+            his hard rule: the per-session suite must never exceed 2 minutes, and a functionality test
+            does not take a second. No model, harness or fixture code changed -- `tww_sim/` and
+            `harness/` are byte-identical, so the 0-ULP surface is untouched by construction.
+            - **THE DIAGNOSIS IS HIS QUESTION, NOT A SPEEDUP.** The expensive cases were not
+              functionality tests: they re-ran the planner, the fan or the camera pool at test time and
+              asserted the measurement that came back. `test_the_gate_reaches_the_PASS_and_not_only_the_alphabet`
+              re-derived `entry_score.qualified` from an empty cache (**117 s**);
+              `test_the_probe_fan_is_recentred_on_tetra...` ran a herd stage (**61 s**); the three
+              `entry_ledger` spread gates each ran the camera model over a pool (**12-16 s**). Research
+              re-derived per run, wearing a test's clothes. The real fidelity gates were always fast --
+              `test_node1_console` 0.3 s, the 12 `test_native_camera` gates 1.9 s together.
+            - **MEASURED, NEVER GUESSED, AND WITHOUT EVER RUNNING THE 29-MINUTE SUITE TO FIND THEM.**
+              Per FILE first, each in its own process under a 45 s cap, so a file that blows the cap
+              IS a carrier and the search is bounded (11 min): **89 of 126 files run in 87 s together**
+              and six held nearly all the rest. Then per TEST, streaming `pytest -v` with a reader
+              thread and a deadline so a killed run still names the case it died in.
+            - **THE BAR IS THE RULE: 135 marks across 34 files**, ending with every case over 1 s.
+              **29:00 -> 1:07** (1118 passed, 3 skipped, 159 deselected, 8 xfailed), serial, on the
+              same box. Everything marked still runs: `pytest -m slow`.
+            - **AND IT IS GATED, because a convention this repo does not machine-check drifts.**
+              [`tests/conftest.py`](../../tests/conftest.py) fails the default run when it exceeds
+              **120 s** or when any unmarked test exceeds the per-test budget, printing the offenders
+              by name. Cost is charged as setup+call+teardown on purpose (a module fixture is paid by
+              its first consumer). It trips at 1.5 s rather than 1.0 because a band of tests sits at
+              0.9-1.1 and a hard 1.0 flags a different two every run -- that is noise, not drift.
+              Subset and `-m slow` runs are exempt: a one-file run's first test absorbs the whole cold
+              start, which is ~0.5 s of fiction.
+            - **TWO NEGATIVE RESULTS worth not repeating.** `pytest-xdist` is INSTALLED but
+              deliberately NOT wired in: measured 280 s -> 152 s with `-n auto --dist loadfile` and
+              **worse** at 175 s with `--dist load` (module fixtures rebuild per worker), i.e. ~1.8x
+              for a hard dependency, while marking alone got 4.7x for free. And marking the top test
+              in a file often just MOVES its cost: `test_entry_ledger` read 20 s -> 14.4 -> 14.5 ->
+              14.4 across three marks as the camera warm-up was handed down the file, and only
+              re-measuring per test showed all three spread gates were independently 12-16 s (the file
+              is now **1.06 s**).
       - [x] **THE CAMERA RUNS ON THE C FRAME, AND THE THING IN THE WAY WAS A GUARD -- THE STAGE
             NOW TAKES ZERO WIRED STEPS (session 131).** s130's next step, done. One new truth page,
             [`knowledge/model/the-camera-on-the-native-frame.md`](../../knowledge/model/the-camera-on-the-native-frame.md).

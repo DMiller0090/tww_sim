@@ -291,6 +291,7 @@ def test_the_uncapped_fleet_fan_is_the_python_fan():
 # --------------------------------------------- the momentum axis: generalized, then measured DEAD
 # Session 82. "Each sub-cap momentum is its own locus" is true; "with genuine dust on it" is not.
 
+@pytest.mark.slow
 def test_the_momentum_below_the_cap_is_a_dead_axis():
     """THE FINDING. Scanned ALONG the whole locus (not a one-point band -- `entry_search.locus_scan`,
     which re-projects onto resid 0 at every station), the cap lights up most of its curve and every
@@ -516,6 +517,7 @@ def test_byte_pairs_that_decode_alike_walk_alike_bit_for_bit():
         assert len(out) == 1
 
 
+@pytest.mark.slow
 def test_the_decoded_alphabet_keeps_every_draw_and_survives_delivery():
     """Collapsing the grid must lose no physics and no delivery: one member per decoded class, the
     classes themselves unchanged, and the representative clear of the 0/255 bytes `dtm_make`
@@ -923,6 +925,7 @@ def _fx(name):
     return os.path.join(_FIXTURES, name)
 
 
+@pytest.mark.slow
 def test_the_session_87_pass_still_scores_but_two_thirds_of_it_cannot_ROLL():
     """**THE PASS, AND THE GATE IT WAS MISSING.** Same scoping as session 85's
     (`search2 2 1,2 1 6 2`, 39.3 M candidates, 4997 s): 55 distinct genuine draws, frame floor 4, and
@@ -1031,6 +1034,7 @@ def test_the_session_90_list_is_the_whole_pass_because_the_seam_closed():
     assert s90['rows'][0]['frames'] == 4
 
 
+@pytest.mark.slow
 def test_the_pinned_qualification_still_measures_the_same_way():
     """The productive set is PINNED (624 s to measure), so it has to be spot-checked or it rots.
 

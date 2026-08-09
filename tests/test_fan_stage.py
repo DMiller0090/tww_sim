@@ -221,6 +221,7 @@ def _cands(cs):
             for c in cs]
 
 
+@pytest.mark.slow
 def test_the_stage_is_the_same_stage(stage):
     """The whole point: same candidates, same order, same knobs, same endpoints, `==`."""
     ref, fan = stage
@@ -228,6 +229,7 @@ def test_the_stage_is_the_same_stage(stage):
     assert _cands(fan) == _cands(ref)
 
 
+@pytest.mark.slow
 def test_the_stage_agrees_on_the_banked_nodes_too(env, hl, box, nodes):
     """The banked seeds run through the whole stage BY THE SAME ROUTE, coarsely.
 
@@ -306,6 +308,7 @@ def test_the_seed_exercises_both_branches_of_the_screen(env, hl, box, prologue):
                             % (kept, pruned)
 
 
+@pytest.mark.slow
 def test_each_kernel_carries_the_stage_on_its_own(env, hl, box, prologue):
     """**R1 and R2 are separate ports and are gated separately** (session 130).
 
@@ -325,6 +328,7 @@ def test_each_kernel_carries_the_stage_on_its_own(env, hl, box, prologue):
     assert _cands(both) == _cands(wired)
 
 
+@pytest.mark.slow
 def test_the_shared_body_really_runs_on_this_seed(env, hl, box, prologue):
     """The R2 comparison above is only worth something if a shared body actually FORMS here -- an
     aim that talks, or one whose roll never fires, silently falls back to the wired path and the
@@ -345,6 +349,7 @@ def test_the_shared_body_really_runs_on_this_seed(env, hl, box, prologue):
     assert seen
 
 
+@pytest.mark.slow
 def test_the_screen_order_survives_the_fan_being_evaluated_per_l_window(stage_keep1):
     """**The one thing the record comparison cannot catch.** `roll_candidates` sorts its screen with
     a STABLE sort, so ties break by insertion order, and the fan is evaluated per L WINDOW while the

@@ -133,6 +133,7 @@ def test_the_camera_alphabet_is_deduped_on_the_trail():
     assert EC.NEUTRAL in {b for b, _t in alpha}
 
 
+@pytest.mark.slow
 def test_every_alphabet_byte_survives_dtm_delivery():
     """`dtm_make.cal` clamps a C-stick 255 to 254 and 0 to 1 exactly as it does the main stick
     (`[[octagon-clamp-decode-bug]]`), so an alphabet built on raw bytes would author trails the console
@@ -198,6 +199,7 @@ def test_the_roll_facing_latches_one_frame_after_the_a_press():
             assert got != (ang + 0x8000 + trail[h]) & 0xFFFF
 
 
+@pytest.mark.slow
 def test_a_camera_that_cannot_aim_the_cell_is_not_a_camera_for_that_cell():
     """The bound on the axis, and the one thing that could have made it a phantom: the residual is a
     property of the facing CELL and camera-independent, but the BYTES that reach the cell are not. So
@@ -273,6 +275,7 @@ def test_cameras_a_fan_cannot_tell_apart_are_one_pass():
 
 # --------------------------------------------------- the SHAPE of the axis (session 96)
 
+@pytest.mark.slow
 def test_the_walk_side_channel_carries_exactly_two_bytes():
     """**THE AXIS'S SUPPLY LAW.** The 4-frame walk trail is a function of the C-stick bytes on entry
     frames 0 and 1 and of nothing later -- measured over every 4-byte path at stride 32 (4096 of them):
@@ -301,6 +304,7 @@ def test_a_tail_byte_moves_the_aim_and_leaves_the_walk_trail_alone():
     assert len(aims) > 4, "the tail byte does not move the aim frame either -- then it is inert"
 
 
+@pytest.mark.slow
 def test_one_aimable_camera_per_walk_trail_beats_enumerating_paths():
     """WHAT A PASS SHOULD BUY. `walk_cameras` picks the walk pair first and then searches a TAIL byte
     that keeps the scope aimable, so every camera it returns is a distinct walk cloud AND deliverable.
@@ -321,6 +325,7 @@ def test_one_aimable_camera_per_walk_trail_beats_enumerating_paths():
     assert len(keep) < len(seg)                        # ...from fewer passes
 
 
+@pytest.mark.slow
 def test_a_pass_reports_the_dedup_key_and_thrust_scope_it_ran_under():
     """A pass's own budget choices are part of its result, exactly as `cell_scope` is: session 95's
     "2x cheaper" number came from a dedup key that `dedupe_cameras` was never called with, and no pass

@@ -178,6 +178,7 @@ def test_the_windowed_scan_is_the_full_span_scan(pf):
             == H.side_crossings(pf, REF_TETRA, pf.entry_at(230.0)))
 
 
+@pytest.mark.slow
 def test_the_root_curve_is_a_bound_and_says_so(pf):
     """`entry_roots` skips the f32 band walk, so it can be non-empty where the GENUINE curve is empty
     -- a bisected root is only a sign change, and whether its neighbourhood clips is what the walk

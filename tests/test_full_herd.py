@@ -142,6 +142,7 @@ def test_pursuit_box_contains_the_human_every_frame(env, hl, box):
     assert box['max_lat'] > 0 and box['max_delta'] > 0
 
 
+@pytest.mark.slow
 def test_junction_beam_gives_far_more_endpoints_than_the_family(env, hl, box):
     """The s43 search-space finding, gated as MEASURED: from the human's own cycle-1 exit the
     per-frame junction beam returns an order of magnitude more distinct gate-passing in-box
@@ -270,6 +271,7 @@ def test_the_exit_probes_pool_is_the_uncapped_mix_not_the_carry_pool():
     assert F._probe_pool(ends, 250, None, spread=False) == ends[:250]
 
 
+@pytest.mark.slow
 def test_the_endpoint_probe_reports_the_arrival_its_rolls_deliver(env, hl, box):
     """**The OVERSHOOT as the endpoint probe's third axis** (session 70). A cycle's roll is a ~205 u
     atom that cannot stop short, so WHERE a plan finishes is decided when its last endpoint is chosen
@@ -319,6 +321,7 @@ def test_the_endpoint_probe_reports_the_arrival_its_rolls_deliver(env, hl, box):
     assert got, "no endpoint off the human's own cycle-1 exit was rollable at all"
 
 
+@pytest.mark.slow
 def test_the_probe_pool_is_a_flatness_prefix_and_the_band_share_is_what_covers_the_arrival(env, hl,
                                                                                           box):
     """**The false assumption that starved the arrival keep** (session 70). `_probe_pool`'s note said
@@ -591,6 +594,7 @@ def test_endgame_report_scores_both_halves_of_the_joint_target(env, hl):
     assert -0x8000 <= eg['entry_dfacing'] < 0x8000
 
 
+@pytest.mark.slow
 def test_terminal_targeting_reduces_placement_distance_and_bit_confirms(env, hl, box):
     """The terminal cycle drives Tetra TOWARD a genuine coord (ranked by placement distance, not
     u/frame) and any survivor replays BIT-IDENTICALLY on a fresh `FreeRun`. Run off a cheap cycle-1
@@ -608,6 +612,7 @@ def test_terminal_targeting_reduces_placement_distance_and_bit_confirms(env, hl,
     assert c['talk_safe'] and not best['run']._follow_warned
 
 
+@pytest.mark.slow
 def test_the_wall_prune_bites_on_the_locked_plan_and_is_inert_on_a_clean_one(env, hl, box):
     """**Session 61: the wall half of the objective, wired into the search.**
 
@@ -684,6 +689,7 @@ def test_the_frame_bound_rank_and_the_budget_cut(env, hl, box):
     assert len(F._budget_cut(nodes, kb, mid)) == sum(1 for v in vb if v <= mid)
 
 
+@pytest.mark.slow
 def test_the_lateral_rate_is_the_measured_plow_authority(env, hl):
     """**Session 62: `objective.LATERAL_RATE` is a MEASUREMENT, and this is the measurement.**
 
@@ -707,6 +713,7 @@ def test_the_lateral_rate_is_the_measured_plow_authority(env, hl):
     assert a['along_max'] / a['frames'] > 3.0 * a['per_frame']
 
 
+@pytest.mark.slow
 def test_glide_probe_ranks_an_endpoint_by_what_its_terminal_reaches(env, hl):
     """**Session 62: the last cycle's keep is GLIDE-ABILITY, one stage on from `roll_probe`.**
 
@@ -742,6 +749,7 @@ def test_glide_probe_ranks_an_endpoint_by_what_its_terminal_reaches(env, hl):
                                                hl.lateral(spent['run'].tx, spent['run'].tz), th)
 
 
+@pytest.mark.slow
 def test_the_thread_rank_is_wired_without_moving_the_budget_cut_off_the_bound(env, hl, box):
     """A WIRING gate (reproducing the measurement costs ~8 min of search). Two things have to hold
     together for the session-62 last-cycle rank to be safe:
@@ -781,6 +789,7 @@ def test_the_thread_rank_is_wired_without_moving_the_budget_cut_off_the_bound(en
             "the budget cut must stay on the admissible bound even under the thread rank"
 
 
+@pytest.mark.slow
 def test_the_frame_minimal_terminal_stops_at_the_first_placement_with_link_moving(env, hl, box):
     """**Session 61: the re-aimed terminal.** Rule 3 replaced the near-rest arrival, so the terminal
     stops the moment Tetra is inside the placement band with Link STILL MOVING (`_terminal_ready`) --
@@ -820,6 +829,7 @@ def test_the_frame_minimal_terminal_stops_at_the_first_placement_with_link_movin
     assert tt_p['best']['score'] == tt_p['best']['dist'] == tt_p['dist']
 
 
+@pytest.mark.slow
 def test_the_atom_wired_terminal_places_post_atom_at_the_slam(env, hl):
     """**Session 66: the terminal is wired to the escape atom's residual.** The atom's conversion
     frames keep pushing Tetra ~35-45 u down-corridor after the glide hands off, so in atom mode
@@ -906,6 +916,7 @@ def _prologue_node(env, nflip=1):
     return dict(run=base, log=blog, frames=nflip, jf=nflip, jv=dict(kind='prologue', phases=[]))
 
 
+@pytest.mark.slow
 def test_the_camera_cut_takes_a_share_per_probe_and_one_probe_is_unchanged(env, hl, box):
     """**Several ``tcs_probe`` keeps, one share each** (session 116). The last cycle's camera answers
     to two independent customers -- the escape's snap bill (`camera_probe_key`) and its ``l_ok`` cone
@@ -940,6 +951,7 @@ def test_the_camera_cut_takes_a_share_per_probe_and_one_probe_is_unchanged(env, 
     assert vals <= {0.0, None}
 
 
+@pytest.mark.slow
 def test_the_same_predicate_as_a_requirement_drops_what_the_share_only_sinks(env, hl, box):
     """**A ``tcs_require`` is a ``tcs_probe``'s other SHAPE, and the shape is the only difference**
     (session 122) -- the property that makes `extend_cycle`'s ``lok_require`` an A/B rather than a
@@ -1014,6 +1026,7 @@ def test_a_beam_node_re_opens_at_its_last_roll_bit_exact(env, hl, box, tmp_path)
     assert sp['roll_frames'] >= 2
 
 
+@pytest.mark.slow
 def test_a_terminal_is_attributed_to_its_parent_cycle_by_log_prefix(env, hl, box):
     """**`beam_io.attribute_parents`, gated** (session 123): a chained beam records only terminals, so
     the transfer between two cycles -- what moving cycle N-1 would do to cycle N -- has no column, and
@@ -1155,6 +1168,7 @@ def test_the_cycle_beam_keeps_the_corridor_branch_the_frame_bound_ranks_away(env
     assert '_mixed_beam(' in r1src and "abs(t['m']['lat'])" in r1src
 
 
+@pytest.mark.slow
 def test_the_terminal_reports_the_rule_3_frontier_as_well_as_the_closest(env, hl, box):
     """**`closest` is rule-3-blind, and session 63 measured the two disagreeing.** The same chain under
     two different cycle-3 keeps ends either 31.406 u out with `ready=False` or 33.482 u out at 74 frames
@@ -1207,6 +1221,7 @@ def test_the_roll_endpoint_alignment_is_the_humans_envelope_not_alives_60_u(env,
                                      - hl.lateral(n['run'].tx, n['run'].tz))
 
 
+@pytest.mark.slow
 def test_separation_scan_reports_the_coupled_entry_barrier(env, hl, box):
     """The coupled-entry barrier metric (milestone 2b): from a placement state, `separation_scan`
     reports the deep-contact gap, the best one-step Tetra-still-on-coord placement, whether a CLEAN
@@ -1228,6 +1243,7 @@ def test_separation_scan_reports_the_coupled_entry_barrier(env, hl, box):
     assert sc['freeze_ok'] == (sc['centre_feet'] >= sc['co_radii_bar'])
 
 
+@pytest.mark.slow
 def test_freeze_bar_is_the_co_radii_sum(env, hl, box):
     """**The session-46 pivot, gated decomp-exact**: the plow ejects Tetra by `CO_RADII_BAR -
     centre_feet` (halved by the 50/50 `cc_push_pair` split), so she is FROZEN on her coord exactly
@@ -1284,6 +1300,7 @@ def test_freeze_bar_is_the_co_radii_sum(env, hl, box):
                for cf, ej in samples)
 
 
+@pytest.mark.slow
 def test_entry_targeting_stays_in_regime_and_bit_confirms(env, hl, box):
     """The coupled-entry reposition machinery: `entry_targeting` steers Link toward the final-clip
     entry within the plow regime + genuine band, and any survivor replays BIT-IDENTICALLY on a fresh
@@ -1301,6 +1318,7 @@ def test_entry_targeting_stays_in_regime_and_bit_confirms(env, hl, box):
     assert c['talk_safe'] and not b['run']._follow_warned
 
 
+@pytest.mark.slow
 def test_walk_to_entry_is_clean_from_rest_and_flags_a_hot_arrival(env, hl):
     """**Milestone-2b piece 2, gated (session 47): the Link-only WALK to the final-clip entry is
     CLEAN above the bar from a near-rest arrival, and freeze_ok alone is NOT enough.**
@@ -1337,6 +1355,7 @@ def test_walk_to_entry_is_clean_from_rest_and_flags_a_hot_arrival(env, hl):
         "freeze_ok position with a HOT arrival must be flagged (momentum is the other half)"
 
 
+@pytest.mark.slow
 def test_arrival_quality_gates_position_and_momentum(env, hl):
     """**Route a, piece 1 -- the CHEAP arrival gate (session 48).** `arrival_quality` is the monotone
     predictor a grazing-chain candidate is rejected by BEFORE paying `walk_to_entry` / the 800 s
@@ -1369,6 +1388,7 @@ def test_arrival_quality_gates_position_and_momentum(env, hl):
     assert F.walk_to_entry(ebs, hl)['clean'] == qe['arrival_ok']
 
 
+@pytest.mark.slow
 def test_terminal_grazing_objective_seeks_freeze_ok_without_breaking_placement_mode(env, hl, box):
     """**The re-ranked terminal (session 48), gated structurally.** `terminal_targeting`'s default
     `objective='placement'` (the s44 nearest-coord rank) must be byte-for-byte unchanged, and the new
@@ -1417,6 +1437,7 @@ def test_place_on_thread_freezes_tetra_on_the_thread_from_an_online_rest_arrival
         assert p['frames'] == len(p['log'])
 
 
+@pytest.mark.slow
 def test_decel_place_beats_the_hot_glide_with_an_on_line_near_rest_arrival(env, hl):
     """**Route (a), piece 1 -- the DECELERATING on-line placement approach, gated (session 50).**
     Session 49 proved the hot -23 EBS glide places Tetra on a coord only at deep contact then drags
@@ -1450,6 +1471,7 @@ def test_decel_place_beats_the_hot_glide_with_an_on_line_near_rest_arrival(env, 
         assert r['frames'] == len(r['log']) and r['brake_frames'] > 0
 
 
+@pytest.mark.slow
 def test_homing_place_corrects_an_off_thread_lateral_offset(env, hl):
     """**Route (a), piece 1 -- the HOMING placement terminal, gated (session 51).** `decel_place`
     (s50) herds Tetra straight DOWN the line (lat_drift ~0), so it needs her already on the thread; run
@@ -1517,6 +1539,7 @@ def test_cycle_unit_chains_from_the_recorded_entry_and_bit_confirms(env, hl, box
     assert c['per_frame'] == best['m']['per_frame']    # same log, same frames -- exact
 
 
+@pytest.mark.slow
 def test_junction_authority_is_real_and_cannot_be_armed(env, hl, box):
     """**Session 64: session 63's next step, retired by measurement.** It asked to correct Tetra's
     lateral in the JUNCTION rather than the roll, on the premise that Link repositions there in
@@ -1560,6 +1583,7 @@ def test_junction_authority_is_real_and_cannot_be_armed(env, hl, box):
     assert off['armed'] == 0, "still zero armed with the pursuit box removed -- the box is not the blocker"
 
 
+@pytest.mark.slow
 def test_the_endpoint_probe_reports_where_the_escape_would_land_and_that_beats_the_corridor(env, hl,
                                                                                            box):
     """**The axis that SUBSUMES ``off`` and ``arrive`` instead of joining them** (session 71).
@@ -1641,6 +1665,7 @@ def test_the_endpoint_probe_reports_where_the_escape_would_land_and_that_beats_t
     assert rolls[0][1] < min(t[1] for t in rolls[1:]) - 2.0 * O.PLACEMENT_BAND
 
 
+@pytest.mark.slow
 def test_the_probe_fan_is_recentred_on_tetra_because_that_is_where_survivors_live(env, hl, box):
     """**The screen was 3x coarser than the stage it screens for, over a fan 6x wider than any roll can
     survive in** (session 71) -- the coverage bug one level down from the session-70 pool.
@@ -1693,6 +1718,7 @@ def test_the_probe_fan_is_recentred_on_tetra_because_that_is_where_survivors_liv
     assert edge < narrow
 
 
+@pytest.mark.slow
 def test_the_screens_axis_is_the_window_not_the_step_because_survival_is_one_aim_wide(env, hl, box):
     """**Session 71 handed over a two-stage screen -- coarse ``step`` to find live endpoints, fine
     ``step`` on those -- and it cannot work, because per-endpoint survival is ONE alphabet member

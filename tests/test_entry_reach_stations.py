@@ -185,6 +185,7 @@ def test_the_locus_scan_inside_filter_is_inert_by_default():
     assert (c['stations'], c['live'], c['walkable'], c['live_at']) == (0, 0, 0, [])
 
 
+@pytest.mark.slow
 def test_hull_scan_finds_the_console_delivered_clip_at_the_frame_floor():
     """THE CONTROL, and the gate that makes every negative below mean something
     (`[[search-space-contains-human]]`). The identical call that reads empty at cell 2553 must find the
@@ -196,6 +197,7 @@ def test_hull_scan_finds_the_console_delivered_clip_at_the_frame_floor():
     assert min(_dist(q, entry) for q in r['walkable_at']) < 0.5
 
 
+@pytest.mark.slow
 def test_cell_2553_has_no_reachable_dust_at_thrust_15():
     """The negative, and note what it is a negative ABOUT: thrust 15, which is what `thrusts=(15,)`
     narrowed every pass to from session 96 on. Measured over all 1040 leans in the slow gate below
@@ -211,6 +213,7 @@ def test_cell_2553_has_no_reachable_dust_at_thrust_15():
         assert r['n_genuine_grid'] == 0
 
 
+@pytest.mark.slow
 def test_cell_2553_is_alive_at_thrust_14_at_the_same_frame_floor():
     """THE SESSION-99 FINDING THAT OVERTURNED THE CLOSURE, pinned so nobody re-drops the thrust.
 
@@ -230,6 +233,7 @@ def test_cell_2553_is_alive_at_thrust_14_at_the_same_frame_floor():
     assert hit >= 3, 'thrust 14 should be live at most heavy leans, got %d of 4' % hit
 
 
+@pytest.mark.slow
 def test_the_thrust_14_bands_are_mostly_plateau_which_is_what_the_axis_COSTS():
     """Why a live population is still expensive, and why `lottery` scored it at zero.
 
@@ -246,6 +250,7 @@ def test_the_thrust_14_bands_are_mostly_plateau_which_is_what_the_axis_COSTS():
     assert max(widths) < 1e-4, widths                  # and it is a razor, not a door
 
 
+@pytest.mark.slow
 def test_cell_2553_dust_appears_one_frame_up():
     """THE COUNTERFACTUAL, which is what localises the negative to the FRAME BUDGET rather than to the
     search. One extra walk frame and the same scan finds dust -- at the station session 94's

@@ -254,6 +254,7 @@ def test_the_flip_sweeps_span_is_a_budget_and_the_conversion_cone_is_not_a_bound
     assert set(arc).issubset(set(full)) and len(full) > len(arc)
 
 
+@pytest.mark.slow
 def test_sweeping_the_flip_and_rotate_knobs_can_only_improve_the_landing(bed):
     """**The two knobs `probe` was leaving at their defaults are the ones that STEER the placement**
     (session 72).
@@ -299,6 +300,7 @@ def test_sweeping_the_flip_and_rotate_knobs_can_only_improve_the_landing(bed):
     assert len(lats) > 2 and max(lats) - min(lats) > 1.0
 
 
+@pytest.mark.slow
 def test_the_frames_rank_prices_the_landing_against_what_the_separation_costs(bed):
     """**Sweeping the flip knob creates a trade, and a landing-only rank pays any number of frames
     for it** (session 72).
@@ -356,6 +358,7 @@ def test_the_frames_rank_prices_the_landing_against_what_the_separation_costs(be
     assert abs(miss(by_miss) - min(miss(r) for r in ok)) < 1e-12
 
 
+@pytest.mark.slow
 def test_the_camera_bill_is_the_snap_windows_near_edge_and_the_atom_never_pays_it(bed):
     """**The snap window is ~80 deg wide, the scan returned its FAR edge, and that value is the csangle
     every atom result from session 65 to 72 was computed at** (session 73).
@@ -460,6 +463,7 @@ def test_the_escapes_own_frames_are_worth_less_than_a_ceiling_frame_and_one_is_d
     assert pd0 - pd1 <= prof['total'] + 1e-6
 
 
+@pytest.mark.slow
 def test_a_non_snapping_camera_does_not_veto_the_turnaround(env, hl, arrivals_s75):
     """**A SUFFICIENT CONDITION WAS BEING USED AS A NECESSARY ONE, and it threw away firing escapes**
     (session 75, settling the item session 74 measured and deliberately did not claim).
@@ -586,6 +590,7 @@ def snapreach_s77(env):
     return out
 
 
+@pytest.mark.slow
 def test_recovery_row_is_the_ledgers_measurement_and_a_bucket_not_a_rank(hl, arrivals_s75):
     """**The producer `objective.along_floor`'s ``recovery`` never had** (session 77).
 
@@ -756,6 +761,7 @@ def test_lok_clear_is_the_atoms_own_l_ok_and_not_the_snap_or_the_arrival_cone(hl
     assert all(s['snaps'] == (not s['l_active']) for s in sr['states']) and sr['n_clear'] == 0
 
 
+@pytest.mark.slow
 def test_the_camera_supplies_l_ok_where_it_cannot_supply_the_snap(hl, lok_s116):
     """**THE SESSION-116 FINDING, gated: the snap and the cone are different questions, and the last
     roll can answer the one that matters.**
@@ -941,6 +947,7 @@ def lok_reach_s116(hl, lok_s116):
             for k, a in lok_s116.items()}
 
 
+@pytest.mark.slow
 def test_the_screen_cannot_order_the_axis_it_lets_through(hl, lok_s116, lok_reach_s116):
     """**A screen is not a rank** (session 117) -- the property that keeps `full_herd.lok_probe_key`
     and `full_herd.camera_probe_key` BOTH in the last cycle's ``tcs_probe`` instead of the newer one
@@ -979,6 +986,7 @@ def test_the_screen_cannot_order_the_axis_it_lets_through(hl, lok_s116, lok_reac
     assert separating, "no family's clearing set is separated by the snap bill either -- the gate "                        "is measuring nothing"
 
 
+@pytest.mark.slow
 def test_a_coarse_camera_grid_must_be_swept_directly_not_filtered_from_a_fine_one(lok_s116,
                                                                                   lok_reach_s116):
     """**The join trap, gated** (sessions 116 and 117 both paid for it).

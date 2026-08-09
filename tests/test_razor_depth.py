@@ -106,6 +106,7 @@ def test_the_pocket_orders_the_thrusts_and_the_floor_thrust_falls_outside_it():
     assert 0.45 < d[15]['push'] - d[13]['push'] < 0.46
 
 
+@pytest.mark.slow
 def test_the_brace_pin_loosens_as_the_cut_fires_earlier():
     """THE MECHANISM, and it is legible in how tightly `old` is pinned.
 
@@ -135,6 +136,7 @@ def test_the_brace_pin_loosens_as_the_cut_fires_earlier():
 
 # --------------------------------------------------------------- the screen, and its two directions
 
+@pytest.mark.slow
 def test_from_the_frame_floor_hull_the_floor_thrust_cannot_reach_the_plane():
     """The verdict AT THE FRAME FLOOR, which is where a plan at the delivered cost puts the entry: thrust 14
     (`plan_cost` 22) admits a clip, thrust 13 (cost 21) cannot reach the plane from any entry the hull
@@ -155,6 +157,7 @@ ON_LOCUS = ((2552, 40841, 15, 64761), (2552, 40841, 14, 64761), (2553, 40850, 14
             (2551, 40820, 15, 64793))
 
 
+@pytest.mark.slow
 def test_genuine_implies_a_through_going_endpoint():
     """THE GATE THAT COULD FALSIFY THE VERDICT, so it is the one that must stay green.
 
@@ -186,6 +189,7 @@ def test_genuine_implies_a_through_going_endpoint():
     assert ngen >= 50, ngen                               # it had a real population to falsify with
 
 
+@pytest.mark.slow
 def test_the_screen_has_no_false_negative_on_the_session_99_live_configurations():
     """The control every negative here is argued against (`[[search-space-contains-human]]`): the four
     configurations session 99 measured live walkable stations at must all ADMIT. A screen that refused
@@ -197,6 +201,7 @@ def test_the_screen_has_no_false_negative_on_the_session_99_live_configurations(
         assert r['admits'], (cell, thrust, r)
 
 
+@pytest.mark.slow
 def test_the_placement_is_inert_at_the_scale_a_herd_tolerates():
     """THE PLACEMENT AT HERD SCALE, measured rather than reasoned -- and note the scale in the name.
 
@@ -214,6 +219,7 @@ def test_the_placement_is_inert_at_the_scale_a_herd_tolerates():
     assert max(depths) - min(depths) < 0.10, depths       # 6 u of Tetra buys under 0.1 u of depth
 
 
+@pytest.mark.slow
 def test_one_more_walk_frame_does_not_open_thrust_13():
     """The frame counterfactual, because `plan_cost` = plan_frames + thrust + 4 would still make
     thrust 13 at FIVE walk frames (cost 22) worth a frame. The bigger hull reaches 2.3x the entries and
@@ -226,6 +232,7 @@ def test_one_more_walk_frame_does_not_open_thrust_13():
     assert five['depth'][1] <= four['depth'][1] + 0.01     # and got no nearer the plane
 
 
+@pytest.mark.slow
 def test_the_thrust_13_shortfall_is_not_a_grid_ARTEFACT():
     """The negative's own resolution control, since at thrust 13 `old` is NOT pinned and so the verdict
     does rest on how finely the razor curve was sampled.
@@ -319,6 +326,7 @@ def test_a_placement_is_a_position_she_can_stand_in():
     assert math.hypot(row[5], row[6]) > 0.4 and RD.depth_of(row) > 0.0
 
 
+@pytest.mark.slow
 def test_the_depth_floor_is_a_corner_constant_over_the_brace_locus():
     """WHAT THE FLOOR IS A PROPERTY OF. Session 100 read ">= 0.1273" off the four populations that happened
     to have live dust, which cannot distinguish a corner constant from a coincidence of those braces.
@@ -440,6 +448,7 @@ def test_the_entry_lean_is_spent_before_the_cut_fires():
     assert max(depths) - min(depths) < 1e-3, depths
 
 
+@pytest.mark.slow
 def test_the_genuine_depth_floor_is_measured_not_assumed():
     """`GENUINE_DEPTH_FLOOR` is the bar the open frame is judged against, so it is measured here rather than
     quoted: at each configuration with known dust, every genuine row's depth is bit-constant across its own
@@ -463,6 +472,7 @@ def test_the_genuine_depth_floor_is_measured_not_assumed():
     assert abs(min(floors) - GENUINE_DEPTH_FLOOR) < 1e-3, sorted(floors)
 
 
+@pytest.mark.slow
 def test_no_placeable_configuration_reaches_the_floor_at_thrust_13_at_the_best_cells():
     """THE HULL-FREE VERDICT, with the placement clause enforced (session 101).
 

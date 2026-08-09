@@ -92,6 +92,7 @@ def _state(run):
 
 # --------------------------------------------------------------------------- the contract
 
+@pytest.mark.slow
 def test_the_shared_body_reproduces_every_target(prologue, aims, grid):
     """**The whole point**: the same segment dict, the same endpoint, the same log, per target."""
     seen = 0
@@ -112,6 +113,7 @@ def test_the_shared_body_reproduces_every_target(prologue, aims, grid):
     assert seen == len(LWS) * len(aims) * len(grid)
 
 
+@pytest.mark.slow
 def test_the_branch_frame_is_where_the_tail_starts(prologue, aims, grid):
     """**Measured, not assumed** -- the s129 handoff's own condition for this port.
 
@@ -163,6 +165,7 @@ def _phys_trace(node, aim, lw, tcs):
     return out
 
 
+@pytest.mark.slow
 def test_one_bodys_camera_arguments_serve_the_whole_family(prologue, aims, grid):
     """**The economy, gated past the divergence.** The camera is walked over the FROZEN body's
     arguments, and past the branch those arguments are no longer that target's own physics -- so

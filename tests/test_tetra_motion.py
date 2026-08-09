@@ -172,6 +172,7 @@ def test_the_ejection_equilibrium_pins_her_cut_frame_distance():
 # --------------------------------------------------------- the law inverted: what is enough
 
 
+@pytest.mark.slow
 def test_the_required_contact_is_thrust_independent():
     """DERECK'S "IT IS ALL THE SAME ANIMATIONS", AS A NUMBER. What the corner asks for -- the cut-frame
     overlap and the spot she must stand in -- is a property of the CELL and the BRACE, not of the
@@ -188,6 +189,7 @@ def test_the_required_contact_is_thrust_independent():
         assert abs(r13['theta_deg'] - r15['theta_deg']) < 3.0, cell
 
 
+@pytest.mark.slow
 def test_the_required_contact_reproduces_the_delivered_clip():
     """THE CONTROL (`[[search-space-contains-human]]`): the requirement is derived, so it owes an
     account of the one clip this corner is known to give. At the delivered cell it predicts a
@@ -208,6 +210,7 @@ def test_the_required_contact_reproduces_the_delivered_clip():
     assert RD.depth_of(row) > RD.DEPTH_FLOOR                   # ...and it is a clip
 
 
+@pytest.mark.slow
 def test_the_delivered_cell_is_an_expensive_one_and_2557_is_the_cheapest():
     """WHERE TO HUNT, AND WHY IT IS NOT WHERE THE CLIP WAS DELIVERED. The requirement is set by how far
     the cell's own no-push razor sits from the corner-most brace: a facing that points at the corner
@@ -338,6 +341,7 @@ def _conjunction(facing, thrust, halo=48.0, hstep=8.0, travel=(160.0, 420.0), t_
     return bands
 
 
+@pytest.mark.slow
 def test_the_razor_and_the_contact_are_mutually_exclusive_at_thrust_13():
     """THE SESSION-102 VERDICT, and it is a mechanism rather than a budget.
 

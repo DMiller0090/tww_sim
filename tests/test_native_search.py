@@ -121,6 +121,7 @@ def test_batch_step_equals_individual(env):
                 "clone %d field %d: %r != %r" % (i, j, indiv[i][j], got[j])
 
 
+@pytest.mark.slow
 def test_search_prunes_and_bit_confirms(env):
     """A tiny search runs, its best is an on-line behind-Tetra pursuit, and the plan bit-confirms."""
     warnings.simplefilter('ignore')

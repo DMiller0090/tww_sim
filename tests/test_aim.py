@@ -114,6 +114,7 @@ def test_the_aim_and_the_centre_lateral_are_the_same_statement(env, hl, thread):
     assert cl['gap'] > 0.0                                # the centre is behind her
 
 
+@pytest.mark.slow
 def test_the_terminal_alphabet_cannot_move_tetra_for_two_frames(env, hl):
     """**Why every terminal rank measured inert.** The input pipeline acts 2 frames late, so a whole
     generation of `full_herd._terminal_alphabet` (290 sticks x L) puts Tetra in the SAME place for

@@ -534,6 +534,7 @@ def test_the_exit_arc_strictly_contains_the_standing_pair_the_grid_defaults_to(a
     assert {r['knobs']['exit_bearing'] for r in CL.atom_cloud(run, hl, **kw)} <= pair
 
 
+@pytest.mark.slow
 def test_the_exit_arc_reaches_arrivals_the_standing_pair_cannot(arrival, hl):
     """**The axis the enumeration owns and had never turned** (session 118).
 
@@ -605,6 +606,7 @@ def test_a_longer_tail_can_move_the_arrival_FURTHER_from_the_station(arrival, hl
 
 # ------------------------------------------------- the arc reaches the CUT (session 119)
 
+@pytest.mark.slow
 def test_the_keep_can_ASK_for_the_arc_and_still_defaults_to_the_standing_pair(arrival, hl):
     """The plumbing session 118 said was missing: `cloud_landing` -- and so `cloud_probe` and
     `full_herd.extend_cycle` above it -- could not pass an exit bearing at all, which is why the arc
@@ -641,6 +643,7 @@ def test_the_arc_is_resolved_PER_ENDPOINT_so_a_bearing_LIST_could_not_be_plumbed
     assert CL._arc(near, hl, None, None) is None, "no step asked for is the pair, not an empty sweep"
 
 
+@pytest.mark.slow
 def test_the_fan_carries_the_arc_so_the_SCREEN_sees_the_axis_the_keep_does(arrival, hl):
     """The screen's half of the same fix. `full_herd.roll_probe` never enumerates -- it prices
     `predict_bound` over a measured fan -- so the arc reaches the cut that decides which endpoints

@@ -22,6 +22,7 @@ def env():
     return seeds.load_env()
 
 
+@pytest.mark.slow
 def test_reachable_fan_is_the_full_byte_grid_not_the_stick_for_bearing_image():
     """The fan's atom is the stick BYTE PAIR, so its aim alphabet is everything the pad can express.
     `stick_for_bearing` emits only maximal-radius bytes, a strict and much smaller subset -- pinning

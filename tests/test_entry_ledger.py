@@ -30,6 +30,8 @@ camera model (`entry_camera.cam_trail`) for a few seconds, everything else is ar
 import json
 import os
 
+import pytest
+
 from harness.tetrapush import entry_ledger as EL
 from harness.tetrapush import entry_score as SC
 
@@ -227,6 +229,7 @@ def test_the_distance_law_reproduces_from_the_cameras_it_was_measured_on():
     assert abs(bams[-1]) > abs(bams[-2]) and dists[-1] < dists[-2]
 
 
+@pytest.mark.slow
 def test_the_strided_camera_pool_misses_the_channels_positive_extreme():
     """WHY THE POOL NEEDS `SPREAD_EXTREMES`, and it is worth a gate because nothing else would notice.
 
@@ -248,6 +251,7 @@ def test_the_strided_camera_pool_misses_the_channels_positive_extreme():
     assert EL.ledger_distance(714, bams) == 520
 
 
+@pytest.mark.slow
 def test_spread_is_farthest_point_and_re_ranks_after_every_pick():
     """The law is a property of the ledger AT PURCHASE TIME, so ranking once and buying the top n is
     the clustering it says not to do: the four best candidates against a FIXED bought set are four
@@ -277,6 +281,7 @@ def test_spread_is_farthest_point_and_re_ranks_after_every_pick():
     assert abs(once[0] - once[1]) < dists[1]
 
 
+@pytest.mark.slow
 def test_a_spread_pick_can_still_aim_the_scope():
     """A camera that cannot aim the cell is not a draw for it, so the pool is filtered rather than
     reported -- and the filter searches a TAIL byte nearest-neutral first, because the walk pair and

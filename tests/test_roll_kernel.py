@@ -128,6 +128,7 @@ def test_the_refusal_record_is_the_segments_own(nodes):
 
 # ------------------------------------------------------- the invariance the fan API is built on
 
+@pytest.mark.slow
 def test_the_camera_through_a_roll_is_a_node_property_not_an_aim_one(nodes):
     """**The economy, gated at its root.** The fan pays for ONE camera because the csangle sequence a
     roll segment commits does not depend on the aim -- bit-identical across the fan, at every C-stick

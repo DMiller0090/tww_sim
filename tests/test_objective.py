@@ -494,6 +494,7 @@ def test_wall_margin_is_the_binding_actor(walls):
 
 # --------------------------------------------------------------------------- the regime
 
+@pytest.mark.slow
 def test_the_fast_prune_predicate_agrees_exactly_with_the_measured_distance(walls):
     """`clear_of_walls` is what a beam search calls per frame, so it early-rejects on bounding
     boxes -- but it must stay EXACT, not conservative. Checked over the whole room: an
@@ -630,6 +631,7 @@ def test_the_locked_plan_leaves_the_regime_before_the_first_open_console_sample(
             first_out, first_wall)
 
 
+@pytest.mark.slow
 def test_the_shipped_plan_passes_the_whole_objective_from_its_input_log_alone(env):
     """**MILESTONE 2, as a regression gate: the first plan that passes `objective.verdict`**
     (session 73).

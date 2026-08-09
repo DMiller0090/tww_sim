@@ -304,6 +304,7 @@ def test_the_armed_crash_latch_never_changes_this_roll():
 _SCH_KEYS = RF.TABLE_KEYS + ('link_x0', 'link_z0', 'link_y', 'tet_seed')
 
 
+@pytest.mark.slow
 def test_the_analytic_schedule_is_the_simulated_one():
     """`fast_schedule` drops the 17-frame coupled roll for a direct evaluation and is 0-ULP identical
     over facing x lean x thrust. That is what makes 81 x 3 loci affordable: the 22 ms ctx build, not
@@ -527,6 +528,7 @@ def test_the_acceptance_band_is_per_configuration_not_the_fixture_window():
     assert b['width'] <= w['width']
 
 
+@pytest.mark.slow
 def test_no_leverage_is_a_property_of_the_seed_entry_not_of_the_configuration():
     """WHAT "MOST CONFIGURATIONS HAVE NO LOCUS" ACTUALLY MEANT (corrected, session 92).
 
@@ -578,6 +580,7 @@ def test_the_rank_is_the_signed_distance_to_the_window_not_the_absolute_residual
     assert ES.window_gap(w['hi'] + 1e-6, w) == pytest.approx(1e-6, rel=1e-6)
 
 
+@pytest.mark.slow
 def test_the_fan_labels_a_plan_the_a_press_reproduces():
     """The fan never presses A, it PREDICTS. `confirm_entry` replays a plan and presses A for real.
 
@@ -678,6 +681,7 @@ def test_the_entry_does_not_move_links_cut_position_it_is_the_wall_brace():
 
 # ----------------------------------- a NEGATIVE about a configuration is argued from the WHOLE curve
 
+@pytest.mark.slow
 def test_the_escalation_recovers_the_cell_one_station_reads_barren():
     """THE GATE SESSION 91 OWED. `configuration_band` sweeps ACROSS the locus at ONE station, so a
     configuration whose genuine dust has slid ALONG the curve reads barren. Cell 2553 (facings
@@ -692,6 +696,7 @@ def test_the_escalation_recovers_the_cell_one_station_reads_barren():
     assert re_seeded['productive']
 
 
+@pytest.mark.slow
 def test_the_second_lobe_needs_the_curve_to_find_its_own_seeds():
     """THE SAME TRAP ONE LEVEL DEEPER (session 92), and it was hiding the whole exit-angle axis.
 
@@ -715,6 +720,7 @@ def test_the_second_lobe_needs_the_curve_to_find_its_own_seeds():
         assert ES.configuration_band(SEED['tetra'], facing, 15, 0, cs['walkable_at'][0])['productive']
 
 
+@pytest.mark.slow
 def test_the_recovered_dust_is_a_real_clip_and_not_the_refusal_shape():
     """A `genuine` verdict is only worth spending a delivery on if Link actually goes THROUGH the seam:
     session 88's expensive rejection class is `ShoveCtx` scoring ~49.9 u where the composite refuses to
@@ -746,6 +752,7 @@ def test_the_recovered_dust_is_a_real_clip_and_not_the_refusal_shape():
     assert lunges[41058] > lunges[40834]
 
 
+@pytest.mark.slow
 def test_the_facing_window_fixture_is_two_lobes_with_a_dead_gap():
     """THE MEASURED WINDOW, pinned so the two-lobe shape cannot silently narrow back to one (session
     92). The fixture is a MODEL output and cheap to re-derive per cell, so this checks its structure

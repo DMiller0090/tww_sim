@@ -129,6 +129,7 @@ def test_her_cut_frame_position_is_an_attractor(fr):
     assert max(zs) - min(zs) < 0.25
 
 
+@pytest.mark.slow
 def test_the_lean_shifts_the_razor_but_does_not_close_it():
     """OVERTURNS the reading that some body leans cannot clip. `entry_search`'s "m351C 0 and 1 clip, 64
     already does not (resid 1.1e-2)" is measured at a FIXED entry, where 1.1e-2 is a hundred window

@@ -51,6 +51,7 @@ def _measurement():
 
 # ------------------------------------------------------------------------------ the licence
 
+@pytest.mark.slow
 def test_the_old_band_table_called_the_delivered_clips_own_configuration_dead():
     """**THE LICENCE, and it is the harshest form of `[[search-space-contains-human]]`.**
 
@@ -76,6 +77,7 @@ def test_the_old_band_table_called_the_delivered_clips_own_configuration_dead():
     assert b_new['n_genuine'] > 0 and b_new['escalated'] and b_new['seed'] == 'curve'
 
 
+@pytest.mark.slow
 def test_the_console_clip_scores_genuine_through_stream_search_with_one_escalated_band():
     """END TO END, on the one candidate whose answer is known from console.
 

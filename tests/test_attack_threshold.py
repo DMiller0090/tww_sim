@@ -133,6 +133,7 @@ def test_every_angle_keeps_a_representative_that_can_roll_where_one_exists():
                if main_stick_decode(sx, sy)[0] == ang), "no deep member of that angle exists"
 
 
+@pytest.mark.slow
 def test_the_gate_reaches_the_PASS_and_not_only_the_alphabet(tmp_path):
     """**THE FIX HAS TO CROSS THE CACHE, and session 89 spent 5000 s learning that it did not.**
 

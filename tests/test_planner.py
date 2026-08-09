@@ -35,6 +35,7 @@ def test_plan_cruise_small_dest():
     assert r["reached"] >= 3000
 
 
+@pytest.mark.slow
 def test_plan_cold_start_3k():
     # Real cold start (state 54, entry off): build speed from v=0 to cover 3000 units.
     r = plan.plan_min_frames(3000, v=0.0, anim=COLD_ANIM, air=900, cold_start=True,

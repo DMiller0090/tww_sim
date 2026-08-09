@@ -147,6 +147,7 @@ def test_per_cycle_reach_resonance(env, recs):
         "off-resonance neighbours herd too far: %.1f / %.1f u" % (herd[0], herd[2])
 
 
+@pytest.mark.slow
 def test_beam_search_reaches_first_cycle(env):
     """CAPABILITY: the beam search runs and its first cycle lands on the resonance -- a real FreeRun
     rollout (no approximation), Tetra herded > 300 u toward the genuine band while in regime. (The
@@ -200,6 +201,7 @@ def test_recorded_window_is_talk_safe(env, recs):
     assert not violations, "recorded window has roll-A-in-cone (talk) at frames %s" % violations
 
 
+@pytest.mark.slow
 def test_beam_and_recorded_rollout_are_talk_safe(env, recs):
     """INVARIANT (session 32): the talk gate is wired into the rollout path -- the recorded-input
     replay carries `talk_unsafe` False, and every candidate the beam keeps is talk-safe (the gate
