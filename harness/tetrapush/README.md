@@ -1756,13 +1756,21 @@ from scratch. Land the edits first, then gate.
               default OFF. Gate
               [`tests/test_l0_screen.py`](../../tests/test_l0_screen.py) (7 + 1 slow) against a banked
               artefact [`fixtures/courtyard_l0_screen_nodes.json`](../../fixtures/courtyard_l0_screen_nodes.json).
-            - **AND THE CLIP ROLL'S THRUST IS NOT FREE AFTER ALL.** s126 quoted thrust 9 at bound
-              92.50 vs 97.35 (4.85 frames). Swept thrust 9/10/11 x a 61-value facing ladder at 5 BAM
-              on a coarse 135-cell box: the facing window WIDENS from s125's one value (thrust 14) to
-              **12-23 facings**, but **ZERO of them admit an UNBROKEN family** -- contact breaks
-              before the cut, so the cheap thrust is not a zero-walk-away plan. The coarse box
-              under-samples ~3x against the fine one (thrust 14 reads 5/1 here vs 15/13 fine), so this
-              is a SCREEN result and the fine box is what would settle it.
+            - **THE CLIP ROLL'S THRUST WIDENS THE FACING WINDOW, AND IT DOES NOT COST CONTACT.**
+              s126 quoted thrust 9 at bound 92.50 vs 97.35 (4.85 frames). Swept thrust 9/10/11 x a
+              61-value facing ladder at 5 BAM on a coarse 135-cell box: the facing window WIDENS from
+              s125's one value (thrust 14) to **12-23 facings**, and none of the cells found admit an
+              UNBROKEN family. **That is a property of the box, not of the thrust** -- measured,
+              ``thrust`` moves only WHEN the cut fires and the roll before it is BIT-IDENTICAL (the
+              overlap traces at one cell agree exactly through frame 10 and first differ at frame 11,
+              thrust 9's own ``cut_step``), and ``unbroken`` reads the PREFIX ``ov[:cut_step]`` -- so
+              a cheaper thrust makes the contact window SHORTER and therefore strictly EASIER to keep.
+              At the s124 reference cell the margin is **+11.86 at thrust 9 against +1.13 at 14**.
+              What moves is the genuine LOCUS (thrust 14's cells sit at ``lat`` +4.0..+7.4, thrust
+              9's at +16.8..+27.8), and in this box those happen to be non-contact cells. The box
+              finds **1 unbroken where s124's fine one finds 13**, so zero at thrust 9-11 is not
+              evidence of absence (`[[infeasible-needs-proof]]`). The FINE box at thrust 9-11 is the
+              open cheap item, and it is worth 4.85 frames.
       - [x] **THE STAGE FIVE SESSIONS WERE SPENT ON IS NOW 2% OF A CYCLE, AND A NODE'S 274 CHILDREN
             ARE ONE FRAME (session 133).** The queued next step was another ROLL-stage port
             (`CourtyardFleet`). Measured before building it -- s131's own lesson, applied to the
