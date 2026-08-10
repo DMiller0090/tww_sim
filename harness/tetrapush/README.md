@@ -1784,19 +1784,33 @@ from scratch. Land the edits first, then gate.
               assumption, not a plan length**; quoting it as one is the same proxy-as-plan error the
               standing rule below forbids. Prefer zero-walk because it deletes an unpriced phase and
               matches s123's geometry, not because it is 15 frames faster.
-            - **AND THE RE-POINT IS SMALL, WHICH IS WHAT MAKES IT WORTH TRYING FIRST**
-              (`_notes/s143_aim.py` off the same artefact).
-              At those last rolls ``along`` 42..56 and ``lat`` -1.7..+2.8 are already in the family;
-              only the AIM is off, by **1.2 to 47.3 deg**, and **7 of 49 rungs are inside the
-              +-8.44 deg fan the screen already sweeps**. Best is rung 15: aim off **1.19 deg**,
-              ``side`` 7.2 u, 73 frames. Collinearity is a LATERAL step of **1.3 u** there -- Tetra
-              is ~53 u out and the corner ~346, so a sideways move swings the near bearing ~7x
-              harder than the far one, and 1.3 u is a quarter of one walk frame.
-            - **THE TENSION TO RESOLVE FIRST: the best-AIMED rungs sit at runway ~345 and s124 found
-              genuine cells only at 190-310** (26 of 49 rungs are in that band; the well-aimed ones
-              are not). That band is a thrust-14 / lean-0 / IDLE-Tetra measurement, and **the family
-              at thrust 13 and 15 has never been scanned** -- s124 did 14, s136 did 9/10/11 and those
-              are void. One `terminal.scan` a thrust says whether the far edge moves.
+            - **THE REAL BLOCKER, IN ONE LINE: the herd has to FINISH THE PLOW and END UP ON THE
+              CORNER AXIS at the same time, and nothing in 49 rungs does both** (Dereck: "part of the
+              final roll has to be spent going around her, so how would we ever be close enough" --
+              measured, and it is worse than that, because the two are ANTI-CORRELATED). The clip roll
+              plows Tetra only **24.7-125.9 u** (`_generated/s124/terminal_40835_14_0.json`,
+              ``plowed``), so a genuine configuration needs her within **180 u of the corner at the
+              roll entry**; the unbroken-contact subset needs **100..180 u** at ``along`` 50..110 /
+              ``runway`` 190..260. The banked last rolls split cleanly and disjointly: **8 rungs have
+              her at ``tetra_from_corner`` 120..178 u and are aimed 33..47 deg off the corner**
+              (``side`` 149..228 u off the brace line), and **7 rungs are aimed 1.2..8.4 deg and leave
+              her 293..337 u out** -- 113..157 u past the plow ceiling, i.e. 9..12 more frames of
+              pushing. Closing the first group's 149..228 u at the walk cap is **9..13 frames**. Both
+              costs land in the same place.
+            - **SO THE BEST CASE IS ~84..95 FRAMES, AND THE TWO SHAPES ARE THE SAME PROBLEM.** The 8
+              close-enough rungs total 75..82 before the line-up, plus 9..13 to line up -- which is
+              where the WALK shape lands too (86 + walk). Either the herd's last cycle swings Link onto
+              the corner axis or a walk does it afterwards; zero-walk saves the turnaround out of the
+              untarget flip, not the distance. Against the banked **101** that is roughly **6..17
+              frames**. **The s143 "1.3 u re-point" is RETIRED** -- it was measured on rung 15, which is
+              113 u short of the plow ceiling, so the nudge is real and buys nothing.
+            - **WHAT IS NOT PROVEN is that the geometry forbids it** (`[[infeasible-needs-proof]]`):
+              all 49 rungs were bred by a search ranking on distance-to-a-razor-entry-AFTER-A-WALK, so
+              none was ever asked to satisfy both criteria at once. A keep that carries only one of
+              them is exactly what produces a population satisfying only one. And the 180 u ceiling is
+              itself a THRUST-14 number -- **the family at thrust 13 and 15 has never been scanned**
+              (s124 did 14; s136 did 9/10/11, void), and a longer roll plows further, so one
+              `terminal.scan` a thrust re-prices the whole table above before any search runs on it.
             - **THE MODEL ASSUMPTIONS NOBODY HAS CHECKED AT A DELIVERY STATE**, and the reason the
               next step is a validation rather than a search: `fast_schedule` seeds Tetra **idle and
               at rest** (``tet_seed`` = FAR + ``STT_IDLE``, speed 0) and every terminal scan ran
