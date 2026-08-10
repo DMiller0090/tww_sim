@@ -50,32 +50,54 @@ def test_the_top_rung_is_locked_exactly(ladder):
     assert top['bound'] < ladder['incumbent']
 
 
+def test_the_ladders_terminal_is_a_roll_that_never_cuts(ladder):
+    """**SESSION 143: every ``bound`` in this fixture is priced against a cut the game cannot
+    dispatch.** The ladder's terminal is thrust 11, and `entry_search.cut_step_window` -- derived
+    from the roll's own `ROLL_RATE`/`ROLL_EARLY`/`ROLL_END` -- admits ``cut_step`` 15..17 only
+    (thrust 13..15). Below the floor the B press is ignored and the roll runs on, so ``cut`` 13 is
+    not a schedule; s136 read it off the ANALYTIC `fast_schedule`, which computed ``thrust + 2``
+    without checking, and priced it as three frames cheaper than thrust 14.
+
+    The herd LOGS are untouched by this -- they are real bit-exact inputs. What is void is the
+    terminal they were ranked against, so this is gated rather than left to a memory."""
+    from harness.tetrapush import entry_search as ES
+    from harness.tetrapush import handoff as HO
+
+    t = ladder['terminal']
+    assert (t['thrust'], t['cut_step']) == (11, 13)
+    lo, hi = ES.cut_step_window()
+    assert not lo <= t['cut_step'] <= hi, 'the window moved -- re-price the ladder, do not re-open it'
+    with pytest.raises(ValueError):
+        HO.PairFrame(facing=t['facing'], thrust=t['thrust'])
+    assert all(c['cut'] == t['cut_step'] for c in ladder['candidates']), \
+        'a rung on a different terminal needs its own realizability check'
+
+
 @pytest.mark.slow
-def test_the_top_rung_replays_to_its_banked_numbers(ladder):
+def test_the_top_rung_replays_to_its_banked_endpoint(ladder):
     """The banked scalars are only worth what the LOG reproduces: replay it on a fresh native
-    `FreeRun` and recompute `handoff.endpoint`. Exact equality, no tolerance."""
+    `FreeRun`. Exact equality, no tolerance.
+
+    Session 143 dropped the ``bound``/``gap`` half of this assertion -- not because the replay
+    changed, but because `PairFrame` now refuses the thrust-11 terminal those numbers were computed
+    at (see `test_the_ladders_terminal_is_a_roll_that_never_cuts`). Link and Tetra are what the log
+    actually delivers, so they are what a fallback rung is worth."""
     import warnings
 
     from harness.tetrapush import beam_io as BIO
-    from harness.tetrapush import handoff as HO
     from harness.tetrapush import seeds as SD
     from harness.tetrapush.reposition import HerdLine
 
     top = ladder['candidates'][0]
-    t = ladder['terminal']
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         env = SD.load_env()
         hl = HerdLine.from_env(env)
         rec = dict(cycles=[[dict(log=top['log'], frames=top['herd'])]])
         run = BIO.rebuild_beam(env, rec, cycle=1, hl=hl)[0]['run']
-        pf = HO.PairFrame(facing=t['facing'], thrust=t['thrust'])
-        h = HO.endpoint(pf, (run.link.pos_x, run.link.pos_z), (run.tx, run.tz), top['herd'],
-                        runways=tuple(t['runways']))
-    assert h['bound'] == top['bound']
-    assert h['gap'] == top['gap']
-    assert HO.tetra_lateral(pf, (run.tx, run.tz)) == top['l0']
-    assert h['onside'] and h['n'] == top['entry_points']
+    assert run.native_step and run._live, 'not on the C engine'
+    assert (run.link.pos_x, run.link.pos_z) == (-1478.1232910156250, -796.2630615234375)
+    assert (run.tx, run.tz) == (-1527.2644042968750, -854.9425659179688)
 
 
 def test_the_ladder_cannot_be_read_as_a_ranked_shortlist(ladder):

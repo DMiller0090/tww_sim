@@ -214,6 +214,7 @@ deliberately unported.
 
 | File | What |
 |------|------|
+| `clip_roll.py` | **THE CLIP ROLL'S INPUTS AND ITS REAL FRAME COST (session 143)** -- the piece every bound priced and nobody had emitted. `clip_stream` = the raw rows (`rollstab.turnaround.build_sticks`' shape: aim + A, NEUTRAL through the roll, ONE UP+B rising edge at `b_index` = ``cut_step + 1``; a pushed mid-roll stick exits the roll before the thrust, and a neutral B is a side slash rather than the in-line CUT_F whose root translate IS the lunge). `roll_frames(cut_step)` = **``cut_step + 2``**, the corrected cost -- the entry frame runs one full roll step before schedule step 0, so the cut at step ``cut_step`` is roll frame ``cut_step + 2``; `handoff.endpoint` charges ``cut_step``. `aim_bytes_for` inverts `entry_search.aim_alphabet` onto a wanted facing and reports whether the residual BAM error stays inside its `aim_cell`. `dispatchable` = the two traps that stop a herd endpoint firing it (proc must be in ``ROLL_FROM``; `roll_nspeed` off the PRE-roll speedF). `fire` steps a Python-path `FreeRun` through the roll and reports the entry/cut frames -- **the native core has no cut branch at all** (`_anmc._proc_roll` omits the ``b_trig`` arm), so build the herd native and fire on `beam_io.rebuild_beam(native=False)`. Gated `tests/test_clip_roll.py` (9). CLI `python -m harness.tetrapush.clip_roll stream [cut_step]`. |
 | `deliver.py` | **THE TIER-2 LIVE DELIVERY (session 54)** -- author a computed plan onto console and read the endpoint. `build_boot_movie` SPLICES the plan onto the recorded BOOT movie (game-frames 0..F0 byte-identical, tail = `log[i]` -> F0+1+i, `bFromSaveState=0`); **both savestate-anchor routes are dead** (see `## Plan / status` s54). `tick_mode='extend'` is mandatory (the recorded tickCount truncates the tail; the maxed 0xFFFF... reads as signed -1 = s53's State::Load crash). `play_spliced` issues ONLY `playmovie` + `savestate load 1` -- the subset-state shortcut that skips the ~9.5-min boot replay (~8 s/run); any pause/resume/advance of ours makes Dolphin re-pause. `deliver_plan` = author+play+read; **`divergence_curve` = TRUNCATE-AND-READ** (author the first N frames, PauseMovie halts at plan frame N-1, so one plain run samples that frame for BOTH actors -- a per-frame sim-vs-console curve with no stepping). Gated `tests/test_tetrapush_deliver.py` (6 offline: round-trip + prefix byte-identity, latched-input equality vs the recording, L/A/B + cal-clamp encoding, the tick_mode invariants incl. the maxed-value crash pin, truncation alignment). **Session 86** added `m351C`, `shape_z` and `nspeed` to `read_link`: a roll-entry confirm owes the two a `ShoveCtx` is keyed on (the lean it was built at and the momentum its schedule was baked at), not just position and facing. |
 | `find_tetra.py` | Locate Tetra (Zl1, id 429) live via the DMC walk, `_execute` breakpoint, `r3`. Session-stable (recomputes the REL base). **`tetra_scan` (session 54) = the breakpoint-FREE locator** (one MEM1 block + `field_0x84F == 5` on the courtyard floor Y): required for any endpoint read off a HALTED movie, where the `_execute` bp cannot trap and silently yields nothing. |
 | `capture_push.py` | Load slot 2, locate Tetra, single-step the movie N frames, log both actors + FULL pad to a fixture. The (scalar) GROUND TRUTH -- single-stepped, so `+-1` on edges. Now also logs `nspeed` (mNormalSpeed). Subcommand **`capture_push seed`** = a DETERMINISTIC single read of the complete f0 state (no single-step jitter) -> `fixtures/courtyard_push_seed.json`. |
@@ -1710,6 +1711,71 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE TERMINAL'S CUT IS NOT DISPATCHABLE, THE CLIP ROLL COSTS TWO FRAMES MORE THAN
+            ANYTHING CHARGED IT, AND NO BANKED ENDPOINT CLIPS IN THE ZERO-WALK-AWAY SHAPE
+            (session 143, going to build the clip roll's inputs).** Building the sequence Dereck
+            asked for is what found all three; the clip roll's bytes now exist
+            (`clip_roll.py`) and there is nothing yet to fire them from.
+            - **THE THRUST-11 TERMINAL IS A ROLL THAT NEVER CUTS -- and the repo already knew the
+              floor.** [`mechanics/roll-cut-thrust-floor.md`](../../knowledge/mechanics/roll-cut-thrust-floor.md)
+              derived it in session 99 ("the earliest cut dispatch is roll step 15... on the
+              Courtyard corner's indexing, thrust 13") and `entry_fan.THRUST_FLOOR` has held the 13
+              ever since. The TERMINAL path never consulted either: `fast_schedule` computes
+              ``cut_step = thrust + 2`` in closed form and checked nothing, so s136 read a thrust-11
+              family off it and "thrust 14 -> 11 takes the cut 16 -> 13, three frames off every
+              plan" went into every bound after it. `turnaround.extract_schedule_at`, which
+              SIMULATES, raises "schedule never reached a CUT" for every thrust outside **13..15**.
+              **The old fidelity gate could not have caught it: it swept `ES.THRUSTS` only, i.e.
+              exactly where analytic and simulated already agreed.**
+              NEW `entry_search.cut_step_window` derives the whole window off `LandState`'s own
+              ``ROLL_RATE``/``ROLL_EARLY``/``ROLL_END`` rather than restating a literal -- ``cut_step``
+              **15..17**, the KB's floor plus a CEILING it does not state (past 17 the anim has
+              completed and the roll has exited to MOVE, so the press finds no roll). `thrust_window()`
+              reproduces `ES.THRUSTS` exactly, which is what that tuple always was. `fast_schedule`
+              now RAISES, gated by
+              `test_the_analytic_schedule_refuses_exactly_what_the_simulator_refuses` (thrust 9..18,
+              analytic vs simulated, both directions) -- **the doc was right and unenforced, which is
+              the whole failure**.
+            - **AND THE CLIP ROLL COSTS ``cut_step + 2`` FRAMES, NOT ``cut_step``** -- also already
+              known, as `entry_fan.plan_cost`'s ``plan_frames + thrust + 4``, and also dropped when
+              `handoff.endpoint` was written at s135. The entry frame runs one full roll step BEFORE
+              the schedule's step 0 (`entry_search.roll_entry`; `extract_schedule_at` seeds a
+              `LandState` already rolling at ``entry`` and calls its first STEPPED frame k=0).
+              Re-derived here by SIMULATION across the whole realizable window rather than from the
+              schedule that produced the number. The cheapest deliverable clip roll is therefore
+              **17 frames** (thrust 13) against the 13 the ladder charges -- **+4 frames on every
+              bound**, on top of the re-solve the new terminal forces.
+            - **THE CLIP ROLL'S INPUTS EXIST NOW** -- NEW `clip_roll.py` (see `## Tooling`), gated by
+              `tests/test_clip_roll.py` (9, 0.8 s). And two traps say a herd endpoint cannot fire
+              them: the roll EXIT frame is ``ATN_ACTOR_MOVE`` and the A-roll dispatches only from
+              ``ROLL_FROM`` = (MOVE, ATN_MOVE) -- **the natural chain frame is the one frame that
+              refuses** -- while one frame later the untarget flip has run and
+              `roll_nspeed(-25.72)` clamps to **5.0**, a 65 u roll against a runway grid starting at
+              160. Also **the native core has no cut at all** (`_anmc._proc_roll` omits the
+              ``b_trig`` arm), which is why nobody had ever stepped one: build the herd native,
+              `fire` the clip roll on a Python-path run.
+            - **NO BANKED ENDPOINT CLIPS IN s123'S SHAPE, POPULATION-COMPLETE.** If the herd's LAST
+              ROLL *is* the clip roll then the acceptance belongs at each roll's OWN entry, which
+              nothing had ever asked. Read there across all 49 rungs -- 147 roll entries x 17
+              thrusts, **2499 probes: 0 genuine** (`_notes/s143_rolls.py`,
+              `_generated/s106/s143_roll_entries.json`). Cut-frame CONTACT in 479 of them, all at low
+              thrust; the last rolls sit at resid **-25 .. -307 u**. The mechanism is not a near
+              miss: a herd roll is aimed AT Tetra to plow her, and a clip roll must be aimed at the
+              CORNER with her ON that line (the terminal's ``along`` 50-245 / ``lat`` ~0 /
+              ``runway`` 190-310). Her ``lat`` is already right (+0.2..+2.8 u); Link's ``side`` is
+              not.
+            - **WHICH GIVES s142'S "WALK-AWAY" A GEOMETRIC READING: it is an ALIGNMENT.** On the
+              confirmed plan Link ends 57.85 u from her and the entry is 84.66 u away -- 26.81 u
+              FURTHER -- but she sits ~24 u OFF his line to the corner, and putting her BETWEEN him
+              and the corner is what requires backing off that line. Not the round trip s123 killed.
+              Its priced cost is optimistic in a second, new way though: the herd hands Link over at
+              speedF **-25.72**, so the walk must turn around and re-accelerate past 17 before any
+              roll can carry 26 -- ``gap / WALK_CAP`` charges none of that.
+            - **AND ``gap`` IS MEASURED TO THE WRONG POINT.** `handoff.endpoint` measures
+              walk -> ``entry``, but ``entry`` IS the post-roll-entry-frame position
+              (`entry_reach.reachable` translates by exactly this step), so the herd's real target is
+              ``entry - roll_step``. At the confirmed rung's own delivered state that is **+4.92 u**
+              of gap; at the walk cap the step is 26 u.
       - [~] **THE TERMINAL WAS NEVER CONFIRMED: NO LADDER RUNG ADMITS A GENUINE ENTRY, AND THE
             CONFIRMABLE SET IS FOUR TIMES CLOSER TO THE LINE THAN THE HERD PARKS HER (session 142,
             after Dereck asked whether we are ready to assemble).** The blocker on a DTM delivery is

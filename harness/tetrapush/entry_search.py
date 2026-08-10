@@ -184,6 +184,8 @@ SIN_CELL_BAM = 16
 #: one seed entry. The real window is `fixtures/courtyard_facing_window_s92.json`; see `curve_scan`.
 PRODUCTIVE_CELLS = (2551, 2552)
 #: Thrust steps that still dispatch a CUT out of this roll schedule -- each bakes its own locus.
+#: **Not a chosen family: it IS `thrust_window()`**, and session 143 found out the hard way what
+#: happens when a caller steps outside it (see `cut_step_window`).
 THRUSTS = (13, 14, 15)
 #: Walk frames the entry box of `curve_seeds` must cover. The frame floor a delivered plan reached
 #: (session 90's 4-frame clip), so the box is "everywhere a plan at the floor can put the entry".
@@ -313,6 +315,48 @@ def roll_entry(walk_pos, facing, nspeed=None):
             fadds(walk_pos[1], fmuls(v, ML.cM_scos_s16(facing))))
 
 
+def cut_step_window():
+    """**The ``cut_step`` values a roll can actually dispatch a CUT on** -- ``(lo, hi)``, inclusive.
+
+    DERIVED from the roll's own anim constants, never listed. `_proc_roll` advances ``roll_frame`` by
+    `LandState.ROLL_RATE` on every frame but the entry one, so schedule step ``k`` (which is the
+    roll's frame ``k + 2``) sits at ``k + 1`` accumulations. Two branches can dispatch the cut and
+    both are bounded:
+
+      * the early-turn arm needs ``roll_frame > ROLL_EARLY``, which is the FLOOR; and
+      * the anim completes at ``roll_frame >= ROLL_END`` and the roll is gone after it, which is the
+        CEILING -- that last step still cuts, because `_roll_exit` takes the ``_b_trig`` branch first.
+
+    Outside the window the B press does nothing at all: below the floor the roll ignores it and runs
+    on; above the ceiling the roll has already exited to MOVE.
+
+    THE FLOOR IS NOT NEW -- `knowledge/mechanics/roll-cut-thrust-floor.md` derived it from the HIO
+    block in session 99 and `entry_fan.THRUST_FLOOR` has held the 13 since. What was missing is an
+    ENFORCEMENT on this side: `fast_schedule` computed ``thrust + 2`` and checked nothing, so session
+    136 priced a thrust-11 terminal (``cut_step`` 13) as three frames cheaper than thrust 14 and
+    carried that saving into every bound for seven sessions. `turnaround.extract_schedule_at` says
+    no by raising, because it SIMULATES. The ceiling is the addition here; the rest is the doc,
+    finally gated (session 143).
+    """
+    rate, early, end = LandState.ROLL_RATE, LandState.ROLL_EARLY, LandState.ROLL_END
+    lo = hi = None
+    rf = 0.0
+    for k in range(256):                       # k = schedule step; roll_frame after k+1 advances
+        rf = f32(rf + rate)
+        if lo is None and rf > early:
+            lo = k
+        if rf >= end:                          # the anim completes here; this step is the last one
+            hi = k
+            break
+    return lo, hi
+
+
+def thrust_window():
+    """`cut_step_window` in the caller's units -- ``cut_step = thrust + 2``."""
+    lo, hi = cut_step_window()
+    return lo - 2, hi - 2
+
+
 def fast_schedule(facing, m351c, thrust=TA.THRUST, entry=TAB_ENTRY, link_y=TA.GROUND_Y,
                   nspeed=None):
     """`turnaround.extract_schedule_at` WITHOUT the simulation -- 0-ULP identical, ~110x cheaper
@@ -328,9 +372,20 @@ def fast_schedule(facing, m351c, thrust=TA.THRUST, entry=TAB_ENTRY, link_y=TA.GR
 
     ``nspeed`` defaults to the walk cap's 26.0. It is the axis session 82 opened: it scales `dx`/`dz`
     and NOTHING else (the cut lunge is a root translate, the pose chain is frame- and lean-driven), so
-    a sub-cap roll is a different locus rather than a worse one."""
+    a sub-cap roll is a different locus rather than a worse one.
+
+    RAISES on a thrust outside `thrust_window`, exactly as the simulated reference does. The analytic
+    form computes ``cut_step = thrust + 2`` unconditionally, and that arithmetic is only a schedule
+    where the roll can still dispatch the cut -- session 143."""
     facing = int(facing) & 0xFFFF
     cut_step = int(thrust) + 2
+    _lo, _hi = cut_step_window()
+    if not _lo <= cut_step <= _hi:
+        raise ValueError(
+            "thrust %d (cut_step %d) never reaches a CUT: the roll dispatches one only at cut_step "
+            "%d..%d (thrust %d..%d) -- below that the B press is ignored and the roll runs on, above "
+            "it the roll has already exited to MOVE. See `cut_step_window`."
+            % (int(thrust), cut_step, _lo, _hi, _lo - 2, _hi - 2))
     v = ROLL_NSPEED if nspeed is None else nspeed
     dxv = fmuls(v, ML.cM_ssin_s16(facing))
     dzv = fmuls(v, ML.cM_scos_s16(facing))

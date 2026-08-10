@@ -1,14 +1,19 @@
 # The earliest a roll can cut, and the frames a search spends not knowing it
 
-**Answers:** How early can the B thrust fire out of a forward roll? Does holding the stick during the
-roll open the cut window sooner? My frame-minimal search returned a plan that is provably late - what
-cost was it not counting?
+**Answers:** How early can the B thrust fire out of a forward roll? How LATE can it? Does holding the
+stick during the roll open the cut window sooner? My frame-minimal search returned a plan that is
+provably late - what cost was it not counting? Why does building a schedule at a cheaper thrust raise?
 **Status:** decomp-derived and gated (session 99), against the HIO data and the console-delivered
 Courtyard clip, in [`tests/test_entry_reach_stations.py`](../../tests/test_entry_reach_stations.py).
+The window is now ENFORCED where schedules are built (session 143, after seven sessions of pricing a
+thrust the game cannot dispatch): `entry_search.cut_step_window` derives it and `fast_schedule`
+raises outside it, gated in [`tests/test_clip_roll.py`](../../tests/test_clip_roll.py).
 **Source:** `tww/src/d/actor/d_a_player_main.cpp` (`procFrontRoll` 6852, `procFrontRoll_init` 6817,
 `setSingleMoveAnime` 12795), `tww/src/d/actor/d_a_player_HIO_data.inc` (`daPy_HIO_roll_c0::m`),
 [`harness/tetrapush/entry_fan.py`](../../harness/tetrapush/entry_fan.py) (`THRUST_FLOOR`, `plan_cost`),
-[`tww_sim/land/procs/roll.py`](../../tww_sim/land/procs/roll.py).
+[`harness/tetrapush/entry_search.py`](../../harness/tetrapush/entry_search.py) (`cut_step_window`,
+`thrust_window`), [`harness/tetrapush/clip_roll.py`](../../harness/tetrapush/clip_roll.py)
+(the stream and `roll_frames`), [`tww_sim/land/procs/roll.py`](../../tww_sim/land/procs/roll.py).
 
 ## The gate is the animation frame, and only that
 
@@ -42,6 +47,26 @@ Two things worth stating because both were guessed wrong before being checked:
   the `getRate() < 0.01` path, where a neutral stick subtracts `field_0x20` from `mNormalSpeed`. Holding
   the stick up (or any direction) through the roll cannot make the cut window open sooner. It does change
   the cut's AIM once the window is open (`_roll_exit`: `aim = target if msd > 0.05 and not l_held`).
+
+## And there is a ceiling, one step past the anim
+
+The same `getRate() < 0.01` branch is the window's far edge. `1.1 × 18 = 19.8` is the first value at or
+past `ROLL_END` 19.0, so **`cut_step` 17 is the last step the roll still exists on** - and it still cuts,
+because `_roll_exit` takes the `_b_trig` branch before `checkNextMode`. One step later there is no roll
+to press B into: it has already exited to MOVE (or ATN_MOVE), and the press does nothing.
+
+So the whole window is **`cut_step` 15..17, i.e. thrust 13..15** - which is exactly what
+`entry_search.THRUSTS` always was. `cut_step_window()` re-derives it from `ROLL_RATE`/`ROLL_EARLY`/
+`ROLL_END` rather than restating the tuple, and `fast_schedule` raises outside it.
+
+**The floor above was right and unenforced for seven sessions.** `fast_schedule` computes
+`cut_step = thrust + 2` in closed form; nothing made it ask whether that step is dispatchable, so a
+session-136 terminal sweep found a thrust-11 "family" (53 genuine cells, one unbroken), priced its
+`cut_step` 13 as *three frames cheaper than thrust 14*, and every bound after it carried the saving.
+The simulated reference had been refusing that thrust the whole time - `extract_schedule_at` raises
+"schedule never reached a CUT" - and the fidelity gate between them only ever swept `THRUSTS`, i.e.
+exactly the range where the two already agreed. A gate that samples only where a formula is known good
+tests nothing about where it is used.
 
 ## What the search was not charging for
 

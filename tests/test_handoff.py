@@ -262,12 +262,16 @@ def test_the_crossing_bar_belongs_to_its_terminal_and_an_unmeasured_one_says_so(
     t11 = {(r['facing'], r['thrust']): r for r in bank['records'] if r['thrust'] == 11}
     assert len(t11) == 10, sorted(t11)                         # the s135 unbroken family, entire
     for key, rec in t11.items():
-        got = H.crossing_bar(H.PairFrame(facing=key[0], thrust=key[1]))
-        assert got == rec['bar'] and ref < got < 0.0, (key, ref, got)
+        # s143: thrust 11 is outside `cut_step_window`, so this half of the bank describes a roll
+        # the game never dispatches -- the records stay readable, the terminal is gone.
+        with pytest.raises(ValueError):
+            H.PairFrame(facing=key[0], thrust=key[1])
+        assert ref < rec['bar'] < 0.0, (key, ref, rec['bar'])
         # ...and the bar does not depend on where the runway band's near edge is drawn: the roll that
         # sets it sits deep inside the band, which is why the s136 floor move cannot have touched it
         assert rec['flat_over_edges'] and rec['setter']['runway'] > rec['band_lo'] + 50.0, rec
-    assert H.crossing_bar(H.PairFrame(facing=40835, thrust=9)) is None, 'unmeasured must be None'
+    # an unmeasured but REALIZABLE terminal still says None rather than borrowing a neighbour's
+    assert H.crossing_bar(H.PairFrame(facing=40835, thrust=13)) is None, 'unmeasured must be None'
 
 
 def test_the_search_keep_reads_only_fields_this_module_promises():
