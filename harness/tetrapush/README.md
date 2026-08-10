@@ -1713,6 +1713,78 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE HERD HANDS LINK OVER STILL INSIDE TETRA, SO THE 94.56'S RAZOR WAS SOLVED AT A
+            TETRA THAT DOES NOT SURVIVE THE HERD -- AND THE AXIS IT PASSED WAS NEVER THE ONE THE
+            LOCUS SOLVES (session 147).** Session 146 banked 16 genuine entries at rung 5's herd-END
+            Tetra and priced a walk from there. Three measured corrections, all in the same
+            direction, and the plan does not survive any of them.
+            - **THE FIRST FRAME AFTER THE LOG MOVES HER 16.5 u, FOR EVERY INPUT IN THE ALPHABET.**
+              Rung 5 ends with Link's exec Co centre inside her (feet 57.85 u), and the pipeline acts
+              a frame late, so the escape has no say in the first two frames at all. Neutral
+              continuation, her z: -887.80 -> -904.29 -> -918.22 -> -930.13 -> -940.54 -> -950.02 ->
+              -957.01. The s146 step-2 requirement ("never comes within 80 u of Tetra -- a walking
+              push moves her and makes the razor stale") is therefore violated **at frame 0, by the
+              herd**, not by the walk. The terminal sees the POST-CONTACT Tetra; that ordering is
+              `away_walk`'s own since s65 (her residual over the conversion frames, 34.8-44.7 u) and
+              it had never been applied to the ladder's own pricing.
+            - **THE GAP IS NOT THE WALK.** The walk ends one full ROLL STEP short of the entry
+              (`entry_search.roll_entry`), and the roll runs toward the brace while Link sits between
+              the entry and the brace -- so the walk-end is FURTHER OUT than the entry, never nearer.
+              Rung 5's 60.46 u is **83.75 u** at the herd-end Tetra and **112.36 u** at the Tetra
+              that exists.
+            - **AND THE TERMINAL IS THEN UNREACHABLE, MEASURED.** Re-solved at the post-contact Tetra
+              (-1619.928101, -930.130066) over runways 100..480 step 2: **10 genuine entries** at
+              ``runway`` 198..300 / ``side`` +19..+21, so Link owes ``runway >= 224`` at ``side ~
+              +21``. The herd parks him at **runway 146.41, side -29.12** carrying **-25.72** of
+              backslide pointed AT the brace. A 500-node beam closes ~5 u a frame, bottoms out
+              **63.3 u short at frame 7 and then DIVERGES**, and every at-cap node stays **80..90 u**
+              out through frame 18.
+            - **THE AXIS: ``side`` IS LINK'S LATERAL AND IT IS THE ONE `entry_locus` SOLVES.** s146
+              screened ``l0`` -- TETRA's lateral -- and rung 5 passes it at +7.86. Nothing has ever
+              screened Link's, and rung 5 is **50 u** on the wrong side of it. Census of all 49 rungs
+              three frames past their herds (`_notes/s147_census.py`,
+              `_generated/s106/s147_census.json`): Link's ``side`` spans **-43.42 .. +269.46**,
+              Tetra's ``l0`` spans **-0.34 .. +116.57**. `TerminalKeep` has an axis for the second
+              and none for the first.
+            - **THE INSTRUMENT THIS BUYS: the razor scored on ANY (Link, Tetra) pair in 0.013 ms,
+              batched, with no locus solve and no frozen Tetra** --
+              ``pf.sweep([(tetra_x, tetra_z, entry_x, entry_z)])`` returns ``(genuine, resid,
+              overlap, push, brace_dist)``, ``resid`` being the SIGNED miss `solve_razor` bisects.
+              Gated against the solved entries: every genuine one reads **overlap +1.13 / push
+              0.566**, which is `entry_search`'s own "genuine wants ~(-0.551,-0.127)" arriving from
+              the other side. **Its trap: ``resid`` is FLAT outside contact** (the bare roll-stab
+              **-3.293847e-01** whatever the entry, `handoff.resid_window`), so a beam ranked on
+              ``|resid|`` alone has nothing to descend -- ``overlap`` is the gradient that gets it
+              into contact first.
+            - **THE LIVE LEAD IS RUNG 3, AND ITS BLOCKER IS ``at_cap``, NOT DISTANCE.** Three frames
+              past its herd Link is at **runway 190.63, side +37.21** with Tetra at ``l0`` +47.19;
+              its razor solves to **one** genuine entry (runway 178, side +43.29, width 1.56e-04)
+              whose walk-end is **14.69 u** away -> a bound of **71 + 3 + 1 + 18 = 93**. The reach
+              beam then prices the momentum: the box is reached at **frame 10 to 0.001 u** but at
+              ``at_cap`` only at **frame 12** -> **101**, a tie and not a win.
+            - **AND REACHING THE BOX BOUGHT NOTHING** -- at ``need`` **0.016 u** the best at-cap
+              ``|resid|`` was **6.083** against a ~1e-4 acceptance. The razor is JOINT in
+              (Link, Tetra): the box was solved at one continuation's Tetra and the beam's own Tetra
+              is elsewhere, so proximity to it is evidence of nothing. **Never rank on a box solved
+              at another Tetra.**
+            - **TWO TRAPS RE-PAID, both already documented one layer up.** A first census pass at
+              runway step **4** read 0 genuine entries on eight rungs including rung 3, whose only
+              entry sits at **runway 178** -- a rung the step-4 lattice does not contain: a grid
+              STRIDE is not a boundary either (`[[infeasible-needs-proof]]`). And a beam over this
+              state dies on the pending-input tie -- every child of a node is physics-identical until
+              the pipeline clears, so a dedup key without the delivered stick collapses the
+              generation to one trajectory, and a ``per_state`` CUT of one sorted list starves it to
+              4 nodes on frame 1. Round-robin over physics states; the key carries the input
+              (`full_herd.junction_beam`, s68).
+            - **NOTHING WAS DELIVERED AND NOTHING SHOULD HAVE BEEN.** `clip_roll.fire` never returned
+              a CUT_F this session, so by the standing rule there is no plan and no DTM. No tracked
+              library or test changed; the default gate is untouched.
+            - **NEXT:** read `_generated/s106/s147_terminals.json` (banked s147: which of the 49 rungs
+              have a genuine entry at all at their own post-contact Tetra, and what each owes), give
+              the herd keep an axis for ``side``, and attack the landing JOINTLY -- rank
+              ``(not at_cap, contact deficit, |resid|)`` and look for a SIGN CHANGE of ``resid`` over
+              the reachable cloud rather than a minimum of ``|resid|``, sized with
+              `entry_search.window_gap` before any fan is paid for.
       - [~] **THE CYCLE-2 REQUIREMENT WAS READ PAST THE MODEL'S OWN FOLLOW GUARD, AND THE KEEP COULD
             NOT SEE THE AXIS THE WHOLE LADDER FAILS ON (session 146).** Two corrections, both
             measured, and they redirect the re-breed the s145 handoff asked for rather than run it.
