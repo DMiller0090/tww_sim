@@ -25,11 +25,14 @@ and used as the target of five sessions of `l0_keep` breeding (sessions 134-142)
 
 ## Why it does not hold
 
-**The coupled courtyard model has no follow state at all.** `from_f0.FreeRun` carries the pushed actor
-as a bare f32 point moved only by the collision push, and past `npc_zl1.FOLLOW_ENGAGE_DIST` it sets
-`_follow_warned` and warns that live Tetra "would enter the stt-4 FOLLOW state, which this stt-3 plow
-model does NOT cover; the sim is no longer faithful from this frame on". So the stated mechanism cannot
-be what produced the plateau, and the frames the plateau is read at are frames the sim does not model.
+**The coupled courtyard model has no follow state at all**, and no candidate plan enters the regime that
+would need one ([[tetra-glitched-nofollow]] - the push IS the pusher's cylinder herding her, so a state
+with him 230 u away has stopped pushing). `from_f0.FreeRun` carries the pushed actor as a bare f32 point
+moved only by the collision push, and past `npc_zl1.FOLLOW_ENGAGE_DIST` it sets `_follow_warned` and
+warns that live Tetra "would enter the stt-4 FOLLOW state, which this stt-3 plow model does NOT cover;
+the sim is no longer faithful from this frame on". So the stated mechanism cannot be what produced the
+plateau, the frames it is read at are frames the sim does not model, and - the part that settles it - they
+are frames no plan will be in. The bar was never available at any fidelity.
 
 Checked on the census the bar was read from, with no re-simulation (session 146 - the end separation is
 stored, and end separation past the threshold proves the guard fired):
@@ -58,3 +61,7 @@ A guard that warns rather than prunes is invisible to a search maximising over i
 maximum lands past it preferentially - the members that leave the domain are the ones that stop paying
 the cost the domain imposes. Any bound quoted off such a search owes the fraction of its population that
 stayed inside the model, and the same bound restricted to it.
+
+And the repair is a refusal, not a port. Session 146 first proposed wiring the follow model in to
+"close the gap"; that would have spent a native port and a new gate stack producing a more accurate
+number for a state no plan can occupy. The guard here is a PRUNE.

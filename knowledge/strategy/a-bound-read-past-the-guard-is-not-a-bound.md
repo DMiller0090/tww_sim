@@ -82,20 +82,30 @@ is bought either by the deep plow (which spends the runway - see
 [the-crossing-and-the-runway-are-one-resource.md](the-crossing-and-the-runway-are-one-resource.md)) or
 by the JUNCTION, which is in-domain by construction because the pusher stays in contact while he walks.
 
-## The three ways out, and which one is a measurement
+## Modelling the missing regime is the WRONG fix here, and that is the sharpest part of the lesson
 
-1. **Model the missing regime.** The follow state machine already exists and is gated 0-ULP against a
-   live capture (`Zl1FollowState`, [`tests/test_tetra_follow.py`](../../tests/test_tetra_follow.py));
-   it was simply never wired into the coupled courtyard step, which carries her as a bare f32 point.
-   Wiring it turns the whole >threshold population from unsimulated into measured - and the crossing
-   there could move either way, since a following actor walks TOWARD the pusher.
-2. **Stay inside the domain and re-price the requirement**, which is the table above.
-3. **Quote the out-of-domain number anyway.** That is the defect, and it survived twenty sessions
-   because the bound was re-projected, re-gated and re-banked without anyone asking what state it was
-   read at (`[[infeasible-needs-proof]]`'s mirror image: a bound is as unproven as a refusal).
+The obvious repair is to go implement the regime the guard names - and the parts are sitting right
+there: the follow state machine exists and is gated 0-ULP against a live capture (`Zl1FollowState`,
+[`tests/test_tetra_follow.py`](../../tests/test_tetra_follow.py)), and the coupled step just carries her
+as a bare f32 point. It is still wrong, because **the threshold is not only outside the model, it is
+outside every candidate plan** ([[tetra-glitched-nofollow]]): the trick IS the pusher's cylinder herding
+her, so a rollout where he is 230 u away has already stopped doing the thing the plan is made of. Over
+all 49 banked ladder rungs the maximum separation is 222.14 u, and it never approaches the guard by
+accident.
 
-Only (1) and (2) are measurements. A guard that fires and is ignored is a search running with its eyes
-shut over exactly the region it likes best.
+So the guard is a **prune**, and the population past it is not a frontier waiting to be modelled - it
+is non-candidates. Which upgrades the verdict on the bound rather than softening it:
+
+> a quantity maximised over rollouts that trip the guard is not merely UNMODELLED, it is UNREACHABLE.
+
+The +80.4 crossing was never available to a plan at any fidelity. Modelling the regime would have
+produced a *more accurate* number for a state no plan can be in - three sessions of native port and new
+gates to compute an irrelevance. The failure mode has a name and it is the expensive one: repairing the
+model when the search was simply out of bounds.
+
+What remains is the second option: **stay inside the domain and re-price the requirement**, which is the
+table above. A guard that fires and is ignored is a search running with its eyes shut over exactly the
+region it likes best - and the fix is to make it a refusal, not to make it faithful.
 
 ## The rule
 
@@ -103,3 +113,9 @@ shut over exactly the region it likes best.
 inside the model, and the same bound restricted to that fraction.** Cheap to produce - the flag is
 already there and the positions are already banked - and the difference is not a rounding: here it is
 96.93 u on a 80.44 u number, and the sign of the answer changes.
+
+**Then ask which kind of boundary the guard is, because it decides the repair.** A guard around a regime
+the plan may legitimately enter is a model gap and gets modelled. A guard around a regime the plan is
+excluded from by its own mechanism is a PRUNE, and the only correct response is to refuse the population
+and re-price. Getting that backwards costs a port; asking it costs one sentence about what the trick
+actually does.
