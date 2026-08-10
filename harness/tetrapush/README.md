@@ -1738,11 +1738,29 @@ from scratch. Land the edits first, then gate.
               it (`probe` derives ``genuine`` from the roll sweep) -- but the replacement is a set
               DERIVED at the terminal in use, and the herd has been aiming outside it. `sign_prune`
               only ever asked `l0 > 0`.
-            - **NEXT: invert it.** Derive the genuine set at the terminal (one `entry_locus` a Tetra,
-              ~20-30 s), then aim the herd at THAT and rank on a confirmed gap -- or carry the confirm
-              as a hard gate on whatever is ranked. `fixtures/courtyard_candidate_ladder.json` now
-              carries a `CONFIRMATION_WARNING` and is gated as a BANK of herd endpoints, not a
-              shortlist (`tests/test_candidate_ladder.py`).
+            - **AND THE FIX IS A GATE, NOT A TABLE (Dereck, s142): 88.82 IS CONFIRMED.** A
+              precomputed genuine set is `tetra_placements.tsv` again with new provenance, so
+              viability is COMPUTED per candidate and cached on the exact bits of
+              ``(facing, thrust, lean, tetra, runways)`` -- NEW `harness/tetrapush/confirm.py`
+              (`confirmed` / `confirmed_bound` / `best_confirmed`, gated by `tests/test_confirm.py`).
+              It composes into branch-and-bound because `entry_roots` is an under-estimate BY
+              CONSTRUCTION: rank on roots, confirm ascending, stop when the next roots bound cannot
+              beat the best confirmed. Over the 49 banked rungs that is EXACT and it closed in
+              **6 of 49 rungs, 211 s**:
+              **88.8186 = 73 herd + 47.92 u gap (2.82 f) + 13 cut**, rung 5 (s142 node 75), Tetra
+              (-1615.514893, -887.797729), walk to **(-1563.932791, -820.661232) at runway 186**,
+              4 confirmed entries, band width 6.96e-4 u -- **12.18 under `TOTAL_INCUMBENT` 101**.
+            - **THE RUNWAY GRID WAS WORTH 2.76 FRAMES AND HAS NOW CONVERGED.** The locus is a CURVE
+              (one solved ``side`` a runway); sampling it at step 10 gave 1 entry and a 94.79 u gap
+              (91.58), step 2 gave 3 entries and 47.92 u (**88.82**), and step 1 (161 runways) returns
+              the SAME entry and gap -- so 47.92 u is real distance, not sampling, and the proxy's
+              optimism fell from 3.5 f to 0.78 f. Sample a solved curve finely before believing a gap.
+            - **STILL OPEN ON THIS PLAN:** rung 5 scores ``terminal_ok`` False (`escape_ready` does
+              not fire), and whether that rule even applies to the zero-walk-away shape is itself
+              unresolved -- `escape_ready` probes the away walk s123 removed. Resolve it, do not
+              assume it. `fixtures/courtyard_candidate_ladder.json` carries a `CONFIRMATION_WARNING`
+              and is gated as a BANK of herd endpoints, not a shortlist
+              (`tests/test_candidate_ladder.py`).
       - [~] **NEW BEST BOUND 85.22: THE POOL BINDS TOO, AND EVERY WINNER CAME FROM THE DIRECTION
             THE CENSUS RANKED SECOND (session 142).** s141's ordered item -- the cycle-2 probe pool,
             400 of 424-5616 a parent -- priced population-complete with ``jn_keep`` HELD OPEN at
