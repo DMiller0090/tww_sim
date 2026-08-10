@@ -1763,7 +1763,10 @@ from scratch. Land the edits first, then gate.
               miss: a herd roll is aimed AT Tetra to plow her, and a clip roll must be aimed at the
               CORNER with her ON that line (the terminal's ``along`` 50-245 / ``lat`` ~0 /
               ``runway`` 190-310). Her ``lat`` is already right (+0.2..+2.8 u); Link's ``side`` is
-              not.
+              not. **The shape itself survives the thrust correction** -- session 124's scan at the
+              delivered facing / thrust **14** found 51 genuine terminal configurations, 13 of them
+              with contact unbroken for the whole roll (`terminal.py`'s own docstring), so what has
+              to change is the herd's AIM, not the family.
             - **WHICH GIVES s142'S "WALK-AWAY" A GEOMETRIC READING: it is an ALIGNMENT.** On the
               confirmed plan Link ends 57.85 u from her and the entry is 84.66 u away -- 26.81 u
               FURTHER -- but she sits ~24 u OFF his line to the corner, and putting her BETWEEN him
