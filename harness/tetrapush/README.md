@@ -1710,6 +1710,41 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE POOL BINDS AND HIDES NOTHING -- THE SCREEN IS PRICED OUT, GO AT THE HERD'S 72
+            (session 139).** Session 138's ordered item, answered with the two runs that decide it,
+            and the answer retires the whole screen as the place frames live. One new truth page,
+            [`price-a-cut-in-both-directions.md`](../../knowledge/strategy/price-a-cut-in-both-directions.md).
+            - **A NAMED CUT HAS TWO PRICES AND ONLY ONE IS MONEY.** Both runs are s136's config to
+              the knob (terminal 40660 / thrust 11 / cut 13, +-8.44 deg window, freed axis, floor at
+              the shipped 160 -- priced 0.00 by s137), one probe script both modes
+              (`_notes/s139_pool_price.py`, logs `_notes/s139_{pool_price,cap500}.log`, beams
+              `_generated/s106/s139_c3_{altpool,cap500}_t11_f40660.json`).
+            - **PERTURB THE SELECTION: the RUNNER-UP 250 loses 7.57 frames** (97.39 = 79 herd +
+              91.70 u gap + 13 cut). The alternate pool is the shipped `_probe_pool` applied one
+              slice down -- compute the shipped 250 with the untouched function, exclude by
+              identity, re-apply to the remainder -- so it is a different 250 by construction (no
+              new criterion enters; `_mixed_beam` is not prefix-stable across caps, which is why
+              exclusion and not `pool(2*cap)[cap:]`). The pool is LIVE: the bound rides on which
+              250 get probed.
+            - **WIDEN THE CAP: 500 AT THE SHIPPED ORDERS RETURNS 89.82 BIT-IDENTICAL**, same winner
+              (72 herd, gap 81.89, ``l0`` +15.48, runway 179). The next 250 by the same orders
+              produce real families -- 91.34 at 73 herd, 93.56 at 76, 94.94 at 77, all onside, all
+              admitting entry curves -- and every one worse. No frames sit past index 250 by these
+              orders, so the gap-denominated re-rank s138 sketched has nothing on this beam to
+              surface; it is DEPRIORITIZED by measurement, not by fiat.
+            - **THE SELF-CHECKS BOTH FIRED THE RIGHT WAY.** The five junction counters are
+              byte-identical across all three runs (they must be -- the pool sits below the
+              junction; s138's plumbing lesson in the expected direction), the roll-stage counters
+              move with the pool, disjointness asserted per parent (overlap 0 on all 13), and the
+              runner-up run's first-rung warning (winner runway 159 at floor 160) cannot touch the
+              verdict -- that family's floor is 79 + 13 = 92 with the gap at zero.
+            - **WHAT IT RETIRES: the whole screen.** Window (s137, 0.00), floor (s137, 0.00),
+              arming bar (s138, arithmetic), ``l0`` frontier x2 (s137, 0.00), pool slice (s139,
+              only losable), pool cap (s139, 0.00) -- and the ceiling on everything screen-side is
+              the gap term's 4.82 frames (gap at literal zero still reads 72 + 13 = 85). **89.82 =
+              72 herd + 4.82 gap + 13 cut; the herd is 80% and it is unpriced.** The instrument to
+              take there is this session's: perturb what the CYCLE-2 beam hands the junction (its
+              16 survivors, the keeps that chose them) and see whether the 72 depends on it.
       - [~] **`unarmed` IS THE ALPHABET, NOT THE WALL -- AND THE BOUND IS 80% HERD (session 138).**
             Session 137's ordered item, answered, and it retires the counter nine sessions have read
             as the refusal. One new truth page,

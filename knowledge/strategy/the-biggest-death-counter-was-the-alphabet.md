@@ -101,7 +101,10 @@ the alphabet's arithmetic, ~274 letters a node of which about one in seven arms.
 points at instead is the cut that actually decides which endpoints exist, the 250-of-9604 probe pool,
 whose rank is on an axis
 [the-window-binds-on-the-parents-that-produce](the-window-binds-on-the-parents-that-produce.md)
-already showed does not predict the objective.
+already showed does not predict the objective. Session 139 then priced that pool in both directions -
+it binds (a disjoint 250 loses 7.57 frames) and it hides nothing (cap 500 returns the bound
+bit-identical) - see
+[price-a-cut-in-both-directions](price-a-cut-in-both-directions.md).
 
 And the bound's own arithmetic says how much is there to win: **89.82 = 72 herd frames + 4.82 frames
 of gap (81.89 u at the 17.0 u/f walk cap) + 13 of cut**. Every screen-side knob priced since session
