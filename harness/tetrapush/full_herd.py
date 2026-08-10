@@ -431,9 +431,16 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     4 satisfy the terminal's ``tetra_from_corner``, 0 its ``along``, 0 the seam's facing window, and
     none more than one at a time. A rank on a residual that cannot reach zero at that facing is a
     rank on one criterion, so it breeds one criterion. Given a `terminal_keep.TerminalKeep` the sweep
-    REFUSES an aim failing any of the three (``t_facing`` / ``t_along`` / ``t_runway`` / ``t_tfc`` in
-    ``dead``) and ranks only what survives all of them, on the exact residual at the roll's own
+    REFUSES an aim failing any axis (``t_facing`` / ``t_l0`` / ``t_along`` / ``t_runway`` / ``t_tfc``
+    in ``dead``) and ranks only what survives all of them, on the exact residual at the roll's own
     facing, lean and momentum (``t_resid``, ``t_n``, ``t_genuine``).
+
+    ``t_l0`` (session 146) is the axis the box structurally could not test: ``along``, ``runway`` and
+    ``tetra_from_corner`` are every one of them a projection on the roll direction, so all three are
+    invariant to a lateral slide of both actors, and the family behind them is a ``side = 0`` slice.
+    Her own offset from the approach line is where the banked population actually fails -- ~130 u
+    against the 31.58 u session 145 read off ``tetra_from_corner`` -- and no choice of aim buys it,
+    because it is a property of the delivered TETRA (see `terminal_keep.TerminalKeep.screen`).
 
     ``dead`` accumulates WHY each aim died. A stalled cycle is the recurring failure mode here, and
     "no aim rolled" is not a diagnosis -- talk-unsafe, never-rolled, weak (+5 not +26), off-line and

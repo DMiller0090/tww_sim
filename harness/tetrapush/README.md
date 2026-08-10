@@ -1713,6 +1713,68 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE CYCLE-2 REQUIREMENT WAS READ PAST THE MODEL'S OWN FOLLOW GUARD, AND THE KEEP COULD
+            NOT SEE THE AXIS THE WHOLE LADDER FAILS ON (session 146).** Two corrections, both
+            measured, and they redirect the re-breed the s145 handoff asked for rather than run it.
+            NEW truth pages
+            [`a-bound-read-past-the-guard-is-not-a-bound.md`](../../knowledge/strategy/a-bound-read-past-the-guard-is-not-a-bound.md)
+            and [`the-box-cannot-see-the-lateral.md`](../../knowledge/strategy/the-box-cannot-see-the-lateral.md);
+            migrated claim
+            [`history/the-crossing-bar-was-read-past-the-follow-guard.md`](../../knowledge/history/the-crossing-bar-was-read-past-the-follow-guard.md).
+            `TerminalKeep` gains the ``l0`` axis; gate `tests/test_terminal_keep.py` **16 -> 19**;
+            default `pytest` **1203 passed, 3 skipped, 8 xfailed, 66.02 s, exit 0**.
+            - **`crossing_bar` = -80.4359 IS NOT A CONTINUABLE STATE.** The bound every cycle-2 keep
+              has been bred against since s126 ("cycle 2 must hand over ``l0 >= -80.4``") is a max over
+              rolls that leave the model: `FreeRun` has **no follow model at all** -- past
+              `npc_zl1.FOLLOW_ENGAGE_DIST` it sets ``_follow_warned`` and says the sim "is no longer
+              faithful from this frame on" -- and s126 attributed the flat +80.0..+80.4 plateau to
+              "her FOLLOW, not a plow". Audited on the banked census itself, no re-simulation
+              (end separation > 230 u PROVES the guard fired): the roll that SET the bar ends **402.9 u**
+              from her, and **all 2339 band-keeping rolls in the census end past the guard** -- there is
+              no in-domain member of the population the maximum was taken over. The only in-domain
+              crossing in the census reaches ``l0`` +35.48 at runway **6.64**, i.e. the deep plow, which
+              is the surviving structural claim.
+            - **RE-SWEPT INSIDE THE DOMAIN (218880 rolls, 8 cycle-2 exits x 48 junction endpoints x the
+              full aim circle, `_notes/s146_bar_domain.py`):** 98.8% of full-circle rolls trip the guard;
+              a band-keeping roll that never does reaches ``l0`` **-123.48**, so inside the model such a
+              roll LOSES crossing rather than buying +80.4. Respecting the guard costs **96.93 u** in the
+              band.
+            - **THE JUNCTION IS THE CROSSING INSTRUMENT, AND IT IS IN-DOMAIN BY CONSTRUCTION** (Link
+              walks while touching her, so he never leaves 230 u). Population-complete over the banked
+              cycle-2 beam -- 58 of 61 exits arm one, **309500 endpoints, 0 guard trips**: a junction
+              buys **+2.46 .. +89.71 u** (median +53.79), more than the retired roll bar ever claimed,
+              and the best absolute reach anywhere in the population is ``l0`` **-30.7501**. **So what
+              is left is 30.75 u on `l0`**, not the 31.58 u on `tetra_from_corner` s145 measured.
+            - **AND `l0` DOES NOT PREDICT WHAT ITS OWN JUNCTION CARRIES** -- s126's trap (1), now
+              population-complete. The best exit by ``l0`` (-69.66) has a junction worth **+11.0 u**;
+              the biggest gain **+89.71** sits at ``l0`` -193.73; only **2 of 58** reach past -50. Five
+              sessions of `l0_keep` ranked the wrong half of the sum: the keep is
+              ``l0 + (what this exit's junction can carry)``, and the second term is one junction beam
+              per exit with NO aim sweep -- affordable exactly at the cut that decides which exits exist.
+            - **THE KEEP WAS STRUCTURALLY BLIND TO IT.** ``along`` = `(T-L)·m`, ``runway`` =
+              `-(L-brace)·m` and ``tetra_from_corner`` = their difference are all projections on the roll
+              direction, so a lateral slide of BOTH actors leaves the three bit-identical (gated
+              directly). And `terminal.RollFrame.item` has no ``side`` axis, so every banked scan puts
+              Link exactly on the brace line -- the family is a **side = 0 slice** and the box is that
+              slice's. The banked rungs sit at ``side`` -170..-177, ``l0`` **-128.92..-140.40**.
+              `TerminalKeep.screen` now refuses on ``t_l0`` (the SIGN, measured; the 2.2 u ``un_lat``
+              band is reported as ``l0_miss`` and never refuses, since it would drop an unscanned
+              ``side``) and reports ``exact_side``. All 49 rungs refuse on ``t_l0``, gated off the
+              banked s143 entries.
+            - **AND 0 GENUINE ENTRY LOCI EXIST AT THE BANKED NEGATIVE `l0`** -- re-confirmed with
+              `sign_prune` off, `roots=False` and the runway grid widened 320 -> 520: the four best
+              cycle-2 exits (``l0`` -69.66..-90.04) give **5-7 razor ROOTS and 0 genuine**, every root
+              pinned at the old grid's top edge. s142's trap, one axis over.
+            - **NEXT (the ordered item): WIRE HER FOLLOW INTO `FreeRun`.** It is the only way to know
+              what the crossing budget really is, and the model already exists and is live-0-ULP --
+              `npc_zl1.Zl1FollowState` (stt-3/4, engage 230 / break 130), gated
+              `tests/test_tetra_follow.py` against `fixtures/hyrule_tetra_follow.json`; the courtyard
+              step just carries her as a bare f32 point. Wire it Python-side first, keep it INERT below
+              230 u so every existing 0-ULP gate stays green (the DTM window never crosses it -- s144
+              measured max 222.14), gate the boundary, then decide the native port. Named residual: the
+              live capture has Link STATIONARY, so the moving-Link read lag is unpinned (`test_tetra_follow`
+              says so itself). THEN re-breed cycle 2 on ``l0 + junction gain``, and s143's 2/3/4 unchanged.
+              **Standing rules hold: no bound is a plan, and no DTM until the full clip sequence exists.**
       - [~] **THE TERMINAL IS A KEEP NOW, AND IT MEASURES THAT NO RE-POINT OF A BANKED LAST ROLL CAN
             REACH IT -- s144's DISJOINTNESS WAS READ IN 49 DIFFERENT FRAMES, AND IN THE BOX'S OWN
             FRAME `tetra_from_corner` IS SATISFIED BY NOTHING (session 145, item 1 of the s144 plan).**

@@ -10,6 +10,10 @@ to stay true, and is gated here rather than trusted:
     (`[[search-space-contains-human]]`). Three of the eight failed the first version -- the extents
     are of grid-SAMPLED hits and the f32 basis lands a banked hit ~3e-5 u below its own integer
     coordinate -- which is why the window is the sampled extent widened by half a scan cell;
+  * **the box cannot see the lateral, so ``l0`` is a SEPARATE axis and not a consequence** (session
+    146). ``along`` / ``runway`` / ``tetra_from_corner`` are all projections on ``m``, so a lateral
+    translation of both actors leaves the three of them bit-identical while ``l0`` moves -- gated
+    directly, because that invariance is the reason a 130 u miss hid behind a 31.58 u one;
   * **the exact half is 0-ULP.** Re-probing a banked hit through the pooled ctx reproduces the
     scan's own signed residual bit-for-bit (`[[zero-ulp-tests-only]]`: ``==``, never a tolerance);
   * **the windows are the fixture's, not literals.** Every bound traces to
@@ -37,8 +41,11 @@ from harness.tetrapush import seeds as SD                   # noqa: E402
 from harness.tetrapush import terminal as TM                # noqa: E402
 from harness.tetrapush import terminal_keep as TK           # noqa: E402
 from harness.tetrapush.reposition import HerdLine           # noqa: E402
+import tww_sim.core.mathlib as ML                           # noqa: E402
 
 L0_FIXTURE = os.path.join(_REPO, 'fixtures', 'courtyard_l0_screen_nodes.json')
+#: the 49 rungs' own roll entries per thrust (`_notes/s143_rolls.py`), gitignored and skipped if absent
+ENTRIES = os.path.join(_REPO, '_generated', 's106', 's143_roll_entries.json')
 
 
 @pytest.fixture(scope='module')
@@ -149,7 +156,81 @@ def test_the_screen_names_the_first_axis_that_refused(keep):
     off = keep.screen(dict(base, facing=(keep.box_facing + 0x2000) & 0xFFFF))
     assert off['why'] == 't_facing'
     far = keep.screen(dict(base, link=(base['link'][0] + 400.0, base['link'][1] + 400.0)))
-    assert far['why'] in ('t_along', 't_runway', 't_tfc')
+    assert far['why'] in ('t_l0', 't_along', 't_runway', 't_tfc')
+
+
+# --------------------------------------------------------------------------- her side of the line
+
+def test_the_box_is_blind_to_the_lateral_and_l0_is_not(keep):
+    """**Why ``l0`` had to be its own axis.** Slide BOTH actors along ``q`` and the three box axes
+    come back bit-identical while ``l0`` moves by exactly the slide.
+
+    That invariance is not a quirk: ``along = (T-L).m``, ``runway = -(L-brace).m`` and
+    ``tetra_from_corner = runway - along`` are all projections on ``m``, so no amount of sideways
+    displacement registers in any of them. Session 145 read a 31.58 u ``tetra_from_corner`` miss off a
+    population sitting at ``side`` -59..-226, and the axis that refuses that population could not be
+    seen from inside the box."""
+    h = keep.rec['unbroken_hits'][0]
+    base = _entry_of(h, keep)
+    b = keep.screen(base)
+    assert b['ok'] and b['l0'] > 0.0
+    q = (-ML.cM_scos_s16(keep.box_facing), ML.cM_ssin_s16(keep.box_facing))
+    for d in (-200.0, +37.5):
+        slid = dict(base,
+                    link=(base['link'][0] + d * q[0], base['link'][1] + d * q[1]),
+                    tetra=(base['tetra'][0] + d * q[0], base['tetra'][1] + d * q[1]))
+        s = keep.screen(slid)
+        for a in ('along', 'runway', 'tetra_from_corner', 'lat'):
+            assert s[a] == b[a], '%s moved under a pure lateral slide of %+.1f u' % (a, d)
+        assert s['l0'] != b['l0'], 'l0 must move with the slide -- it is the lateral axis'
+        if d < 0:
+            assert s['why'] == 't_l0', 'slid to her wrong side and only l0 refused it'
+
+
+def test_l0_is_a_sign_and_the_family_band_is_only_reported(keep):
+    """The refusal is ``l0 > 0`` (measured over two independent scans); the ~2.2 u ``un_lat`` band is
+    REPORTED as ``l0_miss`` and never refuses.
+
+    A band that narrow would drop a genuine terminal at a ``side`` nobody has scanned, and the family
+    has no ``side`` axis to scan it on (`[[infeasible-needs-proof]]`)."""
+    h = keep.rec['unbroken_hits'][0]
+    base = _entry_of(h, keep)
+    assert keep.l0_band == tuple(keep.rec['un_lat'])
+    assert keep.side_scanned == 0.0, 'the family is a side=0 slice; see terminal.RollFrame.item'
+    q = (-ML.cM_scos_s16(keep.box_facing), ML.cM_ssin_s16(keep.box_facing))
+    # +40 u sideways: OUTSIDE the 2.2 u band, still on her genuine side -> kept, with the miss shown
+    wide = dict(base, link=(base['link'][0] + 40.0 * q[0], base['link'][1] + 40.0 * q[1]),
+                tetra=(base['tetra'][0] + 40.0 * q[0], base['tetra'][1] + 40.0 * q[1]))
+    s = keep.screen(wide)
+    assert s['l0'] > keep.l0_band[1] and s['l0_miss'] > 0.0
+    assert s['ok'], 'a 40 u side offset is unscanned, not refused'
+    assert not s['exact_side'], 'and it must SAY that the scanned side is not this one'
+    assert keep.screen(base)['l0_miss'] == 0.0 and keep.screen(base)['exact_side']
+
+
+def test_the_banked_ladder_is_refused_on_l0_not_on_the_box(keep):
+    """The 49 rungs' own last-roll entries, off the banked s143 artefact: every one of them fails.
+
+    Asserted against a banked artefact rather than re-flown, per the two-minute rule. The point is
+    WHICH axis: session 145 reported ``t_along`` for all 528 seam-window aims because ``l0`` was not
+    an axis yet, and the miss it could not see is an order of magnitude larger."""
+    if not os.path.exists(ENTRIES):
+        pytest.skip('banked roll entries missing: %s' % ENTRIES)
+    with open(ENTRIES) as fh:
+        rows = [r for r in json.load(fh)['rows'] if r['thrust'] == keep.thrust]
+    last = {}
+    for r in rows:
+        if r['rank'] not in last or r['frame'] > last[r['rank']]['frame']:
+            last[r['rank']] = r
+    assert len(last) == 49, 'the ladder is 49 rungs; got %d' % len(last)
+    l0s = []
+    for r in last.values():
+        s = keep.screen(dict(link=tuple(r['entry']), tetra=tuple(r['tetra']),
+                             facing=keep.box_facing, lean=keep.lean, nspeed=r['nspeed']))
+        assert not s['ok'], 'rung %d passed the completed keep' % r['rank']
+        assert s['why'] == 't_l0', 'rung %d refused on %s, not on l0' % (r['rank'], s['why'])
+        l0s.append(s['l0'])
+    assert max(l0s) < 0.0 and min(l0s) < -100.0, 'l0 spans %.2f..%.2f' % (min(l0s), max(l0s))
 
 
 def test_an_unmeasured_terminal_raises_rather_than_answering(keep):
@@ -271,10 +352,11 @@ def test_a_kept_aim_satisfies_all_three_windows(endpoints, keep):
             assert keep.along[0] <= r['along'] <= keep.along[1]
             assert keep.runway[0] <= r['runway'] <= keep.runway[1]
             assert keep.tfc[0] <= r['tetra_from_corner'] <= keep.tfc[1]
+            assert r['l0'] > 0.0
         else:
-            assert r['why'] in ('t_facing', 't_along', 't_runway', 't_tfc')
+            assert r['why'] in ('t_facing', 't_l0', 't_along', 't_runway', 't_tfc')
     kept = [r for r in rows if r.get('terminal', {}).get('ok')]
-    assert sum(dead.get(w, 0) for w in ('t_facing', 't_along', 't_runway', 't_tfc')) \
+    assert sum(dead.get(w, 0) for w in ('t_facing', 't_l0', 't_along', 't_runway', 't_tfc')) \
         == sum(1 for r in sink if not r['ok'] and r['dead_why'] is None)
     assert len(kept) == sum(1 for r in sink if r['ok'] and r['dead_why'] is None)
 

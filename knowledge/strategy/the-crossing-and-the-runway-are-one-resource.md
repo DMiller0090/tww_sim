@@ -8,10 +8,14 @@ predicate cheap enough to rank a whole beam on?
 **Status:** MEASURED (session 126) on the flooded-Hyrule Tetra corner at facing 40835, over **20592
 full-circle rolls** fired from 3 banked cycle-2 endpoints (48 armed junction endpoints each, every herd
 prune off). 51 rolls carry her across the approach line; 12366 leave the pusher at or beyond the entry
-band's near edge (1866 inside it); **zero do both** - the deepest crossing roll ends at runway 89. The
-exchange rate is the finding: a roll that keeps the band buys at most **+80.4 u** of crossing.
-RE-PROJECTED into the thrust-11 family (session 137), where it is **-76.87 .. -77.83** - the bar
-belongs to its terminal, and the structure survives the move.
+band's near edge (1866 inside it); **zero do both** - the deepest crossing roll ends at runway 89.
+RE-MEASURED session 146 with the model's own follow guard respected (218880 rolls off 8 cycle-2 exits),
+which SHARPENED the structure and moved the number: a band-keeping roll inside the domain reaches `l0`
+**-123.48**, i.e. it loses crossing rather than buying any, and the instrument that buys it is the
+**junction** (in-domain by construction, up to **+89.71 u**, best absolute `l0` **-30.75** over the whole
+banked cycle-2 population - 58 exits, 309500 endpoints, 0 guard trips). The old +80.4 exchange rate was read at states the sim does not model -
+migrated to
+[../history/the-crossing-bar-was-read-past-the-follow-guard.md](../history/the-crossing-bar-was-read-past-the-follow-guard.md).
 **Source:** [`harness/tetrapush/handoff.py`](../../harness/tetrapush/handoff.py) (`resid_window`,
 `entry_roots`, `endpoint`, `crossing_bar`), the beam keep in
 [`harness/tetrapush/full_herd.py`](../../harness/tetrapush/full_herd.py) (`extend_cycle`'s
@@ -45,30 +49,52 @@ corner. Measured over the full aim circle, per band of where the roll left the p
 | **190 .. 320 (the entry band)** | 1866 | **+80.4 u** | 105 - 263 |
 | 320 .. 900 | 10500 | +80.2 u | past the corner |
 
-The plateau is the shape worth reading. Past ~150 u of runway the best crossing available stops moving
-at all - **+80.0 to +80.4 u across six hundred units of runway** - because a roll that keeps its
-distance is not plowing her; that 80 u is what she covers on her own, following. Below ~100 u of runway
-the plow engages and the crossing more than doubles. The knee is sharp: at runway 89 the best crossing
-is `+12.9`, at runway 107 it is `-30.8`.
+Below ~100 u of runway the plow engages and the crossing more than doubles; the knee is sharp (at
+runway 89 the best crossing is `+12.9`, at runway 107 it is `-30.8`). Past ~150 u the table above reads
+a flat **+80.0..+80.4 u across six hundred units of runway**, and that plateau is where the whole thing
+went wrong: it is read at states the model does not simulate. Every roll in those rows ends with the
+pusher past `FOLLOW_ENGAGE_DIST`, where `FreeRun` stops modelling her at all - see
+[a-bound-read-past-the-guard-is-not-a-bound.md](a-bound-read-past-the-guard-is-not-a-bound.md) for the
+check and the corrected numbers.
 
-## So the requirement belongs to the cycle before
+## So the requirement belongs to the cycle before, and the JUNCTION is what pays it
 
-A last roll that stays in the entry band buys **at most +80.4 u** of crossing. That converts directly
-into a condition on the handoff one cycle earlier:
+The structure holds and the instrument is not the roll. Re-measured with the guard respected (session
+146, 8 cycle-2 exits x 48 junction endpoints x the full aim circle):
 
-> **the second-to-last cycle must leave the pushed actor at `l0 >= -80.4`**
+| instrument | best `l0` reached | in the domain? |
+|---|---|---|
+| a band-keeping roll | **-123.48** | yes - and it LOSES crossing |
+| a deep-plow roll (any runway) | +128.87 | yes - it spends the runway, per the table above |
+| **the junction alone** | **-30.75** (buying +2.46..**+89.71** u, median +53.79) | yes, 0 trips over 309500 endpoints |
 
-against the -160.6 .. -183.4 the banked cycle-2 beam actually hands over. That is a gap of 80-103 u,
-and it is the honest statement of what is left - not "the last cycle is badly ranked" but "the last
-cycle is being asked to pay a bill that was run up before it started".
+So the condition on the handoff one cycle earlier is real, but it is set by what a JUNCTION can carry,
+and the best any junction in the banked cycle-2 population reaches is `l0` **-30.75** against the
+`l0 > 0` a genuine terminal needs. That is the honest statement of what is left: **30.75 u**, on the
+one axis the terminal box cannot see
+([the-box-cannot-see-the-lateral.md](the-box-cannot-see-the-lateral.md)) - not "the last cycle is badly
+ranked" but "the last cycle is being asked to pay a bill that was run up before it started".
 
 And it is a requirement on the whole cycle, not on its aim. Re-opening each banked cycle-2 terminal as
 its PRE-ROLL endpoint (the split is recoverable exactly from the input log, and verified by re-firing
 it 0-ULP) and sweeping the full aim circle from there, with the junction left exactly as it is, moves
-the handoff by **-10.3 to +18.2 u** and reaches `-159.4` at best against the `-80.4` needed. The roll
-is the wrong knob: it buys ~+89-118 u of crossing off that state whatever it is aimed at. The crossing
-has to come from the JUNCTION - where the pusher repositions without a 400 u commitment - which is the
-same conclusion an earlier session reached about the lateral one cycle down.
+the handoff by **-10.3 to +18.2 u** and reaches `-159.4` at best. The roll is the wrong knob: it buys
+~+89-118 u of crossing off that state whatever it is aimed at. The crossing has to come from the
+JUNCTION - where the pusher repositions without a 400 u commitment - which is the same conclusion an
+earlier session reached about the lateral one cycle down.
+
+## And the handoff's own `l0` does not predict what its junction can carry
+
+This is the trap that makes the requirement awkward to breed against, and it is now population-complete
+rather than anecdotal (session 146, all 58 arming exits): the crossing a junction buys spans
+**+2.46 .. +89.71 u** and it is ANTI-correlated with where its parent starts. The best exit by `l0`
+(-69.66) has a junction worth only **+11.0 u**; the biggest junction gain, **+89.71 u**, sits on an exit
+at `l0` -193.73, and only **2 of 58** exits reach past -50 at all.
+
+So a keep on the handoff's own `l0` - which is what five sessions of breeding ranked on - selects for
+the wrong half of the sum. What has to be kept is `l0 + (what this exit's junction can carry)`, and the
+second term costs one junction beam per exit and no aim sweep at all, so it is affordable at the cut
+that decides which exits exist.
 
 The alternative shape, and its price: let the last roll plow her across (it reaches +196 u) and accept
 that it parks the pusher at runway -48..89, then walk him back. Measured on every crossing roll, the
@@ -76,11 +102,15 @@ pusher lands **112-238 u** from the nearest genuine entry (median 217), i.e. **7
 at the walk cap, before any turn to the roll's facing. The banked cycle-3 beam's best is 73.7 u, so
 neither route is free; the difference is that the first one has somewhere to spend the search.
 
-## The bar belongs to its terminal, and it re-derives without firing a roll
+## A bar belongs to its terminal, and it re-derives without firing a roll
 
-`-80.4` is a max over a roll population read in ONE frame, so it is a property of that terminal and not
-of the problem. It outlived its thrust: the number was measured at facing 40835 / thrust 14 and kept
-being printed beside thrust-11 screens two sessions after the plan moved there.
+Whatever the bar's value, it is a max over a roll population read in ONE frame, so it is a property of
+that terminal and not of the problem. It outlived its thrust: the number below was measured at facing
+40835 / thrust 14 and kept being printed beside thrust-11 screens two sessions after the plan moved
+there. (The values in this section are the out-of-domain ones and are kept only because the
+re-projection METHOD is what licenses reading any bar in another frame -
+`fixtures/courtyard_crossing_bar.json` still holds them; the crossing numbers to use are the in-domain
+table above.)
 
 It needs no re-run to correct. `l0` and `runway` are affine projections of banked WORLD positions -
 `tetra_lateral` is a dot against `pf.q` about `pf.brace` - and the census stores every roll's two XZ

@@ -8,14 +8,32 @@ quantity that CANNOT reach zero, and a rank on one criterion breeds a population
 criterion. So the terminal belongs on the KEEP side of the cut, all three axes together, with the
 residual demoted to what it can honestly do -- ordering the survivors.
 
-WHAT THE THREE WINDOWS ARE, AND WHERE EACH COMES FROM (no literal is restated here):
+WHAT THE WINDOWS ARE, AND WHERE EACH COMES FROM (no literal is restated here):
 
   * the FACING -- `seam_window`, off `fixtures/courtyard_facing_window_s92.json`: which console
     sine-table CELLS admit genuine dust at the seam at all. Two lobes with a dead gap between them.
+  * the SIDE SHE IS ON -- ``l0`` (`handoff.tetra_lateral`), her own offset from the clip roll's
+    approach line. A SIGN, not a band: the genuine set is entirely at ``l0 > 0`` over two independent
+    scans (`handoff.endpoint`'s ``sign_prune``), and session 146 re-confirmed it where it matters --
+    at the four best banked cycle-2 exits (``l0`` -69.66..-90.04) `handoff.entry_locus` returns 5-7
+    razor ROOTS and **0 genuine**, over runway 160..520 and the full ``side`` scan.
   * the BOX -- ``along`` / ``runway`` / ``tetra_from_corner``, off `terminal.clipping_family`'s
     banked scan of the terminal, narrowed to the ``unbroken`` family (Link touching her at the roll
     entry, contact never breaking) because that is the zero-walk-away shape session 123 re-aimed the
     problem at.
+
+THE BOX CANNOT SEE THE LATERAL AT ALL, WHICH IS WHY ``l0`` IS HERE (session 146). ``along``,
+``runway`` and ``tetra_from_corner`` are every one of them a projection on ``m`` = the roll direction,
+so all three are INVARIANT under a lateral translation of either actor -- translate Link and Tetra 200
+u sideways and the box reads identically. And the scan they come from is a ``side = 0`` SLICE:
+`terminal.RollFrame.item` takes ``(runway, along, lat)`` and places Link at ``brace - runway*m``,
+exactly on the brace line, so all 8 banked scans have Link on it and the family carries no ``side``
+coordinate. Session 145 measured a 31.58 u miss on ``tetra_from_corner`` and reported ``side``
+-59.52..-225.66 beside it without screening it; the banked last-roll entries sit at ``l0``
+-128.92..-140.40 against a genuine ``l0`` of +0.57..+51. So the axis that refuses the entire banked
+population was the one axis the screen was structurally unable to test, which is session 144's error
+(rank on a criterion that cannot reach zero) one level down. ``l0`` is one dot product on the delivered
+Tetra, and it goes second -- straight after the facing, which is what ``q`` needs.
 
 THE BOX IS A NEIGHBOURHOOD PROXY AND SAYS SO. `clipping_family` refuses to answer for an unmeasured
 (facing, thrust, lean) precisely so a neighbour's number is never quoted as a measurement, and the
@@ -24,6 +42,14 @@ across the window's live cells as a cheap pre-filter, and `TerminalKeep.exact` s
 probed facing is the scanned one. Nothing rests on the proxy: it decides only which aims are worth
 compiling a `ShoveCtx` for, and the answer for a kept aim is `handoff.probe` at the roll's OWN
 facing, lean and momentum -- exact, and the thing the razor is then bisected on.
+
+``l0`` IS SCREENED AS A SIGN AND REPORTED AGAINST A BAND, AND THE TWO ARE NOT THE SAME CLAIM. The
+family's own lateral extent (``un_lat``, the solved razors' centres at ``side = 0``, where ``l0`` and
+``lat`` coincide) is ~2.2 u wide, and screening on it would refuse a genuine terminal at a ``side``
+nobody has scanned -- a keep may not drop a configuration that is only unmeasured
+(`[[infeasible-needs-proof]]`). So the refusal is the SIGN, which is measured, and ``l0_band`` /
+``l0_miss`` report the distance to the scanned family's band so a caller sees how far off it is
+without that distance ever refusing anything.
 
 THE BOX IS ALSO GRID-COARSE, AND A SCREEN TIGHTER THAN ITS OWN RESOLUTION REFUSES ITS GENERATING SET.
 `terminal.RUNWAY`/`ALONG` step 10 u and 5 u, so ``un_along`` = 60..100 is the extent of the SAMPLED
@@ -93,6 +119,17 @@ def seam_window():
     return _SEAM
 
 
+def _miss(v, win):
+    """How far ``v`` sits outside ``win`` -- 0.0 inside, signed (- = below). ``None`` window -> 0.0."""
+    if win is None:
+        return 0.0
+    if v < win[0]:
+        return v - win[0]
+    if v > win[1]:
+        return v - win[1]
+    return 0.0
+
+
 def in_seam_window(facing):
     """Is this roll facing inside a LIVE seam cell? The keep the 49 banked rungs all fail.
 
@@ -141,6 +178,12 @@ class TerminalKeep:
         self.runway = self._widen(self.sampled['runway'], d_rw, p)
         self.tfc = self._widen(self.sampled['tetra_from_corner'], d_tfc, p)
         self.lat = tuple(rec['un_lat']) if unbroken else None
+        # her side of the approach line: the SIGN is the screen, the family's own band is the report
+        # (see the docstring -- a 2.2 u band would refuse an unscanned ``side``, not a measured miss)
+        self.l0_band = tuple(rec['un_lat']) if unbroken else None
+        #: the ``side`` every banked scan was taken at. `terminal.RollFrame.item` has no side axis,
+        #: so this is a property of the family and not a choice made here.
+        self.side_scanned = 0.0
         self.brace = RD.brace_point(35.0, 35.0)
         self._pool = ES.CtxPool()
 
@@ -168,18 +211,27 @@ class TerminalKeep:
         """The keep on one roll ENTRY (`two_roll.roll_segment`'s ``entry``): ``dict(ok, why, ...)``.
 
         ``why`` names the FIRST axis that refused, so a stalled sweep reads as a diagnosis rather
-        than a count -- ``t_facing`` / ``t_along`` / ``t_runway`` / ``t_tfc``. The order is by cost
-        and by how hard each is to buy: the facing is one integer compare and is the axis nothing in
-        the banked population comes near, so it goes first."""
+        than a count -- ``t_facing`` / ``t_l0`` / ``t_along`` / ``t_runway`` / ``t_tfc``. The order is
+        by cost and by how hard each is to buy: the facing is one integer compare and the axis nothing
+        in the banked population comes near, and ``l0`` is one dot product and the axis no choice of
+        aim can buy (it is where the delivered TETRA is, and the whole banked ladder misses it by
+        ~130 u where the box it hid behind misses by 31.58).
+
+        ``l0_miss`` is signed and rides along unrefused: how far ``l0`` sits outside the scanned
+        family's own lateral band, 0.0 inside it. See the module docstring for why that distance is
+        reported and the SIGN is what refuses."""
         f = int(entry['facing']) & 0xFFFF
         rw, sd, al, la = self.coords(f, entry['link'], entry['tetra'])
+        l0 = sd + la                            # (tetra - brace).q == side + lat, exactly
         out = dict(ok=False, why=None, facing=f, cell=ES.aim_cell(f), runway=rw, side=sd,
-                   along=al, lat=la, tetra_from_corner=rw - al,
-                   exact=(f == self.box_facing), dist=math.hypot(*[a - b for a, b in
-                                                                  zip(entry['tetra'],
-                                                                      entry['link'])]))
+                   along=al, lat=la, tetra_from_corner=rw - al, l0=l0,
+                   l0_miss=_miss(l0, self.l0_band), exact=(f == self.box_facing),
+                   exact_side=(sd == self.side_scanned),
+                   dist=math.hypot(*[a - b for a, b in zip(entry['tetra'], entry['link'])]))
         if not in_seam_window(f):
             return dict(out, why='t_facing')
+        if not l0 > 0.0:
+            return dict(out, why='t_l0')
         if not (self.along[0] <= al <= self.along[1]):
             return dict(out, why='t_along')
         if not (self.runway[0] <= rw <= self.runway[1]):
@@ -220,7 +272,8 @@ class TerminalKeep:
         """The keep as data, for a gate or a report to assert on instead of on prose."""
         return dict(facing=seam_window()['window'], cells=sorted(seam_window()['cells']),
                     along=self.along, runway=self.runway, tetra_from_corner=self.tfc,
-                    lat=self.lat, thrust=self.thrust, lean=self.lean, box_facing=self.box_facing,
+                    lat=self.lat, l0_band=self.l0_band, side_scanned=self.side_scanned,
+                    thrust=self.thrust, lean=self.lean, box_facing=self.box_facing,
                     unbroken=self.unbroken, pad=self.pad, cut_step=self.cut_step,
                     roll_frames=self.roll_frames, sampled=dict(self.sampled),
                     step=dict(self.step))
@@ -259,8 +312,12 @@ def main(argv=None):
     print("terminal thrust %d lean %d (box from facing %d, %s): cut_step %d, %d roll frames"
           % (w['thrust'], w['lean'], w['box_facing'],
              'unbroken' if w['unbroken'] else 'genuine', w['cut_step'], w['roll_frames']))
+    print("  %-18s > 0 (a SIGN; the scanned family's band is %s)"
+          % ('l0', "%.4f .. %.4f" % w['l0_band'] if w['l0_band'] else '--'))
     for a in ('along', 'runway', 'tetra_from_corner', 'lat'):
         print("  %-18s %s" % (a, "%.4f .. %.4f" % w[a] if w[a] else '--'))
+    print("  the box is a side = %.1f SLICE: along/runway/tetra_from_corner are projections on m and"
+          " cannot see the lateral at all" % w['side_scanned'])
 
 
 if __name__ == '__main__':
