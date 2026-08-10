@@ -1710,6 +1710,42 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **NEW BEST BOUND 85.22: THE POOL BINDS TOO, AND EVERY WINNER CAME FROM THE DIRECTION
+            THE CENSUS RANKED SECOND (session 142).** s141's ordered item -- the cycle-2 probe pool,
+            400 of 424-5616 a parent -- priced population-complete with ``jn_keep`` HELD OPEN at
+            s141's configuration, so the reference is 86.89 and not the shipped 89.82. **85.22 = 72
+            herd + 3.71 u of gap (0.22 f) + 13 cut**, `l0` +51.22, runway 260; **-1.67 frames**, and
+            **15.78 under `TOTAL_INCUMBENT` 101**. Still a BOUND: 72 real bit-exact frames, 3.71 u
+            un-routed, a 13-f cut allowance with no cut sequence. One new truth page,
+            [`a-cut-widens-two-ways.md`](../../knowledge/strategy/a-cut-widens-two-ways.md).
+            - **THE CENSUS IS FREE AND IT MIS-RANKED THE TWO DIRECTIONS.** Junction cost only (wrap
+              `_dedup_endpoints`, return nothing, no screen runs; 32 s): the population is **24708
+              unique endpoints = 261 physics states at 94.67 pending letters a state**, and the
+              shipped 2800 slots reach **34**. A widen to 800 reaches 62 and pays for it; the same
+              400 slots under the s68 ``group``/``per_group`` cap reach **all 261 for free** -- so
+              the cut's reach looked like a composition problem. It was not: the FREE direction
+              priced **88.04** at best and the PAID one (more letters of states already reached)
+              priced **85.22**, taking all three sub-86.89 results. Reaching a new state is not
+              reaching a new OUTCOME; s141's 2.93 frames were a letter too.
+            - **THE PRICED POPULATION IS A UNION, WHICH IS WHAT KEEPS THE GUARD.** A re-composition
+              at fixed cap is a SWAP, not a widen (it drops ~60 of the productive state's letters),
+              so the run screened shipped 400 UNION state-capped 400 UNION plain-widen 800 =
+              **6632 endpoints (+137%)**, 2415 s, roll stage 3182 in 247 s (**10.2%**).
+              **GUARD: 220 of 220** s141 roll survivors byte-identical by input log. 490 survivors ->
+              **108 novel (state, pending) identities**, priced 108 of 108 (23563 s of node time,
+              9 parallel batches of 12 with the s141 one-node-per-call JSONL checkpoint).
+            - **THE TOP THREE REPLAY BIT-FOR-BIT** from their stored logs on a fresh native
+              `FreeRun` (`_notes/s142_verify.py`, all fields <1e-9): node 12 **85.22** (72 f, 3.71 u,
+              runway 260, 21 entry curves), node 44 85.31 (72 f, 5.32 u), node 16 85.73 (71 f,
+              29.35 u). Node 12 ends Link (-1478.123291, -796.263062), Tetra (-1527.264404,
+              -854.942566) over a 72-frame log.
+            - **THE WINNING SHAPE RETIRES THE GAP TERM.** Every bound since s135 carried 80-83 u of
+              gap (~4.9 f); node 12 hands her over at **3.71 u = 0.22 f**. The six cuts priced flat
+              before s141 all act on that term, so they are retired as levers whatever their price.
+              85.22 is now **72 f of herd (85%) + a 13-f terminal cut allowance (15%)** -- and the
+              cut allowance has NEVER been priced. The crossing still does not pay: the identities
+              that reach the bar (`l0` -81.88 / -84.18 against -77.83) price 104.17-109.90 at 82-84
+              herd frames.
       - [~] **NEW BEST BOUND 86.89: ``jn_keep`` WAS COSTING 2.93 FRAMES, AND THE ENDPOINT THAT
             CARRIES THEM SAT AT RANK 3 OF A CUT THAT KEEPS 6 (session 141).** s140's ordered item, and
             the FIRST cut priced since s135 that pays. **86.89 = 69 herd + 83.15 u of gap at the walk
