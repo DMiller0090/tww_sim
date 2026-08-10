@@ -1767,6 +1767,35 @@ from scratch. Land the edits first, then gate.
               delivered facing / thrust **14** found 51 genuine terminal configurations, 13 of them
               with contact unbroken for the whole roll (`terminal.py`'s own docstring), so what has
               to change is the herd's AIM, not the family.
+            - **AND THE RE-POINT IS SMALL, WHICH IS WHAT MAKES THIS THE ROUTE** (`_notes/s143_aim.py`
+              off the same artefact). The zero-walk plan is worth
+              ``entry_frame + roll_frames(cut_step) - 1`` = **68..83 frames** on logs that already
+              exist (last rolls enter at frames 52..67) -- the WALK shape cannot reach 88 at all
+              (73 herd + walk + 17 roll), so 88 is a ceiling this shape clears rather than a target.
+              At those last rolls ``along`` 42..56 and ``lat`` -1.7..+2.8 are already in the family;
+              only the AIM is off, by **1.2 to 47.3 deg**, and **7 of 49 rungs are inside the
+              +-8.44 deg fan the screen already sweeps**. Best is rung 15: aim off **1.19 deg**,
+              ``side`` 7.2 u, 73 frames. Collinearity is a LATERAL step of **1.3 u** there -- Tetra
+              is ~53 u out and the corner ~346, so a sideways move swings the near bearing ~7x
+              harder than the far one, and 1.3 u is a quarter of one walk frame.
+            - **THE TENSION TO RESOLVE FIRST: the best-AIMED rungs sit at runway ~345 and s124 found
+              genuine cells only at 190-310** (26 of 49 rungs are in that band; the well-aimed ones
+              are not). That band is a thrust-14 / lean-0 / IDLE-Tetra measurement, and **the family
+              at thrust 13 and 15 has never been scanned** -- s124 did 14, s136 did 9/10/11 and those
+              are void. One `terminal.scan` a thrust says whether the far edge moves.
+            - **THE MODEL ASSUMPTIONS NOBODY HAS CHECKED AT A DELIVERY STATE**, and the reason the
+              next step is a validation rather than a search: `fast_schedule` seeds Tetra **idle and
+              at rest** (``tet_seed`` = FAR + ``STT_IDLE``, speed 0) and every terminal scan ran
+              **lean 0**, while a herd hands over a FOLLOWING Tetra and endpoints carrying m351C
+              **648**. `entry_search.zero_the_resid` already accepts a Tetra ``seed=(speedF, facing,
+              stt)``; the terminal path has never passed one.
+            - **THE STANDING RULE OUT OF THIS SESSION: no bound is a plan.** Nothing is reported as a
+              plan unless `clip_roll.fire` produced a ``CUT_F`` from its own input log, and the Python
+              coupled replay reproduces the razor engine's predicted endpoint. A bound is a research
+              number; the reportable artefact is a sequence that fires the cut. Both s142 (a razor
+              ROOT read as a clip) and s143 (a schedule built outside the thrusts it was verified at)
+              are the same failure -- something checked in one place, used in another -- and emitting
+              the button presses is what caught it.
             - **WHICH GIVES s142'S "WALK-AWAY" A GEOMETRIC READING: it is an ALIGNMENT.** On the
               confirmed plan Link ends 57.85 u from her and the entry is 84.66 u away -- 26.81 u
               FURTHER -- but she sits ~24 u OFF his line to the corner, and putting her BETWEEN him
