@@ -1734,6 +1734,18 @@ from scratch. Land the edits first, then gate.
               **GUARD: 220 of 220** s141 roll survivors byte-identical by input log. 490 survivors ->
               **108 novel (state, pending) identities**, priced 108 of 108 (23563 s of node time,
               9 parallel batches of 12 with the s141 one-node-per-call JSONL checkpoint).
+            - **THE RANKED LADDER IS NOW A TRACKED FIXTURE**, so a rung that does not survive
+              assembly has a written successor instead of "re-run the search":
+              [`fixtures/courtyard_candidate_ladder.json`](../../fixtures/courtyard_candidate_ladder.json)
+              -- all **49** live candidates from s141+s142, best bound first, each with its FULL herd
+              input log, and each scored by `objective.replay_and_score` so ``viable`` means wall_ok
+              AND regime_ok AND rule 3 AND onside AND off the rung edges. **27 of 49 are viable, and
+              the ladder reads 85.22 -> 85.31 -> 86.89 -> 90.41 -> 91.74**: rung 2 costs 0.09 frames.
+              Rung 3 (85.73) is exactly why the flag exists -- it beats the reference on ``bound`` and
+              FAILS rule 3, which a bound-only list would have hidden until assembly. Every rung was
+              replay-verified on build (all 49 reproduce their banked bound/gap exactly). Gate:
+              `tests/test_candidate_ladder.py` (structure + top rung locked 0-ULP; the replay is
+              slow-marked).
             - **THE TOP THREE REPLAY BIT-FOR-BIT** from their stored logs on a fresh native
               `FreeRun` (`_notes/s142_verify.py`, all fields <1e-9): node 12 **85.22** (72 f, 3.71 u,
               runway 260, 21 entry curves), node 44 85.31 (72 f, 5.32 u), node 16 85.73 (71 f,
@@ -1742,8 +1754,10 @@ from scratch. Land the edits first, then gate.
             - **THE WINNING SHAPE RETIRES THE GAP TERM.** Every bound since s135 carried 80-83 u of
               gap (~4.9 f); node 12 hands her over at **3.71 u = 0.22 f**. The six cuts priced flat
               before s141 all act on that term, so they are retired as levers whatever their price.
-              85.22 is now **72 f of herd (85%) + a 13-f terminal cut allowance (15%)** -- and the
-              cut allowance has NEVER been priced. The crossing still does not pay: the identities
+              85.22 is now **72 f of herd (85%) + the 13-f clip roll (15%)**, and that 13 is
+              ``PairFrame.cut_step`` -- the schedule's own EXACT length for this terminal, not a
+              padding allowance; it moves by choosing a terminal (thrust 14 -> 11 already took it
+              16 -> 13), not by building the sequence tighter. The crossing still does not pay: the identities
               that reach the bar (`l0` -81.88 / -84.18 against -77.83) price 104.17-109.90 at 82-84
               herd frames.
       - [~] **NEW BEST BOUND 86.89: ``jn_keep`` WAS COSTING 2.93 FRAMES, AND THE ENDPOINT THAT

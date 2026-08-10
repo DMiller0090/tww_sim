@@ -123,4 +123,6 @@ new outcome, and the direction that reached 227 extra states lost to the one tha
 flat before s141 all act on that gap term
 ([price-a-cut-in-both-directions](price-a-cut-in-both-directions.md)); at 0.22 f they are retired as
 levers whatever their price. What is left of 85.22 is **72 frames of herd (85%)** and the **13-frame
-terminal cut allowance (15%)**, and the cut allowance has never been priced at all.
+clip roll (15%)** - and that 13 is `PairFrame.cut_step`, the schedule's own exact length for this
+terminal, not a padding allowance. It moves by CHOOSING a terminal (thrust 14 -> 11 already took it
+16 -> 13), not by building the sequence more tightly.
