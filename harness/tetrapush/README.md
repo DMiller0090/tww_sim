@@ -1767,11 +1767,25 @@ from scratch. Land the edits first, then gate.
               delivered facing / thrust **14** found 51 genuine terminal configurations, 13 of them
               with contact unbroken for the whole roll (`terminal.py`'s own docstring), so what has
               to change is the herd's AIM, not the family.
-            - **AND THE RE-POINT IS SMALL, WHICH IS WHAT MAKES THIS THE ROUTE** (`_notes/s143_aim.py`
-              off the same artefact). The zero-walk plan is worth
-              ``entry_frame + roll_frames(cut_step) - 1`` = **68..83 frames** on logs that already
-              exist (last rolls enter at frames 52..67) -- the WALK shape cannot reach 88 at all
-              (73 herd + walk + 17 roll), so 88 is a ceiling this shape clears rather than a target.
+            - **WHAT THE TWO SHAPES COST -- and the first two answers s143 gave were both wrong, so
+              read the arithmetic and not the headline.** Every plan is ``(frames before the clip
+              roll dispatches) + roll_frames(cut_step)``, the second term 17/18/19 at thrust 13/14/15.
+              **WALK shape** = herd + walk + 17; banked herds are **69..84**, so its floor is **86**
+              at the shortest and **88 needs a 2-frame walk -- not ruled out** (the first claim that
+              it was came from anchoring on the 73-frame confirmed rung and generalising). Its open
+              term is the walk itself: Link hands over at speedF **-25.72** and must turn around and
+              re-accelerate past 17 before a roll carries 26, which ``gap / WALK_CAP`` charges
+              nothing for. **ZERO-WALK shape** = the prefix before the last roll + 17; banked
+              prefixes are **51..66**, so ``entry + 16`` = 68..83. **THE TWO ARE NOT COMPARABLE:**
+              the zero-walk prefix is **two** cycles of plowing, not three, and the third cycle
+              exists because two did not put her where the search wanted -- the clip roll would have
+              to finish with its own 53-126 u of plow (`terminal.classify`'s ``plowed``), and nothing
+              shows a clip is available at the 2-cycle Tetra position. **68..83 is a floor under an
+              assumption, not a plan length**; quoting it as one is the same proxy-as-plan error the
+              standing rule below forbids. Prefer zero-walk because it deletes an unpriced phase and
+              matches s123's geometry, not because it is 15 frames faster.
+            - **AND THE RE-POINT IS SMALL, WHICH IS WHAT MAKES IT WORTH TRYING FIRST**
+              (`_notes/s143_aim.py` off the same artefact).
               At those last rolls ``along`` 42..56 and ``lat`` -1.7..+2.8 are already in the family;
               only the AIM is off, by **1.2 to 47.3 deg**, and **7 of 49 rungs are inside the
               +-8.44 deg fan the screen already sweeps**. Best is rung 15: aim off **1.19 deg**,
