@@ -46,6 +46,14 @@ needed to make the clip roll bit-exact in the first place. The rule is about WHE
 > **The lean is an early-roll lever. Past ~10 roll frames it has decayed out, and a sweep of it at a
 > late cut frame is measuring nothing.**
 
+And "the depth at a solved configuration" is not "the set of configurations that solve". Re-scanning
+the Courtyard terminal family at the delivered lean of 648 - a fifth of the ±3000 the depth figure was
+measured over - keeps the depth and costs a fifth of the family: **51 genuine → 40, contact-unbroken
+13 → 8, and the plow ceiling 180 → 160 u**. Both readings are the early-roll lever doing exactly what
+this page says it does, on the frames that decide where the plow leaves her. Quote the 0.0003 u for a
+depth and re-scan for a family:
+[../strategy/dispatchable-is-not-clipping.md](../strategy/dispatchable-is-not-clipping.md).
+
 ## The methodology trap this hides behind
 
 Sweeping the lean **at a frozen entry** reads a spurious sensitivity - 0.03 u at the same configuration

@@ -51,6 +51,16 @@ WHAT THE MEASUREMENT FOUND (session 124, the delivered facing/thrust, `scan`):
     it. It also decays 35%/frame (`LandState.SLANT_DECAY`), so the same long backslide that buys the
     runway flattens the lean to 0 in 13 frames.
 
+A THRUST THAT DISPATCHES THE CUT IS NOT A THRUST THAT CLIPS (session 144). `entry_search.
+cut_step_window` says which steps a roll can press B into at all; it says nothing about whether the
+resulting cut reaches the seam, and the two are different questions with different answers. Scanned
+over this same box at the DELIVERED lean, thrust 13 bisects **2390 razor roots and converts none of
+them**, while thrust 14 converts 40 of 2513 and thrust 15 converts 107 of 2613. So the cheapest
+DISPATCHABLE clip roll (17 frames) is not a deliverable one and the floor is thrust 14's 18. That is
+banked rather than restated -- `fixtures/courtyard_terminal_family.json`, read through
+`clipping_thrusts` / `clipping_family`, which return None at an UNMEASURED terminal rather than a
+neighbour's answer.
+
     python -m harness.tetrapush.terminal scan [facing] [thrust] [lean]
     python -m harness.tetrapush.terminal leans [facing] [thrust]
 """
@@ -93,6 +103,51 @@ ALONG = tuple(range(30, 246, 5))
 
 #: The Co radius sum -- overlap is `CO_R_SUM - |co_centre - tetra|` on the frame the cut consumes.
 CO_R_SUM = RD.CO_R_SUM
+
+#: The banked family: which (facing, thrust, lean) terminals were SCANNED and what they hold. Read it
+#: through `clipping_family`, never as a literal -- see that function for why the fallback is None.
+FAMILY_FIXTURE = os.path.join(_rb, 'fixtures', 'courtyard_terminal_family.json')
+_FAMILY = None
+
+
+def clipping_family(facing, thrust, lean):
+    """**The banked terminal family at one (facing, thrust, lean)** -- or ``None`` if never scanned.
+
+    `entry_search.thrust_window` answers a different question than this one. It says which ``cut_step``
+    a roll can DISPATCH a cut on, which is a property of the roll's animation and nothing else; whether
+    that cut then reaches the seam is a property of the corner, and the two do not agree. Measured over
+    the whole `RUNWAY` x `ALONG` x ``lat`` box at the delivered lean, thrust 13 bisects **2390 razor
+    roots and converts 0**, thrust 14 converts **40 of 2513**, thrust 15 **107 of 2613**. Session 143
+    priced the 17-frame thrust-13 roll as the cheapest deliverable one on the strength of the dispatch
+    window alone; the cheapest one that CLIPS is thrust 14's 18.
+
+    Every record carries ``roots`` beside ``genuine`` on purpose. A bare zero cannot tell absent
+    geometry from under-sampling, and this module has answered that question wrong before
+    (`[[infeasible-needs-proof]]`) -- 2390 roots converting none is a statement about the cut, where
+    2390 roots that were never bisected would be a statement about the scan.
+
+    An UNMEASURED terminal returns ``None`` and the caller says so, exactly as `handoff.crossing_bar`
+    does: reaching for a neighbouring thrust's family is how a thrust-14 number ended up printed beside
+    thrust-11 screens for two sessions."""
+    global _FAMILY
+    if _FAMILY is None:
+        with open(FAMILY_FIXTURE) as fh:
+            d = json.load(fh)
+        _FAMILY = {(r['facing'], r['thrust'], r['lean']): r for r in d['records']}
+    return _FAMILY.get((int(facing) & 0xFFFF, int(thrust), int(lean) & 0xFFFF))
+
+
+def clipping_thrusts(facing, lean, unbroken=False):
+    """The thrusts that actually CLIP at this terminal, ascending -- ``None`` if none were scanned.
+
+    ``unbroken=True`` narrows it to the zero-walk-away family (Link touching her at the roll entry and
+    contact never breaking), which is the shape session 123 re-aimed the problem at. At the delivered
+    lean that narrowing leaves **thrust 14 alone**: 15 scans 107 genuine and 0 unbroken."""
+    got = [r for r in (clipping_family(facing, t, lean) for t in ES.THRUSTS) if r is not None]
+    if not got:
+        return None
+    return tuple(sorted(r['thrust'] for r in got
+                        if (r['unbroken'] if unbroken else r['genuine'])))
 
 
 class RollFrame:

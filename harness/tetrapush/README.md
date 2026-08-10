@@ -243,6 +243,7 @@ deliberately unported.
 | `fixtures/courtyard_clip_s90_console.json` | **THE FRAME-MINIMAL CLIP, ON CONSOLE (session 90; LOCKED).** Row 0 of the s90 list -- a **4-frame** walk-up, one frame under the s88 delivery, and rejected by the cross-engine filter until the seam above was settled -- delivered end to end in ONE run. At the cut Link is bit-identical to the prediction, **49.7368 u off `old`** and out through the seam; five frames later `daPyProc_FALL_e` off the courtyard floor, with Tetra bit-frozen and stt 3 at BOTH samples. Nothing past `cut_i` is claimed of Link (`post_cut`) -- the composite is flat-ground; Tetra is gated there anyway. So milestone 2 is console-confirmed at the FRAME FLOOR. Gate `tests/test_clip_frame_minimal.py` (6). |
 | `fixtures/courtyard_entry_s90_hits.json` | **THE CURRENT CANDIDATE LIST (session 90).** The s89 pass re-confirmed on the fixed engine: **55 of 55 deliverable, frame floor 4, 0 rejected, 0 dropped** -- the seam's whole cost recovered, and the s89 rows plus its four rejections are exactly these rows. Frame-minimal row 0 = plan `[0,208,110,2,169,192,2]`, aim `[82,186]`, facing 40841, thrust 15, m351C 64761, entry `(-1531.1784667969, -781.7215576172)`, resid +6.2429e-05, 4 walk frames, lunge 49.7368 u. A MODEL output; regenerate with `entry_fan confirm <hits> xengine` + `_notes/s89_pin.py`. Gate `tests/test_entry_fan.py`. |
 | `fixtures/courtyard_entry_locus_s79.json` | **THE ENTRY LOCUS** -- 1735 genuine roll entries for Tetra pinned at her console-measured herd endpoint, at facing 40835 / m351C 0, plus the acceptance window, the fork verdict, the gradient, the m351C sensitivity table and the reachability rows. One thin curve 104 u long; **856 inside the 230 u follow bar** = the usable target, nearest 49.7 u from where the escape leaves Link. DERIVED, not measured -- regenerable by `python -m harness.tetrapush.entry_search locus` (~250 s), pinned so the gates do not pay the sweep. |
+| `fixtures/courtyard_terminal_family.json` | **THE TERMINAL FAMILY AT THE DELIVERED STATE (session 144)** -- 8 `terminal.scan`s over the axes the family had never been scanned at: thrust across the whole realizable window (s124 did 14 only), the DELIVERED body lean 648 beside the scanned 0, and two delivered roll facings beside the seam's own. Every record carries **`roots` beside `genuine`**, which is the point: a bare zero cannot separate absent geometry from a thin scan (`[[infeasible-needs-proof]]`), and 2390 roots converting none at thrust 13 against 2513 -> 40 at thrust 14 is a statement about the CUT. Also banks `delivery` -- what all 49 ladder rungs actually hand over (lean 648, nspeed 26.0, Tetra never past `FOLLOW_ENGAGE_DIST`, last-roll facings 26637..38782 against a seam window of 40768..41183, `along` 42.0..56.0). Read through `terminal.clipping_thrusts` / `clipping_family`, which return **None** at an unmeasured terminal rather than a neighbour's answer. Built by `_notes/s144_bank.py`; gated `tests/test_terminal_family.py` (12 fast + 1 slow re-scan). |
 | `dtm_inputs.py` | Extract the REAL per-frame raw controller BYTES from the recorded movie `GZLJ01.s02.dtm` (F0=44974 alignment, re-derived) and bake them + the live states into `fixtures/courtyard_push_dtm.json`. The 0-ULP replay input (the sim decodes raw bytes; the pad struct is post-decode/lossy). Session 19: extracts **poll index 2** of each 4-poll frame group -- the poll the game actually latches (live-pinned via the camera oracle on the window's two non-uniform groups); regen with no capture preserves the baked live rows. |
 | `fixtures/courtyard_push_dtm.json` | Baked: state-2 seed + per-frame {raw DTM input, live Link proc/speedF/facing/pos, Tetra pos/stt}. Self-contained (no Dolphin/DTM needed to replay). Gated by `tests/test_tetra_untarget.py`. |
 | `fixtures/courtyard_push_state2.json` | 51-frame session-1 ground-truth capture from state 2 (repo `fixtures/`). |
@@ -1711,11 +1712,76 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE 17-FRAME FLOOR DOES NOT EXIST, THE DELIVERED LEAN COSTS A FIFTH OF THE FAMILY, AND
+            TETRA WAS NEVER THE PROBLEM WITH THE SEED (session 144, items 0 and 0b of the s143 plan).**
+            All three axes the terminal family had never been scanned at are now measured and BANKED
+            (`fixtures/courtyard_terminal_family.json`, read through `terminal.clipping_thrusts` /
+            `clipping_family`; gated `tests/test_terminal_family.py`, 12 fast + 1 slow). The reference
+            row re-scans identical to session 124's (51 genuine / 13 unbroken / `plowed`
+            24.70..125.88), which is what licenses reading the rest as differences.
+            - **A THRUST THAT DISPATCHES THE CUT IS NOT A THRUST THAT CLIPS.** New truth page
+              [`dispatchable-is-not-clipping.md`](../../knowledge/strategy/dispatchable-is-not-clipping.md).
+              `cut_step_window` is a property of `procFrontRoll`'s animation; whether the cut reaches
+              the seam is the corner's, and over the whole scan box at the delivered lean:
+
+              | thrust | `cut_step` | roll frames | roots | genuine | unbroken |
+              |---|---|---|---|---|---|
+              | 13 | 15 | 17 | 2390 | **0** | 0 |
+              | 14 | 16 | 18 | 2513 | 40 | **8** |
+              | 15 | 17 | 19 | 2613 | 107 | 0 |
+
+              **So s143's "cheapest deliverable clip roll = 17 frames" is fiction and the floor is 18**
+              -- +1 frame on every bound it wrote, on top of its own +4. It is ABSENT GEOMETRY, not a
+              thin scan (`[[infeasible-needs-proof]]`): the root counts sit within 10% of one another
+              across the three thrusts, thrust 13's roots solve to |resid| ~2e-7, and its `brace_dist`
+              reaches **0.00**, so Link arrives at the corner and the cut still does not go through.
+              The 0 also holds at lean 0 (2414 roots), so it is the thrust and not the state. The KB
+              half-knew this -- `roll-cut-thrust-floor.md` recorded "thrust 13 has no reachable live
+              station at any cell sampled" in s99 and hedged that a ~390 u entry might still go
+              through; runways out to 480 were swept here and it does not.
+            - **THE DELIVERED LEAN IS 648 AT EVERY ROLL ENTRY OF ALL 49 RUNGS, AND THE FAMILY WAS
+              SCANNED AT 0.** One distinct value, one distinct nspeed (26.0). Re-scanned at 648:
+              genuine **51 -> 40**, unbroken **13 -> 8**, `plowed` ceiling 125.88 -> 106.05 u, and the
+              number the whole endgame is priced against -- how far from the corner a herd may leave
+              her -- **180 -> 160 u**. That HALVES the ladder rungs clearing it (**8 -> 4**: rungs 44,
+              41, 46, 43 at `tetra_from_corner` 119.9..158.1). `roll-lean-decay.md` is not contradicted
+              and its scope is now stated on it: the lean is spent before a late cut, so the DEPTH at a
+              solved configuration moves 0.0003 u -- which is a different quantity from WHICH
+              configurations admit a solvable razor.
+            - **AND THE ZERO-WALK-AWAY FAMILY IS THRUST 14 ALONE AT THE DELIVERED LEAN.** Thrust 15
+              has the most genuine configurations of any thrust (107) and **zero** with contact
+              unbroken. So the terminal is pinned: thrust 14, 18 roll frames, `along` 60..100,
+              `runway` 190..240, `tetra_from_corner` 105..160, `lat` +3.07..+5.23.
+            - **ITEM 0'S TETRA HALF DOES NOT EXIST -- SHE IS IDLE AND AT REST, FAITHFULLY.** The s143
+              plan opened with "a herd hands over a FOLLOWING Tetra" and that is measured false:
+              across all 49 rungs Link never reaches `FOLLOW_ENGAGE_DIST` (max **222.14 u**, rung 47),
+              so she never leaves stt 3 and `fast_schedule`'s at-rest ``tet_seed`` IS the delivered
+              one. No seed threading was needed -- a measurement was (`_notes/s144_delivery.py`, 49
+              rungs in 1 s). **The margin is 7.86 u**, so this is gated rather than noted: a re-pointed
+              herd that crosses 230 u puts `FreeRun` outside the state it models at all, and its own
+              warning is suppressed by the `simplefilter('ignore')` every probe here runs (the flag
+              still works -- `roll_probe` reads `_follow_warned` as a death reason).
+            - **THE AIM IS A BAR IN THE SAME POPULATION-COMPLETE SENSE THE THRUST IS.** The delivered
+              last-roll facings are **26637..38782**; the seam's own measured cell window
+              (`fixtures/courtyard_facing_window_s92.json`, cells 2548..2573) is **40768..41183**.
+              **0 of 49 rungs aim into it**, the closest being 11.0 deg below its floor -- and scanned
+              over the whole box that facing bisects **2674 roots and clips at none of them** (a
+              mid-pack -34.1 deg facing: 1778 roots, 0). The camera is not the constraint: 27 of the
+              5600 deliverable facings at `CSANGLE` land inside the window. **The herd's last roll
+              points AT her, to plow her; the clip roll must point at the CORNER.**
+            - **WHICH MAKES THE s143 ANTI-CORRELATION A THREE-WAY DISJOINTNESS, ALL MEASURED, NONE
+              SATISFIED BY ANY RUNG:** `tetra_from_corner` in 105..160 -- **4** of 49; `along` in
+              60..100 -- **0** of 49 (delivered 42.0..56.0); the facing in the seam window -- **0** of
+              49. The `runway` is the one axis that is fine (8 of 49 already in 190..240). So the herd
+              is short on the handoff distance by 4..18 u, outside the plow ceiling on 45 rungs, and
+              pointed 11..78 deg away on all of them.
       - [~] **THE TERMINAL'S CUT IS NOT DISPATCHABLE, THE CLIP ROLL COSTS TWO FRAMES MORE THAN
             ANYTHING CHARGED IT, AND NO BANKED ENDPOINT CLIPS IN THE ZERO-WALK-AWAY SHAPE
             (session 143, going to build the clip roll's inputs).** Building the sequence Dereck
             asked for is what found all three; the clip roll's bytes now exist
-            (`clip_roll.py`) and there is nothing yet to fire them from.
+            (`clip_roll.py`) and there is nothing yet to fire them from. **Session 144 corrects two
+            numbers in this box: the 17-frame floor is thrust 13's and thrust 13 clips nowhere, so the
+            floor is 18; and the 180 u plow ceiling is a lean-0 number, 160 at the delivered lean.**
             - **THE THRUST-11 TERMINAL IS A ROLL THAT NEVER CUTS -- and the repo already knew the
               floor.** [`mechanics/roll-cut-thrust-floor.md`](../../knowledge/mechanics/roll-cut-thrust-floor.md)
               derived it in session 99 ("the earliest cut dispatch is roll step 15... on the

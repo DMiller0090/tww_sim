@@ -3,6 +3,8 @@
 **Answers:** How early can the B thrust fire out of a forward roll? How LATE can it? Does holding the
 stick during the roll open the cut window sooner? My frame-minimal search returned a plan that is
 provably late - what cost was it not counting? Why does building a schedule at a cheaper thrust raise?
+(For whether a dispatchable thrust can actually *clip*, which is a different question with a different
+answer, see [../strategy/dispatchable-is-not-clipping.md](../strategy/dispatchable-is-not-clipping.md).)
 **Status:** decomp-derived and gated (session 99), against the HIO data and the console-delivered
 Courtyard clip, in [`tests/test_entry_reach_stations.py`](../../tests/test_entry_reach_stations.py).
 The window is now ENFORCED where schedules are built (session 143, after seven sessions of pricing a
@@ -59,6 +61,11 @@ So the whole window is **`cut_step` 15..17, i.e. thrust 13..15** - which is exac
 `entry_search.THRUSTS` always was. `cut_step_window()` re-derives it from `ROLL_RATE`/`ROLL_EARLY`/
 `ROLL_END` rather than restating the tuple, and `fast_schedule` raises outside it.
 
+**This window is the animation's, and it is not a statement about the seam.** A press inside it
+produces a cut; whether that cut reaches the corner is measured separately, and at the Courtyard only
+**thrust 14 and 15** do. Read the clipping set through `terminal.clipping_thrusts`, never off the
+window - [../strategy/dispatchable-is-not-clipping.md](../strategy/dispatchable-is-not-clipping.md).
+
 **The floor above was right and unenforced for seven sessions.** `fast_schedule` computes
 `cut_step = thrust + 2` in closed form; nothing made it ask whether that step is dispatchable, so a
 session-136 terminal sweep found a thrust-11 "family" (53 genuine cells, one unbroken), priced its
@@ -111,7 +118,12 @@ different herd.** A census counts stations and cannot say why one is empty; aske
 cut endpoint lands ~0.19 u SHORT of the near side of the wall at every frame-floor entry - the cut fires
 before CrrPos has slid Link the last of the way in, and the lunge is a constant. That is a statement about
 entries ~239 u from the corner, which is where a frame-floor plan puts him; from ~390 u out (26 u × the 15
-roll steps) the cut fires as he ARRIVES and the endpoint goes through. See
+roll steps) the cut fires as he ARRIVES and the endpoint goes through.
+
+That last clause is the escape hatch, and session 144 swept it: over runways out to 480 u - which
+contains the ~390 - thrust 13 bisects **2390 razor roots and clips at none of them**, with
+`brace_dist` reaching 0.00 so Link does arrive. **The 0 in the table above is the whole box, not the
+frame-floor slice.** See
 [../strategy/clip-razor-depth.md](../strategy/clip-razor-depth.md) for both families, the pushed actor's
 two scales, and the 0.087 u of barrier clearance still open on the second frame.
 
