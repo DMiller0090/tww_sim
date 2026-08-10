@@ -214,6 +214,7 @@ deliberately unported.
 
 | File | What |
 |------|------|
+| `terminal_keep.py` | **THE TERMINAL AS A KEEP, NOT A RANK (session 145)** -- the three windows a last roll must satisfy AT ONCE, and the module that makes them affordable at the per-aim cut. `seam_window` reads which sine-table CELLS admit genuine dust off `fixtures/courtyard_facing_window_s92.json` (22 live, two lobes, a measured dead gap at 2554..2559, **and both scan edges live -- the top of the window is where the sweep stopped**); `in_seam_window` is the cell test. `TerminalKeep` reads the box off `terminal.clipping_family` (`un_along`/`un_runway`/`un_tetra_from_corner`, the ZERO-WALK-AWAY family) and RAISES at an unmeasured terminal rather than answering from a neighbour. Two halves by cost: `screen` = the cheap projection at the ROLL's own facing (no ctx, names the first axis that refused -- ``t_facing``/``t_along``/``t_runway``/``t_tfc``), `probe`/`score` = `handoff.probe` on a pooled `entry_search.CtxPool` ctx (0.13 ms against `PairFrame`'s 17), exact at the roll's own facing/lean/momentum. **The window is the sampled extent widened by HALF a scan cell**: a grid extent is not a boundary and the f32 basis lands a banked hit ~3e-5 u below its own integer coordinate, so the bare extent refused three of the eight hits it was read from. Gated `tests/test_terminal_keep.py` (16). CLI `python -m harness.tetrapush.terminal_keep [thrust] [lean]`. |
 | `clip_roll.py` | **THE CLIP ROLL'S INPUTS AND ITS REAL FRAME COST (session 143)** -- the piece every bound priced and nobody had emitted. `clip_stream` = the raw rows (`rollstab.turnaround.build_sticks`' shape: aim + A, NEUTRAL through the roll, ONE UP+B rising edge at `b_index` = ``cut_step + 1``; a pushed mid-roll stick exits the roll before the thrust, and a neutral B is a side slash rather than the in-line CUT_F whose root translate IS the lunge). `roll_frames(cut_step)` = **``cut_step + 2``**, the corrected cost -- the entry frame runs one full roll step before schedule step 0, so the cut at step ``cut_step`` is roll frame ``cut_step + 2``; `handoff.endpoint` charges ``cut_step``. `aim_bytes_for` inverts `entry_search.aim_alphabet` onto a wanted facing and reports whether the residual BAM error stays inside its `aim_cell`. `dispatchable` = the two traps that stop a herd endpoint firing it (proc must be in ``ROLL_FROM``; `roll_nspeed` off the PRE-roll speedF). `fire` steps a Python-path `FreeRun` through the roll and reports the entry/cut frames -- **the native core has no cut branch at all** (`_anmc._proc_roll` omits the ``b_trig`` arm), so build the herd native and fire on `beam_io.rebuild_beam(native=False)`. Gated `tests/test_clip_roll.py` (9). CLI `python -m harness.tetrapush.clip_roll stream [cut_step]`. |
 | `deliver.py` | **THE TIER-2 LIVE DELIVERY (session 54)** -- author a computed plan onto console and read the endpoint. `build_boot_movie` SPLICES the plan onto the recorded BOOT movie (game-frames 0..F0 byte-identical, tail = `log[i]` -> F0+1+i, `bFromSaveState=0`); **both savestate-anchor routes are dead** (see `## Plan / status` s54). `tick_mode='extend'` is mandatory (the recorded tickCount truncates the tail; the maxed 0xFFFF... reads as signed -1 = s53's State::Load crash). `play_spliced` issues ONLY `playmovie` + `savestate load 1` -- the subset-state shortcut that skips the ~9.5-min boot replay (~8 s/run); any pause/resume/advance of ours makes Dolphin re-pause. `deliver_plan` = author+play+read; **`divergence_curve` = TRUNCATE-AND-READ** (author the first N frames, PauseMovie halts at plan frame N-1, so one plain run samples that frame for BOTH actors -- a per-frame sim-vs-console curve with no stepping). Gated `tests/test_tetrapush_deliver.py` (6 offline: round-trip + prefix byte-identity, latched-input equality vs the recording, L/A/B + cal-clamp encoding, the tick_mode invariants incl. the maxed-value crash pin, truncation alignment). **Session 86** added `m351C`, `shape_z` and `nspeed` to `read_link`: a roll-entry confirm owes the two a `ShoveCtx` is keyed on (the lean it was built at and the momentum its schedule was baked at), not just position and facing. |
 | `find_tetra.py` | Locate Tetra (Zl1, id 429) live via the DMC walk, `_execute` breakpoint, `r3`. Session-stable (recomputes the REL base). **`tetra_scan` (session 54) = the breakpoint-FREE locator** (one MEM1 block + `field_0x84F == 5` on the courtyard floor Y): required for any endpoint read off a HALTED movie, where the `_execute` bp cannot trap and silently yields nothing. |
@@ -1712,6 +1713,63 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE TERMINAL IS A KEEP NOW, AND IT MEASURES THAT NO RE-POINT OF A BANKED LAST ROLL CAN
+            REACH IT -- s144's DISJOINTNESS WAS READ IN 49 DIFFERENT FRAMES, AND IN THE BOX'S OWN
+            FRAME `tetra_from_corner` IS SATISFIED BY NOTHING (session 145, item 1 of the s144 plan).**
+            NEW tracked `terminal_keep.py` (`TerminalKeep`, `seam_window`; gated
+            `tests/test_terminal_keep.py`, 16), wired into `full_herd.roll_probe` as ``terminal`` /
+            ``terminal_sink`` and passed through `extend_cycle`. The keep refuses an aim failing ANY
+            of facing / ``along`` / ``runway`` / ``tetra_from_corner`` and ranks only survivors on the
+            exact residual at the roll's own facing, lean and momentum. **`nspeed` reached the tracked
+            frames** (`terminal.RollFrame` / `handoff.PairFrame` take it; it lived in a `_notes`
+            subclass since s143). Default `pytest` **1200 passed, 68.44 s, exit 0**.
+            - **THE MEASUREMENT: 0 KEPT, 0 GENUINE, over all 49 rungs.** Re-point each rung's LAST
+              roll from its own last junction across the FULL 2280-member alphabet -- the corner sits
+              up to 78 deg off the herd bearing, i.e. **outside the ±56.25 deg fan every screen
+              before this one swept** -- with `reposition.AXIS_PAIR` so "stay near the herd line" is
+              not asserted of a roll that turns away from it. 112k rollouts, 210 s
+              (`_notes/s145_repoint.py`, `_generated/s106/s145_repoint.json`).
+            - **THE BOX BELONGS TO THE CLIP ROLL'S FACING.** ``runway``/``along``/``lat`` are
+              projections on ``m`` = the ROLL DIRECTION, so they are properties of a pair PLUS a
+              facing; ``tetra_from_corner`` is `-(tetra - brace)·m`. s144's delivery block reads them
+              off `_notes/s143_rolls.py`, which builds a frame **per rung at that rung's own
+              facing** -- 49 different bases, none of them the box's. And the re-point is not a
+              re-projection: ``entry`` is Link's position at the END of the roll-entry frame, which
+              steps ``nspeed`` in the aim direction, so a re-pointed roll STARTS somewhere else and
+              has to be simulated. New truth page
+              [`re-point-the-handoff-dont-re-project-it.md`](../../knowledge/strategy/re-point-the-handoff-dont-re-project-it.md).
+            - **RE-MEASURED IN THE BOX'S FRAME, over the 528 aims that reach a live seam cell:**
+
+              | axis | window | delivered | best miss |
+              |---|---|---|---|
+              | `runway` | 185.00..245.00 | 193.69..360.51 | **0.00** -- satisfied on 10 of 49 rungs |
+              | `along` | 57.50..102.50 | -12.43..50.43 | 7.07 |
+              | `tetra_from_corner` | 102.50..162.50 | 194.08..331.52 | **31.58** |
+              | `lat` (solved, not kept) | +3.07..+5.23 | 15.80..79.57 | 10.57 |
+
+              So **s144's "4 of 49 satisfy `tetra_from_corner`" does not survive the frame
+              correction: nothing is within 31 u**, and the axis that is genuinely FREE is
+              ``runway`` -- the opposite of the s144 reading, which had ``along`` cheap at 4..18 u.
+              Closest overall is rung 49 (along 41.28, runway 236.28, tfc 195.00, lat 39.39, pair
+              57.06 u apart). Delivered separation is 52.85..79.82 u where the terminal wants 60..100
+              **on-axis**, at a pair bearing 15..45 deg off the corner's against the box's ~3.
+            - **`followed` IS THE DEATH COUNTER, MEASURED RATHER THAN PREDICTED (s144 item 2).**
+              `followed` 110321, `wall` 680, `t_facing` 719 -- and the CROSS-TAB ``followed@seam``
+              **528 of 528**: every aim that reached a live seam cell died it. That is not a model
+              limit hiding a solution, it is the same fact the box states: a corner-aimed roll stops
+              plowing her, Link runs ~470 u past her, and the screen and the box refuse it together.
+              All 528 fail ``t_along`` first.
+            - **A GRID EXTENT IS NOT A BOUNDARY.** `terminal.scan` samples ``runway`` every 10 u and
+              ``along`` every 5, and projecting a banked hit's own world pair back through the f32
+              basis lands it **~3e-5 u below** its integer coordinate -- so the bare ``un_*`` extent
+              refused **three of the eight unbroken hits it was read from**. The window is the
+              sampled extent widened by HALF a scan cell (the resolution it is known to, not a
+              tolerance); `test_the_keep_contains_every_hit_it_was_built_from` holds it there
+              (`[[search-space-contains-human]]`).
+            - **SO THE KEEP HAS TO BE BRED AGAINST, NOT APPLIED AT THE END.** Nothing a last-roll
+              re-point can do moves ``tetra_from_corner``, ``along`` or ``lat`` -- those are set by
+              the CYCLES. ``terminal`` is already plumbed through `extend_cycle`; the next run is the
+              last cycle re-bred with it, not another sweep of the banked junctions.
       - [~] **THE 17-FRAME FLOOR DOES NOT EXIST, THE DELIVERED LEAN COSTS A FIFTH OF THE FAMILY, AND
             TETRA WAS NEVER THE PROBLEM WITH THE SEED (session 144, items 0 and 0b of the s143 plan).**
             All three axes the terminal family had never been scanned at are now measured and BANKED

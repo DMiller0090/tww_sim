@@ -296,7 +296,7 @@ def junction_alphabet(run, hl, *, ess_step=4, aim_step=64):
 def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_window=0x2800,
                dead=None, corridor=None, target_along=None, thread=None, resid=None,
                fan_center=None, fan=None, rows=None, stations=None, pf=None, axis=AXIS_HERD,
-               collect=None):
+               collect=None, terminal=None, terminal_sink=None):
     """**Is this junction endpoint ROLLABLE at all, how STRAIGHT can its roll be, where does it
     ARRIVE, and where would the ESCAPE land from it?** -- an aim sweep, returning
     ``dict(rate, off, off_rate, along, n, arrive, over, land, land_frames, land_off, land_over,
@@ -425,9 +425,32 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
     ``dict(along, lat, off, over, rate, link_lat, aim, want, jf)`` -- what a combined key has to be
     calibrated on (`junction_beam`'s ``collect`` has the same shape and the same reason).
 
+    ``terminal`` (session 145) is the axis ``pf`` reports moved to the KEEP side, and it is here
+    because reporting it was measurably not enough. ``l0_max`` and `handoff.probe`'s ``resid`` ranked
+    five sessions of breeding, and session 144 measured the population that produced: of 49 rungs,
+    4 satisfy the terminal's ``tetra_from_corner``, 0 its ``along``, 0 the seam's facing window, and
+    none more than one at a time. A rank on a residual that cannot reach zero at that facing is a
+    rank on one criterion, so it breeds one criterion. Given a `terminal_keep.TerminalKeep` the sweep
+    REFUSES an aim failing any of the three (``t_facing`` / ``t_along`` / ``t_runway`` / ``t_tfc`` in
+    ``dead``) and ranks only what survives all of them, on the exact residual at the roll's own
+    facing, lean and momentum (``t_resid``, ``t_n``, ``t_genuine``).
+
     ``dead`` accumulates WHY each aim died. A stalled cycle is the recurring failure mode here, and
     "no aim rolled" is not a diagnosis -- talk-unsafe, never-rolled, weak (+5 not +26), off-line and
-    wall are four different problems with four different fixes."""
+    wall are four different problems with four different fixes. With a ``terminal`` it also carries
+    the CROSS-TAB ``<why>@seam``: how many aims that died a HERD death had already put their achieved
+    facing inside the seam window. Session 144 predicted ``followed`` would be that counter (a roll
+    aimed at the corner stops plowing her the moment it passes her) and predicting is not measuring;
+    every death after ``no_roll`` has fired its roll, so the achieved facing is known exactly and the
+    cross-tab needs no proxy for it.
+
+    ``terminal_sink`` is the DIAGNOSIS beside the count, and it exists because "0 kept" is not a
+    result any more than session 144's bare zeros were: it takes `terminal_keep.TerminalKeep.screen`
+    for EVERY aim whose roll fired -- kept or dead, and carrying the herd ``dead_why`` -- so a sweep
+    that keeps nothing still says by how much each axis missed and which one to steer. The roll entry
+    is known the moment the roll appears, so a herd death downstream of it does not cost the
+    measurement; only the exact residual (which needs a compiled ctx) is reserved for what the screen
+    passes."""
     walls = O.courtyard_walls()
     dead = {} if dead is None else dead
     cor = O.push_corridor(hl) if corridor is None else corridor
@@ -458,7 +481,19 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
                 why = 'offline'
         if why is not None:
             dead[why] = dead.get(why, 0) + 1
+            if terminal is not None and seg.get('entry') is not None:
+                # the cross-tab: a HERD death whose roll nevertheless aimed into the seam window
+                if _TK().in_seam_window(seg['entry']['facing']):
+                    dead[why + '@seam'] = dead.get(why + '@seam', 0) + 1
+                if terminal_sink is not None:
+                    terminal_sink.append(dict(terminal.screen(seg['entry']), dead_why=why,
+                                              aim=aim, want=_want, jf=endpoint['jf']))
             continue
+        # computed HERE, refused after ``collect``: a keep that drops an aim silently says how many
+        # survived and not by how much the rest missed (`terminal_sink`, and the docstring's why)
+        tk = None if terminal is None else terminal.score(seg['entry'])
+        if tk is not None and terminal_sink is not None:
+            terminal_sink.append(dict(tk, dead_why=None, aim=aim, want=_want, jf=endpoint['jf']))
         al = hl.along(rr.tx, rr.tz)
         lat = hl.lateral(rr.tx, rr.tz)
         off = cor['offset'](al, lat)
@@ -483,13 +518,19 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
                                               if hstat else None),
                                         stations=hstat)
         if collect is not None:
-            collect.append(dict(along=al, lat=lat, off=off, over=over, rate=m['per_frame'],
-                                link_lat=m['lat'], sep=sep, aim=aim, want=_want, jf=endpoint['jf'],
-                                land=land, land_frames=lframes, l0=l0, frames=m['frames'],
-                                cloud_bound=(cloud['bound'] if cloud else None),
-                                cloud_miss=(cloud['miss'] if cloud else None),
-                                cloud_d_station=(cloud['d_station'] if cloud else None),
-                                cloud_arr=(cloud['arr_frames'] if cloud else None)))
+            row = dict(along=al, lat=lat, off=off, over=over, rate=m['per_frame'],
+                       link_lat=m['lat'], sep=sep, aim=aim, want=_want, jf=endpoint['jf'],
+                       land=land, land_frames=lframes, l0=l0, frames=m['frames'],
+                       cloud_bound=(cloud['bound'] if cloud else None),
+                       cloud_miss=(cloud['miss'] if cloud else None),
+                       cloud_d_station=(cloud['d_station'] if cloud else None),
+                       cloud_arr=(cloud['arr_frames'] if cloud else None))
+            if tk is not None:                 # ABSENT, not None, when unasked: the row shape a
+                row['terminal'] = dict(tk)     # caller banked before this axis existed is preserved
+            collect.append(row)
+        if tk is not None and not tk['ok']:
+            dead[tk['why']] = dead.get(tk['why'], 0) + 1
+            continue
         edge = abs(_s16(_want - center))
         if best is None:
             best = dict(rate=m['per_frame'], off=off, off_rate=m['per_frame'], along=al, n=1,
@@ -503,6 +544,9 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
                         cloud_d_station=(cloud['d_station'] if cloud else None),
                         cloud_arr=(cloud['arr_frames'] if cloud else None),
                         fan_edge=edge, fan_half=int(half_window))
+            if tk is not None:                 # same discipline as the ``collect`` row above
+                best.update(t_resid=tk['resid'], t_genuine=1 if tk['genuine'] else 0,
+                            terminal=dict(tk))
             continue
         best['n'] += 1
         best['fan_edge'] = max(best['fan_edge'], edge)
@@ -523,6 +567,10 @@ def roll_probe(endpoint, hl, *, step=24, l_window=(4, 7), min_roll=20.0, half_wi
             best['cloud_row'] = cloud['row_idx']
             best['cloud_d_station'], best['cloud_arr'] = cloud['d_station'], cloud['arr_frames']
             best['cloud_sep'] = sep
+        if tk is not None:
+            best['t_genuine'] += 1 if tk['genuine'] else 0
+            if abs(tk['resid']) < abs(best['t_resid']):
+                best['t_resid'], best['terminal'] = tk['resid'], dict(tk)
     return best
 
 
@@ -531,6 +579,12 @@ def _CL():
     back, and because a beam that asks for no landing measure should not pay for the module at all."""
     from harness.tetrapush import cloud_land as CL
     return CL
+
+
+def _TK():
+    """`terminal_keep`, imported on use -- same reason as `_HO`, and it reads `handoff` in turn."""
+    from harness.tetrapush import terminal_keep as TK
+    return TK
 
 
 def _HO():
@@ -1491,7 +1545,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                  cloud_exit_runs=None, cloud_exit_step=None, cloud_exit_half=None,
                  delivered_keep=False, handoff_keep=False, handoff_pf=None, handoff_rungs=None,
                  handoff_roots=True, handoff_sign=True, l0_keep=False, free_axis=False,
-                 env=None, verbose=False):
+                 terminal=None, terminal_sink=None, env=None, verbose=False):
     """One chained cycle applied to a whole beam: the junction stage (`junction_beam`), whose
     endpoints are kept by ROLLABILITY (`roll_probe` -- not flatness, which measurably selects
     unrollable states), followed by the roll stage (`roll_candidates`), deduped by state and cut to
@@ -1707,6 +1761,17 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
     the rollout already produced, where `handoff.endpoint`'s locus solve is ~1.5 s a survivor. The
     axis is affordable exactly where the set is decided.
 
+    ``terminal`` / ``terminal_sink`` (session 145) pass a `terminal_keep.TerminalKeep` straight
+    through to `roll_probe`, and they exist because ``l0_keep`` and every rank before it were still
+    RANKS. Session 144 measured the population five sessions of that produced: 4 of 49 rungs satisfy
+    the terminal's ``tetra_from_corner``, 0 its ``along``, 0 the seam's facing window, none more than
+    one at a time. Session 145 then measured what a re-point of the last cycle can recover, sweeping
+    the FULL 2280-member alphabet from each rung's own last junction: 528 aims reach a live seam cell
+    and **every one of them dies ``followed``**, missing ``along`` by >= 9.6 u, ``tetra_from_corner``
+    by >= 34.1 u and the razor's ``lat`` by >= 10.6 u -- while ``runway`` is satisfied outright. So
+    the keep here is not an optimisation of the last roll; it is the axis the CYCLES have to be bred
+    against, which is the only thing that moves those three.
+
     It is a share at THREE cuts, and the third was measured to be load-bearing: a chained run with
     the pool and the screen alone handed over **-160.62** where the same stage's screened population
     reaches **-90.39**. The roll stage was exonerated -- re-opening each kept node at its own
@@ -1799,6 +1864,7 @@ def extend_cycle(nodes, hl, box, *, jn_keep=6, jn_beam=24, ess_step=1, aim_step=
                                                  fan=cloud_fan, rows=(rows_j if cloud_fan else None),
                                                  stations=cloud_stations,
                                                  pf=(pf_j if l0_keep else None), axis=jaxis,
+                                                 terminal=terminal, terminal_sink=terminal_sink,
                                                  **pkw), e)
                                       for e in uniq) if p is not None]
         scored.sort(key=lambda t: -t[0]['rate'])

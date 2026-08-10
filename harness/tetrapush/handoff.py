@@ -70,16 +70,17 @@ _BARS = None
 
 
 class PairFrame:
-    """One compiled (facing, thrust, lean) read in the 4-coordinate handoff frame.
+    """One compiled (facing, thrust, lean, nspeed) read in the 4-coordinate handoff frame.
 
     Wraps `terminal.RollFrame` -- same `ShoveCtx`, same schedule, same residual -- and adds Link's
     own lateral offset. `at_side` hands back a `RollFrame`-shaped view so `terminal`'s bracket /
-    bisect / band methods run on it unchanged."""
+    bisect / band methods run on it unchanged. ``nspeed`` is the roll's own momentum; see
+    `terminal.RollFrame` for why a sub-cap roll is a different locus rather than a worse one."""
 
-    def __init__(self, facing=ES.TAB_FACING, thrust=14, lean=0):
-        self.fr = TM.RollFrame(facing, thrust, lean)
+    def __init__(self, facing=ES.TAB_FACING, thrust=14, lean=0, nspeed=None):
+        self.fr = TM.RollFrame(facing, thrust, lean, nspeed)
         for a in ('m', 'q', 'brace', 'off', 'cut_step', 'facing', 'thrust', 'lean', 'ctx', 'sch',
-                  'resid'):
+                  'resid', 'nspeed'):
             setattr(self, a, getattr(self.fr, a))
 
     def item(self, runway, side, along, lat):
@@ -140,7 +141,7 @@ class _SideView:
     def __init__(self, pf, side):
         self.pf, self.side = pf, side
         for a in ('m', 'q', 'brace', 'off', 'cut_step', 'facing', 'thrust', 'lean', 'ctx', 'sch',
-                  'resid'):
+                  'resid', 'nspeed'):
             setattr(self, a, getattr(pf, a))
 
     def item(self, runway, along, lat):

@@ -151,14 +151,20 @@ def clipping_thrusts(facing, lean, unbroken=False):
 
 
 class RollFrame:
-    """One compiled (facing, thrust, lean) in the roll's own brace-anchored frame.
+    """One compiled (facing, thrust, lean, nspeed) in the roll's own brace-anchored frame.
 
     Holds the `ShoveCtx` -- the coupled roll from Link's entry through the CUT entry step, with the
     plow, her follow AI and both actors' CrrPos -- so a configuration reads the same at every facing
-    and the caller never touches world coordinates."""
+    and the caller never touches world coordinates.
 
-    def __init__(self, facing=ES.TAB_FACING, thrust=14, lean=0):
-        self.ctx, self.sch, self.resid = ES.build_fast(facing, lean, thrust)
+    ``nspeed`` is the roll's MOMENTUM and it defaults to `entry_search.ROLL_NSPEED` (26.0, the walk
+    cap's roll). A roll a herd already fires carries whatever `_roll_init` clamped from its own
+    pre-roll speedF, and reading a razor at the wrong momentum is reading a different schedule: it
+    scales `dx`/`dz` and nothing else (`fast_schedule`), so a sub-cap roll is a DIFFERENT locus and
+    not a worse one. Session 143 carried this as a `_notes` subclass; it belongs on the frame."""
+
+    def __init__(self, facing=ES.TAB_FACING, thrust=14, lean=0, nspeed=None):
+        self.ctx, self.sch, self.resid = ES.build_fast(facing, lean, thrust, nspeed=nspeed)
         f = int(facing) & 0xFFFF
         self.m = (ML.cM_ssin_s16(f), ML.cM_scos_s16(f))
         self.q = (-self.m[1], self.m[0])
@@ -166,6 +172,7 @@ class RollFrame:
         self.off = RD.co_centre_offsets(self.sch)
         self.cut_step = self.sch['cut_step']
         self.facing, self.thrust, self.lean = f, int(thrust), int(lean) & 0xFFFF
+        self.nspeed = ES.ROLL_NSPEED if nspeed is None else float(nspeed)
 
     def item(self, runway, along, lat):
         """``(tetra_x, tetra_z, entry_x, entry_z)`` -- one `ShoveCtx.sweep_par` sample."""

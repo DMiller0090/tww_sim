@@ -237,8 +237,15 @@ def roll_segment(run, aim_bytes, *, target_cs=None, l_window=(5, 8), hold=1, a_h
     C-stick, which is the COMPUTED slew toward ``target_cs`` -- csangle pre-positioned for the next
     turnaround, the camera-adjustment/instant-turnaround setup the cycle depends on.
 
-    Returns ``dict(ok, talk_unsafe, roll_speedF, roll_facing, frames, exit_cs)``; ``ok`` is False if
-    the A-press would TALK or no roll ever fired."""
+    Returns ``dict(ok, talk_unsafe, roll_speedF, roll_facing, frames, exit_cs, entry)``; ``ok`` is
+    False if the A-press would TALK or no roll ever fired.
+
+    ``entry`` (session 145) is the state on the frame the FRONT_ROLL first appears -- Link's and
+    Tetra's positions, the roll's achieved facing, its body lean and its momentum. That frame is
+    exactly what `terminal`/`handoff` call the roll ENTRY (``entry = brace - runway*m``, the
+    post-roll-entry-frame position), so it is the coordinate the razor is read at, and until it was
+    reported the terminal question could only be asked of a whole banked log after the fact
+    (`_notes/s143_rolls.py`) and never of an aim the sweep is deciding on. None if no roll fired."""
     stream = roll_stream(aim_bytes, hold=hold, a_hold=a_hold, l_window=l_window, post=post)
 
     def _step(d):
@@ -249,10 +256,10 @@ def roll_segment(run, aim_bytes, *, target_cs=None, l_window=(5, 8), hold=1, a_h
     d = dict(stream(0), substickX=slew_substick(run.csangle, target_cs), substickY=0)
     if S.a_press_is_talk(run, d):
         return dict(ok=False, talk_unsafe=True, roll_speedF=None, roll_facing=None, frames=0,
-                    exit_cs=run.csangle)
+                    exit_cs=run.csangle, entry=None)
     _step(d)
     frames = 1
-    roll_speedF = roll_facing = None
+    roll_speedF = roll_facing = entry = None
     seen = False
     for k in range(1, MAX_ROLL_FRAMES + 1):
         _step(dict(stream(k), substickX=slew_substick(run.csangle, target_cs), substickY=0))
@@ -261,10 +268,13 @@ def roll_segment(run, aim_bytes, *, target_cs=None, l_window=(5, 8), hold=1, a_h
             seen = True
             if roll_speedF is None:
                 roll_speedF, roll_facing = run.link.speedF, run.link.facing
+                entry = dict(k=k, link=(run.link.pos_x, run.link.pos_z), tetra=(run.tx, run.tz),
+                             facing=int(run.link.facing) & 0xFFFF,
+                             lean=int(run.link.m351C) & 0xFFFF, nspeed=float(run.link.nspeed))
         elif seen and run.link.state == 6:
             break
     return dict(ok=seen, talk_unsafe=False, roll_speedF=roll_speedF, roll_facing=roll_facing,
-                frames=frames, exit_cs=run.csangle)
+                frames=frames, exit_cs=run.csangle, entry=entry)
 
 
 # --------------------------------------------------------------------------- containment / fidelity
