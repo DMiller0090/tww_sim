@@ -78,6 +78,19 @@ def test_the_top_rung_replays_to_its_banked_numbers(ladder):
     assert h['onside'] and h['n'] == top['entry_points']
 
 
+def test_the_ladder_cannot_be_read_as_a_ranked_shortlist(ladder):
+    """``viable`` does NOT include the terminal confirm, and s142 measured that no rung passes it.
+    The warning is the only thing standing between a future session and a plan whose clip never
+    fires, so it is gated rather than trusted to survive an edit."""
+    w = ladder['CONFIRMATION_WARNING']
+    assert 'roots=True' in w and 'UNCONFIRMED' in w
+    assert ladder['confirmed_tested'] == {'rung_1': 0, 'rung_2': 0, 'rung_4': 0, 'rung_7': 0}
+    lo, hi = ladder['genuine_region']['l0']
+    assert lo < hi <= 13.0, 'the confirmable band moved -- re-derive it before trusting the ladder'
+    assert all(c['l0'] > hi for c in ladder['candidates'][:4]), \
+        'a top rung now sits inside the confirmable band -- CONFIRM it and re-rank'
+
+
 def test_viability_is_the_conjunction_the_header_claims(ladder):
     """``viable`` is what a session reads to pick a fallback, so it must not drift from its own
     definition -- and rung 3 is the reason the flag exists: it beats the reference on ``bound`` and

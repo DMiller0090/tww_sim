@@ -31061,5 +31061,27 @@
     }
    ]
   }
- ]
+ ],
+ "CONFIRMATION_WARNING": "NO rung on this ladder has a CONFIRMED genuine entry (session 142). Every bound here was ranked with handoff.endpoint(roots=True) -- the UNCONFIRMED razor curve, \"an under-estimate by construction\" per its own docstring -- so ``gap`` and therefore ``bound`` measure the distance to a residual zero-crossing, not to a point where the clip fires. Rungs 1, 2, 4 and 7 were run through the confirm (entry_locus / roots=False) andreturned 0 genuine entries each, and densifying to 81 runways with a 40x band walk kept them at 0. The confirm path itself is sound: 9 of 29 tabulated coords confirm at this terminal. The herd logs are real and bit-exact; the ORDERING is not founded. Use this file as a bank of herd endpoints, NOT as a ranked shortlist. See knowledge/strategy/confirm-the-terminal-before-you-rank.md and _generated/s106/s142_genuine_region.json.",
+ "confirmed_tested": {
+  "rung_1": 0,
+  "rung_2": 0,
+  "rung_4": 0,
+  "rung_7": 0
+ },
+ "genuine_region": {
+  "l0": [
+   4.11,
+   12.67
+  ],
+  "x": [
+   -1650.61,
+   -1627.94
+  ],
+  "z": [
+   -929.51,
+   -893.0
+  ],
+  "note": "9 of 29 tabulated coords confirm at facing 40660 / thrust 11; the ladder parks Tetra at l0 +29.47..+51.97, four times outside this band."
+ }
 }

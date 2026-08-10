@@ -1710,6 +1710,39 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE TERMINAL WAS NEVER CONFIRMED: NO LADDER RUNG ADMITS A GENUINE ENTRY, AND THE
+            CONFIRMABLE SET IS FOUR TIMES CLOSER TO THE LINE THAN THE HERD PARKS HER (session 142,
+            after Dereck asked whether we are ready to assemble).** The blocker on a DTM delivery is
+            not search and not the scorer. One new truth page,
+            [`confirm-the-terminal-before-you-rank.md`](../../knowledge/strategy/confirm-the-terminal-before-you-rank.md).
+            - **THE RANK WAS A PROXY NOBODY HAD CASHED.** `handoff.endpoint` takes ``roots``, and
+              **s134-s142 all ran the DEFAULT ``roots=True``** -- `entry_roots`, the UNCONFIRMED razor
+              curve its own docstring calls "an under-estimate by construction… so a bound is never
+              quoted as a solved entry". Run through `entry_locus` (``roots=False``, the claim):
+              **rungs 1 / 2 / 4 / 7 confirm 0, 0, 0, 0** genuine entries against 21 / 21 / 17 / 25
+              roots. A residual zero-crossing is necessary, not sufficient -- so ``gap`` and ``bound``
+              measure the distance to a point where the clip does NOT fire, and the ladder's ORDERING
+              (85.22 vs 90.41) is unfounded. The herd logs stay real and bit-exact.
+            - **IT IS NOT THE CONFIRM AND IT IS NOT SAMPLING.** Positive control first
+              (`[[search-space-contains-human]]`): 2 of 6 tabulated coords confirm at this terminal,
+              ``genuine`` True, resid ~5e-5 u -- the machinery works, at a base rate of **0-1
+              confirmed per 22-29 roots**. Then densify by RESOLUTION only: 81 runways instead of 17
+              (111 and 125 roots) and a band walk of **+-0.05 u** against `side_band`'s +-1.2e-3.
+              Still **0**. Forty times the span and five times the roots retires the density story
+              without retiring `[[infeasible-needs-proof]]`.
+            - **WHERE THE SET ACTUALLY IS** (`_generated/s106/s142_genuine_region.json`, 9 confirmed
+              Tetras with their entry curves): **`l0` +4.11..+12.67, x -1650.61..-1627.94,
+              z -929.51..-893.00** -- 9 of 29 tabulated coords survive at THIS terminal. The ladder
+              parks her at **`l0` +29.47..+51.97**. Dereck (s142) is right that
+              `tetra_placements.tsv` must not restrict the plan and nothing in the search path reads
+              it (`probe` derives ``genuine`` from the roll sweep) -- but the replacement is a set
+              DERIVED at the terminal in use, and the herd has been aiming outside it. `sign_prune`
+              only ever asked `l0 > 0`.
+            - **NEXT: invert it.** Derive the genuine set at the terminal (one `entry_locus` a Tetra,
+              ~20-30 s), then aim the herd at THAT and rank on a confirmed gap -- or carry the confirm
+              as a hard gate on whatever is ranked. `fixtures/courtyard_candidate_ladder.json` now
+              carries a `CONFIRMATION_WARNING` and is gated as a BANK of herd endpoints, not a
+              shortlist (`tests/test_candidate_ladder.py`).
       - [~] **NEW BEST BOUND 85.22: THE POOL BINDS TOO, AND EVERY WINNER CAME FROM THE DIRECTION
             THE CENSUS RANKED SECOND (session 142).** s141's ordered item -- the cycle-2 probe pool,
             400 of 424-5616 a parent -- priced population-complete with ``jn_keep`` HELD OPEN at

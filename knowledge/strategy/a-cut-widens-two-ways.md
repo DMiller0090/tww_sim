@@ -90,6 +90,13 @@ is not the same as reaching a new *outcome* - a letter changes what the roll doe
 roll is where the divergence lives. Session 141's 2.93 frames came from a letter of a state the cut
 already had; this is the same fact measured as a population.
 
+**Read every bound on this page as a RELATIVE measurement on a fixed metric.** Session 142 went on to
+find that the metric's terminal term was never confirmed -- no candidate on the banked ladder admits a
+genuine entry, and the confirmable set sits four times closer to the line than the herd parks her
+([confirm-the-terminal-before-you-rank](confirm-the-terminal-before-you-rank.md)). The cut prices below
+hold, because both directions were measured against the same metric; "85.22 is nearly deliverable"
+does not.
+
 ## The verdict: -1.67 frames, and the free direction bought nothing
 
 All 108 novel identities went through the cycle-3 stage knob-for-knob with s136-s141 (terminal facing
