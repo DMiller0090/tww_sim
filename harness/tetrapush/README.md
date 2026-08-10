@@ -1710,6 +1710,39 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE CYCLE-2 BEAM CUT IS TWINS AND PRICES 0.00 BOTH WAYS -- THE 72 IS UPSTREAM OF IT
+            (session 140).** Session 139's ordered item -- its instrument one stage up -- answered
+            over the cut's ENTIRE population, and the answer moves the herd question past the
+            final cut. One new truth page,
+            [`count-the-states-before-pricing-a-cut.md`](../../knowledge/strategy/count-the-states-before-pricing-a-cut.md).
+            - **THE REPRODUCTION GUARD CAME FIRST AND IT MATTERED.** The banked 16
+              (`s134_c3_l0_beam.json` cycle 1) predate s134's ``l0`` share at the final beam cut,
+              so the re-run (s134_recut knobs: 8 cycle-1 parents, contact fan, thrust-14 ``l0``
+              screen, cap 400, beam 16; `_notes/s140_c2_price.py c2`, 929 s) tested BOTH cut
+              hypotheses against the banked logs: the PRE-FIX rank-only cut reproduces
+              **byte-identical**; today's mixed rank+``l0`` cut does not. Perturb the cut the
+              artefact was actually cut by, or the counterfactual prices a cut nobody took.
+            - **THE POPULATION IS 31 NODES = 18 BIT-EXACT STATES.** The final cut keeps 16; the 15
+              it drops are 9 bit-exact twins of kept members plus **2 novel states** (6 nodes, all
+              cycle-1-parent-0 descendants). A runner-up "16" does not exist -- the honest
+              counterfactual is the WHOLE complement, which upgrades the verdict from a slice to
+              the population.
+            - **THE COMPLEMENT REACHES 89.82 WITH THE WINNER'S OWN NUMBERS** (cycle-3 stage
+              knob-for-knob with s136/s139, 523 s: 72 herd + 81.89 u gap + 13 cut, ``l0`` +15.48,
+              runway 179) -- because the winner's cycle-2 state sits on BOTH sides of the cut:
+              ``alt[0]``'s 45-frame input log differs from every kept node's and its end state is
+              bit-identical to kept ``S1``. The two novel states both lose (one is the 70-71 f
+              family that parks her OFFSIDE at ``l0`` -33.66, the other survives to no endpoint).
+              Union verdict: min(89.82, 89.82) -- the cycle-3 stage is per-parent independent up
+              to its final cut and ``handoff`` is computed pre-cut, so ONE run carries both
+              pricing directions.
+            - **WHERE THE CYCLE-2 SELECTION ACTUALLY IS**: ``jn_keep`` passes **6** of 58-259
+              rolling endpoints a parent, the cycle-2 probe pool passes **400** of 424-5616, and
+              cycle 1 hands 8 parents of which only **4 produce** the banked 16 (the winner
+              descends from cycle-1 parent 4). None of those has been perturbed; the s139/s140
+              instrument -- the free bit-exact state census FIRST, then the two-direction price --
+              applies to each in turn. That, or the herd's physics (the cycle count itself), is
+              where the 72 lives.
       - [~] **THE POOL BINDS AND HIDES NOTHING -- THE SCREEN IS PRICED OUT, GO AT THE HERD'S 72
             (session 139).** Session 138's ordered item, answered with the two runs that decide it,
             and the answer retires the whole screen as the place frames live. One new truth page,

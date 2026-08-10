@@ -88,4 +88,6 @@ The bound's own decomposition says why that had to be cheap: **89.82 = 72 herd +
 cut**, so the whole screen acts on 5.4% of the bound, and even a gap of literal zero only reaches
 72 + 13 = 85. The frames are in the herd's 72, and the way at them is this same instrument moved one
 stage up: perturb what the CYCLE-2 beam hands the junction - its 16 survivors, its keeps - and see
-whether the 72 depends on it.
+whether the 72 depends on it. (Session 140 did: it does not - the cycle-2 final cut prices 0.00 both
+ways because its population is twins - and the free census that bounds any such pricing BEFORE the
+run is [count-the-states-before-pricing-a-cut](count-the-states-before-pricing-a-cut.md).)
