@@ -1755,6 +1755,25 @@ from scratch. Land the edits first, then gate.
               (91.58), step 2 gave 3 entries and 47.92 u (**88.82**), and step 1 (161 runways) returns
               the SAME entry and gap -- so 47.92 u is real distance, not sampling, and the proxy's
               optimism fell from 3.5 f to 0.78 f. Sample a solved curve finely before believing a gap.
+            - **DERECK'S CORRECTION, AND IT IS THE SHAPE: THE ``gap`` TERM IS A WALK-AWAY.** He
+              asked why we are walking away from Tetra when s123 set ZERO WALK-AWAY ("the herd's LAST
+              ROLL *is* the clip roll... Link never leaves her"). Measured on this plan: Link ends the
+              herd **57.85 u** from her -- inside s123's measured 57.0-75.4 u terminals -- and the
+              confirmed entry is **84.66 u** away, so the 47.92 u walk ends **26.81 u FURTHER from
+              her**. `handoff.endpoint` has priced `frames + gap/WALK_CAP + cut_step` since s135 and
+              ``gap`` is exactly that walk; it is not s123's round trip (no walk-back) but it IS Link
+              leaving. **The shape's own target is ``gap`` = 0 -- the herd's LAST FRAME already on a
+              confirmed entry -- which for this same 73-frame log is 73 + 13 = 86 frames**, better
+              than 88.82 AND the right shape. So `confirm` belongs as the ACCEPTANCE TEST on the
+              herd's final frame (is the confirmed gap inside the ~7e-4 u band), not as a distance to
+              minimise. Unchecked risk the walk adds: Tetra may FOLLOW during those 2.82 frames, which
+              would make the position the clip was confirmed against stale.
+            - **THE DELIVERY PATH IS PROVEN WIRED FOR THIS PLAN SHAPE, and a partial DTM is NOT a
+              deliverable (Dereck, s142: no DTM until the full clip sequence exists).**
+              `_notes/s142_dtm.py` spliced the 73 real frames onto the recorded boot movie as a wiring
+              check only -- F0 44974, ticks EXTENDED, **`rt_mismatch` 0 / `prefix_ok` True** -- so
+              `deliver.build_boot_movie` is known good here. Point it at the COMPLETE sequence
+              (herd + clip roll) when that exists, and deliver once.
             - **STILL OPEN ON THIS PLAN:** rung 5 scores ``terminal_ok`` False (`escape_ready` does
               not fire), and whether that rule even applies to the zero-walk-away shape is itself
               unresolved -- `escape_ready` probes the away walk s123 removed. Resolve it, do not
