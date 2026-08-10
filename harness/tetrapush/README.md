@@ -1710,6 +1710,53 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **NEW BEST BOUND 86.89: ``jn_keep`` WAS COSTING 2.93 FRAMES, AND THE ENDPOINT THAT
+            CARRIES THEM SAT AT RANK 3 OF A CUT THAT KEEPS 6 (session 141).** s140's ordered item, and
+            the FIRST cut priced since s135 that pays. **86.89 = 69 herd + 83.15 u of gap at the walk
+            cap (4.89 f) + 13 cut**, `l0` +29.47, runway 230, terminal facing 40660 / thrust 11 -- under
+            s136-s140's 89.82 and the banked console 101. Still a BOUND: gap at cap speed, no
+            turnaround, roll entry separate. One new truth page,
+            [`a-keeps-width-is-not-its-reach.md`](../../knowledge/strategy/a-keeps-width-is-not-its-reach.md).
+            - **THE CENSUS INVERTS s140's, AND IT PREDICTED THE CUT WOULD PAY.** The rolling population
+              is **1266 endpoints = 1266 distinct cut keys over 34 bit-exact states** (4-6 a parent) --
+              the mirror of the final cut's 31-nodes-18-states -- because the key is
+              ``(_physics_tag, pending stick, pending L)`` and the members are one node's children
+              (the-frame-the-alphabet-shares). So this cut selects **which pending letter launches the
+              roll**, and a state-only census would have called a live 1266-way selection a 34-way one.
+              The Tetra-blind ident is measurably HARMLESS: zero key collisions at a different Tetra,
+              widest ``l0`` spread inside one key **0.00 u**.
+            - **THE WIDTH WAS HALF NOMINAL.** The shipped 42 slots (6 x 7 producing parents) reach
+              **20** of the 34 states and spend **22** re-picking a state another slot already had --
+              the exact failure mode s68 built `_mixed_beam`'s ``group``/``per_group`` cap for, present
+              at `junction_beam`'s frontier keep (`group=_physics_tag, per_group=per_state`) and
+              **absent** at this cut.
+            - **AND THE SLOT WAS TAKEN BY THE ``l0`` SHARE.** `_mixed_beam` gives each order
+              ``beam // len(orders)`` slots, so rank + the s134 ``l0`` share is **3 each** and the rate
+              order never sees rank 3 -- which is exactly where the winner sat. The winner's own
+              cycle-2 ``l0`` is **-175.60**, WORSE than the shipped beam's -154.38, so the screen ranks
+              it near-last: s137's "the screen's axis does not predict the bound", now billed in frames.
+            - **PRICED POPULATION-COMPLETE, 66 of 66.** Rolling the WHOLE population cost **+94 s of a
+              1042 s stage (9.0%, 0.074 s an endpoint)** where the queued `jn_keep=12` was budgeted at
+              "~2x 929 s" -- so measure the share of the stage BELOW a cut before budgeting its widen.
+              189 dropped-origin survivors = **66 novel (state, pending) identities on 66 states none
+              of the shipped 31 reach** (the other 123 bit-exact twins of the shipped 18, which is
+              s140's own census of those nodes, cross-checked free). 15 of the 66 yield a live handoff;
+              the runners-up are 91.74 / 92.33 / 92.72, and the identities that reach the crossing bar
+              (``l0`` -79.26..-81.87) price **95.45..107.40** at 52-53 herd frames, so the crossing
+              still does not pay. GUARD: 31 of 31 banked logs reproduced byte-identical, junction death
+              counters byte-identical to s140's.
+            - **WHAT IS LEFT, AND AGAINST THE RIGHT BAR.** The acceptance test is
+              `objective.verdict` = complete AND (``within_budget`` OR ``beats_incumbent``), i.e.
+              **beat `TOTAL_INCUMBENT` 101 on the TOTAL** -- Dereck's s135 rule, in the module's own
+              words, is that "more than 75 herd frames is acceptable if it saves time overall".
+              `frame_floor`'s 72.12/75 prices the OLD ending (push her onto a coord and stop) and
+              carries NO gap and NO cut term, so it is not this route's bar and a "distance to 75" is
+              not a headroom. What sizes the remaining cut-pricing is the term split and the base rate:
+              **six cuts priced flat, all on the GAP term** (4.89 f, 5.6% of the bound, ceiling 4.89
+              even at zero distance and only able to GROW when made real), and **one priced inside the
+              HERD** (69 f, 79%) which paid **2.93**. Two herd selections are left -- the **cycle-2
+              probe pool** (400 of 424-5616 a parent) and **cycle 1's beam** (8 parents, 4 produce);
+              past them the remainder is cycle count and junction length, a different attack.
       - [~] **THE CYCLE-2 BEAM CUT IS TWINS AND PRICES 0.00 BOTH WAYS -- THE 72 IS UPSTREAM OF IT
             (session 140).** Session 139's ordered item -- its instrument one stage up -- answered
             over the cut's ENTIRE population, and the answer moves the herd question past the

@@ -28,6 +28,12 @@ is whatever the novel-state complement is worth. The census costs seconds (rebui
 the state bits); the perturbation run it bounds costs an hour. Run the census first: it can say
 "this cut cannot bind by more than N states" before anything is re-searched.
 
+Count in the CUT'S OWN KEY, not only in states: one stage up the same census inverts - 1266 rolling
+endpoints carry 1266 distinct cut keys over just 34 states, so a state-only census would have called a
+live 1266-way selection a 34-way one
+([a-keeps-width-is-not-its-reach](a-keeps-width-is-not-its-reach.md), which also measures what a keep's
+slots actually reach).
+
 Twins across a cut are invisible to the cut itself: `_mixed_beam` dedups by `_state_tag` WITHIN one
 call, so the kept 16 are tag-distinct, but nothing compares the dropped nodes to the kept ones.
 The mechanism that mints twins is
