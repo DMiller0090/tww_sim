@@ -1772,6 +1772,27 @@ from scratch. Land the edits first, then gate.
                 re-run the widened rediscovery sweep (7..13) with both fixes in and see whether a
                 genuine, deliverable, <=101-frame plan actually surfaces -- THAT is what would satisfy
                 s151's hard gate for real, not a bound and not a mechanism proof.
+              - **SESSION 153 -- ITEM (1) IS RESOLVED: THE NATIVE `confirm_entry` BRANCH IS FIXED AND
+                SQUASHED INTO THIS ONE, AND THE REAL BUG WAS A ONE-FRAME SHIFT, NOT THE FIELD ITSELF.**
+                The "real fix along the way" above had it backwards: `link.csangle` was correctly
+                flagged as stale on a native step, but the replacement -- a POST-step `run.csangle` --
+                reads the NEXT frame's committed value, not this one's. The camera runs at the END of a
+                frame and commits the csangle the frame AFTER reads, so the swap shifted every row's
+                csangle forward by exactly one frame, in BOTH engines, wired included. `entry_camera.
+                cam_trail` builds the search's whole camera reference off this exact field, which is
+                why the regression landed precisely on `test_entry_camera.py` (4 cases) +
+                `test_entry_ledger.py` (1) and nowhere else. Confirmed empirically before fixing, not
+                guessed (`_notes/s153_csangle_shift_probe.py`): the OLD `link.csangle` read always
+                equals `run.csangle` taken BEFORE that frame's `step()`, never after, in both wired and
+                native runs alike. Fix: capture `run.csangle` before stepping -- exactly reproduces the
+                old wired behaviour and fixes the real native staleness at the same time, since
+                `run.csangle` (unlike `link.csangle`) is threaded through `_run_camera` on both step
+                paths. Full default suite: 1257 passed, 0 regressed. Squashed onto this branch
+                (`f39a97a`); `dmiller/tetrapush-native-confirm-entry-wip` is fully folded in and can be
+                deleted whenever Dereck wants -- not done here (branch deletion is his call).
+                **NEXT (items (2) and (3) above, unchanged and still the real blocker)**: teach
+                `cam_trail` the real L-press followCamera blip, then re-run the widened rediscovery
+                sweep (7..13) with both fixes in -- THAT is what satisfies s151's hard gate for real.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
