@@ -48,6 +48,7 @@ configures and validates the unit.
     python -m harness.tetrapush.overnight items [head=N]
     python -m harness.tetrapush.overnight item <id|unit> [walk=N] [seconds=S]
     python -m harness.tetrapush.overnight run [workers=11] [hours=7] [id=<run>] [resume=1]
+                                              [only=rung03,rung17] [leaf=40000000] [pre=16]
     python -m harness.tetrapush.overnight status [id=<run>] [full=1]
 """
 import json
@@ -479,7 +480,7 @@ PRE_L = (0,)
 
 def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthreads=0, chunk=EF.CHUNK,
               two_segment=True, junction_cap=None, pre_stride=PRE_STRIDE, pre_frames=PRE_FRAMES,
-              pre_l=PRE_L, deadline=None):
+              pre_l=PRE_L, deadline=None, beat=None, leaf_budget=None):
     """Every distinct ``(endpoint, lean, speedF, Tetra)`` Link can stand on AT THE ROLL CAP after
     EXACTLY ``walk`` delivered frames, as ``(dict of key -> plan, stats)``.
 
@@ -500,8 +501,9 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
     the item (``alpha_stride``, ``alphabet``). Never the PRE: its job is only to rotate him."""
     out = {}
     fleets_est = _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l)
+    budget = LEAF_BUDGET if leaf_budget is None else int(leaf_budget)
     a_stride = next((s for s in ALPHA_STRIDES
-                     if fleets_est * len(EF.stick_alphabet(s)) <= LEAF_BUDGET),
+                     if fleets_est * len(EF.stick_alphabet(s)) <= budget),
                     ALPHA_STRIDES[-1])
     alpha = EF.stick_alphabet(a_stride)
     st = dict(raw=0, sub_cap=0, off_cap_only=0, junctions=0, junctions_dead=0, fleets=0,
@@ -542,6 +544,8 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
                     if junction_cap is not None and st['junctions'] >= junction_cap:
                         st['junction_cap_hit'] = True
                         break
+                    if beat is not None and st['junctions'] % 64 == 0:
+                        beat(junctions=st['junctions'], at_cap=len(out), alpha=len(alpha))
                     if deadline is not None and time.time() >= deadline:
                         # a deep walk's fan is minutes long, so the clock is checked at the junction
                         # rather than only before the item: an overnight run must stop ON its deadline
@@ -719,7 +723,8 @@ def prepared(unit, env, walls, top, *, cache=_PREPARED):
 
 
 def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads=0,
-             dflt_incumbent=None, on_event=None, two_segment=True, pre_stride=PRE_STRIDE):
+             dflt_incumbent=None, on_event=None, two_segment=True, pre_stride=PRE_STRIDE,
+             leaf_budget=None):
     """One ``(herd, walk length)`` item: prepare the herd, fan every plan of exactly that length, score
     it against every aimable configuration, and push what is genuine through the acceptance stack.
 
@@ -754,7 +759,10 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
     tf = time.time()
     cands, fst = fan_exact(seed, env, walk, csa, trail, hold, s1_stride=s1_stride,
                            nthreads=nthreads, two_segment=two_segment, pre_stride=pre_stride,
-                           deadline=deadline)
+                           deadline=deadline, leaf_budget=leaf_budget,
+                           beat=lambda **kw: IO.beat(d, item['item'], worker, walk=walk,
+                                                     incumbent=inc, herd=item['herd'],
+                                                     unit_of=item['unit'], **kw))
     t_fan = time.time() - tf
     ts = time.time()
     hits, st = score(cands, quals)
@@ -764,7 +772,7 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
                score_seconds=t_score, floor=item['floor'],
                totals={t: total_frames(item['herd'], walk, t) for t in thrusts},
                two_segment=bool(two_segment), s1_stride=s1_stride, pre_stride=pre_stride,
-               lswitch_j1=list(LSWITCH_J1), fan=fst, **st)
+               lswitch_j1=list(LSWITCH_J1), leaf_budget=leaf_budget, fan=fst, **st)
     ev(event='scored', item=item['item'], candidates=st['candidates'], genuine=st['genuine'],
        near=st['near'], fan_seconds=round(t_fan, 1), score_seconds=round(t_score, 1),
        at_cap=len(cands), raw=fst['raw'], n_contact=st['n_contact'],
@@ -932,7 +940,8 @@ def _env_for_worker():
 
 
 def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_cap=None,
-           s1_stride=32, two_segment=True, order=None, pre_stride=PRE_STRIDE):
+           s1_stride=32, two_segment=True, order=None, pre_stride=PRE_STRIDE, leaf_budget=None,
+           only=None):
     """Pull items from the claim queue until the deadline. Nothing in this function is state: every
     item's outcome is on disk before the next one starts, so killing it loses at most one item.
 
@@ -946,6 +955,11 @@ def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_c
         ilist = [x for x in ilist if x['walk'] <= int(walk_cap)]
     if order:
         ilist = [x for x in ilist if x['item'] in set(order)]
+    if only:
+        # a FOCUSED pass: the herds (or items) a first pass showed reaching contact, re-run at a bigger
+        # leaf budget -- clip-lottery-draws.md's "widen where the draws are", as one command
+        want = set(only)
+        ilist = [x for x in ilist if x['item'] in want or x['unit'] in want]
     env = SD.load_env()
     evp = os.path.join(d, 'events-%s.jsonl' % worker_id)
 
@@ -978,7 +992,8 @@ def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_c
         try:
             rec = run_item(it, d, env, worker=worker_id, deadline=deadline,
                            s1_stride=s1_stride, nthreads=1, dflt_incumbent=inc0, on_event=ev,
-                           two_segment=two_segment, pre_stride=pre_stride)
+                           two_segment=two_segment, pre_stride=pre_stride,
+                           leaf_budget=leaf_budget)
             ev(event='item_done', item=it['item'], seconds=round(rec['seconds'], 1),
                n_plans=rec.get('n_plans', 0), dropped=rec.get('dropped'))
         except Exception as exc:
@@ -992,13 +1007,16 @@ def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_c
 
 
 def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=None, s1_stride=32,
-           two_segment=True, wait=True):
+           two_segment=True, wait=True, only=None, leaf_budget=None, pre_stride=PRE_STRIDE):
     """Write the run's configuration, spawn the workers, wait. The parent holds no search state."""
     run_id = run_id or time.strftime('s150-%Y%m%d-%H%M%S')
     d = IO.ensure(IO.run_dir(REPO, run_id))
     keep, drop = items(trunc=trunc)
     if walk_cap is not None:
         keep = [x for x in keep if x['walk'] <= int(walk_cap)]
+    if only:
+        want = set(only)
+        keep = [x for x in keep if x['item'] in want or x['unit'] in want]
     t0 = time.time()
     deadline = t0 + float(hours) * 3600.0
     cfg = IO.read_json(os.path.join(d, 'config.json'), {}) if resume else {}
@@ -1008,7 +1026,9 @@ def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=N
                    walk_cap=walk_cap, s1_stride=int(s1_stride), two_segment=bool(two_segment),
                    walk_floor=WALK_FLOOR, thrusts=list(ES.THRUSTS), pre_stride=PRE_STRIDE,
                    pre_frames=list(PRE_FRAMES), max_accept=MAX_ACCEPT,
-                   lswitch_j1=list(LSWITCH_J1),
+                   lswitch_j1=list(LSWITCH_J1), only=(sorted(only) if only else None),
+                   leaf_budget=(int(leaf_budget) if leaf_budget else LEAF_BUDGET),
+                   pre_stride_run=int(pre_stride),
                    items=[dict((k, v) for k, v in x.items() if k != 'log') for x in keep],
                    units=sorted({x['unit'] for x in keep}), dropped=drop, cpu=os.cpu_count(),
                    note='items are ordered by the TOTAL they could produce, so the run is globally '
@@ -1039,6 +1059,12 @@ def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=N
                'two=%d' % (1 if two_segment else 0)]
         if walk_cap is not None:
             cmd.append('walk=%d' % walk_cap)
+        if leaf_budget:
+            cmd.append('leaf=%d' % int(leaf_budget))
+        if pre_stride != PRE_STRIDE:
+            cmd.append('pre=%d' % int(pre_stride))
+        if only:
+            cmd.append('only=%s' % ','.join(sorted(only)))
         lp = os.path.join(d, 'worker-w%02d.log' % k)
         procs.append(subprocess.Popen(cmd, cwd=REPO, env=_env_for_worker(),
                                       stdout=open(lp, 'a'), stderr=subprocess.STDOUT))
@@ -1195,13 +1221,17 @@ def main(argv=None):
                resume=bool(_i('resume', 1)), walk_cap=(_i('walk', 0) or None),
                s1_stride=_i('s1', 32), two_segment=bool(_i('two', 1)),
                pre_stride=_i('pre', PRE_STRIDE),
+               leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
+               only=(opt['only'].split(',') if 'only' in opt else None),
                steal_after=(float(opt['steal']) if 'steal' in opt else None))
         return 0
     if cmd == 'run':
         launch(run_id=opt.get('id'), workers=_i('workers', 11), hours=float(opt.get('hours', 7)),
                resume=bool(_i('resume', 0)), trunc=_i('trunc', 0),
                walk_cap=(_i('walk', 0) or None), s1_stride=_i('s1', 32),
-               two_segment=bool(_i('two', 1)))
+               two_segment=bool(_i('two', 1)), pre_stride=_i('pre', PRE_STRIDE),
+               leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
+               only=(opt['only'].split(',') if 'only' in opt else None))
         return 0
     if cmd == 'status':
         rid = opt.get('id')
