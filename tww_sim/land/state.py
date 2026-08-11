@@ -273,7 +273,13 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
 
     def _sync_from_core(self):
         """Copy the LandCore's post-step public fields back onto this LandState (for tests/planners
-        reading pos/state/etc.) and record the visited proc."""
+        reading pos/state/etc.) and record the visited proc.
+
+        **Sync every field a caller can SEE, not the ones the step happens to need.** A missing one is
+        not inert: it reads as a measurement that never moved, and the physics gates cannot find it
+        because nothing inside the sim reads the mirror. ``m351C`` was absent until session 148 and
+        cost four sessions of terminals solved at the wrong body lean --
+        `knowledge/strategy/the-lean-is-the-rolls-own-dispatch.md`."""
         c = self._core
         self.pos_x = c.pos_x
         self.pos_z = c.pos_z
@@ -286,6 +292,8 @@ class LandState(_LandHIO, _MoveMixin, _AtnMixin, _AtnActorMixin, _RollMixin, _Cr
         self.msd = c.msd
         self.max_nspeed = c.max_nspeed
         self.direction = c.direction
+        self.m351C = int(c.m351C)
+        self._draw_lean = int(c._draw_lean_c)
         self.visited.add(self.state)
 
     @property

@@ -92,6 +92,10 @@ def test_freerun_native_matches_python(env, inject_eye):
             ('pos_z', _bits(rn['sim_link'][1]), _bits(rp['sim_link'][1])),
             ('tetra_x', _bits(nt.tx), _bits(py.tx)),
             ('tetra_z', _bits(nt.tz), _bits(py.tz)),
+            # The roll's body lean: an allowlist can only catch a field that is ON it
+            # (knowledge/strategy/the-lean-is-the-rolls-own-dispatch.md).
+            ('m351C', nt.link.m351C, py.link.m351C),
+            ('draw_lean', nt.link._draw_lean, py.link._draw_lean),
         )
         for name, a, b in checks:
             if a != b:

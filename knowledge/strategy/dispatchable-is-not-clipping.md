@@ -54,26 +54,22 @@ one level up). So the count that matters is not the hits - it is the **conversio
 `clipping_thrusts` is the filter a search should iterate rather than
 `entry_search.THRUSTS` - which is, correctly, the *dispatch* window.
 
-## The delivered lean moves the family, and downward
+## The body lean moves the family, and it belongs to the roll's own dispatch
 
 [../mechanics/roll-lean-decay.md](../mechanics/roll-lean-decay.md) shows the entry lean is spent long
 before a late cut fires, and that **with the razor re-solved the cut-frame depth moves 0.0003 u over
-±3000 s16**. Both remain true and neither implies what was assumed from them. Depth at a solved
-configuration is not the same quantity as *which configurations admit a solvable razor*, and over the
-box the delivered lean of 648 costs a fifth of the family:
+±3000 s16**. Both remain true and neither implies what was assumed from them: depth at a solved
+configuration is not the same quantity as *which configurations admit a solvable razor*. Scanned at
+lean 0 the box carries 51 genuine and 13 unbroken; the family genuinely does move with the lean.
 
-| | genuine | unbroken | `plowed` | `tetra_from_corner` |
-|---|---|---|---|---|
-| lean 0 (session 124's scan) | 51 | 13 | 24.70..125.88 u | 10..**180** |
-| lean 648 (delivered) | 40 | 8 | 25.26..106.05 u | 25..**160** |
-
-The last column is the one the endgame is priced against - how far from the corner a herd may leave
-her, since the clip roll has to finish the plow itself. **It is 160 u, not 180**, and that halves the
-banked ladder rungs that clear it (8 of 49 → 4).
-
-At the delivered lean the zero-walk-away family - contact unbroken from the roll entry through the cut
-- exists at **thrust 14 alone**. Thrust 15 has the most genuine configurations of any thrust and not
-one of them keeps contact.
+**Which lean, though, is not a property of the corner** - it is written by the roll's own dispatch
+frame, which is still a MOVE and turns. See
+[the-lean-is-the-rolls-own-dispatch.md](the-lean-is-the-rolls-own-dispatch.md): the schedule seed is
+the `m351C` *after* the entry frame, one simulated roll reads it, and one at-cap cloud reached leans
+from -130 to +240. So this table has to be re-asked per plan rather than quoted, and the session-144
+numbers that pinned it to "thrust 14 alone" and moved the plow ceiling 180 → 160 u were taken at
+**648, a state-2 seed read off a native mirror that is never synced back** - see
+[../history/the-delivered-lean-was-an-unsynced-mirror.md](../history/the-delivered-lean-was-an-unsynced-mirror.md).
 
 ## The rule
 

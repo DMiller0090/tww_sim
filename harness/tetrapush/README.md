@@ -1713,6 +1713,77 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **``at_cap`` WAS THE RANK AND NOT THE PHYSICS -- IT IS FOUR FRAMES -- AND THEN THE LEAN
+            EVERY TERMINAL HAS BEEN SOLVED AT SINCE s144 IS A STATE-2 SEED READ OFF A MIRROR THAT IS
+            NEVER SYNCED (session 148).** Rung 3's single genuine entry, the ladder's only rung that
+            beats the console, does not exist at the lean its own roll carries. The bug is fixed in
+            the library and gated; the ladder is being re-censused at the corrected axis.
+            - **``at_cap`` IS FRAME 4, NOT 12.** s147's reach beam looked for the cap in
+              ACCELERATION; `away_walk`'s conversion buys it outright -- the `setSpeedAndAngleAtn`
+              DIR_BACKWARD negation puts speedF at **+17.609** with the motion unchanged, which
+              `entry_search.roll_nspeed` clamps to 26. The bare recipe reaches it at frame 3 but the
+              L LOCKS (Tetra is in the front cone at the handover) into proc 9, which cannot
+              dispatch; with the recipe's own turnaround frame first it is **frame 4, proc 6,
+              dispatchable -> total 93 (-8 vs the console)**. Enumerated over the whole conversion
+              family (`_notes/s148_cap.py`, 82432 rollouts): **67 at-cap dispatchable states at
+              frame 4, 869 at frame 5**, essentially all talk-free. So rung 3's floor is 93 and the
+              walk budget is 11 frames.
+            - **THE JOINT BEAM REACHES |resid| 4.109e-02 AT TOTAL 100 AND THEN HITS A QUANTUM.**
+              `_notes/s148_land.py` sweeps every node at its own (Link, Tetra) pair and ranks
+              ``(fireable, contact deficit, |resid|)`` as s147 prescribed. Its in-contact cloud reads
+              ONE residual across 514 nodes -- the pending-input tie, not a sample of the razor.
+            - **SO THE FAN WAS SIZED BEFORE IT WAS PAID FOR, AND THIS IS THE DURABLE NUMBER
+              (`_notes/s148_fan.py`): the whole 254x254 stick grid on the frame that ACTS expresses
+              171 DISTINCT residuals** over -70.96..+66.14 -- 41148 negative, 2524 positive, so the
+              razor IS bracketed -- at a **median neighbour gap of 1.663e-01, 1066x the 1.56e-04
+              acceptance.** One walk frame cannot land this razor however wide the fan.
+              `knowledge/strategy/clip-lottery-draws.md` already names the fix ("when the fine knob
+              is saturated, widen the PREFIX"; count draws per prefix family) -- this is that
+              measurement one layer over, on a walking rather than a held-stick alphabet. **And the
+              pipeline lesson was re-paid a third time:** fanning the input delivered ON the landing
+              frame returned **129032 children with ONE distinct residual**, none of them having
+              acted yet; fan the input at ``len(log) - 2``.
+            - **THE LEAN: `terminal_keep.DELIVERED_LEAN` = 648 IS THE STATE-2 SEED, NOT A
+              MEASUREMENT.** Its own docstring is the tell -- "the body lean every one of the 49
+              banked rungs delivers at its roll entry, **one distinct value**". `from_f0._step_native`
+              copied back seven fields and not ``m351C`` (same hole in `LandState._sync_from_core`),
+              so on a native run `run.link.m351C` held its seed for the whole herd. It is one value
+              across 49 different herds because it is the seed. **There is no physics divergence:**
+              the native core's OWN ``m351C`` matches Python bit-for-bit (422, 275, 77, 10, 0, 0),
+              and nothing inside the sim reads the mirror -- so the staleness is invisible until a
+              HARNESS script reads it, which is how 648 was derived. The native gates could not have
+              caught it: `test_freerun_native.py` compares an ALLOWLIST that never held ``m351C``.
+            - **AND THE RIGHT VALUE IS NOT THE WALK-END ONE EITHER (nailed by simulation).** The
+              roll's first frame is still MOVE -- the A acts a frame late -- and ITS turn WRITES
+              ``m351C``: from a walk end of **0** the dispatch frame wrote **200**, the ENTRY frame
+              decayed it to **130**, and that is `fast_schedule`'s seed. Seeded at 130 the analytic
+              draws ``[65, 42, 28, 18, 12]`` reproduce the simulated roll exactly; at 648 they read
+              ``[324, 211, 137, 89, 58]``. **The lean is a product of the ROLL'S OWN DISPATCH -- how
+              far that frame turns -- so it is an axis the plan CHOOSES, and it has never been swept
+              because everyone believed it was pinned.**
+            - **WHAT IT COSTS.** At rung 3's census state the dispatch lean is **0**, and there the
+              s147 entry reads ``genuine False, resid -3.294e-01, overlap -32.989`` against
+              ``genuine True, +6.745e-05, +1.126`` at 648; re-solving the whole locus at lean 0 over
+              runways 100..400 step 2 returns **0 genuine entries**. Session 144's pinning (thrust 14
+              alone, the 180 -> 160 u plow ceiling, 8 -> 4 rungs clearing it, genuine 51 -> 40,
+              unbroken 13 -> 8) all rests on 648 -- it "corrected" a family scanned at 0, which was
+              nearer the truth. Re-census IN FLIGHT (`_notes/s148_lean_census.py`); first 8 rungs,
+              ``n`` at the true lean against s147's: **rung 3 0 (was 1) -- the lead, gone**; rung 5
+              **9** (was 10) owing 101.95 u -> **bound 100**; rung 6 13 (13) -> 107; rung 7 1 (4) ->
+              107; rung 8 7 (6) -> 109. The correction does not wipe the ladder, it wipes the LEAD.
+            - **FIXED + GATED (tracked).** `_sync_from_core` and `_step_native` now sync ``m351C`` and
+              ``_draw_lean`` (both native branches are pure delegation + copy-back, so this cannot
+              move physics -- it only makes the mirror true), and `tests/test_freerun_native.py`
+              gains both to its 0-ULP allowlist so an unlisted field cannot hide again. `pytest`
+              **1203 passed, 3 skipped, 8 xfailed, exit 0**, counts unchanged.
+            - **NOTHING WAS DELIVERED, CORRECTLY.** `clip_roll.fire` never returned a CUT_F, so by
+              the standing rule there is no plan and no DTM.
+            - **NEXT:** finish the census and re-rank (rung 5 leads at bound 100); re-read every
+              s144-s147 number quoted at 648, including `TerminalKeep`'s box and
+              `fixtures/courtyard_terminal_family.json`'s lean-648 records; then sweep the lean as
+              the axis it is -- fire the aim, read the entry-frame ``m351C``, solve THERE, and vary
+              the approach so the dispatch turn writes a different one. Carry the 1066x density
+              number into whatever lands it: the landing is bought in PREFIX FAMILIES, not fan width.
       - [~] **THE HERD HANDS LINK OVER STILL INSIDE TETRA, SO THE 94.56'S RAZOR WAS SOLVED AT A
             TETRA THAT DOES NOT SURVIVE THE HERD -- AND THE AXIS IT PASSED WAS NEVER THE ONE THE
             LOCUS SOLVES (session 147).** Session 146 banked 16 genuine entries at rung 5's herd-END

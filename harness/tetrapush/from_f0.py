@@ -897,6 +897,10 @@ class FreeRun:
         link.facing = core.facing; link.travel = core.travel
         link.speedF = sf; link.nspeed = core.nspeed
         link.state = core.state
+        # Sync every field a caller can SEE: an unsynced one reads as a measurement that never moved
+        # (knowledge/strategy/the-lean-is-the-rolls-own-dispatch.md).
+        link.m351C = int(core.m351C)
+        link._draw_lean = int(core._draw_lean_c)
         self.tx = core._tetra_x; self.tz = core._tetra_z
         self.pend_link = (core._pend_link_x, core._pend_link_z)
         self.pend_tetra = (core._pend_tetra_x, core._pend_tetra_z)
