@@ -1864,12 +1864,24 @@ from scratch. Land the edits first, then gate.
                 segment to clear the cone, untested in combination). The atom does not yet compose with
                 a PRE pre-turn -- it only runs bare off each ``n0``. Neither blocks the containment
                 claim; both are honest follow-up, not a gap these tests paper over.
-              - **NEXT: RE-LAUNCH THE REAL PASS.** Nothing from s150's own runs (all pre-fix) is
-                trustworthy evidence the space is barren on the 48 non-console herds -- that conclusion
-                is RETRACTED, not confirmed. `overnight run` is clear to launch for real now that
-                `verify-console` re-passed and the atom's own physics is gated; widen
-                ``turnaround_first`` and the PRE+atom composition only if the bare sweep comes back
-                empty.
+              - **DERECK REFUSED TO ACCEPT THIS AS ENOUGH: "i refuse to allow any search that cant also
+                rediscover the 101 solution."** Bit-exactness against `escape_atom` and containment-of-
+                shape on a proxy state are MECHANISM proofs, not a search-finds-answers proof --
+                `[[search-must-rediscover-known-answer]]` is the hard gate this created, and nothing in
+                this box before this line satisfies it. Nothing from s150's own runs (all pre-fix) is
+                trustworthy evidence the space is barren on the 48 non-console herds either -- that
+                conclusion stays RETRACTED, not confirmed, but re-launching `overnight run` is NOT the
+                next step until the gate below passes.
+              - **NEXT (BLOCKING, before `overnight run` or trusting any of its output):** run the
+                ACTUAL pipeline -- `fan_exact` -> `score` (the real razor sweep against real aim/thrust
+                configurations, `configurations()`) -> `accept` (`confirm_entry` + the walled composite)
+                -- on the console's own herd with its real conversion REMOVED (truncated to before frame
+                71, session 151's own probe point: `seed=dict(log=FIX['log'][:71])`), swept over a
+                reasonable walk-length range. The bar: does the GENERATOR itself (never the recorded
+                plan, never a hand-picked aim) produce a GENUINE, DELIVERABLE plan totalling <=101? A
+                yes is the first real evidence this search can find anything; a no is the real blocker,
+                to report as such -- not a reason to re-run with different knobs before understanding
+                why.
 
       - [~] **RUNG 5's BLOCKER IS NEITHER THE DISTANCE NOR THE CONVERSION -- IT IS TETRA HITTING A
             WALL, AND THE GUARD THAT REFUSES IT STANDS IN FOR A MECHANIC THE CONSOLE GATED

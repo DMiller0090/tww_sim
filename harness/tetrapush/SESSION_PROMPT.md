@@ -42,6 +42,13 @@ HARD RULES:
   (`[[tetra-clip-solved-live]]`). Log the movie per frame; the divergence frame names the bug.
 - **No calibration / no live-feedback in the loop.** The planner takes only the static state-2 seed;
   pure sim, DTM-verified out of band.
+- **A SEARCH IS NOT TRUSTED UNTIL IT REDISCOVERS A KNOWN ANSWER** (Dereck, session 151: "i refuse
+  to allow any search that cant also rediscover the 101 solution" -- `[[search-must-rediscover-known-
+  answer]]`). Proving a mechanism is bit-exact against a validated primitive, or that it can produce a
+  candidate of the right SHAPE, is NOT the same claim as proving the search -- generation, the razor
+  sweep, `accept` -- finds a GENUINE, DELIVERABLE result. Before trusting any `overnight run` output (a
+  hit OR a "0 genuine"), show the pipeline rediscovers a known-good plan from a state where one is
+  known to exist (e.g. the console's own herd with its real conversion removed).
 
 READ, IN THIS ORDER, before proposing anything or touching code:
   1. `harness/tetrapush/README.md`: the setup, the push mechanic, the untarget-brakeslide decomp
