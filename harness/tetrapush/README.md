@@ -1717,6 +1717,61 @@ from scratch. Land the edits first, then gate.
             MACHINERY THAT ACTUALLY DELIVERED THE CONSOLE CLIP, ORDERED SO THE CHEAPEST PLAN IN THE
             SPACE IS TRIED FIRST (session 150).** `harness/tetrapush/overnight.py` +
             `overnight_io.py`; 17 gates in `tests/test_overnight_driver.py` (1.7 s).
+            - **SESSION 152 -- THE REDISCOVERY GATE RAN FOR REAL (s151's item 0): ONE GENUINE RAZOR HIT
+              SURFACED, `accept()` REFUSED IT, AND THE REFUSAL'S ROOT CAUSE IS NOW KNOWN AND
+              CROSS-CONFIRMED TWO INDEPENDENT WAYS.** Seeded the console's own herd with its real
+              conversion REMOVED (`log[:71]`) and ran `fan_exact(atom=True) -> score -> accept` for
+              real, widening walk 7/8/9. Walk 7 and 8: 0 genuine, but overlap landed within 0.0006u /
+              0.00007u of the console's own +1.2259 target. **Walk 9: ONE genuine razor hit** (thrust
+              15, would total **99 frames -- 2 faster than the console's 101**) -- but `accept()`
+              refused it at `confirm_entry`, on a predicted-vs-measured gap of facing 11 BAM / walk
+              0.013u / entry 0.027u, tiny in absolute terms but nonzero against `confirm_entry`'s exact
+              `==` (`[[zero-ulp-tests-only]]`, no tolerance to fall back on). Widening stopped there
+              (escalating per-walk cost, and the walk-9 signal was already the useful one).
+              - **`overnight.score` was silently discarding exactly the data needed to look at a
+                near-miss** -- `best_overlap`/`best_resid_in_contact` were bare running scalars with no
+                record of which candidate produced them, so inspecting one meant a full expensive
+                re-run. Fixed: `best_overlap_row`/`best_resid_row`/`near_rows` (capped, `near_capped`
+                flagged) now carry the full candidate identity, same shape as a genuine `hit`, so
+                `composite_log`/`accept` can rebuild and inspect ANY of them without recomputing, ever
+                again. Purely additive, gated (`tests/test_overnight_driver.py` unchanged, 23/23; full
+                default suite 1256 passed, byte-identical to pre-fix).
+              - **Surveyed `confirm_entry` against every genuine/near-miss/best-overlap/best-resid row
+                across walk 7/8/9 (86 rows, using the fixed `score`): 0/86 pass, and the facing delta is
+                NEVER continuous -- it is EXACTLY one of three discrete values, 11, 31 or 81 BAM, every
+                single time.** Position error tracks the bucket (11-BAM rows smallest, 81-BAM rows
+                worst), naming facing error as the actual driver, not independent noise.
+              - **ROOT CAUSE (cross-confirmed): `LandCamera` fires a real, documented 1-frame
+                followCamera blip on every L-press** (its own module docstring); re-entering manual mode
+                resets the camera's internal yaw TARGET to wherever the yaw-chase happens to sit at that
+                instant. `entry_camera.cam_trail` -- what the fast search injects as its camera
+                projection -- builds its own reference replay with an L-free, constant input, so it
+                never sees this and injects the PRE-blip angle for every candidate whose walk presses L
+                (every escape-atom-junction candidate, unconditionally, by construction). An isolated
+                sweep of the L-press timing alone (no atom/rotate/slam) reproduced **-81 / -31 /
+                -11 (saturating)** exactly, with zero free parameters shared with the empirical survey
+                above -- about as clean a confirmation as this gets. **NOT fixed**: a real fix means
+                teaching `cam_trail` (or a sibling) the candidate's real button/stick schedule instead
+                of a bare C-stick byte, new 0-ULP gates, and a decision on whether ordinary `_families`
+                L=1 candidates need the same treatment -- scoped, multi-piece, left for next session.
+              - **Separately, built + wired a full-fidelity native `confirm_entry` (Dereck: "why
+                wouldn't confirm_entry also be native?") -- it exists, but REGRESSES 5 tests, unmerged.**
+                `seeds.make_freerun(env, native=True)` already runs physics + both look models in C with
+                the camera still live-computed (never injected), already 0-ULP gated including L-press
+                cases; `entry_search.continue_walk` grew a `native=` flag and `confirm_entry` opted in,
+                plus a real fix along the way (`continue_walk` was reading the never-synced
+                `link.csangle` instead of the authoritative `run.csangle`). Its own new test passes
+                standalone, but the full default suite regresses 4 `test_entry_camera.py` cases + 1
+                `test_entry_ledger.py` case that are clean on the unmodified branch -- likely the
+                csangle field swap, not yet root-caused. **Preserved, not merged**: committed to
+                `dmiller/tetrapush-native-confirm-entry-wip` (commit `e2b396e`), worktree removed, not
+                pushed. **NEXT (Dereck: resolve that branch, then continue the search)**: (1) trace the
+                5-test regression on that branch to a root cause and fix it (same per-frame-diff rigor
+                as the camera-blip finding, not a guess); (2) teach `cam_trail` the real L/button
+                schedule so escape-atom candidates stop being scored against the wrong camera; (3)
+                re-run the widened rediscovery sweep (7..13) with both fixes in and see whether a
+                genuine, deliverable, <=101-frame plan actually surfaces -- THAT is what would satisfy
+                s151's hard gate for real, not a bound and not a mechanism proof.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled

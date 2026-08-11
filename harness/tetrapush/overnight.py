@@ -806,7 +806,7 @@ CLIP_BAND = (0.0, 3.0)
 BAND_IS_NOT_PREFILTERABLE = True
 
 
-def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3):
+def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=256):
     """Score a candidate dict against every configuration, at each candidate's OWN Tetra.
 
     Grouped by ``(facing, thrust, lean, nspeed)`` -- the four things that pick the baked roll schedule
@@ -818,7 +818,14 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3):
     -- with everything `confirm_entry` and `cross_engine.agree` need to re-derive them. The stats carry
     the CONTACT population and the residual SIGN SPLIT, because those are what say where a barren item
     stood: outside contact the razor's residual is a dead constant, so "0 genuine, 0 near" alone cannot
-    distinguish an item that was 20 u from touching her from one that bracketed the razor and missed."""
+    distinguish an item that was 20 u from touching her from one that bracketed the razor and missed.
+
+    ``best_overlap`` / ``best_resid_in_contact`` are scalars for a quick read, but every value this
+    function ever singles out -- the best-overlap row, the best-in-contact-residual row, and every
+    ``near`` row (capped at ``near_cap``, ``near_capped`` says if any were dropped) -- is recorded in
+    FULL, the same shape as a genuine ``hit``, in ``best_overlap_row`` / ``best_resid_row`` / ``near_rows``
+    (Dereck, s152: a near-miss the search finds and then throws away, keeping only the scalar, is exactly
+    what forces an expensive re-run just to look at it -- this is the fix, not another recompute)."""
     global CO_R_SUM
     if CO_R_SUM is None:
         from harness.tetrapush import terminal as TM
@@ -829,9 +836,20 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3):
     n_band = 0
     n_contact, n_neg, n_pos = 0, 0, 0
     best_ovl, best_resid = -1e30, None      # 'best' = NEAREST `CLIP_TARGET`, never the max
+    best_ovl_row, best_resid_row = None, None
+    near_rows, near_capped = [], False
     by_roll = {}
     for k, plan in items:
         by_roll.setdefault(ES.lean_at_roll(k[2]), []).append((k, plan))
+
+    def _row(k, plan, e, o, fac, thrust, lean, aim, cell, resid_val, ovl):
+        return dict(entry=[e[0], e[1]], walk=[k[0], k[1]], m351C_walk=k[2],
+                   m351C=lean, facing=fac, aim=list(aim), thrust=thrust,
+                   b_step=thrust + 2, resid=resid_val, nspeed=ES.ROLL_NSPEED,
+                   push=[o[5], o[6]], plan=list(plan), cell=cell,
+                   tetra=[k[-2], k[-1]], overlap=ovl,
+                   walkable=bool(XE.TA.is_walkable(k[0], k[1]) and XE.TA.is_walkable(e[0], e[1])))
+
     for q in quals:
         fac, thrust = q['facing'], q['thrust']
         for lean, group in by_roll.items():
@@ -844,34 +862,39 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3):
                 n_eval += len(rows)
                 for (k, plan), e, o in zip(part, ents, rows):
                     ovl = CO_R_SUM - math.hypot(o[10] - o[12], o[11] - o[13])
+                    r = resid(o)
                     if CLIP_BAND[0] <= ovl <= CLIP_BAND[1]:
                         n_band += 1              # the only scorings that could have been a clip
                     if abs(ovl - CLIP_TARGET) < abs(best_ovl - CLIP_TARGET):
                         best_ovl = ovl
+                        best_ovl_row = _row(k, plan, e, o, fac, thrust, lean, q['aim'], q['cell'], r, ovl)
                     if ovl >= 0.0:
                         n_contact += 1
-                        r = resid(o)
                         n_neg += r < 0.0
                         n_pos += r > 0.0
                         if best_resid is None or abs(r) < abs(best_resid):
                             best_resid = r
+                            best_resid_row = _row(k, plan, e, o, fac, thrust, lean, q['aim'], q['cell'],
+                                                  r, ovl)
                     if not o[0]:
-                        if abs(resid(o)) < near_probe:
+                        if abs(r) < near_probe:
                             n_near += 1
+                            if len(near_rows) < near_cap:
+                                near_rows.append(_row(k, plan, e, o, fac, thrust, lean, q['aim'],
+                                                      q['cell'], r, ovl))
+                            else:
+                                near_capped = True
                         continue
-                    hits.append(dict(entry=[e[0], e[1]], walk=[k[0], k[1]], m351C_walk=k[2],
-                                     m351C=lean, facing=fac, aim=list(q['aim']), thrust=thrust,
-                                     b_step=thrust + 2, resid=resid(o), nspeed=ES.ROLL_NSPEED,
-                                     push=[o[5], o[6]], plan=list(plan), cell=q['cell'],
-                                     tetra=[k[-2], k[-1]], overlap=ovl,
-                                     walkable=bool(XE.TA.is_walkable(k[0], k[1])
-                                                   and XE.TA.is_walkable(e[0], e[1]))))
+                    hits.append(_row(k, plan, e, o, fac, thrust, lean, q['aim'], q['cell'], r, ovl))
     return hits, dict(candidates=len(items), evaluations=n_eval, genuine=len(hits), near=n_near,
                       configurations=len(quals), n_contact=n_contact, resid_neg=n_neg,
                       resid_pos=n_pos, bracketed=bool(n_neg and n_pos),
                       best_overlap=(None if best_ovl <= -1e29 else best_ovl),
-                      best_resid_in_contact=best_resid, band=list(CLIP_BAND),
-                      band_draws=n_band, band_share=(n_band / n_eval if n_eval else 0.0))
+                      best_overlap_row=best_ovl_row,
+                      best_resid_in_contact=best_resid, best_resid_row=best_resid_row,
+                      band=list(CLIP_BAND), band_draws=n_band,
+                      band_share=(n_band / n_eval if n_eval else 0.0),
+                      near_rows=near_rows, near_capped=near_capped)
 
 
 # --------------------------------------------------------------------------- acceptance
