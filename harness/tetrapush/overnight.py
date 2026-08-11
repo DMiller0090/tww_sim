@@ -49,7 +49,7 @@ configures and validates the unit.
     python -m harness.tetrapush.overnight item <id|unit> [walk=N] [seconds=S]
     python -m harness.tetrapush.overnight run [workers=11] [hours=7] [id=<run>] [resume=1]
                                               [only=rung03,rung17] [leaf=40000000] [pre=16]
-                                              [tail=1,2] [tbeam=400]
+                                              [tail=1,2] [tbeam=400] [pcap=20000]
     python -m harness.tetrapush.overnight status [id=<run>] [full=1]
 """
 import json
@@ -431,6 +431,10 @@ LSWITCH_J1 = (1, 2)
 LEAF_BUDGET = 8_000_000
 ALPHA_STRIDES = (1, 2, 3, 4, 6, 8, 16)
 
+#: `_steered_tail`'s prefix pool held one live `LandCore` clone per prefix, uncapped (session 150's
+#: MemoryError). Bounds it like `tail_beam` bounds the between-frame beam: nearest her, kept.
+PREFIX_CAP = 20000
+
 
 def _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l):
     """Fleets `fan_exact` will build for this shape -- the clone budget's own arithmetic, so the
@@ -482,7 +486,7 @@ PRE_L = (0,)
 def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthreads=0, chunk=EF.CHUNK,
               two_segment=True, junction_cap=None, pre_stride=PRE_STRIDE, pre_frames=PRE_FRAMES,
               pre_l=PRE_L, deadline=None, beat=None, leaf_budget=None,
-              tail_frames=(), tail_beam=400):
+              tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
     """Every distinct ``(endpoint, lean, speedF, Tetra)`` Link can stand on AT THE ROLL CAP after
     EXACTLY ``walk`` delivered frames, as ``(dict of key -> plan, stats)``.
 
@@ -567,12 +571,14 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
                                     + tuple(_f['label'](_p[i][0], _p[i][1]))[1:])
     if tail_frames:
         _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chunk, nthreads,
-                      s1_stride, pre_stride, pre_frames, pre_l, tail_frames, tail_beam, deadline)
+                      s1_stride, pre_stride, pre_frames, pre_l, tail_frames, tail_beam, deadline,
+                      beat=beat, prefix_cap=prefix_cap)
     return out, st
 
 
 def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chunk, nthreads,
-                  s1_stride, pre_stride, pre_frames, pre_l, tail_frames, tail_beam, deadline):
+                  s1_stride, pre_stride, pre_frames, pre_l, tail_frames, tail_beam, deadline,
+                  beat=None, prefix_cap=PREFIX_CAP):
     """**PER-FRAME STEERING AFTER THE CONVERSION** -- the one coverage gap the family set leaves, and the
     draw multiplier where contact is already made.
 
@@ -582,17 +588,19 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
     bracketed) the binding constraint is no longer distance but DRAWS: 112 in-contact scorings expressing
     one best |resid| of 1.55e-01 against a ~1e-4 acceptance.
 
-    It is affordable because the at-cap set is SMALL. Fan the ordinary families at ``walk - k``, keep the
-    at-cap prefixes, and re-fan the last ``k`` frames over the full alphabet from each -- ``|prefix| x
-    |alpha|`` clones for k=1, and for k=2 a beam of ``tail_beam`` between the two frames, ranked on the
-    only thing that is free to rank on (distance to her, the contact gradient's own driver -- the razor
-    costs a sweep and this is inside the fan).
+    It is affordable because the at-cap set is SMALL -- but ``pfx`` is a pool of LIVE CLONES, not numbers,
+    so "affordable in fleets" and "affordable in memory" are two different budgets and only the first one
+    is `LEAF_BUDGET`. Fan the ordinary families at ``walk - k``, keep the at-cap prefixes UNDER
+    `PREFIX_CAP`, and re-fan the last ``k`` frames over the full alphabet from each; k=2 beams between the
+    two frames on distance to her, the contact gradient's own driver.
 
     ``at_cap`` is read on the PREFIX core here, one delivered byte before the endpoint: the conversion
     holds speedF at ~17.6 once it has fired, so it is a filter on the same population and not a
-    different test. Logged as ``tail_prefixes`` / ``tail_leaves``."""
+    different test. Logged as ``tail_prefixes`` / ``tail_leaves`` / ``prefix_cap_hit``."""
     st['tail_prefixes'] = st.get('tail_prefixes', 0)
     st['tail_leaves'] = st.get('tail_leaves', 0)
+    st['prefix_cap_hit'] = st.get('prefix_cap_hit', False)
+    tx, tz = seed['tetra']
     for k in sorted(x for x in tail_frames if 1 <= x < walk):
         w0 = walk - k
         pfx = []
@@ -615,15 +623,26 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
                             if not at_cap(c.speedF):
                                 continue
                             head = ((n0,) if ps is None else (n0, ps[0], ps[1], lp, jp))
-                            pfx.append((head + tuple(fam['label'](part[i][0], part[i][1]))[1:], c))
+                            d = math.hypot(c.pos_x - tx, c.pos_z - tz)
+                            pfx.append((head + tuple(fam['label'](part[i][0], part[i][1]))[1:], c, d))
+                    if len(pfx) > prefix_cap:
+                        # rank-and-truncate NOW, before the pool grows further -- a prefix far from
+                        # contact cannot become the razor's winner after k more frames
+                        pfx.sort(key=lambda t: t[2])
+                        pfx = pfx[:prefix_cap]
+                        st['prefix_cap_hit'] = True
+                    if beat is not None:
+                        beat(tail_k=k, tail_n0=n0, tail_pfx=len(pfx))
                 if deadline is not None and time.time() >= deadline:
                     st['deadline_cut'] = True
                     return
+        pfx.sort(key=lambda t: t[2])
+        pfx = [(p, c) for p, c, _d in pfx[:prefix_cap]]
         st['tail_prefixes'] += len(pfx)
         for depth in range(k):
             nxt = []
             last = depth == k - 1
-            for plan, c in pfx:
+            for pi, (plan, c) in enumerate(pfx):
                 for c0 in range(0, len(alpha), chunk):
                     part = alpha[c0:c0 + chunk]
                     st['fleets'] += 1
@@ -642,6 +661,8 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
                         elif at_cap(cc.speedF):
                             nxt.append((p2, cc, math.hypot(cc.pos_x - cc._tetra_x,
                                                            cc.pos_z - cc._tetra_z)))
+                if beat is not None and pi % 32 == 0:
+                    beat(tail_k=k, tail_depth=depth, tail_prefix=pi, tail_of=len(pfx))
                 if deadline is not None and time.time() >= deadline:
                     st['deadline_cut'] = True
                     return
@@ -823,7 +844,7 @@ def prepared(unit, env, walls, top, *, cache=_PREPARED):
 
 def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads=0,
              dflt_incumbent=None, on_event=None, two_segment=True, pre_stride=PRE_STRIDE,
-             leaf_budget=None, tail_frames=(), tail_beam=400):
+             leaf_budget=None, tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
     """One ``(herd, walk length)`` item: prepare the herd, fan every plan of exactly that length, score
     it against every aimable configuration, and push what is genuine through the acceptance stack.
 
@@ -859,7 +880,7 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
     cands, fst = fan_exact(seed, env, walk, csa, trail, hold, s1_stride=s1_stride,
                            nthreads=nthreads, two_segment=two_segment, pre_stride=pre_stride,
                            deadline=deadline, leaf_budget=leaf_budget,
-                           tail_frames=tail_frames, tail_beam=tail_beam,
+                           tail_frames=tail_frames, tail_beam=tail_beam, prefix_cap=prefix_cap,
                            beat=lambda **kw: IO.beat(d, item['item'], worker, walk=walk,
                                                      incumbent=inc, herd=item['herd'],
                                                      unit_of=item['unit'], **kw))
@@ -872,7 +893,8 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
                score_seconds=t_score, floor=item['floor'],
                totals={t: total_frames(item['herd'], walk, t) for t in thrusts},
                two_segment=bool(two_segment), s1_stride=s1_stride, pre_stride=pre_stride,
-               lswitch_j1=list(LSWITCH_J1), leaf_budget=leaf_budget, fan=fst, **st)
+               lswitch_j1=list(LSWITCH_J1), leaf_budget=leaf_budget, prefix_cap=prefix_cap,
+               fan=fst, **st)
     ev(event='scored', item=item['item'], candidates=st['candidates'], genuine=st['genuine'],
        near=st['near'], fan_seconds=round(t_fan, 1), score_seconds=round(t_score, 1),
        at_cap=len(cands), raw=fst['raw'], n_contact=st['n_contact'],
@@ -1042,7 +1064,7 @@ def _env_for_worker():
 
 def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_cap=None,
            s1_stride=32, two_segment=True, order=None, pre_stride=PRE_STRIDE, leaf_budget=None,
-           only=None, tail_frames=(), tail_beam=400):
+           only=None, tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
     """Pull items from the claim queue until the deadline. Nothing in this function is state: every
     item's outcome is on disk before the next one starts, so killing it loses at most one item.
 
@@ -1095,7 +1117,7 @@ def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_c
                            s1_stride=s1_stride, nthreads=1, dflt_incumbent=inc0, on_event=ev,
                            two_segment=two_segment, pre_stride=pre_stride,
                            leaf_budget=leaf_budget, tail_frames=tail_frames,
-                           tail_beam=tail_beam)
+                           tail_beam=tail_beam, prefix_cap=prefix_cap)
             ev(event='item_done', item=it['item'], seconds=round(rec['seconds'], 1),
                n_plans=rec.get('n_plans', 0), dropped=rec.get('dropped'))
         except Exception as exc:
@@ -1110,7 +1132,7 @@ def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_c
 
 def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=None, s1_stride=32,
            two_segment=True, wait=True, only=None, leaf_budget=None, pre_stride=PRE_STRIDE,
-           tail_frames=(), tail_beam=400):
+           tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
     """Write the run's configuration, spawn the workers, wait. The parent holds no search state."""
     run_id = run_id or time.strftime('s150-%Y%m%d-%H%M%S')
     d = IO.ensure(IO.run_dir(REPO, run_id))
@@ -1132,7 +1154,7 @@ def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=N
                    lswitch_j1=list(LSWITCH_J1), only=(sorted(only) if only else None),
                    leaf_budget=(int(leaf_budget) if leaf_budget else LEAF_BUDGET),
                    pre_stride_run=int(pre_stride), tail_frames=list(tail_frames),
-                   tail_beam=int(tail_beam),
+                   tail_beam=int(tail_beam), prefix_cap=int(prefix_cap),
                    items=[dict((k, v) for k, v in x.items() if k != 'log') for x in keep],
                    units=sorted({x['unit'] for x in keep}), dropped=drop, cpu=os.cpu_count(),
                    note='items are ordered by the TOTAL they could produce, so the run is globally '
@@ -1172,6 +1194,7 @@ def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=N
         if tail_frames:
             cmd.append('tail=%s' % ','.join(str(x) for x in tail_frames))
             cmd.append('tbeam=%d' % int(tail_beam))
+            cmd.append('pcap=%d' % int(prefix_cap))
         lp = os.path.join(d, 'worker-w%02d.log' % k)
         procs.append(subprocess.Popen(cmd, cwd=REPO, env=_env_for_worker(),
                                       stdout=open(lp, 'a'), stderr=subprocess.STDOUT))
@@ -1246,7 +1269,7 @@ def report(d, full=False):
     if bad:
         print('  items dropped DURING the run: %d (bound skips + refused herds)' % len(bad))
         for m in bad[:12 if not full else len(bad)]:
-            print('    %-12s %s' % (m['unit'], m.get('reason', '')[:96]))
+            print('    %-14s %s' % (m.get('item', m.get('unit')), m.get('reason', '')[:96]))
     if full:
         print('  per-unit walk coverage:')
         for r in s['progress']:
@@ -1320,7 +1343,7 @@ def main(argv=None):
                            leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
                            tail_frames=(tuple(int(x) for x in opt['tail'].split(','))
                                         if 'tail' in opt else ()),
-                           tail_beam=_i('tbeam', 400),
+                           tail_beam=_i('tbeam', 400), prefix_cap=_i('pcap', PREFIX_CAP),
                            on_event=lambda **kw: print('  [%s] %s'
                                                        % (kw.get('event'),
                                                           {k: v for k, v in kw.items()
@@ -1339,7 +1362,7 @@ def main(argv=None):
                leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
                only=(opt['only'].split(',') if 'only' in opt else None),
                tail_frames=(tuple(int(x) for x in opt['tail'].split(',')) if 'tail' in opt else ()),
-               tail_beam=_i('tbeam', 400),
+               tail_beam=_i('tbeam', 400), prefix_cap=_i('pcap', PREFIX_CAP),
                steal_after=(float(opt['steal']) if 'steal' in opt else None))
         return 0
     if cmd == 'run':
@@ -1350,7 +1373,7 @@ def main(argv=None):
                leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
                only=(opt['only'].split(',') if 'only' in opt else None),
                tail_frames=(tuple(int(x) for x in opt['tail'].split(',')) if 'tail' in opt else ()),
-               tail_beam=_i('tbeam', 400))
+               tail_beam=_i('tbeam', 400), prefix_cap=_i('pcap', PREFIX_CAP))
         return 0
     if cmd == 'status':
         rid = opt.get('id')
