@@ -1816,6 +1816,26 @@ from scratch. Land the edits first, then gate.
               hit at frame 7 already beats the console by 3, the remaining budget belongs in a FAN
               at frame 7, not in walking to 8-9 -- which is `clip-lottery-draws.md`'s prescription
               (widen the PREFIX, count draws per family) applied to the frames that FEED frame 7.
+            - **WHICH ENGINE WAS BROKEN, AND WHAT IT COSTS THE CENSUS.** There are two, and only the
+              stepper was missing the pass: **`ShoveCtx` / `tww_sim/core/_shovec.pyx`, the RAZOR
+              engine** that scores a candidate roll (and produced the census, the terminal family and
+              the 288 placements), **has the ``dBgS_Acch::CrrPos`` pass for BOTH actors and always
+              did** -- verified at the console's own hit configuration, where Tetra's z pins at
+              **-940.25562 for roll steps 10-14**, the console-locked brace to the bit. It is
+              `from_f0.FreeRun`, the frame-by-frame herd/walk stepper, that `make_freerun` never
+              wired. So the SCORING was right and the defect was REACHABILITY.
+              **But the pair the census HANDED that engine came off an unwalled herd replay, and a
+              correct verdict on an impossible input is still worthless.** Measured over all 49 rungs
+              (walled vs unwalled, first divergence against the herd length): **8 diverge INSIDE the
+              herd** (42..49, all 2-3 frames before it ends -- those banked herds are not what the
+              console engine produces), **16 in the 3 settle frames the census added**, 25 never part;
+              and **5 sit inside her own cylinder at the census state** (8, 10, 12, 30, 37). Of the
+              **16 rungs the census called LIVE, only 5 are clean** -- rung **5 (n 9, bound 100)**, 6,
+              7, 16, 20 -- against 1 inside-herd (42) and 10 settle-frame, which is **every
+              high-count row** (10 n=19, 27 n=16, 15 n=14, 12 n=13, 25 n=10). The lead survives by
+              luck, not design. **CONSEQUENCE: the census's live/dead labels may NOT order or prune a
+              search** -- reopen all 49 rungs, replay every herd on the WALLED engine, and re-verify
+              the 8 herd-diverging rungs before quoting their bounds.
             - **NOTHING WAS DELIVERED, correctly:** `clip_roll.fire` never returned a CUT_F, so by
               the standing rule there is no plan and no DTM.
       - [~] **``at_cap`` WAS THE RANK AND NOT THE PHYSICS -- IT IS FOUR FRAMES -- AND THEN THE LEAN
