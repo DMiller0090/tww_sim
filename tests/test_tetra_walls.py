@@ -104,17 +104,36 @@ def test_a_braced_tetra_lands_on_the_console_locked_pin(env):
         'unwalled Tetra should pass THROUGH the plane (that is the defect), got %r' % out[False])
 
 
-def test_a_native_run_cannot_pretend_to_be_walled(env):
-    """`LandCore.step_courtyard` has no BG pass, so the mesh must be refused, not silently ignored.
+def test_a_native_run_is_genuinely_walled(env):
+    """A native run is WALLED now (session 150), and it is the mesh reaching the C core that says so.
 
-    Assigning it after construction is how a probe gets a Tetra that looks walled and is not, so
-    `wall_for_terminal` repeats the constructor's check instead of trusting it."""
-    with pytest.raises(ValueError):
-        SD.make_freerun(env, native=True, walls=True)
+    The old gate here asserted the opposite -- `LandCore.step_courtyard` had no BG pass, so
+    `wall_for_terminal` refused a native run rather than let the mesh be a silent no-op. Both actors'
+    `dBgS_Acch::CrrPos` are ported, so what has to be gated is the thing that made the refusal
+    necessary: the C engine holding the mesh itself, not a Python attribute nobody reads.
+    `tests/test_courtyard_walls_native.py` is where native == Python is proven 0-ULP."""
+    nat = SD.make_freerun(env, native=True, walls=True)
+    assert nat.walls_modelled is True
+    assert nat.walls_tetra is not None and nat.link._walls is not None
+    assert nat._core.walls_tetra is not None, 'her mesh never reached the C step'
+    assert nat._core.walls_link is not None, 'his mesh never reached the C step'
+    assert nat._core.walls_tetra.size == len(nat.walls_tetra)
+
+    herd = SD.make_freerun(env, native=True)
+    assert herd.walls_modelled is False
+    assert herd._core.walls_tetra is None and herd._core.walls_link is None
+    SD.wall_for_terminal(herd)                       # the phase boundary, mid-run
+    assert herd._core.walls_tetra is not None
+
+
+def test_a_native_run_refuses_a_mesh_that_never_reached_its_core(env):
+    """The remaining trap, made loud: `link._walls` is a `LandState` attribute `FreeRun` cannot
+    intercept, so assigning it after the core was seeded would brace nobody. The step refuses."""
     nat = SD.make_freerun(env, native=True)
-    assert nat.walls_modelled is False
+    nat.pre_seed_input(SD.dtm_input_at(env)(0))
+    nat.link._walls = SD.courtyard_mesh()            # the s149-style bare assignment
     with pytest.raises(ValueError):
-        SD.wall_for_terminal(nat)
+        nat.step(NEUTRAL)
 
 
 def test_frame_ok_guards_exactly_the_unmodelled_actors(env):

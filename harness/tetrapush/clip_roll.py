@@ -36,10 +36,17 @@ out of a roll is a side slash, not the in-line CUT_F whose root translate IS the
     65 u roll against a runway grid that starts at 160. `dispatchable` reports both, because a plan
     that fires the clip roll off the flip is not slow, it is geometrically impossible.
 
-**AND IT CANNOT BE STEPPED ON THE NATIVE CORE.** `_anmc._proc_roll` omits the ``b_trig`` arm of the
-Python `_proc_roll`, so the C courtyard engine has no cut at all: a B press mid-roll is ignored and
-the roll runs to its ordinary exit. Build the herd on the native step, then `fire` the clip roll on a
-Python-path run (`beam_io.rebuild_beam(native=False)`), which is gated 0-ULP against it.
+**IT STEPS ON THE NATIVE CORE** (session 150). `_anmc._proc_roll` used to omit the ``b_trig`` arm, so
+the C courtyard engine had no cut at all -- a mid-roll B was ignored and the roll ran to its ordinary
+exit -- and the clip roll had to be fired on a Python-path run. `LandCore` now carries the whole arm:
+the b_trig exit, `_cut_init`, `_proc_cut`, and the ANM_CUT joint-0 root translate that IS the lunge, at
+0 ULP against the Python procs (`tests/test_cut_native.py`), walled or not. So `fire` takes either
+engine, and the herd no longer has to change engines at the thrust.
+
+Two mid-roll cases the C core still cannot carry, and it RAISES on both rather than mis-stepping them
+(`LandCore.wall_check`): a roll BONK (a head-on wall hit inside the crash window -> procFrontRollCrash,
+unported) and an A press the wall turns into a SIDLE. Neither is modelled by the native step; a bonk
+means the roll crashed, so the plan is dead either way.
 
     python -m harness.tetrapush.clip_roll stream [cut_step]
 """
@@ -144,8 +151,9 @@ def dispatchable(link):
 def fire(run, aim_bytes, cut_step, *, frame0=0, log=None, **kw):
     """Step ``run`` through the clip roll and report where the roll entered and where it cut.
 
-    ``run`` is a `from_f0.FreeRun` on the PYTHON path (the native core has no cut -- see the module
-    docstring); it is advanced in place. ``frame0`` is the frame number already on the clock, so
+    ``run`` is a `from_f0.FreeRun` on EITHER engine (the native core carries the cut since session
+    150 -- see the module docstring); it is advanced in place. ``frame0`` is the frame number already
+    on the clock, so
     ``entry_frame``/``cut_frame`` come back in the plan's own numbering. ``log`` collects the emitted
     rows for a delivery splice.
 

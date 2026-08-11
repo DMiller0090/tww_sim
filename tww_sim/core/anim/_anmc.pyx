@@ -2211,6 +2211,8 @@ DEF LS_WAIT_TURN=23
 DEF LS_MOVE_TURN=24
 DEF LS_SLIP=25
 DEF LS_FRONT_ROLL=30
+DEF LS_CUT_A=0x41
+DEF LS_CUT_F=0x42
 DEF LD_FORWARD=0
 DEF LD_BACKWARD=1
 DEF LD_LEFT=2
@@ -2249,7 +2251,22 @@ cdef long long _L_TURN_MAX, _L_TURN_MIN, _L_TURN_SCALE
 cdef double _L_WAIT_TURN_ANIM_RATE
 cdef double _L_SLIP_THRESH, _L_SLIP_ENTRY, _L_SLIP_DEC_SCALE, _L_SLIP_DEC_MAX, _L_SLIP_DEC_MIN
 cdef double _L_SLIP_ANIM_RATE, _L_SLIP_MORF, _L_MT_SLIP_SEED
+# the sword-thrust cut (hio.py CUT_*): the per-type fields are indexed [0]=CUT_F, [1]=CUT_A.
+cdef double _L_CUT_RATE, _L_CUT_START, _L_CUT_END, _L_CUT_PASS, _L_CUT_LAUNCH_MUL
+cdef double _L_CUT_DEC_SCALE, _L_CUT_DEC_MIN
+cdef double _L_CUT_EARLY[2]
+cdef double _L_CUT_LAUNCH_ADD[2]
+cdef double _L_CUT_DEC_MAX[2]
+cdef long long _L_CUT_TURN_SCALE, _L_CUT_TURN_MAX, _L_CUT_TURN_MIN
+# the roll bonk window (hio.py ROLL_BONK_*): read only to REFUSE the unported crash proc.
+cdef long long _L_ROLL_BONK_ANGLE
+cdef double _L_ROLL_BONK_FMIN, _L_ROLL_BONK_FMAX, _L_ROLL_BONK_SPEED
 cdef bint _LAND_CONSTS_READY = False
+
+
+cdef inline int _cut_slot(int cut_type) noexcept nogil:
+    """[0] for CUT_F, [1] for CUT_A -- the C form of hio.py's per-cut-type dicts."""
+    return 1 if cut_type == LS_CUT_A else 0
 
 
 def land_init_consts(c):
@@ -2265,6 +2282,10 @@ def land_init_consts(c):
     global _L_TURN_MAX, _L_TURN_MIN, _L_TURN_SCALE, _L_WAIT_TURN_ANIM_RATE
     global _L_SLIP_THRESH, _L_SLIP_ENTRY, _L_SLIP_DEC_SCALE, _L_SLIP_DEC_MAX, _L_SLIP_DEC_MIN
     global _L_SLIP_ANIM_RATE, _L_SLIP_MORF, _L_MT_SLIP_SEED, _LAND_CONSTS_READY
+    global _L_CUT_RATE, _L_CUT_START, _L_CUT_END, _L_CUT_PASS, _L_CUT_LAUNCH_MUL
+    global _L_CUT_DEC_SCALE, _L_CUT_DEC_MIN
+    global _L_CUT_TURN_SCALE, _L_CUT_TURN_MAX, _L_CUT_TURN_MIN
+    global _L_ROLL_BONK_ANGLE, _L_ROLL_BONK_FMIN, _L_ROLL_BONK_FMAX, _L_ROLL_BONK_SPEED
     _L_MAX_NSPEED = c['MAX_NSPEED']; _L_F14 = c['F14']; _L_F1C = c['F1C']; _L_F20 = c['F20']
     _L_F24 = c['F24']; _L_F0 = c['F0']; _L_F4 = c['F4']; _L_F6 = c['F6']
     _L_ATN_MAX = c['ATN_MAX']; _L_ATN_SPD = c['ATN_SPD']; _L_ATN_ACC = c['ATN_ACC']
@@ -2284,6 +2305,18 @@ def land_init_consts(c):
     _L_SLIP_DEC_SCALE = c['SLIP_DEC_SCALE']; _L_SLIP_DEC_MAX = c['SLIP_DEC_MAX']
     _L_SLIP_DEC_MIN = c['SLIP_DEC_MIN']; _L_SLIP_ANIM_RATE = c['SLIP_ANIM_RATE']
     _L_SLIP_MORF = c['SLIP_MORF']; _L_MT_SLIP_SEED = c['MT_SLIP_SEED']
+    # the cut: scalars, then the two per-type dicts flattened onto [CUT_F, CUT_A] slots.
+    _L_CUT_RATE = c['CUT_RATE']; _L_CUT_START = c['CUT_START']; _L_CUT_END = c['CUT_END']
+    _L_CUT_PASS = c['CUT_PASS']; _L_CUT_LAUNCH_MUL = c['CUT_LAUNCH_MUL']
+    _L_CUT_DEC_SCALE = c['CUT_DEC_SCALE']; _L_CUT_DEC_MIN = c['CUT_DEC_MIN']
+    _L_CUT_TURN_SCALE = c['CUT_TURN_SCALE']; _L_CUT_TURN_MAX = c['CUT_TURN_MAX']
+    _L_CUT_TURN_MIN = c['CUT_TURN_MIN']
+    _L_CUT_EARLY[0] = c['CUT_EARLY'][LS_CUT_F]; _L_CUT_EARLY[1] = c['CUT_EARLY'][LS_CUT_A]
+    _L_CUT_LAUNCH_ADD[0] = c['CUT_LAUNCH_ADD'][LS_CUT_F]
+    _L_CUT_LAUNCH_ADD[1] = c['CUT_LAUNCH_ADD'][LS_CUT_A]
+    _L_CUT_DEC_MAX[0] = c['CUT_DEC_MAX'][LS_CUT_F]; _L_CUT_DEC_MAX[1] = c['CUT_DEC_MAX'][LS_CUT_A]
+    _L_ROLL_BONK_ANGLE = c['ROLL_BONK_ANGLE']; _L_ROLL_BONK_FMIN = c['ROLL_BONK_FMIN']
+    _L_ROLL_BONK_FMAX = c['ROLL_BONK_FMAX']; _L_ROLL_BONK_SPEED = c['ROLL_BONK_SPEED']
     _LAND_CONSTS_READY = True
 
 
@@ -2382,6 +2415,71 @@ cdef double _cstick_posy_c(int csx, int csy) noexcept nogil:
 # it is a distinct subsystem, `include`d rather than imported because `LandCore` runs it INSIDE
 # `_step_courtyard_nogil` and so needs its C state in this translation unit.
 include "_zl1c.pxi"
+# dBgS_Acch::CrrPos (both actors' BG wall pass) -- same reason: `_step_courtyard_nogil` braces Link
+# and Tetra INSIDE the frame, so the collision core has to be nogil C in this translation unit.
+include "_acchc.pxi"
+
+
+cdef class CutAnimData:
+    """The ANM_CUT root-motion tracks: joint 0's three TRANSLATE keyframe tracks for cutf and cuta.
+
+    That joint-0 translate IS the thrust's lunge (`m3700`; posMove reads getAnmTransform(0) and MOVE1
+    is NULL for a setSingleMoveAnime cut, so there is no blend) -- the 23.22 u the roll-stab stacks on
+    top of the carried speedF. Only joint 0 and only translate: nothing else in the cut BCK moves
+    position, and the cut poses no foot chain (`land/procs/cut.py`).
+
+    Built once from `core.anim.j3d_eval.load_anim(_generated/anim/link_anim_cuts.json)`, then IMMUTABLE
+    -- so a `LandCore.clone()` shares it by reference and a `prange` fleet reads it from every thread.
+    Slots follow `_cut_slot`: [0] = CUT_F, [1] = CUT_A."""
+    cdef double* _t[2]
+    cdef int _cnt[2][3]
+    cdef int _off[2][3]
+    cdef int _tt[2][3]
+
+    def __cinit__(self, cutf, cuta):
+        cdef int s, ax, n
+        for s in range(2):
+            self._t[s] = NULL
+        for s in range(2):
+            anm = cutf if s == 0 else cuta
+            td = anm['trans_data']
+            n = len(td)
+            self._t[s] = <double*>malloc(n * sizeof(double))
+            if self._t[s] == NULL:
+                raise MemoryError()
+            for ax in range(n):
+                self._t[s][ax] = td[ax]
+            trk = anm['joints'][0]['t']
+            for ax in range(3):
+                self._cnt[s][ax] = int(trk[ax][0])
+                self._off[s][ax] = int(trk[ax][1])
+                self._tt[s][ax] = int(trk[ax][2])
+
+    def __dealloc__(self):
+        cdef int s
+        for s in range(2):
+            free(self._t[s])
+
+    def m3700_at(self, int cut_type, double frame):
+        """`land.procs.cut._cut_m3700_at` -- the leaf the 0-ULP gate diffs against the Python eval."""
+        cdef double out[3]
+        _cut_m3700_c(self, _cut_slot(cut_type), frame, out)
+        return (out[0], out[1], out[2])
+
+
+cdef void _cut_m3700_c(CutAnimData d, int slot, double frame, double* out) noexcept nogil:
+    """m3700 = the CUT anim's joint-0 root mTranslate at `frame` (J3DAnmTransformKey::calcTransform's
+    translate arm for one joint). Twin of `_CutMixin._cut_m3700_at`."""
+    cdef int ax, cnt
+    for ax in range(3):
+        cnt = d._cnt[slot][ax]
+        if cnt == 0:
+            out[ax] = 0.0
+        elif cnt == 1:
+            out[ax] = f32(d._t[slot][d._off[slot][ax]])
+        else:
+            out[ax] = f32(_keyframe_interp_c(frame, cnt, d._tt[slot][ax], d._t[slot],
+                                             d._off[slot][ax], 0))
 
 
 cdef class LandCore:
@@ -2426,6 +2524,36 @@ cdef class LandCore:
     cdef NeckLookCore _neck
     cdef bint _has_look                     # both wired -> the step generates its own proc-9 eye
     cdef public double _tetra_y             # her world Y (setMtx/setAttention; constant here)
+    # --- the sword-thrust cut (CUT_F/CUT_A): the roll's b_trig arm and the root-translate lunge ---
+    cdef public double cut_frame            # ANM_CUT MOVE0 frame ctrl (starts at CUT_START)
+    cdef long long cut_target               # mProcVar2.m34D4 (the latched diagonal aim)
+    cdef bint _has_cut_target
+    cdef double _cut_m3700[3]               # previous frame's joint-0 root translate
+    cdef double _cut_add_x, _cut_add_z      # THIS frame's rotated root-translate delta
+    cdef public bint sword_drawn            # gates the roll->cut hand-off (seeded)
+    cdef bint _b_trig                       # swordTrigger(): B mItemTrigger RISING EDGE this frame
+    cdef CutAnimData _cutanm                # joint-0 translate tracks (immutable, shared on clone)
+    cdef bint _has_cutanm
+    # --- dBgS_Acch::CrrPos, both actors (session 150): the BG wall pass INSIDE the frame ---
+    cdef WallMesh _lwalls                   # Link's mAcch mesh (NULL/None = no pass)
+    cdef WallMesh _twalls                   # Tetra's mObjAcch mesh
+    cdef bint _has_lwalls, _has_twalls
+    cdef double _lwh[8]                     # Link's wall cylinder heights
+    cdef int _lnh
+    cdef double _lwr, _lgravity             # Link's wall radius + the CrrPos-time speed.y dip
+    cdef double _twh[8]                     # Tetra's (her R 50 / half-H 30 cylinder)
+    cdef int _tnh
+    cdef double _twr
+    cdef public bint wall_hit               # mAcch.ChkWallHit() -- LAST frame's CrrPos, Link
+    cdef public bint line_hit               # LINE_CHECK_HIT (diagnostic; the Python twin's info key)
+    cdef bint _wall_cir_hit[8]              # SetWallCirHit per cylinder
+    cdef long long _wall_angle[8]           # SetWallAngleY per cylinder
+    cdef public bint _roll_m3570            # the roll's grind latch (6838)
+    # Sticky refusals: a case the C step CANNOT model. The nogil frame can only raise a flag; the
+    # GIL-holding caller (`FreeRun._step_native` via `wall_check`) turns it into an exception, so an
+    # unported branch REFUSES instead of silently running the wrong proc.
+    cdef public bint bonk_unmodelled        # the roll bonk fired -> procFrontRollCrash, unported
+    cdef public bint sidle_unmodelled       # the A-press was a SIDLE, not a roll -- unported
 
     @property
     def pe_phase(self):
@@ -2501,6 +2629,29 @@ cdef class LandCore:
         self._neck = None
         self._has_look = False
         self._tetra_y = 0.0
+        # cut state (inert until a roll's b_trig arm dispatches one)
+        self.cut_frame = 0.0
+        self.cut_target = 0
+        self._has_cut_target = False
+        self._cut_m3700[0] = 0.0; self._cut_m3700[1] = 0.0; self._cut_m3700[2] = 0.0
+        self._cut_add_x = 0.0; self._cut_add_z = 0.0
+        self.sword_drawn = False
+        self._b_trig = False
+        self._cutanm = None
+        self._has_cutanm = False
+        # BG wall pass (inert until seed_walls)
+        self._lwalls = None; self._twalls = None
+        self._has_lwalls = False; self._has_twalls = False
+        self._lnh = 0; self._tnh = 0
+        self._lwr = 0.0; self._lgravity = 0.0; self._twr = 0.0
+        self.wall_hit = False
+        self.line_hit = False
+        self._roll_m3570 = False
+        self.bonk_unmodelled = False
+        self.sidle_unmodelled = False
+        for i in range(8):
+            self._lwh[i] = 0.0; self._twh[i] = 0.0
+            self._wall_cir_hit[i] = False; self._wall_angle[i] = 0
         for i in range(6):
             self._cbuf[i] = 128 if i == 0 or i == 1 or i == 4 or i == 5 else 0
 
@@ -2545,6 +2696,27 @@ cdef class LandCore:
         c._neck = self._neck.clone() if self._neck is not None else None
         c._has_look = self._has_look
         c._tetra_y = self._tetra_y
+        # cut state; the keyframe tracks are immutable dev data -> shared by reference
+        c.cut_frame = self.cut_frame; c.cut_target = self.cut_target
+        c._has_cut_target = self._has_cut_target
+        c._cut_m3700[0] = self._cut_m3700[0]; c._cut_m3700[1] = self._cut_m3700[1]
+        c._cut_m3700[2] = self._cut_m3700[2]
+        c._cut_add_x = self._cut_add_x; c._cut_add_z = self._cut_add_z
+        c.sword_drawn = self.sword_drawn; c._b_trig = self._b_trig
+        c._cutanm = self._cutanm; c._has_cutanm = self._has_cutanm
+        # BG wall pass: the meshes are immutable -> shared by reference (the AnimData contract)
+        c._lwalls = self._lwalls; c._twalls = self._twalls
+        c._has_lwalls = self._has_lwalls; c._has_twalls = self._has_twalls
+        c._lnh = self._lnh; c._tnh = self._tnh
+        c._lwr = self._lwr; c._lgravity = self._lgravity; c._twr = self._twr
+        c.wall_hit = self.wall_hit
+        c.line_hit = self.line_hit
+        c._roll_m3570 = self._roll_m3570
+        c.bonk_unmodelled = self.bonk_unmodelled
+        c.sidle_unmodelled = self.sidle_unmodelled
+        for j in range(8):
+            c._lwh[j] = self._lwh[j]; c._twh[j] = self._twh[j]
+            c._wall_cir_hit[j] = self._wall_cir_hit[j]; c._wall_angle[j] = self._wall_angle[j]
         for j in range(6):
             c._cbuf[j] = self._cbuf[j]
         return c
@@ -2851,12 +3023,29 @@ cdef class LandCore:
         self.nspeed = v
         self.facing = self.target
         self.travel = self.facing
+        # m3570 latch (6838): a roll STARTED already wall-hit facing the wall (within mRoll.field_0x4)
+        # disables the mid-roll crash -- it GRINDS instead of bonking. Reads LAST frame's CrrPos, so it
+        # is False-by-default (never wall-hit) on a core with no Link mesh wired -- the pre-port value.
+        self._roll_m3570 = not (self._wall_cir_hit[0]
+                                and _lldist((self.travel + 0x8000) & 0xFFFF, self._wall_angle[0])
+                                <= _L_ROLL_BONK_ANGLE)
         self.state = LS_FRONT_ROLL
         self.roll_frame = 0.0
         self._roll_entered = True
         self._pe._w_enter_single_c(C_ROLLF, _L_ROLL_ENTRY_MORF, 0.0, _L_ROLL_END, _L_ROLL_RATE, True)
 
     cdef void _roll_exit(self, bint l_held) noexcept nogil:
+        """The roll's checkNextMode transition, WITH the b_trig CUT arm (`procs/roll.py::_roll_exit`).
+
+        A buffered sword button + the sword drawn routes to a cut -- the "roll stab": L held -> CUT_A
+        (vertical slash), else CUT_F (forward thrust) -- carrying the roll's full speedF into the
+        cut's first-frame lunge. The aim is `changeCutProc`'s sVar2: the stick target while pushed and
+        unlocked, else shape_angle.y."""
+        cdef long long aim
+        if self._b_trig and self.sword_drawn:
+            aim = self.target if (self.msd > 0.05 and not l_held) else self.facing
+            self._cut_init(LS_CUT_A if l_held else LS_CUT_F, aim)
+            return
         self._check_next_mode(l_held)
         if self.state == LS_MOVE:
             self._pe._w_set_pending_c(_L_MOVE_REENTRY_MORF)
@@ -2870,8 +3059,76 @@ cdef class LandCore:
             if self.msd <= 0.05:
                 self.nspeed = f32(self.nspeed - _L_ROLL_MIN)
             self._roll_exit(l_held)
-        elif self.roll_frame > _L_ROLL_EARLY and self.msd > 0.05:
+        elif (self.roll_frame > _L_ROLL_EARLY
+              and (self.msd > 0.05 or (self._b_trig and self.sword_drawn))):
+            # getFrame()>field_0x10 -> checkNextMode(1) (6866); inert only when neutral AND no action --
+            # a pushed stick (roll-EBS) or a B RISING EDGE (swordTrigger) fires it.
             self._roll_exit(l_held)
+        elif (self.speedF >= _L_ROLL_BONK_SPEED and self._roll_m3570
+              and self.wall_hit and self._wall_cir_hit[0]
+              and _lldist((self.travel + 0x8000) & 0xFFFF, self._wall_angle[0]) <= _L_ROLL_BONK_ANGLE
+              and _L_ROLL_BONK_FMIN <= self.roll_frame <= _L_ROLL_BONK_FMAX):
+            # The roll bonk (6869) -> procFrontRollCrash_init, which this core does NOT model. A nogil
+            # frame cannot raise, so flag it and let `wall_check` refuse: the alternative is running the
+            # roll on through a frame the console spent airborne.
+            self.bonk_unmodelled = True
+
+    # --- the sword-thrust cut (CUT_F 0x42 / CUT_A 0x41), dispatched out of a roll --------------
+    cdef void _cut_init(self, int cut_type, long long aim) noexcept nogil:
+        """procCutF_init / procCutA_init (d_a_player_sword.inc:660/430) -- `_CutMixin._cut_init`.
+
+        setSingleMoveAnime(ANM_CUT*, rate CUT_RATE, start CUT_START); m3700 = cXyz::Zero; m34C2 = 1.
+        mNormalSpeed KEEPS the entry value (the roll's carried speedF) this frame, and current.angle.y
+        (travel) is NOT touched -- the snap to shape_angle.y happens in `_proc_cut` frame 2+."""
+        self.state = cut_type
+        self.cut_frame = _L_CUT_START
+        self._cut_m3700[0] = 0.0; self._cut_m3700[1] = 0.0; self._cut_m3700[2] = 0.0
+        self.cut_target = aim & 0xFFFF
+        self._has_cut_target = True
+        # No foot-engine pose: the cut anim is not a foot-chain walk anim and m3598 stays 0, so
+        # position = the joint-0 root lunge + mNormalSpeed. The toe stream freezes.
+
+    cdef bint _cut_checkpass(self, double frame) noexcept nogil:
+        """J3DFrameCtrl::checkPass, EMode_NONE arm -- `_CutMixin._checkpass_none`. True iff CUT_PASS is
+        crossed by this update; `frame` is the already-advanced frame and next is recomputed here."""
+        cdef double cur = frame
+        cdef double nxt = f32(cur + _L_CUT_RATE)
+        if nxt < _L_CUT_START:
+            nxt = _L_CUT_START
+        if nxt >= _L_CUT_END:
+            nxt = f32(_L_CUT_END - 0.001)
+        if cur <= nxt:
+            return cur <= _L_CUT_PASS and _L_CUT_PASS < nxt
+        return nxt <= _L_CUT_PASS and _L_CUT_PASS < cur
+
+    cdef void _proc_cut(self, bint l_held) noexcept nogil:
+        """One CUT_F/CUT_A frame (`_CutMixin._proc_cut`). Advance the MOVE0 ctrl (+CUT_RATE,
+        EMode_NONE), then: getFrame()>field_0xC -> checkNextMode(1) exit to WAIT; the diagonal-aim
+        shape snap; checkPass(CUT_PASS) -> launch mNormalSpeed off the pre-cut speedF; then the
+        per-frame cLib_addCalc decel. The lunge itself is applied in the position block."""
+        cdef int ct = self.state
+        cdef int slot = _cut_slot(ct)
+        cdef double fc = f32(self.cut_frame + _L_CUT_RATE)
+        cdef double end_clamp = f32(_L_CUT_END - 0.001)
+        if fc < _L_CUT_START:
+            fc = _L_CUT_START
+        if fc >= _L_CUT_END:
+            fc = end_clamp
+        self.cut_frame = fc
+        if fc > _L_CUT_EARLY[slot]:
+            self.state = LS_WAIT
+            self.nspeed = 0.0
+            self._pe._w_set_pending_c(_L_MOVE_REENTRY_MORF)
+            return
+        if self._has_cut_target and self.cut_target != self.facing:
+            self.facing = _clib_addcalc_angles(self.facing, self.cut_target, _L_CUT_TURN_SCALE,
+                                               _L_CUT_TURN_MAX, _L_CUT_TURN_MIN)
+        self.travel = self.facing
+        if self._cut_checkpass(fc):
+            self.nspeed = f32(f32(_c_fabs(self.speedF) * _L_CUT_LAUNCH_MUL)
+                              + _L_CUT_LAUNCH_ADD[slot])
+        self.nspeed = _clib_addcalc(self.nspeed, 0.0, _L_CUT_DEC_SCALE, _L_CUT_DEC_MAX[slot],
+                                    _L_CUT_DEC_MIN)
 
     cdef void _cam_step(self, int acsx, int acsy):
         self._cam_target = _cam_step_target_c(self._cam_target, self._cam_pending_posx, self._cam_scale)
@@ -3191,6 +3448,155 @@ cdef class LandCore:
         """Raise whatever the Python look model would have (the nogil step sets a flag instead)."""
         self._zl1.check()
 
+    @property
+    def cut_target_py(self):
+        """`LandState.cut_target` -- the latched thrust aim, or None before a cut has latched one.
+
+        None rather than 0: the Python field defaults to None and a native run's `LandState` is a
+        field-holder synced from here, so handing it a 0 would read as an aim of due north that no
+        cut ever set."""
+        return int(self.cut_target) if self._has_cut_target else None
+
+    def seed_cut(self, CutAnimData data, bint sword_drawn):
+        """Arm the roll->CUT hand-off (session 150): the ANM_CUT root tracks + `sword_drawn`.
+
+        Without this a mid-roll B is IGNORED by the C step, which is the gap `clip_roll.fire` used to
+        have to step in Python for -- so it is seeded, never defaulted: a core that was not handed the
+        tracks refuses the cut (`_step_courtyard_nogil` flags it) instead of rolling on through it."""
+        self._cutanm = data
+        self._has_cutanm = True
+        self.sword_drawn = sword_drawn
+
+    def seed_walls(self, link_mesh, tetra_mesh, link_wall_h, double link_wall_r, double gravity,
+                   tetra_wall_h, double tetra_wall_r):
+        """Wire `dBgS_Acch::CrrPos` for either actor (session 150) -- the BG wall pass INSIDE the frame.
+
+        ``link_mesh``/``tetra_mesh`` are `WallMesh` objects (None = that actor keeps no pass, which is
+        the herd phase's setting -- see `seeds.make_freerun`); pass the SAME object to every core of a
+        beam, it is immutable and shared. The cylinder geometry comes from the Python models
+        (`land.walls.WALL_H/WALL_R/GRAVITY`, `core.npc_zl1.WALL_H/WALL_R`) rather than being restated
+        here, so one canonical value per constant survives the port."""
+        cdef int i
+        self._lwalls = link_mesh
+        self._twalls = tetra_mesh
+        self._has_lwalls = link_mesh is not None
+        self._has_twalls = tetra_mesh is not None
+        self._lnh = len(link_wall_h)
+        self._tnh = len(tetra_wall_h)
+        if self._lnh > 8 or self._tnh > 8:
+            raise ValueError("at most 8 wall cylinders per actor")
+        for i in range(self._lnh):
+            self._lwh[i] = link_wall_h[i]
+        for i in range(self._tnh):
+            self._twh[i] = tetra_wall_h[i]
+        self._lwr = link_wall_r
+        self._lgravity = gravity
+        self._twr = tetra_wall_r
+
+    @property
+    def walls_link(self):
+        return self._lwalls
+
+    @property
+    def walls_tetra(self):
+        return self._twalls
+
+    @property
+    def wall_cir_hit(self):
+        """SetWallCirHit per Link cylinder, from the LAST frame's CrrPos (what the procs read)."""
+        return tuple(bool(self._wall_cir_hit[i]) for i in range(self._lnh if self._lnh else 3))
+
+    @property
+    def wall_angle(self):
+        """SetWallAngleY per Link cylinder (the twin of `LandState.wall_angle`)."""
+        return tuple(int(self._wall_angle[i]) for i in range(self._lnh if self._lnh else 3))
+
+    def wall_check(self):
+        """Raise whatever the nogil frame could only FLAG -- call once per step, under the GIL.
+
+        The C step must never silently run a branch it does not model, and it cannot raise from
+        `nogil`, so `_step_courtyard_nogil` sets a sticky flag and this converts it. Both cases are
+        Link-wall consequences that only exist once his mesh is wired, which is why they arrived with
+        it rather than before."""
+        if self.bonk_unmodelled:
+            raise RuntimeError(
+                "the roll BONKED (mid-roll head-on wall hit inside the crash window): "
+                "procFrontRollCrash is not ported to LandCore, so the native step cannot carry this "
+                "frame. Step this roll on the Python path (LandState models the crash).")
+        if self.sidle_unmodelled:
+            raise RuntimeError(
+                "the A press dispatched a SIDLE, not a roll (setDoStatus SIDLE preempts ATTACK at a "
+                "head-on wall): the sidle proc is not modelled on either path, so the native step "
+                "refuses rather than rolling. Same verdict as LandState.sidle_blocked.")
+
+    cdef void _link_wall_pass(self, double old_x, double old_z) noexcept nogil:
+        """Link's `mAcch.CrrPos` at the game's point in the frame (`land.walls.wall_pass`, grounded
+        default): old = the frame-START position (old.pos.y is the SNAPPED ground height), new = the
+        integrated position with the mid-frame gravity dip, speed.y = that same gravity. Writes back
+        XZ + the per-cylinder wall state the procs read NEXT frame."""
+        cdef double px = self.pos_x, pz = self.pos_z
+        cdef double y_old = self.pos_y
+        cdef double py = fadds(y_old, self._lgravity)
+        self.wall_hit = _ac_crr_pos(old_x, y_old, old_z, &px, &py, &pz, self._lgravity,
+                                    self._lwalls._vtx, self._lwalls._pla,
+                                    self._lwalls._sp68, self._lwalls._sp6c,
+                                    self._lwalls._cand, self._lwalls._n,
+                                    self._lwh, self._lnh, self._lwr,
+                                    self._wall_cir_hit, self._wall_angle, &self.line_hit)
+        self.pos_x = px
+        self.pos_z = pz
+
+    cdef void _tetra_wall_pass(self, double old_x, double old_z) noexcept nogil:
+        """Tetra's `mObjAcch.CrrPos` where `Zl1FollowState.step` runs it -- after posMove consumes the
+        recoil, speed_y 0 on the flat floor (a gravity dip mis-ejects a corrected XZ by 1 ULP). Twin of
+        the `FreeRun.step` walls_tetra block; her hit flags are not read by anything, so no cir out."""
+        cdef double px = self._tetra_x, pz = self._tetra_z
+        cdef double py = self._tetra_y
+        _ac_crr_pos(old_x, self._tetra_y, old_z, &px, &py, &pz, 0.0,
+                    self._twalls._vtx, self._twalls._pla,
+                    self._twalls._sp68, self._twalls._sp6c,
+                    self._twalls._cand, self._twalls._n,
+                    self._twh, self._tnh, self._twr, NULL, NULL, NULL)
+        self._tetra_x = f32(px)
+        self._tetra_z = f32(pz)
+
+    cdef bint _sidle_blocks_roll(self) noexcept nogil:
+        """`land.walls.sidle_blocks_roll`: an A press at a head-on wall is setDoStatus SIDLE (2241),
+        which preempts the ATTACK/roll in the doTrigger chain (4188). ChkWallHit (LAST frame's CrrPos),
+        a 25+wallR line check along FACING at each cylinder height hitting a steep wall (|n.y| <= 0.05),
+        and facing within 0x2000 of head-on."""
+        if not self.wall_hit:
+            return False
+        cdef double sin_f = jma_sin(self.facing)
+        cdef double cos_f = jma_cos(self.facing)
+        cdef double reach = fadds(25.0, self._lwr)
+        cdef int hi, ci, ti, hit_ti
+        cdef double sx, sy, sz, cex, cey, cez, h
+        cdef double dst[3]
+        cdef double nx, ny, nz
+        cdef long long wall_ang
+        for hi in range(self._lnh - 1, -1, -1):       # the decomp scans i = 2..0
+            h = self._lwh[hi]
+            sx = self.pos_x; sy = fadds(self.pos_y, h); sz = self.pos_z
+            cex = fadds(sx, fmuls(sin_f, reach)); cey = sy
+            cez = fadds(sz, fmuls(cos_f, reach))
+            hit_ti = -1
+            for ci in range(self._lwalls._n):
+                ti = self._lwalls._cand[ci]
+                if _ac_cross_lin_tri(sx, sy, sz, cex, cey, cez,
+                                     self._lwalls._vtx + ti * 9, self._lwalls._pla + ti * 4, dst):
+                    cex = dst[0]; cey = dst[1]; cez = dst[2]
+                    hit_ti = ti
+            if hit_ti >= 0:
+                nx = self._lwalls._pla[hit_ti * 4 + 0]
+                ny = self._lwalls._pla[hit_ti * 4 + 1]
+                nz = self._lwalls._pla[hit_ti * 4 + 2]
+                if _c_fabs(ny) > 0.05:
+                    return False
+                wall_ang = _cm_atan2s_c(nx, nz)
+                return _lldist(wall_ang, (self.facing + 0x8000) & 0xFFFF) <= 0x2000
+        return False
+
     def pre_seed_courtyard(self, int sx, int sy, int buttons, int triggerL):
         """Seed the delay-1 controller buffer (the input the FIRST step_courtyard acts on) --
         FreeRun.pre_seed_input at input_delay=1."""
@@ -3319,6 +3725,10 @@ cdef class LandCore:
 
         Thin GIL wrapper over `_step_courtyard_nogil` (the whole coupled frame runs in C with the GIL
         released; the fleet driver `prange`s that core across the search frontier -- Stage 4)."""
+        if self._has_twalls and native_push == 0:
+            raise ValueError("a wired Tetra mesh needs native_push=1: in the injected mode her "
+                             "position comes from the caller each frame, so her CrrPos would brace a "
+                             "point the next call overwrites")
         return self._step_courtyard_nogil(sx, sy, buttons, triggerL, csangle, tetra_x, tetra_z,
                                           eye_x, eye_z, has_eye, pend_link_x, pend_link_z,
                                           speedf_inject, has_speedf_inject, native_push)
@@ -3355,6 +3765,10 @@ cdef class LandCore:
         cdef int entry_state = self.state
         cdef bint l_held = ((abtn & 0x40) != 0) or (atrig >= 200)
         cdef bint a_pressed = (abtn & 0x100) != 0
+        # swordTrigger() (checkNextActionFromButton 4203): the B mItemTrigger RISING EDGE -- a HELD B
+        # is not an edge. Twin of state.py's `_b_trig`; it is what dispatches the roll's CUT.
+        self._b_trig = ((abtn & ~self._abtn_prev) & 0x200) != 0
+        self._abtn_prev = abtn
         cdef bint moving = self.msd > 0.05
         # attention machine (delay-1: l_atn == l_held); cone gate on the pre-dispatch pos/facing.
         # target_exists=1: the courtyard step always has a driven Tetra, and she never despawns.
@@ -3368,8 +3782,14 @@ cdef class LandCore:
                               or self.state == LS_MOVE or self.state == LS_ATN_MOVE)
         if (a_pressed and grounded and not l_held and self.msd > _L_ATTACK_MSD_MIN
                 and (self.state == LS_MOVE or self.state == LS_ATN_MOVE)):
-            self.facing = self.target
-            self._roll_init()
+            # With Link's mesh wired the press can be a SIDLE instead (setDoStatus SIDLE preempts
+            # ATTACK at a head-on wall) -- unmodelled on BOTH paths, so flag and refuse rather than
+            # roll. Twin of state.py's `sidle_blocked`, which rejects the input stream the same way.
+            if self._has_lwalls and self._sidle_blocks_roll():
+                self.sidle_unmodelled = True
+            else:
+                self.facing = self.target
+                self._roll_init()
         cdef bint locked_actor = self._atn_locked()
         self._court_locked = locked_actor       # steers the shared _check_next_mode / _update_atn_direction
         cdef int proc = self.state
@@ -3400,6 +3820,8 @@ cdef class LandCore:
             self._proc_slip(l_held)
         elif proc == LS_FRONT_ROLL:
             self._proc_roll(l_held)
+        elif proc == LS_CUT_F or proc == LS_CUT_A:
+            self._proc_cut(l_held)          # sword-thrust lunge; exits to WAIT past field_0xC
 
         cdef int prev_dir = self.direction
         if (self.state == LS_ATN_MOVE or self.state == LS_ATN_ACTOR_MOVE
@@ -3420,7 +3842,11 @@ cdef class LandCore:
         cdef long long r3, r3a
         cdef int r27
         cdef bint entered, morf_on, rest_hp
+        cdef double m3700[3]
+        cdef double sp5c[3]
+        cdef double cs, cc
         cdef int st_now = self.state
+        self._cut_add_x = 0.0; self._cut_add_z = 0.0
         if st_now == LS_FRONT_ROLL or st_now == LS_SLIP:
             self._pe._w_step_single_c(self.nspeed, self.msd)
             na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
@@ -3437,6 +3863,25 @@ cdef class LandCore:
                                        _L_MOVE_REENTRY_MORF if morf_on else 0.0, morf_on)
             na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
             sf_native = 0.0 if na < 0.05 else self.nspeed
+        elif st_now == LS_CUT_F or st_now == LS_CUT_A:
+            # Sword-thrust lunge: speedF (== nspeed, m3598 == 0, NO foot pose -- the toe stream
+            # freezes) + the posMove m34C2==1 root-translate delta rotated by shape_angle.y. On the
+            # entry frame m3700_prev == 0, so the whole root translate stacks (the ~23.22 u).
+            na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
+            sf_native = 0.0 if na < 0.05 else self.nspeed
+            _cut_m3700_c(self._cutanm, _cut_slot(st_now), self.cut_frame, m3700)
+            sp5c[0] = fsubs(m3700[0], self._cut_m3700[0])
+            sp5c[1] = fsubs(m3700[1], self._cut_m3700[1])
+            sp5c[2] = fsubs(m3700[2], self._cut_m3700[2])
+            self._cut_m3700[0] = m3700[0]; self._cut_m3700[1] = m3700[1]
+            self._cut_m3700[2] = m3700[2]
+            cs = jma_sin(self.facing); cc = jma_cos(self.facing)
+            self._cut_add_x = fadds(fmuls(sp5c[2], cs), fmuls(sp5c[0], cc))
+            self._cut_add_z = fsubs(fmuls(sp5c[2], cc), fmuls(sp5c[0], cs))
+        elif proc == LS_CUT_F or proc == LS_CUT_A:
+            # The cut EXITED to WAIT this frame (checkNextMode(1) set mNormalSpeed 0) -> position
+            # freezes, and the WAIT idle below must NOT pose (this arm precedes it, as in state.py).
+            sf_native = 0.0
         elif st_now == LS_ATN_MOVE:
             f31 = f32(_c_fabs(self.nspeed) / self.max_nspeed)
             morf_on = (proc != LS_ATN_MOVE) or (self.direction != prev_dir)
@@ -3483,17 +3928,31 @@ cdef class LandCore:
 
         # --- world motion (speedF along travel) then the posMove CC recoil consume ---
         cdef double d = self.speedF
+        cdef double px0 = self.pos_x, pz0 = self.pos_z      # frame-START pos = CrrPos's `old`
         self.pos_x = f32(self.pos_x + f32(d * jma_sin(self.travel)))
         self.pos_z = f32(self.pos_z + f32(d * jma_cos(self.travel)))
         # posMove CC recoil (2558): consume THIS frame's Link recoil. self._pend_link is the injected
         # value (native_push==0) or the pair computed at the end of the previous native frame.
         self.pos_x = f32(self.pos_x + self._pend_link_x)
         self.pos_z = f32(self.pos_z + self._pend_link_z)
+        # The sword-cut root-translate lunge (posMove m34C2==1) on top of the foot term -- zero except
+        # on a CUT frame, so the single-frame move is then foot + lunge (the ~49.22 u roll-stab).
+        if st_now == LS_CUT_F or st_now == LS_CUT_A:
+            self.pos_x = f32(self.pos_x + self._cut_add_x)
+            self.pos_z = f32(self.pos_z + self._cut_add_z)
+        # mAcch.CrrPos: after integration, before the deferred draw (the game's order).
+        if self._has_lwalls:
+            self._link_wall_pass(px0, pz0)
         # Native coupling: move the tracked Tetra by THIS frame's push (matched to the recoil just
         # consumed), rounding each axis to f32 (the plow amplifies any f64 residue -- README s29).
         if native_push != 0:
             self._tetra_x = f32(self._tetra_x + self._pend_tetra_x)
             self._tetra_z = f32(self._tetra_z + self._pend_tetra_z)
+            # Her own mObjAcch.CrrPos, where Zl1FollowState.step runs it: a WEDGED Tetra BRACES (her
+            # CC recoil is cancelled by the wall) instead of being plowed through it -- which is the
+            # whole mechanic the clip is built on. Without this she went 53 u THROUGH the back wall.
+            if self._has_twalls:
+                self._tetra_wall_pass(tetra_pre_x, tetra_pre_z)
         # end-of-frame: the draw lean (pre-update m351C), the setMoveSlantAngle update, m34de/m34ea.
         self._draw_lean_c = <double>(_s16c(<long long>self.m351C) >> 1)
         # The model is DRAWN here -- post-posMove base, no lean on a proc *_init frame (commonProcInit
@@ -3601,6 +4060,9 @@ cdef class CourtyardFleet:
         for i in range(self._n):
             if not isinstance(self._pylist[i], LandCore):
                 raise TypeError("CourtyardFleet requires LandCore instances")
+            if (<LandCore>self._pylist[i])._has_twalls and native_push == 0:
+                raise ValueError("a wired Tetra mesh needs native_push=1 (see "
+                                 "LandCore.step_courtyard)")
             self._cores[i] = <void*>(<LandCore>self._pylist[i])
 
     def __dealloc__(self):

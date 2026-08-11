@@ -92,20 +92,15 @@ def wall_for_terminal(run):
     Returns ``run`` so it can be chained, and sets ``walls_modelled`` -- the flag
     `objective.frame_ok` reads to decide which actors a guard still has to refuse.
 
-    **Refuses a native run**, the same way `from_f0.FreeRun.__init__` already refuses
-    ``walls_tetra`` with ``native_step``: `LandCore.step_courtyard` has no BG pass, so assigning the
-    mesh to a native run is a silent no-op (measured s149 -- native+walls is bit-identical to
-    native+unwalled, she passes straight through). The constructor's guard is bypassed by assigning
-    after the fact, which is exactly how s149's probes got a Tetra that looked walled and was not, so
-    the check is repeated here rather than trusted upstream."""
-    if getattr(run, 'native_step', False):
-        raise ValueError(
-            "wall_for_terminal: LandCore.step_courtyard has no BG pass, so a native run cannot "
-            "brace either actor -- assigning the mesh would be a silent no-op. Step the final roll "
-            "+ thrust on the Python path: make_freerun(env, native=False).")
+    **Native runs are wired too** (session 150): `LandCore.step_courtyard` now runs BOTH actors'
+    `dBgS_Acch::CrrPos` in C, so the terminal phase no longer has to be stepped in Python. It goes
+    through `FreeRun.wire_walls` rather than assigning the attributes here, because assigning them is
+    a silent no-op on a native run -- the C core has to be handed the mesh itself, and that is exactly
+    how s149's probes got a Tetra that looked walled and was not. What the native step still cannot
+    carry it REFUSES: a mid-roll bonk (procFrontRollCrash) and a sidle-preempted A press each raise out
+    of `LandCore.wall_check`, rather than running the wrong proc."""
     mesh = courtyard_mesh()
-    run.link._walls = mesh
-    run.walls_tetra = mesh
+    run.wire_walls(link=mesh, tetra=mesh)
     run.walls_modelled = True
     return run
 
@@ -144,9 +139,9 @@ def make_freerun(env, tetra_at=None, native=False, walls=False):
     Use `wall_for_terminal` at the phase boundary rather than threading this through a herd search.
     Wiring it is INERT on every existing 0-ULP gate -- over the whole 45-frame DTM window both actors
     stay 331-337 u from geometry, so the pass is a strict no-op there and walled == unwalled
-    bit-for-bit (gated). **The native core has NO BG pass** (`LandCore.step_courtyard` ignores both
-    meshes -- measured s149): a native run reports ``walls_modelled False`` and warns rather than
-    accepting the argument silently, so the terminal phase must be stepped on the Python path."""
+    bit-for-bit (gated). Session 150 ported the pass into `LandCore.step_courtyard`, so ``walls`` now
+    composes with ``native`` and the terminal phase runs on the C step at ~13x the Python one
+    (`tests/test_courtyard_walls_native.py` gates native == Python 0-ULP frame by frame)."""
     from harness.tetrapush.from_f0 import FreeRun
     from tww_sim.core.camera.land_cam import LandCamera, seed_from_block
     from tww_sim.core.npc_zl1_look import Zl1Look

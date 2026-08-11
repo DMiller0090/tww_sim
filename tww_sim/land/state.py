@@ -750,7 +750,14 @@ _LAND_CONSTS = {n: getattr(LandState, n) for n in (
     'MOVE_REENTRY_MORF', 'ROLL_EARLY', 'ATTACK_MSD_MIN',
     'TURN_MAX', 'TURN_MIN', 'TURN_SCALE', 'WAIT_TURN_ANIM_RATE',
     'SLIP_THRESH', 'SLIP_ENTRY', 'SLIP_DEC_SCALE', 'SLIP_DEC_MAX', 'SLIP_DEC_MIN',
-    'SLIP_ANIM_RATE', 'SLIP_MORF', 'MT_SLIP_SEED')}
+    'SLIP_ANIM_RATE', 'SLIP_MORF', 'MT_SLIP_SEED',
+    # the sword-thrust cut (the roll-stab): the per-type CUT_EARLY/CUT_LAUNCH_ADD/CUT_DEC_MAX stay
+    # dicts keyed by CUT_F/CUT_A and land_init_consts flattens them onto its two C slots.
+    'CUT_RATE', 'CUT_START', 'CUT_END', 'CUT_PASS', 'CUT_LAUNCH_MUL', 'CUT_DEC_SCALE',
+    'CUT_DEC_MIN', 'CUT_EARLY', 'CUT_LAUNCH_ADD', 'CUT_DEC_MAX',
+    'CUT_TURN_SCALE', 'CUT_TURN_MAX', 'CUT_TURN_MIN',
+    # the roll bonk window -- the C step reads it only to REFUSE the unported crash proc.
+    'ROLL_BONK_ANGLE', 'ROLL_BONK_FMIN', 'ROLL_BONK_FMAX', 'ROLL_BONK_SPEED')}
 
 
 def run_walk(sticks, csangle=0, **seed):

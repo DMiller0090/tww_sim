@@ -187,8 +187,7 @@ def _fresh_run():
     from harness.tetrapush import seeds as SD
     env = SD.load_env()
     run = SD.make_freerun(env)
-    run.link._walls = TA.WALLS
-    run.walls_tetra = TA.WALLS
+    run.wire_walls(link=TA.WALLS, tetra=TA.WALLS)
     run.pre_seed_input(SD.dtm_input_at(env)(0))
     return run
 

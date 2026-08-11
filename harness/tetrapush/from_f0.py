@@ -74,6 +74,38 @@ from harness.tetrapush.tetra_plow import LINK_CO_R, TETRA_CO_R, _CO_H
 # first `step_courtyard` or the s16 `diff/scale` SIGFPEs (PROGRESS.md Stage-1 trap 2).
 _NATIVE_CONSTS_ARMED = [False]
 
+# The C `WallMesh` / `CutAnimData`, built once per process and shared by every core of a beam. Keyed
+# by id() with a STRONG ref to the key, so a GC cannot reuse the id (`j3d_eval.calc_transform`).
+_WALL_MESH_CACHE = {}
+_CUT_ANIM_CORE = [None]
+
+#: `wire_walls` sentinel: "leave this actor's mesh alone" (None means "clear it", a real setting).
+_KEEP = object()
+
+
+def _wall_mesh(tris):
+    """The native `WallMesh` for an ordered Python trilist (None -> None)."""
+    if tris is None:
+        return None
+    from tww_sim.core.anim import _anmc as N
+    key = id(tris)
+    hit = _WALL_MESH_CACHE.get(key)
+    if hit is not None and hit[0] is tris:
+        return hit[1]
+    mesh = N.WallMesh(tris)
+    _WALL_MESH_CACHE[key] = (tris, mesh)
+    return mesh
+
+
+def _cut_anim_core():
+    """The native `CutAnimData` (cutf/cuta joint-0 translate tracks), built once per process."""
+    if _CUT_ANIM_CORE[0] is None:
+        from tww_sim.core.anim import _anmc as N
+        from tww_sim.land.procs.cut import _load_cut_anims
+        anms = _load_cut_anims()
+        _CUT_ANIM_CORE[0] = N.CutAnimData(anms['cutf'], anms['cuta'])
+    return _CUT_ANIM_CORE[0]
+
 
 def _arm_look_consts(N):
     """Hand the C look pair its tuning values FROM the Python models (session 128).
@@ -368,7 +400,9 @@ class FreeRun:
     applies). None = the bare XZ plow point, which is faithful only while she is clear of the
     geometry: it is what drove her 53 u THROUGH the courtyard back wall on the clip roll, where
     the console braces her at the plane + her radius (session 86). Link's own wall pass is the
-    plain `link._walls` attribute; set both to run the composite in one walled engine."""
+    plain `link._walls` attribute; set both to run the composite in one walled engine, or call
+    `wire_walls` (which is what `seeds.wall_for_terminal` does) so a NATIVE run gets the meshes
+    handed to its C core as well."""
 
     def __init__(self, seed_row, *, seed_nspeed=None, seed_old_pose=None, computed_pose=True,
                  camera=None, zl1=None, neck=None, seed_push=None, native_step=False,
@@ -425,9 +459,6 @@ class FreeRun:
         if self.native_step:
             if not self.computed_pose:
                 raise ValueError("native_step needs computed_pose (the fused native pose FK)")
-            if walls_tetra is not None:
-                raise ValueError("native_step has no Tetra BG pass -- the C engine tracks her as a "
-                                 "bare plow point; run the Python path for a walled Tetra")
             if self._native_look and (zl1 is None or neck is None):
                 raise ValueError("native_look needs BOTH look models to seed from (zl1= and neck=)")
             self._core = self._build_core()
@@ -505,6 +536,10 @@ class FreeRun:
                             self.pend_link[0], self.pend_link[1],
                             self.pend_tetra[0], self.pend_tetra[1])
         core.low_life = link.low_life        # checkRestHPAnime's seeded half (wait-stop-pose.md)
+        # The roll's b_trig CUT arm, seeded unconditionally: a mid-roll B is a real input, and a core
+        # that could not answer it is the silent no-op this replaced (see the branch-skipped KB page).
+        core.seed_cut(_cut_anim_core(), link.sword_drawn)
+        self._seed_core_walls(core)
         if self._native_look:
             # the look pair moves INTO the C frame here; `zl1`/`neck` are the SEED from now on and
             # the live state is the core's (knowledge/model/porting-the-look-pair.md)
@@ -513,6 +548,49 @@ class FreeRun:
             data = N.zl1_anim_data(anms, CHAIN, ANM_NAME[ANM_WAIT03], ANM_NAME[ANM_LOOK])
             core.seed_look(data, self.zl1, self.neck, self._head_mtx, self.ty)
         return core
+
+    # A PROPERTY, so assigning it re-seeds the C core: a plain attribute is a silent no-op on a native
+    # run (the C step braces with the mesh it was HANDED). Pre-`_core` assignment is fine.
+    @property
+    def walls_tetra(self):
+        return self.__walls_tetra
+
+    @walls_tetra.setter
+    def walls_tetra(self, mesh):
+        self.__walls_tetra = mesh
+        if getattr(self, '_core', None) is not None:
+            self._seed_core_walls(self._core)
+
+    def _seed_core_walls(self, core):
+        """Hand the C core whichever `dBgS_Acch::CrrPos` meshes this run carries (session 150).
+
+        Both actors' cylinder geometry is read out of the PYTHON models here rather than declared in
+        the .pxi -- one canonical value per constant, so moving `land.walls.WALL_H` cannot leave a
+        stale copy compiled into C behind it (the same rule `_arm_look_consts` follows). The trilists
+        are recorded so `_step_native` can refuse a run whose Python meshes and C core have drifted
+        apart."""
+        from tww_sim.core.npc_zl1 import WALL_H as ZWH, WALL_R as ZWR
+        from tww_sim.land.walls import WALL_H as LWH, WALL_R as LWR, GRAVITY as LGRAV
+        lw, tw = self.link._walls, self.walls_tetra
+        core.seed_walls(_wall_mesh(lw), _wall_mesh(tw), LWH, LWR, LGRAV, ZWH, ZWR)
+        self._core_walls = (lw, tw)
+
+    def wire_walls(self, link=_KEEP, tetra=_KEEP):
+        """**Turn the BG wall pass on (or off) for this run** -- both actors, on either engine.
+
+        The phase boundary's one setter (`seeds.wall_for_terminal` calls it): assigning
+        ``run.link._walls`` by hand is enough on the Python path but is a SILENT NO-OP on a native one,
+        because there the frame is stepped by a `LandCore` that has to be handed the mesh itself. That
+        is exactly how s149's probes got a Tetra that looked walled and was not, so the wiring lives
+        here and both paths go through it. Omit an argument to leave that actor alone; pass None to
+        clear it (which is a real setting -- the herd phase runs Tetra unwalled by design)."""
+        if link is not _KEEP:
+            self.link._walls = link
+        if tetra is not _KEEP:
+            self.walls_tetra = tetra
+        if self._core is not None:
+            self._seed_core_walls(self._core)
+        return self
 
     def clone(self):
         """A deep copy for the planner beam search: branch the coupled state without re-running the
@@ -539,6 +617,7 @@ class FreeRun:
         c.computed_pose = self.computed_pose
         c.tx, c.tz, c.ty = self.tx, self.tz, self.ty
         c.walls_tetra = self.walls_tetra          # immutable mesh, shared by reference
+        c._core_walls = getattr(self, '_core_walls', (None, None))
         c.camera = self.camera.clone() if self.camera is not None else None
         c._native_look = self._native_look        # before any look property is read or written
         c.zl1 = (self.zl1 if (self.zl1 is None or self._native_look) else self.zl1.clone())
@@ -871,6 +950,12 @@ class FreeRun:
             btn = int(t[2]) if len(t) > 2 else 0
             trg = int(t[3]) if len(t) > 3 else 0
         core = self._core
+        # `link._walls` is a LandState attribute this class cannot intercept, so a mesh assigned after
+        # the core was seeded would never reach the C step -- caught here rather than carried.
+        if (self.link._walls, self.walls_tetra) != self._core_walls:
+            raise ValueError(
+                "this run's wall meshes no longer match the ones its LandCore was seeded with -- "
+                "assigning `link._walls` does not reach the C step. Use FreeRun.wire_walls().")
         if self.zl1 is not None:
             if eye is not None:
                 raise ValueError("eye injection and a wired zl1 look model are mutually exclusive")
@@ -892,6 +977,9 @@ class FreeRun:
             tetra_pre = (self.tx, self.ty, self.tz)
         sf = core.step_courtyard(sx, sy, btn, trg, int(self.csangle) & 0xFFFF,
                                  0.0, 0.0, ex, ez, he, 0.0, 0.0, 0.0, 0, 1)   # native_push=1
+        # A nogil frame can only FLAG a branch it cannot model; the flag becomes an exception here,
+        # before anything is synced, so a refused frame leaks no half-computed state.
+        core.wall_check()
         link = self.link
         link.pos_x = core.pos_x; link.pos_z = core.pos_z
         link.facing = core.facing; link.travel = core.travel
@@ -901,6 +989,14 @@ class FreeRun:
         # (knowledge/strategy/the-lean-is-the-rolls-own-dispatch.md).
         link.m351C = int(core.m351C)
         link._draw_lean = int(core._draw_lean_c)
+        # The cut + the wall pass are state the procs read NEXT frame, so they sync like the rest.
+        link.cut_frame = core.cut_frame
+        link.cut_target = core.cut_target_py
+        link._roll_m3570 = bool(core._roll_m3570)
+        link.wall_hit = bool(core.wall_hit)
+        link.line_hit = bool(core.line_hit)
+        link.wall_cir_hit = core.wall_cir_hit
+        link.wall_angle = core.wall_angle
         self.tx = core._tetra_x; self.tz = core._tetra_z
         self.pend_link = (core._pend_link_x, core._pend_link_z)
         self.pend_tetra = (core._pend_tetra_x, core._pend_tetra_z)

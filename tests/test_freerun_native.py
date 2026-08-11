@@ -96,6 +96,14 @@ def test_freerun_native_matches_python(env, inject_eye):
             # (knowledge/strategy/the-lean-is-the-rolls-own-dispatch.md).
             ('m351C', nt.link.m351C, py.link.m351C),
             ('draw_lean', nt.link._draw_lean, py.link._draw_lean),
+            # The cut + wall ports write these. Both are INERT over this window, which is the point:
+            # listed, a port that leaks into the reference window is caught.
+            ('cut_frame', _bits(nt.link.cut_frame), _bits(py.link.cut_frame)),
+            ('cut_target', nt.link.cut_target, py.link.cut_target),
+            ('wall_hit', nt.link.wall_hit, py.link.wall_hit),
+            ('line_hit', nt.link.line_hit, py.link.line_hit),
+            ('wall_cir_hit', tuple(nt.link.wall_cir_hit), tuple(py.link.wall_cir_hit)),
+            ('wall_angle', tuple(nt.link.wall_angle), tuple(py.link.wall_angle)),
         )
         for name, a, b in checks:
             if a != b:

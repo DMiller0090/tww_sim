@@ -108,12 +108,12 @@ at-cap cloud. Wired, she pins at **z −940.25561523** - the braced value the co
 0.13..1.96 u/frame against 9.48..7.00; turning the pass on is bit-identical until the frame the roll
 first wedges her, which is what licenses the split.
 
-**And the NATIVE step has no BG pass at all**: `LandCore.step_courtyard` walks her through the wall
-exactly like the unwalled Python path, so `wall_for_terminal` refuses a native run rather than
-assigning the mesh silently (assigning it after construction bypasses `FreeRun.__init__`'s own guard,
-which is how a probe gets a Tetra that looks walled and is not). The terminal is therefore Python-only,
-at **717 clone+steps/s against 9406** - which is why porting her `CrrPos` into the native step is what
-would make a walled search affordable.
+**The NATIVE step runs her `CrrPos` too** (session 150): `LandCore.step_courtyard` brackets both
+actors in C, 0-ULP against the Python pass, so the terminal phase is no longer Python-only - a walled
+clone+step goes **717 -> 8215/s**. The mesh has to be handed to the C core, not assigned onto the
+Python objects, which is what `FreeRun.wire_walls` is for and what `seeds.wall_for_terminal` calls; a
+run whose meshes and core have drifted apart is refused rather than stepped. See
+[the branch a fast engine skips](../model/the-branch-a-fast-engine-skips.md).
 
 ## Lock-on / talk / speak region (planner AVOID)
 

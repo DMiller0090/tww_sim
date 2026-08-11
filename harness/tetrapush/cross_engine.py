@@ -116,8 +116,9 @@ def composite_rollout(log, env=None, walls_tetra=True):
     the missing wall was worth."""
     env = env if env is not None else SD.load_env()
     run = SD.make_freerun(env)
-    run.link._walls = TA.WALLS
-    run.walls_tetra = TA.WALLS if walls_tetra else None
+    # through `wire_walls`, never by attribute: on a native run a bare assignment never reaches the
+    # C step (see FreeRun.wire_walls), and this rollout should stay correct if it is ever switched.
+    run.wire_walls(link=TA.WALLS, tetra=TA.WALLS if walls_tetra else None)
     run.pre_seed_input(SD.dtm_input_at(env)(0))
     rows = []
     with warnings.catch_warnings():

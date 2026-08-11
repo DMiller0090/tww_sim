@@ -3,8 +3,10 @@
 **Answers:** What is the roll stab / the 49.22 single-frame lunge? Where does the 49.22 come from
 (CUT_F vs CUT_A)? Can the thrust be aimed (diagonal thrust), and over what range? How is it modeled?
 **Status:** validated live **bit-exact (0 ULP)** on GZLJ01 (savestate 7): the in-line cut 2026-07-06,
-the **diagonal (aimed) thrust** 2026-07-07. Modeled on the **Python path only**
-(`LandState(native=False, sword_drawn=True)`); the cut is not yet in the native Cython `LandCore`.
+the **diagonal (aimed) thrust** 2026-07-07. Modeled on **both engines**: the Python
+`LandState(native=False, sword_drawn=True)` procs and, since session 150, the native
+`LandCore.step_courtyard` (0-ULP against them - [the branch a fast engine
+skips](../model/the-branch-a-fast-engine-skips.md)).
 **Source:** decomp `d_a_player_main.cpp:2488` (`posMove` `m34C2==1`) + `d_a_player_sword.inc:690`
 (`procCutF`/`procCutA`) + `:404` (`changeCutProc`/`getCutDirection`); live captures. Constants:
 [reference/constants.md#land-sword-cut-roll-stab](../reference/constants.md#land-sword-cut-roll-stab).
@@ -80,8 +82,10 @@ deliberately NOT parsed into the sim (no benefit; would be dead weight).
 
 ## Simulation
 
-[`tww_sim.land`](../../tww_sim/land/land.py) `CUT_F`/`CUT_A`, **Python path only**,
-`LandState(native=False, sword_drawn=True)`. The roll→cut trigger lives in `_roll_exit`: a buffered
+[`tww_sim.land`](../../tww_sim/land/land.py) `CUT_F`/`CUT_A`, `LandState(native=False,
+sword_drawn=True)` - and the courtyard's C step carries the same arm (`_anmc` `LandCore._cut_init` /
+`_proc_cut` / `CutAnimData`, `tests/test_cut_native.py`), so `clip_roll.fire` takes either engine.
+The roll→cut trigger lives in `_roll_exit`: a buffered
 sword button (B) + `sword_drawn` at the roll's early-exit (`getFrame() > 17`) routes to the cut (L held
 → CUT_A) instead of MOVE, carrying the roll's full `speedF`. The whole trajectory (the 49.22 lunge
 through the decel tail to the WAIT idle frame) is **bit-exact end to end** (`tests/test_land.py::
