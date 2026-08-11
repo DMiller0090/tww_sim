@@ -49,6 +49,7 @@ configures and validates the unit.
     python -m harness.tetrapush.overnight item <id|unit> [walk=N] [seconds=S]
     python -m harness.tetrapush.overnight run [workers=11] [hours=7] [id=<run>] [resume=1]
                                               [only=rung03,rung17] [leaf=40000000] [pre=16]
+                                              [tail=1,2] [tbeam=400]
     python -m harness.tetrapush.overnight status [id=<run>] [full=1]
 """
 import json
@@ -480,7 +481,8 @@ PRE_L = (0,)
 
 def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthreads=0, chunk=EF.CHUNK,
               two_segment=True, junction_cap=None, pre_stride=PRE_STRIDE, pre_frames=PRE_FRAMES,
-              pre_l=PRE_L, deadline=None, beat=None, leaf_budget=None):
+              pre_l=PRE_L, deadline=None, beat=None, leaf_budget=None,
+              tail_frames=(), tail_beam=400):
     """Every distinct ``(endpoint, lean, speedF, Tetra)`` Link can stand on AT THE ROLL CAP after
     EXACTLY ``walk`` delivered frames, as ``(dict of key -> plan, stats)``.
 
@@ -563,7 +565,91 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
                                     _n0=n0, _f=fam:
                                     (_n0, _s[0], _s[1], _lp, _jp)
                                     + tuple(_f['label'](_p[i][0], _p[i][1]))[1:])
+    if tail_frames:
+        _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chunk, nthreads,
+                      s1_stride, pre_stride, pre_frames, pre_l, tail_frames, tail_beam, deadline)
     return out, st
+
+
+def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chunk, nthreads,
+                  s1_stride, pre_stride, pre_frames, pre_l, tail_frames, tail_beam, deadline):
+    """**PER-FRAME STEERING AFTER THE CONVERSION** -- the one coverage gap the family set leaves, and the
+    draw multiplier where contact is already made.
+
+    Every family holds ONE stick from the L frame on, because that is the recipe that reaches the cap.
+    So a plan cannot convert and THEN steer, which is exactly what s149's stage-B beam did to close the
+    contact deficit -- and where contact is already deep (rung 3 at walk 4: overlap +60.7 u, the razor
+    bracketed) the binding constraint is no longer distance but DRAWS: 112 in-contact scorings expressing
+    one best |resid| of 1.55e-01 against a ~1e-4 acceptance.
+
+    It is affordable because the at-cap set is SMALL. Fan the ordinary families at ``walk - k``, keep the
+    at-cap prefixes, and re-fan the last ``k`` frames over the full alphabet from each -- ``|prefix| x
+    |alpha|`` clones for k=1, and for k=2 a beam of ``tail_beam`` between the two frames, ranked on the
+    only thing that is free to rank on (distance to her, the contact gradient's own driver -- the razor
+    costs a sweep and this is inside the fan).
+
+    ``at_cap`` is read on the PREFIX core here, one delivered byte before the endpoint: the conversion
+    holds speedF at ~17.6 once it has fired, so it is a filter on the same population and not a
+    different test. Logged as ``tail_prefixes`` / ``tail_leaves``."""
+    st['tail_prefixes'] = st.get('tail_prefixes', 0)
+    st['tail_leaves'] = st.get('tail_leaves', 0)
+    for k in sorted(x for x in tail_frames if 1 <= x < walk):
+        w0 = walk - k
+        pfx = []
+        for n0 in range(0, w0):
+            base, _run = EF.base_core(n0, seed=seed, env=env, hold=hold)
+            shapes = [(None, 0, 0, base)]
+            for jp in [p for p in pre_frames if p < w0 - n0]:
+                for lp in pre_l:
+                    for i1, jc in _fan(base, EF.stick_alphabet(pre_stride), [lp] * jp,
+                                       csangle, cs_trail, n0, nthreads):
+                        shapes.append((EF.stick_alphabet(pre_stride)[i1], lp, jp, jc))
+            for (ps, lp, jp, node) in shapes:
+                for fam in _families(w0 - n0 - jp, 0, s1_stride):
+                    for c0 in range(0, len(alpha), chunk):
+                        part = alpha[c0:c0 + chunk]
+                        # ONE frame short of the family's own schedule: these are PREFIXES, and the
+                        # endpoint is what the steered frames will produce
+                        for i, c in _fan(node, part, fam['lsched'][:-1], csangle, cs_trail,
+                                         n0 + jp, nthreads):
+                            if not at_cap(c.speedF):
+                                continue
+                            head = ((n0,) if ps is None else (n0, ps[0], ps[1], lp, jp))
+                            pfx.append((head + tuple(fam['label'](part[i][0], part[i][1]))[1:], c))
+                if deadline is not None and time.time() >= deadline:
+                    st['deadline_cut'] = True
+                    return
+        st['tail_prefixes'] += len(pfx)
+        for depth in range(k):
+            nxt = []
+            last = depth == k - 1
+            for plan, c in pfx:
+                for c0 in range(0, len(alpha), chunk):
+                    part = alpha[c0:c0 + chunk]
+                    st['fleets'] += 1
+                    st['tail_leaves'] += len(part)
+                    sched = [0, 0] if last else [0]
+                    for i, cc in _fan(c, part, sched, csangle, cs_trail,
+                                      plan_frames(plan) + depth, nthreads):
+                        p2 = tuple(plan) + (part[i][0], part[i][1], 0, 1)
+                        if last:
+                            st['raw'] += 1
+                            if EF._is_rollable(cc) and at_cap(cc.speedF):
+                                out[(cc.pos_x, cc.pos_z, int(cc.m351C) & 0xFFFF, cc.speedF,
+                                     cc._tetra_x, cc._tetra_z)] = p2
+                            else:
+                                st['sub_cap'] += 1
+                        elif at_cap(cc.speedF):
+                            nxt.append((p2, cc, math.hypot(cc.pos_x - cc._tetra_x,
+                                                           cc.pos_z - cc._tetra_z)))
+                if deadline is not None and time.time() >= deadline:
+                    st['deadline_cut'] = True
+                    return
+            if not last:
+                nxt.sort(key=lambda t: t[2])
+                st['tail_beam_kept'] = min(len(nxt), int(tail_beam))
+                st['tail_beam_seen'] = len(nxt)
+                pfx = [(p, c) for p, c, _d in nxt[:int(tail_beam)]]
 
 
 # --------------------------------------------------------------------------- the razor
@@ -724,7 +810,7 @@ def prepared(unit, env, walls, top, *, cache=_PREPARED):
 
 def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads=0,
              dflt_incumbent=None, on_event=None, two_segment=True, pre_stride=PRE_STRIDE,
-             leaf_budget=None):
+             leaf_budget=None, tail_frames=(), tail_beam=400):
     """One ``(herd, walk length)`` item: prepare the herd, fan every plan of exactly that length, score
     it against every aimable configuration, and push what is genuine through the acceptance stack.
 
@@ -760,6 +846,7 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
     cands, fst = fan_exact(seed, env, walk, csa, trail, hold, s1_stride=s1_stride,
                            nthreads=nthreads, two_segment=two_segment, pre_stride=pre_stride,
                            deadline=deadline, leaf_budget=leaf_budget,
+                           tail_frames=tail_frames, tail_beam=tail_beam,
                            beat=lambda **kw: IO.beat(d, item['item'], worker, walk=walk,
                                                      incumbent=inc, herd=item['herd'],
                                                      unit_of=item['unit'], **kw))
@@ -941,7 +1028,7 @@ def _env_for_worker():
 
 def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_cap=None,
            s1_stride=32, two_segment=True, order=None, pre_stride=PRE_STRIDE, leaf_budget=None,
-           only=None):
+           only=None, tail_frames=(), tail_beam=400):
     """Pull items from the claim queue until the deadline. Nothing in this function is state: every
     item's outcome is on disk before the next one starts, so killing it loses at most one item.
 
@@ -993,7 +1080,8 @@ def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_c
             rec = run_item(it, d, env, worker=worker_id, deadline=deadline,
                            s1_stride=s1_stride, nthreads=1, dflt_incumbent=inc0, on_event=ev,
                            two_segment=two_segment, pre_stride=pre_stride,
-                           leaf_budget=leaf_budget)
+                           leaf_budget=leaf_budget, tail_frames=tail_frames,
+                           tail_beam=tail_beam)
             ev(event='item_done', item=it['item'], seconds=round(rec['seconds'], 1),
                n_plans=rec.get('n_plans', 0), dropped=rec.get('dropped'))
         except Exception as exc:
@@ -1007,7 +1095,8 @@ def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_c
 
 
 def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=None, s1_stride=32,
-           two_segment=True, wait=True, only=None, leaf_budget=None, pre_stride=PRE_STRIDE):
+           two_segment=True, wait=True, only=None, leaf_budget=None, pre_stride=PRE_STRIDE,
+           tail_frames=(), tail_beam=400):
     """Write the run's configuration, spawn the workers, wait. The parent holds no search state."""
     run_id = run_id or time.strftime('s150-%Y%m%d-%H%M%S')
     d = IO.ensure(IO.run_dir(REPO, run_id))
@@ -1028,7 +1117,8 @@ def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=N
                    pre_frames=list(PRE_FRAMES), max_accept=MAX_ACCEPT,
                    lswitch_j1=list(LSWITCH_J1), only=(sorted(only) if only else None),
                    leaf_budget=(int(leaf_budget) if leaf_budget else LEAF_BUDGET),
-                   pre_stride_run=int(pre_stride),
+                   pre_stride_run=int(pre_stride), tail_frames=list(tail_frames),
+                   tail_beam=int(tail_beam),
                    items=[dict((k, v) for k, v in x.items() if k != 'log') for x in keep],
                    units=sorted({x['unit'] for x in keep}), dropped=drop, cpu=os.cpu_count(),
                    note='items are ordered by the TOTAL they could produce, so the run is globally '
@@ -1065,6 +1155,9 @@ def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=N
             cmd.append('pre=%d' % int(pre_stride))
         if only:
             cmd.append('only=%s' % ','.join(sorted(only)))
+        if tail_frames:
+            cmd.append('tail=%s' % ','.join(str(x) for x in tail_frames))
+            cmd.append('tbeam=%d' % int(tail_beam))
         lp = os.path.join(d, 'worker-w%02d.log' % k)
         procs.append(subprocess.Popen(cmd, cwd=REPO, env=_env_for_worker(),
                                       stdout=open(lp, 'a'), stderr=subprocess.STDOUT))
@@ -1206,6 +1299,10 @@ def main(argv=None):
             rec = run_item(it, d, env, worker='probe', deadline=dl, s1_stride=_i('s1', 32),
                            nthreads=_i('threads', 0), two_segment=bool(_i('two', 1)),
                            pre_stride=_i('pre', PRE_STRIDE),
+                           leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
+                           tail_frames=(tuple(int(x) for x in opt['tail'].split(','))
+                                        if 'tail' in opt else ()),
+                           tail_beam=_i('tbeam', 400),
                            on_event=lambda **kw: print('  [%s] %s'
                                                        % (kw.get('event'),
                                                           {k: v for k, v in kw.items()
@@ -1223,6 +1320,8 @@ def main(argv=None):
                pre_stride=_i('pre', PRE_STRIDE),
                leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
                only=(opt['only'].split(',') if 'only' in opt else None),
+               tail_frames=(tuple(int(x) for x in opt['tail'].split(',')) if 'tail' in opt else ()),
+               tail_beam=_i('tbeam', 400),
                steal_after=(float(opt['steal']) if 'steal' in opt else None))
         return 0
     if cmd == 'run':
@@ -1231,7 +1330,9 @@ def main(argv=None):
                walk_cap=(_i('walk', 0) or None), s1_stride=_i('s1', 32),
                two_segment=bool(_i('two', 1)), pre_stride=_i('pre', PRE_STRIDE),
                leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
-               only=(opt['only'].split(',') if 'only' in opt else None))
+               only=(opt['only'].split(',') if 'only' in opt else None),
+               tail_frames=(tuple(int(x) for x in opt['tail'].split(',')) if 'tail' in opt else ()),
+               tail_beam=_i('tbeam', 400))
         return 0
     if cmd == 'status':
         rid = opt.get('id')
