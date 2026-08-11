@@ -1776,7 +1776,49 @@ from scratch. Land the edits first, then gate.
               hold on the FLIP's own stick, so nothing steers PER FRAME after the conversion -- what
               s149's stage-B beam did. The fix is cheap because the at-cap prefix set is small (424 at
               walk 3): extend each at-cap prefix at ``walk - k`` by ``k`` fine frames, ~130 s per item
-              at k=1 and ~150 s at k=2 with a 400-node beam. Not added mid-run on purpose.
+              at k=1 and ~150 s at k=2 with a 400-node beam.
+            - **THE OVERLAP TARGET WAS BEING REPORTED BACKWARDS, and the fix is committed
+              (`5264409`).** The console's own clip sits at overlap **+1.2259**, a GRAZING touch, not
+              at the maximum -- deep overlap is Link buried in her, a geometry that cannot clip.
+              Measured over 72000 scorings: 96.1% land at overlap < -5, **0.33% in the clippable band**.
+              `overnight.score` now ranks and reports ``band_draws`` (nearest `CLIP_TARGET`), not the
+              max; `knowledge/strategy/clip-overlap-band.md`. A hypot-based prefilter for the band was
+              measured and REFUSED before shipping: 39.7 u wrong on the known clip (she is plowed 47 u
+              during the roll), so only the full sweep may decide.
+            - **A MEMORY BUG SHIPPED AND CRASHED THE FIRST FOCUSED PASS (`d128031`).**
+              `_steered_tail`'s prefix pool held one live `LandCore` clone per at-cap prefix with NO
+              CAP; at ``pre_stride=16`` over the full 11405-letter alphabet that is hundreds of
+              thousands of clones alive at once. 11 workers hit `MemoryError` simultaneously and lost 3
+              items; the tail never called `beat()`, so a stuck worker read as merely slow for over an
+              hour. Fixed: `PREFIX_CAP` truncates the pool (nearest her, kept) the moment it is
+              crossed, logged not silent; `beat()` fires from inside the tail's own loops. **Caught by
+              Dereck asking whether the search could possibly be sound -- not by a measurement of
+              ours.**
+            - **THE REAL BLOCKER, FOUND WHILE ANSWERING THAT SAME QUESTION: THE FAN'S CONVERSION IS A
+              HAND-ROLLED SUBSTITUTE FOR AN EXISTING, VALIDATED PRIMITIVE, AND IT WAS NEVER CHECKED
+              AGAINST IT.** The ``PRE`` + ``L_AXIS`` recipe above (turn, one L frame, release) is code
+              written fresh this session. `away_walk.escape_atom` already exists, is already gated, and
+              its own docstring says it produces **"the console's own delivered shape"**: turnaround ->
+              L-conversion -> **rotate** (one frame, off the flip bearing) -> **backwards slam** -> hold
+              the exit stick. Confirmed directly against the locked console log: frames 71-77 of its
+              own 78-frame herd ARE exactly this atom (`176,247` with L at frame 71, released holding
+              the same stick at 72, then the rotate/slam/hold through 77) -- seven frames before the
+              herd hands off, not a separate walk-away ending appended after it.
+              **Why `verify-console` passing did not catch this**: the console's herd is defined as its
+              own recorded first 78 frames, which already CONTAIN the atom as fixed history, and its
+              walk (``[0, 208, 110, 2, 169, 192, 2]``) is four plain directional frames that need no
+              conversion because the herd already performed one. Containment proved the forward model
+              REPLAYS the console's exact recording bit-exact; it never exercises the fan's own
+              conversion logic at all, because that item never calls `_families`' PRE/L code. **The 49
+              banked ladder herds are the ones that do** -- they are frozen mid-backslide, before any
+              such conversion, so the fan has to invent one from scratch, and it has been doing that
+              with a cruder tool than the one that actually works on console. None of the 48 non-console
+              herds have ever produced a genuine hit; that is no longer a surprise.
+              **NEXT SESSION'S FIRST JOB, before trusting any further search output from this driver**:
+              rework `fan_exact`'s conversion phase to call `away_walk.escape_atom` (or the equivalent
+              primitives it is built from) instead of the ad hoc ``PRE``/``L_AXIS`` construction. Not
+              attempted this session -- three real mistakes is enough for one sitting, and this needs a
+              clean look, not a rushed patch on top of the others.
 
       - [~] **RUNG 5's BLOCKER IS NEITHER THE DISTANCE NOR THE CONVERSION -- IT IS TETRA HITTING A
             WALL, AND THE GUARD THAT REFUSES IT STANDS IN FOR A MECHANIC THE CONSOLE GATED
