@@ -1767,10 +1767,20 @@ from scratch. Land the edits first, then gate.
               runways 100..400 step 2 returns **0 genuine entries**. Session 144's pinning (thrust 14
               alone, the 180 -> 160 u plow ceiling, 8 -> 4 rungs clearing it, genuine 51 -> 40,
               unbroken 13 -> 8) all rests on 648 -- it "corrected" a family scanned at 0, which was
-              nearer the truth. Re-census IN FLIGHT (`_notes/s148_lean_census.py`); first 8 rungs,
-              ``n`` at the true lean against s147's: **rung 3 0 (was 1) -- the lead, gone**; rung 5
-              **9** (was 10) owing 101.95 u -> **bound 100**; rung 6 13 (13) -> 107; rung 7 1 (4) ->
-              107; rung 8 7 (6) -> 109. The correction does not wipe the ladder, it wipes the LEAD.
+              nearer the truth.
+            - **THE RE-CENSUS, ALL 49 RUNGS AT THEIR OWN DISPATCH LEAN** (`_notes/s148_lean_census.py`,
+              `_generated/s106/s148_lean_census.json`): **16 of 49 have a genuine entry, against 19 at
+              648** -- and it moves BOTH ways, exactly as `clip-band-per-lean.md`'s jagged band says it
+              should (rung 27 **13 -> 16**, rung 10 17 -> 19, rung 36 **0 -> 2**; rung 12 18 -> 13,
+              rung 7 4 -> 1, **rung 3 1 -> 0**). **Rung 3 is gone and rung 5 is the whole ladder's only
+              rung under the console: n 9, owes 101.95 u -> bound 100, a ONE-frame margin** where rung
+              3 claimed eight. Next: 6 and 7 at 107, then 108..121. So the correction wipes the LEAD,
+              not the ladder -- and it costs the endgame its cushion.
+            - **AND THE AXIS IS DEGENERATE AT THIS AIM: every one of the 49 rungs dispatches at lean
+              0.** The lean is real and plan-chosen -- one at-cap cloud reached -130..+240 -- but the
+              terminal's own aim from a settled 3-frame handover barely turns, so the dispatch writes
+              nothing. Buying a different lean means changing the APPROACH (the facing the dispatch
+              frame turns THROUGH), not the aim.
             - **FIXED + GATED (tracked).** `_sync_from_core` and `_step_native` now sync ``m351C`` and
               ``_draw_lean`` (both native branches are pure delegation + copy-back, so this cannot
               move physics -- it only makes the mirror true), and `tests/test_freerun_native.py`
@@ -1778,12 +1788,16 @@ from scratch. Land the edits first, then gate.
               **1203 passed, 3 skipped, 8 xfailed, exit 0**, counts unchanged.
             - **NOTHING WAS DELIVERED, CORRECTLY.** `clip_roll.fire` never returned a CUT_F, so by
               the standing rule there is no plan and no DTM.
-            - **NEXT:** finish the census and re-rank (rung 5 leads at bound 100); re-read every
-              s144-s147 number quoted at 648, including `TerminalKeep`'s box and
-              `fixtures/courtyard_terminal_family.json`'s lean-648 records; then sweep the lean as
-              the axis it is -- fire the aim, read the entry-frame ``m351C``, solve THERE, and vary
-              the approach so the dispatch turn writes a different one. Carry the 1066x density
-              number into whatever lands it: the landing is bought in PREFIX FAMILIES, not fan width.
+            - **NEXT: rung 5 at bound 100 is the whole endgame now, and it is a one-frame margin, so
+              re-run this session's stack on IT** -- the conversion (`at_cap` at frame 4) then the
+              joint beam, with the razor solved at rung 5's own lean 0 rather than 648. Its 101.95 u
+              is 6 walk frames at the cap against a budget of 73 + f + 18 <= 100, i.e. **f <= 9**, so
+              the slack is 3 frames and not the 7 rung 3 appeared to have. Then re-read every
+              s144-s147 number quoted at 648 (`TerminalKeep`'s box,
+              `fixtures/courtyard_terminal_family.json`'s lean-648 records, the "thrust 14 alone"
+              pinning). The lean stays an axis but it must be bought through the APPROACH; and carry
+              the 1066x density number into whatever lands it -- the landing is bought in PREFIX
+              FAMILIES, not fan width.
       - [~] **THE HERD HANDS LINK OVER STILL INSIDE TETRA, SO THE 94.56'S RAZOR WAS SOLVED AT A
             TETRA THAT DOES NOT SURVIVE THE HERD -- AND THE AXIS IT PASSED WAS NEVER THE ONE THE
             LOCUS SOLVES (session 147).** Session 146 banked 16 genuine entries at rung 5's herd-END
