@@ -1779,12 +1779,29 @@ from scratch. Land the edits first, then gate.
             - **NOTHING WAS DELIVERED AND NOTHING SHOULD HAVE BEEN.** `clip_roll.fire` never returned
               a CUT_F this session, so by the standing rule there is no plan and no DTM. No tracked
               library or test changed; the default gate is untouched.
-            - **NEXT:** read `_generated/s106/s147_terminals.json` (banked s147: which of the 49 rungs
-              have a genuine entry at all at their own post-contact Tetra, and what each owes), give
-              the herd keep an axis for ``side``, and attack the landing JOINTLY -- rank
-              ``(not at_cap, contact deficit, |resid|)`` and look for a SIGN CHANGE of ``resid`` over
-              the reachable cloud rather than a minimum of ``|resid|``, sized with
-              `entry_search.window_gap` before any fan is paid for.
+            - **THE LADDER CENSUS SAYS THE HERD IS AIMED AT THE WRONG ACTOR.** All 49 rungs, entry
+              locus re-solved at each rung's own post-contact Tetra, runways 100..400 step 2
+              (`_notes/s147_terminals.py`, `_generated/s106/s147_terminals.json`, 78 min):
+              **19 of 49 have a genuine entry** -- rung 12 has 18 of them, rung 10 has 17, rung 15
+              has 15 -- so clip geometry is NOT the scarce resource. What is scarce is Link being
+              near one, and the distribution of what he owes is a GAP rather than a spread: **rung 3
+              owes 14.69 u (bound 93), rung 5 owes 112.36 (bound 101), and the other 17 owe 179..343
+              (bounds 106..121)**. Rung 3 is an order of magnitude closer than anything else and is
+              the ONLY rung in the ladder that beats the console. Every one of the 19 delivers a live
+              terminal and then stands 180-340 u from it, and nothing in `objective` /
+              `TerminalKeep` ranks that distance -- they rank TETRA's placement, while the binding
+              constraint is where the herd parks LINK.
+            - **NEXT: land rung 3's razor jointly, and attack ``at_cap`` rather than the distance.**
+              Its box is reached at frame 10 to **0.001 u** and at cap only at frame 12, so two
+              frames decide 93 against 101; `away_walk`'s proc-7 DIR_BACKWARD negation converts
+              **-25.727 -> +17.614** (already past `WALK_CAP`, motion unchanged) in 2 frames against
+              the reach beam's ~10, which is the atom to aim the approach at. Then land it with
+              `pf.sweep` per node, ranked ``(not at_cap, contact deficit, |resid|)``, hunting a SIGN
+              CHANGE of ``resid`` over the reachable cloud -- rung 3 has ONE genuine entry at width
+              1.56e-04, so a minimum of ``|resid|`` will not find it. Size it with
+              `entry_search.window_gap` before paying for a fan. If it will not land, re-breed the
+              ladder against ``side`` and against Link's distance to the entry curve his own Tetra
+              generates, which `pf.sweep` now makes free.
       - [~] **THE CYCLE-2 REQUIREMENT WAS READ PAST THE MODEL'S OWN FOLLOW GUARD, AND THE KEEP COULD
             NOT SEE THE AXIS THE WHOLE LADDER FAILS ON (session 146).** Two corrections, both
             measured, and they redirect the re-breed the s145 handoff asked for rather than run it.
