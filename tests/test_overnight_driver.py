@@ -244,3 +244,54 @@ def test_the_pre_segment_is_only_ever_a_cone_clear_length(walk):
     assert 1 in ON.LSWITCH_J1, 'j1 = 1 IS the conversion recipe and may never be budgeted away'
     keep, _d = ON.units()
     assert all(ON.max_walk(u['herd'], 13, O.TOTAL_INCUMBENT) >= walk or walk > 1 for u in keep[:1])
+
+
+# --------------------------------------------------------------------------- the positive control
+
+@pytest.fixture(scope='module')
+def console_scored():
+    """The console's own clip through `overnight.score` -- the search's OWN scoring path.
+
+    THE GATE THIS FILE WAS MISSING, and a 1.14e9-scoring run went out without it. The console's thrust 15
+    is bound-excluded from the search (at walk 4 it totals 101, which cannot beat 101), so the run never
+    scored a single configuration known to be genuine -- and a systematic defect in `score` would have
+    looked exactly like the 0 genuine it reported. A search with no positive control cannot tell "the
+    space is empty here" from "my scorer is broken"."""
+    from harness.tetrapush import entry_search as ES
+    from harness.tetrapush import seeds as SD
+    env = SD.load_env()
+    prep = ON.prepare(ON.console_herd(), env)
+    key = (CC['walk'][0], CC['walk'][1], CC['m351C_walk'], 17.0,
+           prep['seed']['tetra'][0], prep['seed']['tetra'][1])
+    quals = [dict(facing=CC['facing'], aim=list(CC['aim']), thrust=CC['thrust'],
+                  cell=ES.aim_cell(CC['facing']), siblings=0)]
+    hits, st = ON.score({key: ON.from_triples(CC['plan'])}, quals)
+    return hits, st, prep
+
+
+def test_the_search_scoring_path_calls_the_known_clip_genuine(console_scored):
+    """The positive control, and it is an equality on the razor's own coordinate, not a tolerance."""
+    hits, st, _prep = console_scored
+    assert st['genuine'] == 1, 'the search scores the delivered console clip as NOT genuine'
+    assert hits[0]['resid'] == CC['resid'], (
+        'resid %r, the delivery %r' % (hits[0]['resid'], CC['resid']))
+    assert hits[0]['push'] == CC['push']
+
+
+def test_the_lean_and_the_entry_the_search_predicts_are_the_delivered_ones(console_scored):
+    """Two links in the chain that turn a walk endpoint into a razor sample, checked against console."""
+    from harness.tetrapush import entry_search as ES
+    assert ES.lean_at_roll(CC['m351C_walk']) == CC['m351C']
+    ent = ES.roll_entry(tuple(CC['walk']), CC['facing'], ES.ROLL_NSPEED)
+    assert [ent[0], ent[1]] == CC['entry']
+
+
+def test_the_clip_band_is_where_the_delivered_clip_actually_sits(console_scored):
+    """`CLIP_BAND` is a measurement, so it must contain the one clip that exists.
+
+    And `best_overlap` must mean NEAREST the band, never the maximum: a run that reports max overlap as
+    progress reports +63 u -- Link buried 62 u past the grazing touch the clip needs -- as its best."""
+    hits, st, _prep = console_scored
+    assert ON.CLIP_BAND[0] <= hits[0]['overlap'] <= ON.CLIP_BAND[1]
+    assert abs(ON.CLIP_TARGET - hits[0]['overlap']) < 1e-3
+    assert st['band_draws'] == 1 and st['band_share'] == 1.0

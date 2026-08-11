@@ -188,7 +188,7 @@ def summarise(d):
     now = time.time()
     inflight = {k: v for k, v in cl.items() if k not in done}
     tot = dict(candidates=0, evaluations=0, genuine=0, near=0, confirmed=0, deliverable=0,
-               fan_seconds=0.0, score_seconds=0.0)
+               band_draws=0, fan_seconds=0.0, score_seconds=0.0)
     for r in prog:
         for k in tot:
             tot[k] += r.get(k, 0) or 0

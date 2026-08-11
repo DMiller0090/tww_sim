@@ -658,6 +658,15 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
 #: and it is the CONTACT gradient the razor's own residual does not carry -- see `score`.
 CO_R_SUM = None
 
+#: Where a clip can be: the console's own is at overlap +1.2259, a GRAZING touch, and 96% of a blind
+#: fan's scorings cannot clip at all -- knowledge/strategy/clip-overlap-band.md has the distribution.
+CLIP_TARGET = 1.2259
+CLIP_BAND = (0.0, 3.0)
+
+#: A hypot off the baked schedule CANNOT gate it -- 39.7 u out on the known clip, because she is plowed
+#: 47 u during the roll (measured before shipping one; same page). The sweep is the only verdict.
+BAND_IS_NOT_PREFILTERABLE = True
+
 
 def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3):
     """Score a candidate dict against every configuration, at each candidate's OWN Tetra.
@@ -679,8 +688,9 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3):
     pool = ES.CtxPool() if pool is None else pool
     items = list(cands.items())
     hits, n_eval, n_near = [], 0, 0
+    n_band = 0
     n_contact, n_neg, n_pos = 0, 0, 0
-    best_ovl, best_resid = -1e30, None
+    best_ovl, best_resid = -1e30, None      # 'best' = NEAREST `CLIP_TARGET`, never the max
     by_roll = {}
     for k, plan in items:
         by_roll.setdefault(ES.lean_at_roll(k[2]), []).append((k, plan))
@@ -696,7 +706,9 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3):
                 n_eval += len(rows)
                 for (k, plan), e, o in zip(part, ents, rows):
                     ovl = CO_R_SUM - math.hypot(o[10] - o[12], o[11] - o[13])
-                    if ovl > best_ovl:
+                    if CLIP_BAND[0] <= ovl <= CLIP_BAND[1]:
+                        n_band += 1              # the only scorings that could have been a clip
+                    if abs(ovl - CLIP_TARGET) < abs(best_ovl - CLIP_TARGET):
                         best_ovl = ovl
                     if ovl >= 0.0:
                         n_contact += 1
@@ -720,7 +732,8 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3):
                       configurations=len(quals), n_contact=n_contact, resid_neg=n_neg,
                       resid_pos=n_pos, bracketed=bool(n_neg and n_pos),
                       best_overlap=(None if best_ovl <= -1e29 else best_ovl),
-                      best_resid_in_contact=best_resid)
+                      best_resid_in_contact=best_resid, band=list(CLIP_BAND),
+                      band_draws=n_band, band_share=(n_band / n_eval if n_eval else 0.0))
 
 
 # --------------------------------------------------------------------------- acceptance
@@ -863,6 +876,7 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
     ev(event='scored', item=item['item'], candidates=st['candidates'], genuine=st['genuine'],
        near=st['near'], fan_seconds=round(t_fan, 1), score_seconds=round(t_score, 1),
        at_cap=len(cands), raw=fst['raw'], n_contact=st['n_contact'],
+       band_draws=st['band_draws'], band_share=round(st['band_share'], 8),
        best_overlap=st['best_overlap'], bracketed=st['bracketed'],
        best_resid_in_contact=st['best_resid_in_contact'])
     n_ok, plans = 0, []
@@ -1196,14 +1210,18 @@ def report(d, full=False):
     t = s['totals']
     print('  coverage: %d candidates, %d razor evaluations, %d GENUINE, %d near, %d deliverable'
           % (t['candidates'], t['evaluations'], t['genuine'], t['near'], t['deliverable']))
+    print('  BAND DRAWS -- overlap in %s, the only scorings that could clip: %d = %.4f%% of them'
+          % (str(CLIP_BAND), t['band_draws'],
+             100.0 * t['band_draws'] / max(1, t['evaluations'])))
     ovl = [r for r in s['progress'] if r.get('best_overlap') is not None]
     if ovl:
-        b = max(ovl, key=lambda r: r['best_overlap'])
+        b = min(ovl, key=lambda r: abs(r['best_overlap'] - CLIP_TARGET))
         nc = sum(r.get('n_contact', 0) or 0 for r in s['progress'])
         br = [r['item'] for r in s['progress'] if r.get('bracketed')]
         rc = [r for r in s['progress'] if r.get('best_resid_in_contact') is not None]
-        print('  contact: %d scorings IN contact; best overlap %+0.3f u at %s (%+0.3f = touching)'
-              % (nc, b['best_overlap'], b['item'], 0.0))
+        print('  contact: %d scorings IN contact; overlap nearest the clip band %+0.3f u at %s'
+              '   (the console clip is %+0.4f)'
+              % (nc, b['best_overlap'], b['item'], CLIP_TARGET))
         if rc:
             k = min(rc, key=lambda r: abs(r['best_resid_in_contact']))
             print('           best |resid| in contact %.4e at %s; razor BRACKETED at %s'
