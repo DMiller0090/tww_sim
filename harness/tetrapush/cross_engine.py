@@ -134,7 +134,7 @@ def composite_rollout(log, env=None, walls_tetra=True):
     return rows
 
 
-def agree(hit, seed=None, env=None):
+def agree(hit, seed=None, env=None, tetra=None, log=None, ix=None):
     """One candidate through both engines. Returns the verdict plus every number it rests on.
 
     ``handover_ok``    the composite rolls from the entry the hit was SCORED at (position, facing,
@@ -147,9 +147,20 @@ def agree(hit, seed=None, env=None):
     ``composite_moved`` how far the composite actually moves Link on the cut frame. When this is ~0
                        and ``predicted_lunge`` is ~50, the composite is BLOCKING the lunge -- the
                        rejection class that costs a delivery.
-    ``deliverable``    all of the above. Only spend a console run on one of these."""
+    ``deliverable``    all of the above. Only spend a console run on one of these.
+
+    ``tetra`` (session 150) is where SHE is at the roll, when that is not ``seed['tetra']``. The
+    console arrival has broken contact, so her seed point IS her roll point and the two were the same
+    number; a herd end still plowing her moves her during the walk-up, and scoring the razor at her
+    seed would then price a Tetra the roll never sees.
+
+    ``log``/``ix`` let the caller supply the composite log it already built -- for a walk `composite_log`'s
+    triple encoding cannot express (an L press, the herd-to-cap conversion). The VERDICT stays here so
+    there is exactly one implementation of it."""
     seed = seed or ES.console_seed()
-    log, ix = composite_log(hit, seed)
+    tetra = tuple(seed['tetra']) if tetra is None else (float(tetra[0]), float(tetra[1]))
+    if log is None or ix is None:
+        log, ix = composite_log(hit, seed)
     rows = {r['i']: r for r in composite_rollout(log, env=env)}
     entry_i = ix['entry_i']
     ent = rows[entry_i]
@@ -160,7 +171,7 @@ def agree(hit, seed=None, env=None):
             and _bits(ent['nspeed']) == _bits(hit['nspeed']))
     ctx, sch, _resid = ES.build_fast(hit['facing'], hit['m351C'], hit['thrust'],
                                      (hit['entry'][0], hit['entry'][1]), nspeed=hit['nspeed'])
-    res, tr = ctx.run_trace(seed['tetra'][0], seed['tetra'][1], 0)
+    res, tr = ctx.run_trace(tetra[0], tetra[1], 0)
     cut_i = next((i for i in sorted(rows) if i > entry_i and rows[i]['proc'] in (CUT_F, CUT_A)), None)
     worst = 0
     for k, row in enumerate(tr):

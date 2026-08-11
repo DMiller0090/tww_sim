@@ -208,7 +208,7 @@ def _is_rollable(c):
 
 
 def _fan_chunk(base, part, rows, jmax, tx, tz, nthreads, label, cap=ES.WALK_CAP, rollable=False,
-               cs_seq=None):
+               cs_seq=None, with_tetra=False):
     """Run one chunk of held sticks off ``base`` for ``jmax`` frames on the fleet, collecting each
     core's hits in the reference's write order. ``rows`` = the per-core schedule row (one frame, the
     held input); ``label(i, j)`` -> the plan value stored for core ``i`` at step ``j``. ``cap`` is
@@ -217,6 +217,14 @@ def _fan_chunk(base, part, rows, jmax, tx, tz, nthreads, label, cap=ES.WALK_CAP,
 
     ``rollable`` is the THIRD prune, and it is the one session 84's failures asked for: an endpoint is
     only a candidate if the A-press that follows it actually rolls. See `_is_rollable`.
+
+    ``with_tetra`` (session 150) APPENDS Tetra's own tracked feet to the key, which is what makes a fan
+    off an arbitrary herd honest. Every pass before this one scored the whole fan against ONE pinned
+    Tetra (`seed['tetra']`) -- correct only while she does not move, i.e. while Link has broken contact,
+    which is true of the console arrival and is not true of a herd end still plowing her. With her in
+    the key each candidate is scored at its OWN Tetra (the razor sweep takes her per item), so the
+    stay-in-contact and walk-away regimes are one population instead of two searches. Default off: the
+    key is `walk_fan`'s contract and `fan_equality` gates it bit-for-bit.
 
     ``cs_seq`` makes the CAMERA a per-frame input instead of the constant in ``rows`` (session 95):
     step ``j`` runs at ``cs_seq[j]``, which is what a C-stick held through the entry plan actually
@@ -237,7 +245,10 @@ def _fan_chunk(base, part, rows, jmax, tx, tz, nthreads, label, cap=ES.WALK_CAP,
         for i, c in enumerate(cores):
             if not alive[i]:
                 continue
-            if math.hypot(c.pos_x - tx, c.pos_z - tz) > ES.FOLLOW_BAR:
+            # the follow bar is a distance to WHERE SHE IS: pinned at the seed while she cannot move
+            # (the pre-s150 contract), her own tracked point once the key carries it
+            ftx, ftz = (c._tetra_x, c._tetra_z) if with_tetra else (tx, tz)
+            if math.hypot(c.pos_x - ftx, c.pos_z - ftz) > ES.FOLLOW_BAR:
                 alive[i] = False              # she is moving from here on: the branch is dead
                 continue
             if j < 1 or (cap is not None and c.speedF != cap):
@@ -245,21 +256,33 @@ def _fan_chunk(base, part, rows, jmax, tx, tz, nthreads, label, cap=ES.WALK_CAP,
             if rollable and not _is_rollable(c):
                 continue
             key = (c.pos_x, c.pos_z, int(c.m351C) & 0xFFFF)
-            writes[i].append((key if cap is not None else key + (c.speedF,), label(i, j)))
+            if cap is None:
+                key = key + (c.speedF,)
+            if with_tetra:
+                key = key + (c._tetra_x, c._tetra_z)
+            writes[i].append((key, label(i, j)))
     return writes, cores, alive
 
 
 def iter_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, chunk=CHUNK,
-             nthreads=0, progress=False, csangle=ES.CSANGLE, cap=ES.WALK_CAP):
+             nthreads=0, progress=False, csangle=ES.CSANGLE, cap=ES.WALK_CAP, with_tetra=False,
+             hold=None, cs_trail=None):
     """`entry_search.walk_fan` on the native fleet, as a STREAM of ``(key, plan)`` in the reference's
     own write order -- so `dict(iter_fan(...))` reproduces it exactly, and a million-candidate pass
     can be evaluated batch-by-batch instead of materialised.
 
     One held stick per core, `run_par(1)` per frame (the schedule is a single constant row, so
     re-running frame 0 IS the hold), and the reference prunes read off the C fields. ``cap=None``
-    drops the speedF-17 one and keys the sub-cap endpoints by their own speed."""
+    drops the speedF-17 one and keys the sub-cap endpoints by their own speed.
+
+    ``with_tetra``/``hold``/``cs_trail`` are `iter_fan2`'s own arguments, carried here so the
+    one-segment fan can be run off an arbitrary herd too; all three default to the pre-s150
+    behaviour."""
     seed = seed or ES.console_seed()
-    hold = dict(seed['log'][-1], buttons=0)
+    hold = dict(hold or dict(seed['log'][-1], buttons=0))
+    if cs_trail is None and int(hold.get('substickX', 128)) != 128:
+        raise ValueError("a C-stick hold of %s slews the base camera but not the fan's -- pass the"
+                         " matching cs_trail (entry_camera.cam_trail)" % hold.get('substickX'))
     trg = int(hold.get('triggerL', 0))
     tx, tz = seed['tetra']
     sticks = stick_grid(stride)
@@ -271,7 +294,9 @@ def iter_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, chunk=CH
             rows = [(sx, sy, 0, trg, csangle) for (sx, sy) in part]
             writes, _cores, _alive = _fan_chunk(
                 base, part, rows, jmax, tx, tz, nthreads,
-                lambda i, j, _n0=n0, _p=part: (_n0, _p[i][0], _p[i][1], j), cap=cap)
+                lambda i, j, _n0=n0, _p=part: (_n0, _p[i][0], _p[i][1], j), cap=cap,
+                with_tetra=with_tetra,
+                cs_seq=None if cs_trail is None else cs_trail[n0:])
             for w in writes:
                 for kv in w:
                     n += 1
@@ -291,7 +316,7 @@ def fleet_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, chunk=C
 
 def iter_fan2(seed=None, env=None, base_frames=(3, 4), s1_stride=16, j1=(2, 4, 6),
               s2_stride=1, j2max=6, chunk=CHUNK, nthreads=0, progress=False, csangle=ES.CSANGLE,
-              cap=ES.WALK_CAP, rollable=True, hold=None, cs_trail=None):
+              cap=ES.WALK_CAP, rollable=True, hold=None, cs_trail=None, with_tetra=False):
     """TWO-SEGMENT holds: stick S1 for j1 frames, then S2 for j2 -- the lever left once stride 1 x 7
     bases has saturated the one-segment fan (measured, `_notes/s81_saturation.py`).
 
@@ -346,7 +371,8 @@ def iter_fan2(seed=None, env=None, base_frames=(3, 4), s1_stride=16, j1=(2, 4, 6
                         jc, part, rows, j2max, tx, tz, nthreads,
                         lambda i, jj, _n=n0, _p=part, _j=j:
                         (_n, sx1, sy1, _j, _p[i][0], _p[i][1], jj), cap=cap, rollable=rollable,
-                        cs_seq=None if cs_trail is None else cs_trail[n0 + j:])
+                        cs_seq=None if cs_trail is None else cs_trail[n0 + j:],
+                        with_tetra=with_tetra)
                     for w in writes:
                         for kv in w:
                             n += 1

@@ -115,7 +115,9 @@ def cam_trail(subx, frames=TRAIL_FRAMES, seed=None, env=None, cache=True):
     holds = [dict(base, substickX=seq[min(k, len(seq) - 1)]) for k in range(int(frames))]
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        _run, rows = ES.continue_walk(holds, env=env)
+        # the SEED's own log (s150): a trail measured on the console arrival is not the one a different
+        # herd's camera delivers, and it is injected into the fan as if it were
+        _run, rows = ES.continue_walk(holds, log=seed['log'], env=env)
     trail = tuple(int(r['csangle']) & 0xFFFF for r in rows)
     if cache:
         _TRAILS[key] = trail

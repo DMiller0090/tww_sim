@@ -819,7 +819,7 @@ def walk_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, progress
     tx, tz = seed['tetra']
     out = {}
     for n0 in base_frames:
-        base, _ = continue_walk([hold] * n0, env=env)
+        base, _ = continue_walk([hold] * n0, log=seed['log'], env=env)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             for sx in range(0, 256, stride):
@@ -906,7 +906,7 @@ def search(candidates=None, facings=None, thrusts=THRUSTS, seed=None, window=Non
                                      hi=q.get('hi')) for q in quals])
 
 
-def confirm_entry(hit, seed=None, env=None):
+def confirm_entry(hit, seed=None, env=None, rows=None):
     """Close the loop the fan leaves open: it never presses A, it PREDICTS the entry from the walk
     endpoint. Replay the console log, the hit's own plan, then a REAL A-press with its aim bytes on
     the courtyard engine, and read the roll entry back.
@@ -915,7 +915,8 @@ def confirm_entry(hit, seed=None, env=None):
     means the hit is scored at a point Link does not roll from -- the s79 failure, one level down.
 
     A plan is ``(n0, sx, sy, j)`` or, for a two-segment hold, ``(n0, sx1, sy1, j1, sx2, sy2, j2)``:
-    the segments are read off in triples, so the same replay serves both.
+    the segments are read off in triples, so the same replay serves both. ``rows`` overrides that
+    encoding with raw input rows (see below).
 
     ``hit['substickX']`` is the CAMERA axis (session 95): a hit found at a slewing camera is only
     reproducible with the C-stick that slewed it, and this replay runs the WIRED camera -- so it is
@@ -939,14 +940,21 @@ def confirm_entry(hit, seed=None, env=None):
         """Frame k of the replay, carrying the C-stick byte that frame of the camera path asks for."""
         return dict(base, substickX=cseq[min(k, len(cseq) - 1)], **kw)
 
-    extra = [hold(k) for k in range(n0)]
-    for i in range(1, len(plan), 3):
-        sx, sy, j = plan[i:i + 3]
-        extra += [hold(len(extra) + d, stickX=sx, stickY=sy) for d in range(j)]
+    if rows is not None:
+        # the walk as RAW rows, for a plan the triple encoding cannot express (an L press among them).
+        # The A-press and the delay tail are still built here, so it is the same measurement either way.
+        extra = [dict(r) for r in rows]
+    else:
+        extra = [hold(k) for k in range(n0)]
+        for i in range(1, len(plan), 3):
+            sx, sy, j = plan[i:i + 3]
+            extra += [hold(len(extra) + d, stickX=sx, stickY=sy) for d in range(j)]
     extra.append(hold(len(extra), stickX=hit['aim'][0], stickY=hit['aim'][1], buttons=0x100))
     # INPUT_DELAY 2, then the entry frame
     extra += [hold(len(extra) + d, stickX=128, stickY=128) for d in range(3)]
-    run, rows = continue_walk(extra, env=env)
+    # ``seed['log']`` IS replayed (s150): it used to be read only for the hold row while the replay ran
+    # `console_seed`'s log, so a hit off another herd was confirmed against the console's arrival.
+    run, rows = continue_walk(extra, log=seed['log'], env=env)
     walk = next((r for r in rows if r['proc'] == FRONT_ROLL), None)
     k = rows.index(walk) if walk else None
     prev = rows[k - 1] if k else None
