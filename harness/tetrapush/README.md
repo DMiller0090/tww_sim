@@ -1780,6 +1780,26 @@ from scratch. Land the edits first, then gate.
               path braces. So a walled search runs at **717 clone+steps/s against the native 9406,
               13x**, and porting Tetra's ``mObjAcch.CrrPos`` into `LandCore.step_courtyard` is what
               makes a walled beam affordable.
+            - **AND WITH THE GUARD OFF THE STACK RAN: CONTACT IS REACHED AT TOTAL 98 AND THE RAZOR
+              IS BRACKETED.** Walled stage A survives to frame 6 (51 at-cap dispatchable states,
+              total 97) with the contact deficit closing monotonically **21.49 -> 16.96 -> 13.20**,
+              and walled stage B (`_notes/s149_land.py walled=1`) reaches **deficit 0.0000 at frame
+              7 = TOTAL 98**, three frames under the console: **171 in-contact fireable nodes, 159
+              with ``resid`` < 0 and 12 > 0 -- a SIGN CHANGE, the razor is bracketed** over
+              -2.8165e+01 .. +2.9435e+01. s148's best was ONE residual across 514 nodes at total
+              100 with no bracket at all.
+            - **BUT THE BRACKET IS UNDER-SAMPLED, AND THE LEAN AXIS IS LIVE.** The 171 in-contact
+              nodes express only **4 distinct residuals** (all at feet 74.073 -- the pending-input
+              tie one layer on), best **|resid| 1.65958e-01** against a ~1e-4 acceptance. That best
+              node's dispatch lean is **-98 (65438), not 0**, and the in-contact leans are
+              ``[0, -98, -80, -15]`` -- so the axis s148 measured as degenerate at a settled
+              handover IS live in the at-cap cloud, exactly as it predicted, and the own-lean
+              re-sweep is doing real work (257 nodes re-leaned at frame 7).
+            - **AND THE BEAM DOES NOT KEEP THE BRACKET**: frame 8 falls back to **0 in contact**
+              (fireable 15163 -> 1799) and frame 9 loses the cap entirely (**fireable 0**). Since a
+              hit at frame 7 already beats the console by 3, the remaining budget belongs in a FAN
+              at frame 7, not in walking to 8-9 -- which is `clip-lottery-draws.md`'s prescription
+              (widen the PREFIX, count draws per family) applied to the frames that FEED frame 7.
             - **NOTHING WAS DELIVERED, correctly:** `clip_roll.fire` never returned a CUT_F, so by
               the standing rule there is no plan and no DTM.
       - [~] **``at_cap`` WAS THE RANK AND NOT THE PHYSICS -- IT IS FOUR FRAMES -- AND THEN THE LEAN
