@@ -954,7 +954,9 @@ def confirm_entry(hit, seed=None, env=None, rows=None):
     extra += [hold(len(extra) + d, stickX=128, stickY=128) for d in range(3)]
     # ``seed['log']`` IS replayed (s150): it used to be read only for the hold row while the replay ran
     # `console_seed`'s log, so a hit off another herd was confirmed against the console's arrival.
-    run, rows = continue_walk(extra, log=seed['log'], env=env)
+    # native=True: the real A-press check `accept()` runs on every candidate -- worth the native
+    # step's speed, still the full live `LandCamera` (`tests/test_native_camera.py` gates it 0-ULP).
+    run, rows = continue_walk(extra, log=seed['log'], env=env, native=True)
     walk = next((r for r in rows if r['proc'] == FRONT_ROLL), None)
     k = rows.index(walk) if walk else None
     prev = rows[k - 1] if k else None
@@ -1089,13 +1091,21 @@ def entry_gradient(tetra, entry, *, facing=TAB_FACING, m351c=0, d=0.01, thrust=T
     return dict(resid=r0, gx=gx, gz=gz, grad=math.hypot(gx, gz))
 
 
-def continue_walk(extra, *, log=None, env=None):
+def continue_walk(extra, *, log=None, env=None, native=False):
     """Replay the console-confirmed delivered log on a fresh `FreeRun`, then keep stepping `extra`
     (a list of raw input dicts). Returns (run, rows) with one row per EXTRA frame -- the reachability
-    probe, seeded from the measured endpoint the handoff asks for."""
+    probe, seeded from the measured endpoint the handoff asks for.
+
+    ``native`` (Dereck: "why wouldn't confirm_entry also be native?") runs the replay on
+    `seeds.make_freerun`'s fully-wired NATIVE step -- physics and both look models in C, the camera
+    still the real `LandCamera` law (never injected), 0-ULP against the Python default over a window
+    that presses L and engages the attention lock (`tests/test_native_camera.py`). Off by default so
+    the fan's own graft source (`entry_fan.base_core`/`walk_fan`) and `entry_camera.cam_trail` keep
+    their exact, already-gated reference untouched; `confirm_entry` opts in, since it is the stage
+    `accept()` runs on every candidate and the one caller performance actually matters for."""
     seed = console_seed()
     env = env or SD.load_env()
-    run = SD.make_freerun(env)
+    run = SD.make_freerun(env, native=native)
     run.pre_seed_input(SD.dtm_input_at(env)(0))
     rows = []
     with warnings.catch_warnings():
@@ -1104,12 +1114,15 @@ def continue_walk(extra, *, log=None, env=None):
             run.step(inp)
         n0 = len(seed['log'])
         for k, inp in enumerate(extra):
+            # the csangle THIS frame decodes against: `run.csangle` BEFORE stepping (never
+            # `link.csangle` -- stale on a native step; never post-step -- that's next frame's).
+            cs = int(run.csangle) & 0xFFFF
             run.step(inp)
             lk = run.link
             rows.append(dict(n=n0 + k + 1, x=lk.pos_x, z=lk.pos_z, facing=lk.facing & 0xFFFF,
                              proc=lk.state & 0xFF, speedF=lk.speedF, nspeed=lk.nspeed,
                              m351C=getattr(lk, 'm351C', 0) & 0xFFFF,
-                             csangle=getattr(lk, 'csangle', 0) & 0xFFFF))
+                             csangle=cs))
     return run, rows
 
 

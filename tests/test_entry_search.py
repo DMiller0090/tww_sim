@@ -605,6 +605,50 @@ def test_the_fan_labels_a_plan_the_a_press_reproduces():
     assert ok >= 0.75 * checked and rolled >= 0.8 * checked
 
 
+def test_confirm_entry_replays_on_the_native_engine(monkeypatch):
+    """Dereck: "why wouldn't confirm_entry also be native?" It does now: `continue_walk` grew a
+    `native=` flag -- physics and both look models in C, the camera unchanged (still the real
+    `LandCamera`, never injected) -- and `confirm_entry` passes it, since it is the replay `accept()`
+    runs on every candidate. `tests/test_native_camera.py`'s own window already gates native == wired
+    0-ULP over a stretch that presses L and engages the attention lock (the shape a real escape-atom
+    conversion drives the camera through), so this is the narrower claim left to pin here: confirm_
+    entry actually reaches that native core, and asking for it changes NOTHING it reports. Two checks,
+    since a merged one would not say which broke (`[[zero-ulp-tests-only]]`: `==`, never a tolerance)."""
+    from harness.tetrapush.from_f0 import FreeRun
+    hit = json.load(open(_fx('courtyard_entry_s86_console.json')))['hit']
+
+    seen = dict(native=0, wired=0)
+    orig = FreeRun.step
+
+    def counted(self, *a, **kw):
+        seen['native' if self._core is not None else 'wired'] += 1
+        return orig(self, *a, **kw)
+
+    monkeypatch.setattr(FreeRun, 'step', counted)
+    native = ES.confirm_entry(hit)
+    assert native['all_ok'], 'the fixture hit no longer confirms at all'
+    assert seen['native'] > 0, 'confirm_entry never took a native step'
+    assert seen['wired'] == 0, 'confirm_entry still stepped %d frames on the wired engine' % seen['wired']
+    monkeypatch.undo()          # back to the real FreeRun.step before the reference replay below
+
+    # the SAME frames confirm_entry just replayed natively, forced onto the pure-Python engine --
+    # the answer must be identical, not merely close (this is the licence for the switch, not a hope)
+    _run_py, rows_py = ES.continue_walk(native['frames'], log=SEED['log'], native=False)
+    walk_py = next((r for r in rows_py if r['proc'] == ES.FRONT_ROLL), None)
+    kp = rows_py.index(walk_py) if walk_py else None
+    prev_py = rows_py[kp - 1] if kp else None
+    got_py = dict(entry=(walk_py['x'], walk_py['z']) if walk_py else None,
+                 facing=walk_py['facing'] if walk_py else None,
+                 m351C=walk_py['m351C'] if walk_py else None,
+                 walk=(prev_py['x'], prev_py['z']) if prev_py else None,
+                 speedF=prev_py['speedF'] if prev_py else None,
+                 nspeed=walk_py['nspeed'] if walk_py else None,
+                 procs=[r['proc'] for r in rows_py[-5:]])
+    assert got_py == native['measured'], \
+        'the native replay disagrees with a forced-python one on the same frames: %r != %r' \
+        % (native['measured'], got_py)
+
+
 def test_the_walk_fan_keeps_only_capped_pinned_candidates():
     """The two hard prunes: speedF exactly 17.0 (the roll takes its whole nspeed from the cap) and
     inside the 230 u follow bar on every frame -- one frame outside and Tetra is not a constant."""
