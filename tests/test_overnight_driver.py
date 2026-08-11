@@ -168,7 +168,7 @@ def test_the_families_are_uniform_plus_the_l_switch_and_are_frame_exact():
         for n0 in range(walk):
             fams = ON._families(walk, n0, 32)
             j = walk - n0
-            assert len(fams) == 2 + max(0, j - 1)
+            assert len(fams) == 2 + len([x for x in ON.LSWITCH_J1 if x < j])
             assert {f['kind'] for f in fams} <= {'uniform', 'lswitch'}
             for f in fams:
                 assert len(f['lsched']) == j + 1, (walk, n0, f['kind'])
@@ -241,5 +241,6 @@ def test_the_pre_segment_is_only_ever_a_cone_clear_length(walk):
     """`PRE_FRAMES` is a knob, but a pre segment longer than the walk is not a plan."""
     assert all(p >= 1 for p in ON.PRE_FRAMES)
     assert ON.PRE_L == (0,), 'an L on the pre frame acquires the actor -- that is what it must avoid'
+    assert 1 in ON.LSWITCH_J1, 'j1 = 1 IS the conversion recipe and may never be budgeted away'
     keep, _d = ON.units()
     assert all(ON.max_walk(u['herd'], 13, O.TOTAL_INCUMBENT) >= walk or walk > 1 for u in keep[:1])

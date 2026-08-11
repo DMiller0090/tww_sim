@@ -1713,6 +1713,71 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **THE SEARCH IS WRITTEN, GATED AND RUNNING: THE WHOLE HERD SET THROUGH THE TERMINAL
+            MACHINERY THAT ACTUALLY DELIVERED THE CONSOLE CLIP, ORDERED SO THE CHEAPEST PLAN IN THE
+            SPACE IS TRIED FIRST (session 150).** `harness/tetrapush/overnight.py` +
+            `overnight_io.py`; 17 gates in `tests/test_overnight_driver.py` (1.7 s).
+            - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
+              `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
+              `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
+              composite, frame for frame) is what produced the banked 101, and it had only ever been
+              run off ONE herd. Measured on this hardware: the fan is **216k core-frames/s at 12
+              threads, 74k at one**, so **11 workers x 1 thread beats one 12-thread process 3.8x**;
+              the razor sweeps **75.5k scorings/s**; the walled terminal steps **4220 clone+steps/s
+              native against 350 in Python (12x)**.
+            - **THREE STAGES SILENTLY REPLAYED THE CONSOLE ARRIVAL WHATEVER SEED THEY WERE HANDED**
+              -- `walk_fan`, `confirm_entry` and `entry_camera.cam_trail` all called
+              `continue_walk(...)` without ``log=``, the same defect `entry_fan.base_core` had fixed
+              at the fan in s105. Any of them pointed at a ladder rung measured the wrong herd. Fixed
+              in place, inert at every default.
+            - **THE FAN NOW CARRIES TETRA** (`entry_fan._fan_chunk(with_tetra=)`): every pass before
+              this scored a whole fan against ONE pinned Tetra, which is true only while Link has
+              broken contact -- true of the console arrival, false of a herd end still plowing her.
+              The razor takes her per item, so **the stay-in-contact and walk-away regimes are one
+              population** instead of two searches with two ranks (s149's open axis).
+            - **``at_cap`` IS A THRESHOLD AND THE OLD PRUNE WAS AN EQUALITY.** Every fan kept
+              ``speedF == 17.0``; the conversion lands at **+17.6** (17.183998 and 17.833548 measured
+              on real rungs this session), so the equality refused the only states worth searching.
+              It is `roll_nspeed(speedF) == 26` now.
+            - **AND A PLAN NEEDS AN L AXIS, WHICH THE TRIPLE PLAN ENCODING CANNOT EXPRESS.** Measured
+              on BOTH engines off rung 5: a bare walk-up from a herd end tops out at speedF **exactly
+              12.000, proc 9** over 1206 Python rollouts and 57025 native ones -- Tetra is in the
+              front cone at the handover, so the L locks the ACTOR and the proc-9 slide caps at 12.
+              The **cone-clearing pre-frame** is the whole difference (s149 said so; this is it
+              re-measured from the other side). Plans are now
+              ``(n0, sx, sy, l, j, ...)`` and `plan_rows` delivers the L for real.
+            - **THE WORK ORDER IS THE OBJECTIVE.** One item per ``(herd, walk length)``, ordered by
+              ``total = herd + walk + thrust + 4`` ASCENDING -- **348 items over 46 herds, totals 87
+              to 100**, four herds dropped with a proof (floor >= 101 at every thrust). Unit-major
+              ordering would spend the first hours on 100-frame plans off rung 4 while a 91-frame
+              plan sat unexamined on rung 5.
+            - **CONTAINMENT IS GATED END TO END, and it is the driver's own command**
+              (``overnight verify-console``, 12 checks): the console's herd is a live item, its walk
+              length is inside its own budget, **its walk letters are members of the fan alphabet**
+              (as decoded classes, of 11405), its aim is in the alphabet at the camera the fan runs,
+              its facing cell is one of the 45 enumerated, a real A-press re-derives its entry on all
+              six flags, and **its own candidate comes back DELIVERABLE with the cut on frame 101**.
+              `test_the_composite_log_is_the_console_log_row_for_row` pins the same thing with no sim
+              in it: the driver rebuilds the delivered movie byte for byte.
+            - **THE RUN REPORTS COVERAGE, NOT JUST ANSWERS.** ``overnight status`` gives elapsed /
+              remaining / ETA, items done-in-flight-left, candidates, razor evaluations, GENUINE, the
+              CONTACT population and best overlap, the residual sign split (the razor bracket),
+              exceptions counted by class, and the incumbent. Every fact is on disk the moment it
+              exists (append-only JSONL, flushed per line, atomic incumbent), the queue is ``O_EXCL``
+              claim files, and ``resume=1`` skips exactly the completed items and releases abandoned
+              claims -- exercised by killing a dry run, not by reasoning about it.
+            - **WHAT IT HAS SAID SO FAR (first minutes, and it is the instrument working):** at walk
+              1-3 the whole at-cap population is **17 to 87 u short of touching her** (best overlap
+              -16.98 u on rung 5 at walk 3, from 424 at-cap candidates -- which REPRODUCES s149's
+              stage-A deficit of 16.96 from a completely different enumeration). Outside contact the
+              razor's residual is a dead constant, so ``0 genuine`` at short walks is a distance
+              statement and not a refusal; the deficit is what closes with walk length.
+            - **THE KNOWN COVERAGE GAP, sized:** the fan's families are ``pre + flip + hold`` with the
+              hold on the FLIP's own stick, so nothing steers PER FRAME after the conversion -- what
+              s149's stage-B beam did. The fix is cheap because the at-cap prefix set is small (424 at
+              walk 3): extend each at-cap prefix at ``walk - k`` by ``k`` fine frames, ~130 s per item
+              at k=1 and ~150 s at k=2 with a 400-node beam. Not added mid-run on purpose.
+
       - [~] **RUNG 5's BLOCKER IS NEITHER THE DISTANCE NOR THE CONVERSION -- IT IS TETRA HITTING A
             WALL, AND THE GUARD THAT REFUSES IT STANDS IN FOR A MECHANIC THE CONSOLE GATED
             (session 149).** The ladder's only sub-console rung is not dead; both beams that died on

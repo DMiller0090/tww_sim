@@ -420,7 +420,30 @@ def _fan(base, sticks, lsched, csangle, cs_trail, cs_from, nthreads, *, alive_on
     return [(i, c) for i, c in enumerate(cores) if alive[i]]
 
 
-def _families(walk, n0, s1_stride):
+#: Frames the L may be HELD for in the switch family. j1 = 1 is the recipe (see `_families`); bounding it
+#: is a budget decision at depth, so it is a named knob logged per item, not a loop bound.
+LSWITCH_J1 = (1, 2)
+
+#: The per-item CLONE budget and the flip-alphabet strides `fan_exact` walks to meet it. 8 M leaves is
+#: ~400 s of one worker at the measured 74 k core-frames/s, which is what keeps a deep walk affordable.
+LEAF_BUDGET = 8_000_000
+ALPHA_STRIDES = (1, 2, 3, 4, 6, 8, 16)
+
+
+def _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l):
+    """Fleets `fan_exact` will build for this shape -- the clone budget's own arithmetic, so the
+    alphabet can be sized BEFORE the first one is cloned."""
+    n = sum(len(_families(walk, n0, 32)) for n0 in range(walk))
+    if two_segment:
+        pre = len(EF.stick_alphabet(pre_stride))
+        for n0 in range(walk):
+            j = walk - n0
+            for jp in [p for p in pre_frames if p < j]:
+                n += len(pre_l) * (1 + pre * len(_families(walk - n0 - jp, 0, 32)))
+    return n
+
+
+def _families(walk, n0, s1_stride, lswitch_j1=LSWITCH_J1):
     """The L SCHEDULES a ``walk``-frame plan can carry, off ``n0`` base frames -- the search's own
     structure, and every one of them is one fleet.
 
@@ -441,15 +464,15 @@ def _families(walk, n0, s1_stride):
     for l in L_AXIS:
         out.append(dict(kind='uniform', lsched=[l] * (j + 1),
                         label=lambda sx, sy, _l=l, _j=j: (n0, sx, sy, _l, _j)))
-    for j1 in range(1, j):
+    for j1 in [x for x in lswitch_j1 if x < j]:
         out.append(dict(kind='lswitch', lsched=[1] * j1 + [0] * (j - j1 + 1),
                         label=lambda sx, sy, _j1=j1, _j=j: (n0, sx, sy, 1, _j1, sx, sy, 0, _j - _j1)))
     return out
 
 
-#: The PRE segment: the stick that turns Tetra out of the front cone before the L frame. See
-#: `fan_exact` for why a plan without one tops out at speedF 12.000 on both engines.
-PRE_STRIDE = 16
+#: The PRE segment: the stick that turns Tetra out of the front cone before the L frame -- see `fan_exact`
+#: for why a plan without one tops out at speedF 12.000, and why stride 32 buys the depth that matters.
+PRE_STRIDE = 32
 PRE_FRAMES = (1,)
 PRE_L = (0,)
 
@@ -467,11 +490,23 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
     stick-SWITCHING family off coarse junctions, which is the one that has to be budgeted.
 
     The fan runs UNCAPPED and `at_cap` filters here, so the key carries speedF and the sub-cap count is
-    REPORTED rather than silently pruned."""
+    REPORTED rather than silently pruned.
+
+    THE ALPHABET IS SIZED TO A LEAF BUDGET, not fixed. A fan's cost is its core CLONES (measured s150:
+    the stepping is a fraction of it), and the fleet count grows as ``|pre| x walk``, so a fixed
+    full-resolution alphabet makes a 7-frame walk cost fifteen times a 3-frame one -- and the deep walks
+    are the ones that can reach contact at all (it closes ~4 u a frame from -17 u at walk 3). So the FLIP
+    alphabet is coarsened until the item fits `LEAF_BUDGET`, and the stride it settled on is logged with
+    the item (``alpha_stride``, ``alphabet``). Never the PRE: its job is only to rotate him."""
     out = {}
-    alpha = EF.stick_alphabet(1)
+    fleets_est = _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l)
+    a_stride = next((s for s in ALPHA_STRIDES
+                     if fleets_est * len(EF.stick_alphabet(s)) <= LEAF_BUDGET),
+                    ALPHA_STRIDES[-1])
+    alpha = EF.stick_alphabet(a_stride)
     st = dict(raw=0, sub_cap=0, off_cap_only=0, junctions=0, junctions_dead=0, fleets=0,
-              families=0, alphabet=len(alpha))
+              families=0, alphabet=len(alpha), alpha_stride=a_stride, fleets_est=fleets_est,
+              leaves_est=fleets_est * len(alpha))
 
     def collect(cores, label):
         for i, c in cores:
@@ -729,7 +764,7 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
                score_seconds=t_score, floor=item['floor'],
                totals={t: total_frames(item['herd'], walk, t) for t in thrusts},
                two_segment=bool(two_segment), s1_stride=s1_stride, pre_stride=pre_stride,
-               fan=fst, **st)
+               lswitch_j1=list(LSWITCH_J1), fan=fst, **st)
     ev(event='scored', item=item['item'], candidates=st['candidates'], genuine=st['genuine'],
        near=st['near'], fan_seconds=round(t_fan, 1), score_seconds=round(t_score, 1),
        at_cap=len(cands), raw=fst['raw'], n_contact=st['n_contact'],
@@ -973,6 +1008,7 @@ def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=N
                    walk_cap=walk_cap, s1_stride=int(s1_stride), two_segment=bool(two_segment),
                    walk_floor=WALK_FLOOR, thrusts=list(ES.THRUSTS), pre_stride=PRE_STRIDE,
                    pre_frames=list(PRE_FRAMES), max_accept=MAX_ACCEPT,
+                   lswitch_j1=list(LSWITCH_J1),
                    items=[dict((k, v) for k, v in x.items() if k != 'log') for x in keep],
                    units=sorted({x['unit'] for x in keep}), dropped=drop, cpu=os.cpu_count(),
                    note='items are ordered by the TOTAL they could produce, so the run is globally '
