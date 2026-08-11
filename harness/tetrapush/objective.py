@@ -448,6 +448,25 @@ def wall_margin(lx, lz, tx, tz, walls=None):
 
 # --------------------------------------------------------------------------- rule 4b: the regime
 
+def frame_ok(run, walls=None):
+    """**The wall guard a PHASE actually owes** -- refuse only the actors whose BG pass is unmodelled.
+
+    `frame_is_wall_free` refuses a frame with EITHER actor inside its own wall cylinder, which is the
+    right constraint for the herd (rule 4 above: the Courtyard herd is stepped unwalled, and a herd
+    that shoves Tetra into geometry is not one we want). It is the wrong constraint for the FINAL ROLL
+    + THRUST, where the clip happens with her wedged in the corner and her brace is the mechanic --
+    applied there it refuses the clip itself, which is what it did to the s148 ladder's rung 5 (her
+    guard killed 205600 of 205600 children one frame past the at-cap cloud).
+
+    So the guard reads the run: with ``walls_modelled`` set (`seeds.wall_for_terminal`) both passes
+    run and neither actor needs refusing; without it, both do. It is deliberately the RUN that
+    decides and not the caller -- the failure this replaces was a search believing it had a walled
+    Tetra when the factory had never wired one."""
+    if getattr(run, 'walls_modelled', False):
+        return True
+    return frame_is_wall_free(run.link.pos_x, run.link.pos_z, run.tx, run.tz, walls)
+
+
 def in_regime(lx, lz, tx, tz, ly=None, ty=None):
     """True while Tetra stays in the stt-3 plow regime the model covers.
 

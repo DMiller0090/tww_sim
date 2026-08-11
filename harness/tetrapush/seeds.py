@@ -72,7 +72,45 @@ def dtm_input_at(env):
     return lambda k: frames[k]['inp']
 
 
-def make_freerun(env, tetra_at=None, native=False):
+def courtyard_mesh():
+    """The ordered courtyard room mesh both wall passes take (`rollstab.turnaround.WALLS`).
+
+    Imported lazily: it is the only thing here that pulls the rollstab package in, and a herd search
+    (walls off, by design -- see `make_freerun`) should not pay for the mesh."""
+    from harness.rollstab import turnaround as TA
+    return TA.WALLS
+
+
+def wall_for_terminal(run):
+    """**Wire both actors' `dBgS_Acch::CrrPos` on an existing run -- the FINAL ROLL + THRUST phase.**
+
+    The phase boundary, in one call: a herd is stepped unwalled with `objective.frame_is_wall_free`
+    as its constraint (Dereck, s149 -- see `make_freerun`), and the terminal that follows it needs
+    the wall pass, because the clip happens with Tetra wedged in the corner and a braced Tetra HOLDS
+    instead of recoiling out of the push.
+
+    Returns ``run`` so it can be chained, and sets ``walls_modelled`` -- the flag
+    `objective.frame_ok` reads to decide which actors a guard still has to refuse.
+
+    **Refuses a native run**, the same way `from_f0.FreeRun.__init__` already refuses
+    ``walls_tetra`` with ``native_step``: `LandCore.step_courtyard` has no BG pass, so assigning the
+    mesh to a native run is a silent no-op (measured s149 -- native+walls is bit-identical to
+    native+unwalled, she passes straight through). The constructor's guard is bypassed by assigning
+    after the fact, which is exactly how s149's probes got a Tetra that looked walled and was not, so
+    the check is repeated here rather than trusted upstream."""
+    if getattr(run, 'native_step', False):
+        raise ValueError(
+            "wall_for_terminal: LandCore.step_courtyard has no BG pass, so a native run cannot "
+            "brace either actor -- assigning the mesh would be a silent no-op. Step the final roll "
+            "+ thrust on the Python path: make_freerun(env, native=False).")
+    mesh = courtyard_mesh()
+    run.link._walls = mesh
+    run.walls_tetra = mesh
+    run.walls_modelled = True
+    return run
+
+
+def make_freerun(env, tetra_at=None, native=False, walls=False):
     """Build the fully self-contained `FreeRun` at the state-2 f0 seed: computed centres, wired
     `LandCamera` (seeded from the oracle block), wired `Zl1Look` (look-fixture f0), wired
     `NeckLook` (m3564-fixture f0) -- the exact session-21 gate configuration. The caller must
@@ -88,7 +126,27 @@ def make_freerun(env, tetra_at=None, native=False):
     fully-wired run cheap -- everything the search steps with a camera (the junction, its quality
     glides, the roll exit tails) had to stay Python while a camera and the native step were
     mutually exclusive. Same answer 0-ULP, gated frame by frame in `tests/test_native_camera.py`.
-    Default off, so every existing caller and every wired-vs-native gate keeps its reference."""
+    Default off, so every existing caller and every wired-vs-native gate keeps its reference.
+
+    ``walls`` -- BOTH actors' own `dBgS_Acch::CrrPos`. **IT IS A PHASE SETTING, NOT A FIDELITY KNOB**
+    (Dereck, session 149), so it defaults OFF and the terminal turns it on:
+
+      * **HERD phase: OFF, and the prune is the constraint.** `objective`'s own rule 4 is "keep BOTH
+        actors off the walls during the herd, since the Courtyard sim models no wall collision" -- a
+        herd that shoves her into geometry is not a herd we want, so `objective.frame_is_wall_free`
+        refusing it is the intended behaviour and not a stand-in to be lifted.
+      * **FINAL ROLL + THRUST: ON, and REQUIRED.** The clip happens wedged in the corner: a braced
+        Tetra's `CrrPos` cancels her CC recoil so she HOLDS instead of recoiling away each overlap
+        frame, which is what lets the push steer the cut lunge. The console delivery is locked with
+        her pinned at the wall plane plus her radius
+        (`fixtures/courtyard_clip_s86_console.json`, `tests/test_tetra_walls.py`).
+
+    Use `wall_for_terminal` at the phase boundary rather than threading this through a herd search.
+    Wiring it is INERT on every existing 0-ULP gate -- over the whole 45-frame DTM window both actors
+    stay 331-337 u from geometry, so the pass is a strict no-op there and walled == unwalled
+    bit-for-bit (gated). **The native core has NO BG pass** (`LandCore.step_courtyard` ignores both
+    meshes -- measured s149): a native run reports ``walls_modelled False`` and warns rather than
+    accepting the argument silently, so the terminal phase must be stepped on the Python path."""
     from harness.tetrapush.from_f0 import FreeRun
     from tww_sim.core.camera.land_cam import LandCamera, seed_from_block
     from tww_sim.core.npc_zl1_look import Zl1Look
@@ -117,10 +175,14 @@ def make_freerun(env, tetra_at=None, native=False):
     # The exact f0->f1 seed push (perop ΔTetra) -> 0-ULP seed frame; None when Tetra is re-seated
     # (`tetra_at`, the recorded push no longer applies) -> FreeRun's settled-centre fallback.
     seed_push = None if tetra_at is not None else seed_push_f0(env)
-    return FreeRun(seed_row, seed_nspeed=seed['link']['nspeed'],
-                   seed_old_pose=seed.get('old_pose'), computed_pose=True,
-                   camera=cam, zl1=zl1, neck=neck, seed_push=seed_push,
-                   native_step=bool(native), native_look=bool(native))
+    run = FreeRun(seed_row, seed_nspeed=seed['link']['nspeed'],
+                  seed_old_pose=seed.get('old_pose'), computed_pose=True,
+                  camera=cam, zl1=zl1, neck=neck, seed_push=seed_push,
+                  native_step=bool(native), native_look=bool(native))
+    if walls:
+        return wall_for_terminal(run)
+    run.walls_modelled = False          # explicit: `objective.frame_ok` must never guess this
+    return run
 
 
 def make_freerun_native(env, tetra_at=None):
