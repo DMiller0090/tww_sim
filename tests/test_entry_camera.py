@@ -120,6 +120,93 @@ def test_the_injected_trail_reproduces_the_wired_camera_0_ulp():
             assert got == wired, "subx %d stick %s diverges from the wired camera" % (subx, stick)
 
 
+# ------------------------------------------------------------------------- the L-press blip (session 153)
+
+def test_cam_trail_l_frame_reproduces_the_wired_cameras_followcamera_blip_0_ulp():
+    """`LandCamera` fires a real 1-frame followCamera blip on every L rising edge (its own module
+    docstring); the L-FREE trail above cannot see it. This is the same licence as
+    `test_the_injected_trail_reproduces_the_wired_camera_0_ulp`, extended over a window that presses
+    L: the ``l_frame``-corrected trail must reproduce the wired camera exactly across the press, the
+    blip, and the settle, not just before it."""
+    seed = ES.console_seed()
+    frames = 8
+    for subx in (254, 1, 200):
+        for l_frame in (0, 3, 6):
+            trail = EC.cam_trail(subx, frames, l_frame=l_frame)
+            stick = (195, 164)
+            base = dict(seed['log'][-1], buttons=0, substickX=EC.delivered_byte(subx), substickY=0,
+                       stickX=stick[0], stickY=stick[1])
+            holds = [dict(base) for _ in range(frames)]
+            holds[l_frame] = dict(holds[l_frame], buttons=0x40, triggerL=255)     # one L frame
+            _run, rows = ES.continue_walk(holds)
+            wired = [(r['x'], r['z'], r['m351C'], r['speedF']) for r in rows]
+
+            base_core, _run0 = EF.base_core(0, seed=seed, hold=dict(
+                base, stickX=seed['log'][-1]['stickX'], stickY=seed['log'][-1]['stickY']))
+            core = base_core.clone(base_core.pe.clone_state())
+            fleet = N.CourtyardFleet([core], 1)
+            got = []
+            for k in range(frames):
+                l = 1 if k == l_frame else 0
+                fleet.set_schedule([[(stick[0], stick[1], 0x40 if l else 0, 255 if l else 0,
+                                      int(trail[k]))]])
+                fleet.run_par(1, 0)
+                got.append((core.pos_x, core.pos_z, int(core.m351C) & 0xFFFF, core.speedF))
+            assert got == wired, ("subx %d l_frame %d diverges from the wired camera through the "
+                                  "blip" % (subx, l_frame))
+
+
+def test_cam_trail_l_frame_matches_a_held_l_past_the_settle():
+    """`overnight._families`' L_AXIS uniform family never releases L (it holds the roll cap for the
+    rest of the walk); `cam_trail`'s own ``l_frame`` always releases after one frame. The claim that
+    lets one shape serve both consumers: they settle to the identical csangle from the SAME frame on,
+    for any L-press point -- gated here, not merely observed once."""
+    seed = ES.console_seed()
+    for l_frame in (0, 2, 5):
+        trail = EC.cam_trail(254, 9, l_frame=l_frame)
+        base = dict(seed['log'][-1], buttons=0, substickX=EC.delivered_byte(254), substickY=0)
+        holds = [dict(base, buttons=(0x40 if k >= l_frame else 0),
+                     triggerL=(255 if k >= l_frame else 0)) for k in range(9)]
+        _run, rows = ES.continue_walk(holds)
+        held = tuple(int(r['csangle']) & 0xFFFF for r in rows)
+        assert held[l_frame + 2:] == trail[l_frame + 2:], (
+            "l_frame %d: a held L settles to a different csangle than a released one" % l_frame)
+
+
+def test_camtrail_wraps_the_plain_trail_and_memoises_corrections():
+    """`CamTrail` (`overnight._fan`/`_atom_junction`'s own read path) must agree with calling
+    `cam_trail` directly -- both plain (``[idx]``) and corrected (``from_l``) -- and must not rebuild
+    a correction it already has."""
+    seed = ES.console_seed()
+    ct = EC.CamTrail(254, 8, seed, None)
+    plain = EC.cam_trail(254, 8, seed=seed, cache=False)
+    assert [ct[i] for i in range(8)] == list(plain)
+    assert len(ct) == 8
+    corrected = EC.cam_trail(254, 8, seed=seed, cache=False, l_frame=3)
+    once = ct.from_l(3)
+    assert [once[i] for i in range(8)] == list(corrected)
+    assert ct.from_l(3) is once, "from_l recomputed instead of returning its own cached result"
+
+
+def test_camtrail_from_l_composes_a_second_press_onto_the_first():
+    """A plan that presses L twice -- the atom junction's own conversion, released, THEN a
+    `_families` L_AXIS continuation choosing l=1 -- is two independent rising edges on ONE camera
+    history, not two separate L-free-prefixed replays. `overnight._atom_candidates` reads its
+    continuation through ``junction_trail.from_l(...)`` (`junction_trail` already carrying the
+    first press) for exactly this reason; this pins that `CamTrail.from_l` actually composes rather
+    than restarting from the L-free trail every time (session 153's own second-blip fix -- found
+    because a real hit still failed `confirm_entry` after the first, junction-only fix)."""
+    seed = ES.console_seed()
+    ct = EC.CamTrail(254, 12, seed, None)
+    composed = ct.from_l(2).from_l(6)
+    direct = EC.cam_trail(254, 12, seed=seed, cache=False, l_frame=(2, 6))
+    assert [composed[i] for i in range(12)] == list(direct)
+    # and it is NOT the same as pressing only the second (the first press's settle changed frame
+    # 6's own starting state, so the two-press trail must differ from a single-press one there on)
+    single = ct.from_l(6)
+    assert [composed[i] for i in range(3, 12)] != [single[i] for i in range(3, 12)]
+
+
 # ------------------------------------------------------------------------- the counting
 
 def test_the_camera_alphabet_is_deduped_on_the_trail():

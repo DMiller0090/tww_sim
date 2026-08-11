@@ -404,14 +404,23 @@ def _atom_junction(base, flips, rotate_side, rotate_off, csangle, cs_trail, n0, 
     partial-deflection draw is not the same input `escape_atom` was gated on, and comparing the two
     directly is what caught this: `tests/test_overnight_driver.py`'s bit-exactness gate). Candidate
     ``i``'s own flip bearing derives ``rot = flip +- rotate_off`` and ``slam = flip + 0x8000``
-    (`escape_atom`'s own formulas), each re-driven through `stick_for_bearing` at full deflection too.
-    The camera is FROZEN at ``cs0`` (the junction's own starting value) for all four frames, matching
+    (`escape_atom`'s own formulas), each re-driven through `stick_for_bearing` at full deflection too --
+    STICK DECODING is frozen at ``cs0`` (the junction's own starting value) for all four frames, matching
     `escape_atom`'s ``_clone_for_atom`` convention (its own documented ``cs_bill`` cost, not a new one).
 
+    **The frames' own INJECTED csangle is not frozen at ``cs0`` past the L-press (session 153).**
+    `LandCamera` fires a real 1-frame followCamera blip on the L rising edge that resets the yaw target,
+    so the release/rotate/slam frames read a CORRECTED trail (`cs_trail.from_l(n0)`) instead -- the
+    stick-decoding reference stays ``cs0`` (that is what `escape_atom` itself derives its bearings
+    against; freezing it is faithful, not a shortcut), but what actually reaches the physics as csangle
+    is the real post-blip value, not a re-use of the pre-junction one.
+
     Steps: `_fan` for the L-press + release (its existing per-candidate-single-stick shape already
-    fits those two, given full-deflection sticks precomputed from ``flips``), then `_step_batch` twice
-    more -- rotate, then slam -- with a freshly-derived per-candidate stick each time. A candidate that
-    leaves the follow bar during rotate/slam is dropped, same as `_fan`'s own ``alive_only``.
+    fits those two, given full-deflection sticks precomputed from ``flips``, and now self-corrects for
+    the blip -- see `_fan`'s own docstring), then `_step_batch` twice more -- rotate, then slam -- with a
+    freshly-derived per-candidate stick each time, each reading its own corrected-trail frame. A
+    candidate that leaves the follow bar during rotate/slam is dropped, same as `_fan`'s own
+    ``alive_only``.
 
     ``turnaround_first`` is NOT a parameter here (yet): every real backslide measured so far (session
     151, off the locked console fixture) already faces away and fires without it, and a terminal that
@@ -429,6 +438,9 @@ def _atom_junction(base, flips, rotate_side, rotate_off, csangle, cs_trail, n0, 
     junc = _fan(base, sticks, [1, 0], csangle, cs_trail, n0, nthreads)
     if not junc:
         return []
+    trail = cs_trail if cs_trail is None else cs_trail.from_l(n0)
+    rot_cs = cs0 if trail is None else int(trail[n0 + 2])
+    slam_cs = cs0 if trail is None else int(trail[n0 + 3])
     off = int(rotate_off) if int(rotate_side) >= 0 else -int(rotate_off)
     cand = []
     for i, c in junc:
@@ -436,10 +448,10 @@ def _atom_junction(base, flips, rotate_side, rotate_off, csangle, cs_trail, n0, 
         rot = stick_for_bearing((flip + off) & 0xFFFF, cs0, msd=1.0)
         slam = stick_for_bearing((flip + 0x8000) & 0xFFFF, cs0, msd=1.0)
         cand.append(dict(i=i, core=c, flip=sticks[i], rot=rot, slam=slam))
-    rot_cores = _step_batch([r['core'] for r in cand], [r['rot'] for r in cand], 0, cs0, nthreads)
+    rot_cores = _step_batch([r['core'] for r in cand], [r['rot'] for r in cand], 0, rot_cs, nthreads)
     for r, c in zip(cand, rot_cores):
         r['core'] = c
-    slam_cores = _step_batch([r['core'] for r in cand], [r['slam'] for r in cand], 0, cs0, nthreads)
+    slam_cores = _step_batch([r['core'] for r in cand], [r['slam'] for r in cand], 0, slam_cs, nthreads)
     for r, c in zip(cand, slam_cores):
         r['core'] = c
     return [r for r in cand
@@ -455,10 +467,17 @@ def _atom_candidates(base, walk, n0, csangle, cs_trail, s1_stride, alpha, flips,
 
     ``flips`` (bearings, `away_walk.flip_arc`'s output) plays the PRE alphabet's role: the junction's
     job, like the PRE's, is only to pick a DIRECTION to convert through, so it is deliberately a small,
-    dedicated sweep -- the continuation after it is where the search still needs `alpha`'s resolution."""
+    dedicated sweep -- the continuation after it is where the search still needs `alpha`'s resolution.
+
+    The continuation's own `_fan` reads through the JUNCTION's corrected trail (``cs_trail.from_l(n0)``),
+    never the plain one straight from the caller (session 153): the junction already pressed L once
+    (release, rotate, slam all after it), so a continuation family choosing L_AXIS's l=1 branch presses
+    it a SECOND time on a camera that has already been through one blip and settle -- composing onto
+    that real history, not a fresh L-free one, is what a held-L continuation actually experiences."""
     remaining = walk - n0 - ATOM_FRAMES
     if remaining < 1:
         return
+    junction_trail = cs_trail if cs_trail is None else cs_trail.from_l(n0)
     for ro in ATOM_ROTATE_OFFS:
         for side in ATOM_ROTATE_SIDES:
             if deadline is not None and time.time() >= deadline:
@@ -479,7 +498,7 @@ def _atom_candidates(base, walk, n0, csangle, cs_trail, s1_stride, alpha, flips,
                     for c0 in range(0, len(alpha), chunk):
                         part = alpha[c0:c0 + chunk]
                         st['fleets'] += 1
-                        cores = _fan(r['core'], part, fam['lsched'], csangle, cs_trail,
+                        cores = _fan(r['core'], part, fam['lsched'], csangle, junction_trail,
                                      n0 + ATOM_FRAMES, nthreads)
                         collect(cores, lambda i, _p=part, _fl=r['flip'], _rt=r['rot'], _sl=r['slam'],
                                 _n0=n0, _f=fam:
@@ -502,13 +521,23 @@ def _fan(base, sticks, lsched, csangle, cs_trail, cs_from, nthreads, *, alive_on
     So the byte on the extra frame is inert and the A-press replaces it in the real log.
 
     Returns ``[(i, core)]`` for the cores still inside the follow bar -- past it she is turning and the
-    plow model's measured constant is gone, so the branch is dead from that frame on."""
+    plow model's measured constant is gone, so the branch is dead from that frame on.
+
+    ``cs_trail``, when it presses L anywhere in ``lsched``, reads through the CORRECTED trail from
+    that frame on (`entry_camera.CamTrail.from_l`) instead of the L-free one -- the followCamera blip
+    a real L rising edge fires (session 153), which every L-pressing caller shares (`_atom_junction`'s
+    L-conversion, `_families`' L_AXIS uniform hold) and none of them modelled before this."""
     from tww_sim.core.anim import _anmc as N
     cores = [base.clone(base.pe.clone_state()) for _ in sticks]
     fleet = N.CourtyardFleet(cores, 1)
     alive = [True] * len(cores)
+    trail = cs_trail
+    if cs_trail is not None:
+        l_at = next((cs_from + j for j, l in enumerate(lsched) if l), None)
+        if l_at is not None:
+            trail = cs_trail.from_l(l_at)
     for j, l in enumerate(lsched):
-        cs = csangle if cs_trail is None else int(cs_trail[cs_from + j])
+        cs = csangle if trail is None else int(trail[cs_from + j])
         fleet.set_schedule([[(sx, sy, PAD_L if l else 0, TRIG_L if l else 0, cs)]
                             for (sx, sy) in sticks])
         fleet.run_par(1, nthreads)
@@ -976,8 +1005,7 @@ def prepared(unit, env, walls, top, *, cache=_PREPARED):
         cache[key] = (prep, None, ())
         return cache[key]
     hold = hold_row(prep['seed'])
-    trail = EC.cam_trail(int(hold.get('substickX', 128)), frames=top + TRAIL_PAD,
-                         seed=prep['seed'], env=env, cache=False)
+    trail = EC.CamTrail(int(hold.get('substickX', 128)), top + TRAIL_PAD, prep['seed'], env)
     cache[key] = (prep, hold, trail)
     return cache[key]
 

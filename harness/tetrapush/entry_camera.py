@@ -91,7 +91,7 @@ def as_seq(subx):
             else [delivered_byte(x) for x in subx])
 
 
-def cam_trail(subx, frames=TRAIL_FRAMES, seed=None, env=None, cache=True):
+def cam_trail(subx, frames=TRAIL_FRAMES, seed=None, env=None, cache=True, l_frame=None):
     """The csangle Link's physics DECODES against on each entry-plan frame, under C-stick ``subx``.
 
     Index 0 is the first frame after the arrival. Measured on the WIRED camera (`entry_search.
@@ -100,19 +100,41 @@ def cam_trail(subx, frames=TRAIL_FRAMES, seed=None, env=None, cache=True):
 
     It is a pure function of the input: the yaw target moves only with C-stick X and Link's motion moves
     only the camera CENTRE (`knowledge/mechanics/land-camera.md`), so one trail serves every held main
-    stick in the fan -- gated, not assumed.
+    stick in the fan -- gated, not assumed. **True only while nothing ever presses L** (session 153):
+    `LandCamera` fires a real 1-frame followCamera blip on every L rising edge that resets the yaw
+    target to wherever the chase sits at that instant, and this trail's own reference replay is L-free
+    by construction, so it silently mispredicts every frame from an L-press on.
 
     ``subx`` is a byte (held for the whole plan) or a SEQUENCE of bytes, one per frame, short sequences
     holding their last value. The sequence form is the axis's own extension: the C-stick is idle every
     frame, not just uniformly, so the reachable trails are every camera PATH and not the 82 ramps a
-    single held byte draws."""
+    single held byte draws.
+
+    ``l_frame`` (session 153): if given, L presses for exactly one frame at this index then releases
+    (`away_walk.escape_atom`'s own L-conversion shape) instead of never at all. Frames up to and
+    including ``l_frame`` are UNCHANGED from the L-free trail (the blip needs a frame to act, the same
+    1-frame delay every controller input has here); the real followCamera blip is simulated for real
+    frame by frame from ``l_frame + 1`` on, not approximated. A held L (`overnight._families`'s L_AXIS
+    uniform hold, never released) reaches the identical settled csangle by the same frame the release
+    does (gated, `tests/test_entry_camera.py`), so this one shape serves both.
+
+    ``l_frame`` may also be a sequence of frames, EARLIEST FIRST -- a plan that presses L more than
+    once (the atom junction's own conversion, THEN a `_families` L_AXIS continuation choosing l=1, is
+    two independent rising edges on ONE camera history, not two separate replays: `CamTrail.from_l`
+    is what composes them, session 153's own second-blip fix)."""
     seq = as_seq(subx)
-    key = (tuple(seq), int(frames))
+    l_frames = () if l_frame is None else (
+        (int(l_frame),) if isinstance(l_frame, (int, float)) else tuple(int(x) for x in l_frame))
+    key = (tuple(seq), int(frames), l_frames)
     if cache and key in _TRAILS:
         return _TRAILS[key]
     seed = seed or ES.console_seed()
     base = dict(seed['log'][-1], buttons=0, substickY=0)
     holds = [dict(base, substickX=seq[min(k, len(seq) - 1)]) for k in range(int(frames))]
+    for lf in l_frames:
+        # buttons 0x40 (L) + triggerL 255: the only combination a DTM ever delivers (a half-pressed L
+        # is not a real state -- `overnight.PAD_L`/`TRIG_L`'s own note) -- one frame, then released.
+        holds[lf] = dict(holds[lf], buttons=0x40, triggerL=255)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         # the SEED's own log (s150): a trail measured on the console arrival is not the one a different
@@ -122,6 +144,56 @@ def cam_trail(subx, frames=TRAIL_FRAMES, seed=None, env=None, cache=True):
     if cache:
         _TRAILS[key] = trail
     return trail
+
+
+class CamTrail:
+    """The L-free trail plus, on demand, the corrected trail for an L press at any frame -- what
+    `overnight._fan`/`_atom_junction` read through instead of a bare array, so the followCamera-blip
+    correction (`cam_trail`'s ``l_frame``) reaches every consumer automatically wherever L enters the
+    schedule (session 153).
+
+    ``from_l`` COMPOSES: calling it on a trail that already carries an earlier L press (the atom
+    junction's own conversion) adds a SECOND rising edge to the SAME camera history rather than
+    starting a fresh, pristine one -- a `_families` L_AXIS continuation choosing l=1 after the
+    junction's rotate/slam is exactly this case (the junction releases L before the continuation
+    presses it again), and the two blips are not independent: the second one's own result depends on
+    where the first one's settle left the camera, not on the L-free reference (session 153's own
+    second-blip fix -- caught because a real hit off the walk=9 rediscovery run STILL failed
+    `confirm_entry` by 11 BAM after the first (junction-only) fix, not merely reasoned out).
+
+    ``cam_trail``'s own module cache is keyed on ``(subx, frames, l_frames)`` alone, with no seed
+    identity in it -- safe for a single herd, wrong across two (`overnight.prepared`'s existing
+    ``cache=False`` for exactly this reason). This wraps ONE herd's own ``(subx, seed, env)``, so
+    every trail it builds -- plain or corrected -- is already scoped to that herd, and memoises them
+    itself (a search revisits the same ``n0`` many times: every rotate/rotate_side combination in
+    `_atom_junction`'s own grid)."""
+
+    def __init__(self, subx, frames, seed, env, l_frames=()):
+        self.subx = subx
+        self.frames = int(frames)
+        self.seed = seed
+        self.env = env
+        self.l_frames = tuple(int(x) for x in l_frames)
+        self.plain = cam_trail(subx, frames=self.frames, seed=seed, env=env, cache=False,
+                               l_frame=self.l_frames or None)
+        self._corrected = {}
+
+    def __getitem__(self, idx):
+        return self.plain[idx]
+
+    def __len__(self):
+        return len(self.plain)
+
+    def from_l(self, l_frame):
+        """A `CamTrail` with an L press ALSO at ``l_frame``, added to any this trail already
+        carries -- see the class doc on why this composes rather than restarts."""
+        l_frame = int(l_frame)
+        got = self._corrected.get(l_frame)
+        if got is None:
+            got = CamTrail(self.subx, self.frames, self.seed, self.env,
+                           l_frames=self.l_frames + (l_frame,))
+            self._corrected[l_frame] = got
+        return got
 
 
 def _s16(v):
