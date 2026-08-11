@@ -1780,6 +1780,22 @@ from scratch. Land the edits first, then gate.
               path braces. So a walled search runs at **717 clone+steps/s against the native 9406,
               13x**, and porting Tetra's ``mObjAcch.CrrPos`` into `LandCore.step_courtyard` is what
               makes a walled beam affordable.
+            - **THE THRUST IS AN OPTION SET, NOT A PIN, AND THE SLICE'S "BARREN" WAS AN ARTIFACT**
+              (Dereck: thrusting works on 13-15, and it is good to have options; measured
+              `_notes/s149_thrusts.py`). ``roll_frames = cut_step + 2``, so 13/14/15 cost
+              **17/18/19** frames -- and re-scored on the REACHABLE frame-7 cloud at each node's own
+              dispatch lean, **all three bracket the razor**: 13 reads 158 neg / 13 pos at **total
+              97**, 14 reads 159/12 at **98**, 15 reads 158/13 at **99**. So the earlier reading off
+              the banked family ("thrust 13 is barren, 2414 roots and 0 genuine") was the ``side = 0``
+              SLICE speaking: `terminal.RollFrame.item` puts Link on the brace line, so no banked scan
+              can vary LINK's lateral -- the one axis the endgame hinges on (s147) -- and a zero from
+              it is not a refusal (`[[infeasible-needs-proof]]`). **The console's own delivered clip is
+              thrust 15 / m351C 64761, the most expensive of the three**, so the options are worth up
+              to 2 frames against it.
+              **And the bracket TIGHTENS as the thrust rises** -- resid spans +-45.7, +-29.4, +-11.9 u
+              at 13, 14, 15 -- so 13 is the cheapest and coarsest and 15 the tightest, which is
+              presumably why the console took it. Best |resid| runs 6.76 (13), **0.166 (14)**, 0.245
+              (15), all on 4-value samples, so the ordering is suggestive and not established.
             - **AND WITH THE GUARD OFF THE STACK RAN: CONTACT IS REACHED AT TOTAL 98 AND THE RAZOR
               IS BRACKETED.** Walled stage A survives to frame 6 (51 at-cap dispatchable states,
               total 97) with the contact deficit closing monotonically **21.49 -> 16.96 -> 13.20**,
