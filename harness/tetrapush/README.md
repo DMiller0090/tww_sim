@@ -1793,6 +1793,35 @@ from scratch. Land the edits first, then gate.
                 **NEXT (items (2) and (3) above, unchanged and still the real blocker)**: teach
                 `cam_trail` the real L-press followCamera blip, then re-run the widened rediscovery
                 sweep (7..13) with both fixes in -- THAT is what satisfies s151's hard gate for real.
+              - **SAME SESSION, ITEM (2) IS ALSO DONE: `cam_trail` NOW MODELS THE BLIP, INCLUDING A
+                SECOND ONE.** `cam_trail` grows ``l_frame`` (press L for one frame at a given index,
+                then release -- a held L reaches the identical settled csangle by the same frame,
+                gated); a new `entry_camera.CamTrail` wrapper threads the correction through `_fan`
+                (auto-detects L anywhere in a schedule) and `_atom_junction`'s rotate/slam (previously
+                frozen at the pre-junction csangle for the INJECTED value, not just the stick-decoding
+                reference, which `escape_atom` itself never claimed). **Testing against the actual
+                walk=9 case -- not just reasoning it through -- caught a SECOND bug the reasoning
+                missed**: the first (junction-only) fix left an 11 BAM residual, because a `_families`
+                continuation choosing L_AXIS's l=1 after the junction's own release is a SECOND,
+                independent rising edge on a camera that already went through one blip and settle, and
+                `CamTrail.from_l` was building the correction from a fresh L-free reference instead of
+                composing onto that real history. Fixed: `from_l` now composes (an L press adds to
+                whatever a trail already carries), and `_atom_candidates` threads the junction's own
+                corrected trail into its continuation instead of the plain one from the caller.
+                **Verified directly against the wired camera, not just gated in the abstract**: a
+                controlled single-blip atom-junction candidate now matches the wired camera's facing
+                bit-for-bit (was 29 BAM off pre-fix, `_notes/s153_verify_atom_junction_matches_wired.
+                py`). Re-running s152's own walk=9/thrust=15 reacquisition with both fixes in changes
+                its answer from "1 genuine hit, refused by `confirm_entry`" to "0 genuine, best overlap
+                3.85e-5 off target" -- the SAME close-but-not-quite shape already seen at walk 7/8, so
+                the original hit was a FALSE POSITIVE from this exact gap, not a real one the fix broke.
+                Full default suite: 1261 passed (was 1257), new 0-ULP gates for `cam_trail`'s single
+                press, held-vs-released equivalence, and composed double press, all against the wired
+                camera. **NEXT (item 3, unattempted): re-run the widened rediscovery sweep (walk 7..13)
+                with both fixes in and see whether a genuine, DELIVERABLE, <=101-frame plan actually
+                surfaces** -- that is what would satisfy s151's hard gate for real; a 0-genuine walk=9 on
+                its own does not (`[[search-must-rediscover-known-answer]]`, and this session did not
+                widen past 9).
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
