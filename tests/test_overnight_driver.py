@@ -27,6 +27,7 @@ from harness.tetrapush import entry_fan as EF
 from harness.tetrapush import objective as O
 from harness.tetrapush import overnight as ON
 from harness.tetrapush import overnight_io as IO
+from harness.tetrapush import seeds as SD
 
 with open(ON.CONSOLE_CLIP) as _fh:
     FIX = json.load(_fh)
@@ -159,8 +160,15 @@ def test_at_cap_is_a_threshold_and_not_an_equality():
     assert 17.183998107910156 != ES.WALK_CAP, 'the equality prune would have refused this state'
 
 
-def test_the_families_are_uniform_plus_the_l_switch_and_are_frame_exact():
+def test_the_families_are_uniform_and_are_frame_exact():
     """Every family is one fleet, and every one of them delivers EXACTLY the walk it claims.
+
+    ``_families`` is uniform-only since session 151: the L-conversion recipe (`away_walk.escape_atom`'s
+    L-press, release, rotate, backwards slam) needs a DIFFERENT stick per frame, derived per candidate,
+    which no member of this dict-of-fleets shape can express -- see `_atom_junction` +
+    `test_the_atom_junction_agrees_with_escape_atom_bit_for_bit` below, and the module docstring's
+    headline for why the old ``lswitch`` shape (L-press + release, nothing after) was replaced rather
+    than kept beside it.
 
     ``len(lsched) == j + 1``: at ``input_delay = 1`` the endpoint a plan of j delivered frames rolls
     from is the state after j+1 steps, and the byte on that last step is inert."""
@@ -168,14 +176,100 @@ def test_the_families_are_uniform_plus_the_l_switch_and_are_frame_exact():
         for n0 in range(walk):
             fams = ON._families(walk, n0, 32)
             j = walk - n0
-            assert len(fams) == 2 + len([x for x in ON.LSWITCH_J1 if x < j])
-            assert {f['kind'] for f in fams} <= {'uniform', 'lswitch'}
+            assert len(fams) == 2
+            assert {f['kind'] for f in fams} == {'uniform'}
             for f in fams:
                 assert len(f['lsched']) == j + 1, (walk, n0, f['kind'])
                 plan = f['label'](40, 50)
                 assert ON.plan_frames(plan) == walk, (plan, walk)
-            sw = [f for f in fams if f['kind'] == 'lswitch']
-            assert all(f['lsched'][0] == 1 and f['lsched'][-1] == 0 for f in sw)
+
+
+# --------------------------------------------------------------------------- the atom conversion
+
+@pytest.fixture(scope='module')
+def atom_seed():
+    """A real mid-herd backslide, off the locked console fixture's own frames -- the state the
+    escape-atom conversion exists for (session 151). Truncated to 71 of the console's 78 herd frames,
+    ONE FRAME BEFORE the console's own recorded play begins ITS version of this same recipe (frames
+    71-77 of its herd; see `_notes/tetrapush-handoff-2026-08-11-session151.md`), so nothing here
+    borrows the answer -- it is a genuine backslide the conversion has never seen."""
+    env = SD.load_env()
+    seed = dict(log=[dict(r) for r in FIX['log'][:71]])
+    hold = ON.hold_row(seed)
+    core, run = EF.base_core(0, seed=seed, env=env, hold=hold)
+    return dict(env=env, seed=seed, hold=hold, core=core, run=run, cs0=int(run.csangle))
+
+
+def test_the_atom_seed_is_a_genuine_backslide(atom_seed):
+    """The premise both tests below rely on: if the seed were already at cap, converting it would
+    prove nothing about the recipe."""
+    assert not ON.at_cap(atom_seed['core'].speedF)
+    assert atom_seed['core'].speedF < 0.0, 'the untarget backslide this recipe converts is negative'
+
+
+def test_the_atom_junction_agrees_with_escape_atom_bit_for_bit(atom_seed):
+    """`_atom_junction`'s rotate/slam formula IS `away_walk.escape_atom`'s (its module docstring, steps
+    2-4), computed per candidate instead of off one shared flip -- so for a MATCHED knob set (same flip
+    bearing, same frozen camera) the two must produce IDENTICAL stick bytes on all four frames.
+
+    This is the gate session 151's own design correction needed: the first version compared against a
+    stick-BYTE alphabet (any candidate draw, whatever its magnitude) and disagreed on every one of
+    them, because `escape_atom` always drives the L-press at FULL deflection and a byte draw is not
+    guaranteed to be. Swapping the flip axis for `away_walk.flip_arc`'s own bearings -- full deflection
+    by construction, `stick_for_bearing(..., msd=1.0)` -- is what makes the two agree, and this pins
+    that agreement so it cannot silently regress."""
+    from harness.tetrapush import away_walk as AW
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(atom_seed['env'])
+    core, run, cs0 = atom_seed['core'], atom_seed['run'], atom_seed['cs0']
+    flips = AW.flip_arc(hl, step=ON.ATOM_FLIP_STEP)[:3]
+    for flip in flips:
+        for side in ON.ATOM_ROTATE_SIDES:
+            for ro in ON.ATOM_ROTATE_OFFS:
+                junc = ON._atom_junction(core, [flip], side, ro, cs0, None, 0, 0)
+                assert len(junc) == 1, (flip, side, ro)
+                r = junc[0]
+                atom = AW.escape_atom(run, hl, turnaround_first=False, rotate_side=side,
+                                      rotate_off=ro, flip_bearing=flip, exit_bearing=0, csangle=cs0,
+                                      max_frames=4, exit_run=0)
+                assert len(atom['log']) >= 4, (flip, side, ro)
+                l_press = (atom['log'][0]['stickX'], atom['log'][0]['stickY'])
+                release = (atom['log'][1]['stickX'], atom['log'][1]['stickY'])
+                assert r['flip'] == l_press == release, (flip, side, ro, r['flip'], l_press, release)
+                assert r['rot'] == (atom['log'][2]['stickX'], atom['log'][2]['stickY']), (flip, side, ro)
+                assert r['slam'] == (atom['log'][3]['stickX'], atom['log'][3]['stickY']), (flip, side, ro)
+
+
+def test_the_atom_conversion_reaches_at_cap_from_the_consoles_own_backslide(atom_seed):
+    """**THE SEARCH SPACE MUST CONTAIN THE SHAPE OF SEQUENCE THAT PRODUCED THE 101**
+    (`[[search-space-contains-human]]`; Dereck's own framing of this session's task).
+
+    Session 150 found -- confirmed against the live sim in `_notes/s151_verify_atom_matches_console.py`,
+    not just the stick-decode coincidence -- that the console's real 78-frame herd converts its
+    untarget backslide to the walk cap using EXACTLY this recipe, at its own frames 71-77 (L-press,
+    release, rotate, backwards slam, then a held exit stick). `_families`' old ``lswitch`` shape
+    (L-press then release, nothing after) structurally could not express the rotate or the slam, so no
+    pass built on it could ever have found this shape, on ANY herd.
+
+    This seeds the state one frame before the console's own conversion begins and asserts
+    `_atom_junction` -- the generator `fan_exact` now calls in its place -- converts it too: at least
+    one knob combination lands a rollable, at-the-cap state. Off a REAL backslide the search could not
+    convert at all before this session, not a synthetic or cherry-picked one."""
+    from harness.tetrapush import away_walk as AW
+    from harness.tetrapush.reposition import HerdLine
+    hl = HerdLine.from_env(atom_seed['env'])
+    core, cs0 = atom_seed['core'], atom_seed['cs0']
+    flips = AW.flip_arc(hl, step=ON.ATOM_FLIP_STEP)
+    hits = []
+    for flip in flips:
+        for side in ON.ATOM_ROTATE_SIDES:
+            for ro in ON.ATOM_ROTATE_OFFS:
+                for r in ON._atom_junction(core, [flip], side, ro, cs0, None, 0, 0):
+                    c = r['core']
+                    if EF._is_rollable(c) and ON.at_cap(c.speedF):
+                        hits.append(dict(bearing=flip, side=side, ro=ro, **r))
+    assert hits, ('no (flip, rotate_side, rotate_off) combination converts the consoles own recorded '
+                 'backslide to a rollable at-cap state -- the search space does not contain it')
 
 
 # --------------------------------------------------------------------------- the checkpoint layer
@@ -241,7 +335,7 @@ def test_the_pre_segment_is_only_ever_a_cone_clear_length(walk):
     """`PRE_FRAMES` is a knob, but a pre segment longer than the walk is not a plan."""
     assert all(p >= 1 for p in ON.PRE_FRAMES)
     assert ON.PRE_L == (0,), 'an L on the pre frame acquires the actor -- that is what it must avoid'
-    assert 1 in ON.LSWITCH_J1, 'j1 = 1 IS the conversion recipe and may never be budgeted away'
+    assert ON.ATOM_FRAMES == 4, 'L-press, release, rotate, slam are the recipe -- never a budget knob'
     keep, _d = ON.units()
     assert all(ON.max_walk(u['herd'], 13, O.TOTAL_INCUMBENT) >= walk or walk > 1 for u in keep[:1])
 

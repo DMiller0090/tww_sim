@@ -1819,6 +1819,57 @@ from scratch. Land the edits first, then gate.
               primitives it is built from) instead of the ad hoc ``PRE``/``L_AXIS`` construction. Not
               attempted this session -- three real mistakes is enough for one sitting, and this needs a
               clean look, not a rushed patch on top of the others.
+            - **SESSION 151 -- THE HAND-ROLLED CONVERSION IS DELETED, THE REAL RECIPE IS NATIVE AND
+              GATED AGAINST THE PRIMITIVE, AND THE SEARCH SPACE NOW PROVABLY CONTAINS THE CONSOLE'S OWN
+              CONVERSION SHAPE.** `_families`' ``lswitch`` (L-press, release, nothing after) is gone
+              outright, not kept beside its replacement: `overnight._atom_junction` runs
+              `away_walk.escape_atom`'s own recipe (L-press, release, rotate, backwards slam) NATIVELY,
+              per candidate, and `_atom_candidates` composes it into `fan_exact` exactly the way the
+              PRE segment already composes -- a junction, then the ordinary family sweep for whatever
+              walk remains. Gates: `tests/test_overnight_driver.py` (+4, all under 0.2 s).
+              - **CONFIRMED AGAINST THE SIM FIRST, NOT JUST THE STICK-DECODE.** Seeded a `FreeRun` at
+                the console's own locked log truncated to frame 71 -- one frame before its recorded
+                conversion begins -- and ran `away_walk.probe`'s own knob sweep off it:
+                ``flip_bearing=hl.bearing_bam()`` (the herd's own down-bearing, no sweep needed),
+                ``rotate_side=-1``, ``rotate_off=0x6000`` FIRES clean -- separates in 5 frames, ZERO
+                dips, better than the human's own 7. The proc sequence (6 -> 7 ATN_MOVE -> 6 at +17.6
+                the negation -> 24 MoveTurn halved to +8.5 -> 6 settling at +17.0) matches the console's
+                own recorded frames 71-77 exactly; the byte-for-byte stick values do not, a documented
+                ~144 BAM camera-chase gap (`_clone_for_atom`'s own accepted cost) -- expected, not a
+                defect.
+              - **A REAL DESIGN CORRECTION MID-SESSION: THE FLIP AXIS CANNOT BE A STICK-BYTE ALPHABET.**
+                The first `_atom_junction` swept `entry_fan.stick_alphabet` directly for the flip, and
+                the resulting rotate/slam bytes DISAGREED with `escape_atom`'s own computation on every
+                draw, because `escape_atom` always drives the L-press at FULL deflection
+                (``stick_for_bearing(flip, cs, msd=1.0)``, its module docstring: "full stick toward
+                Tetra") and a byte draw is not guaranteed to be. Swapped the flip axis for
+                `away_walk.flip_arc`'s own bearings (full deflection by construction): all 168 tested
+                (flip x rotate_side x rotate_off) combinations then agree with `escape_atom` bit-for-bit
+                on all four frames. Gate: ``test_the_atom_junction_agrees_with_escape_atom_bit_for_bit``.
+              - **CONTAINMENT, THE LITERAL ASK.** ``test_the_atom_conversion_reaches_at_cap_from_the_
+                consoles_own_backslide`` seeds the SAME real frame-71 backslide (never the answer
+                itself) and asserts `_atom_junction` converts it to a rollable at-cap state -- the
+                search's own generator doing what previously only a hand-run `escape_atom.probe` could.
+                ``overnight verify-console`` still passes 12/12 unchanged (the console's own item
+                bypasses the conversion phase entirely, as s150 found, so this was never going to move
+                it).
+              - **A REAL FLEET RUN THROUGH THE WHOLE PIPELINE, SAMPLED.** Off the same frame-71 seed at
+                walk 7, `fan_exact` returns ~98.6k atom-shaped at-cap candidates; 300 sampled at random
+                and replayed on the WIRED python engine via `plan_rows` land rollable-AND-at-cap on
+                ~70% of them. The rest is the SAME prediction-vs-reality fallout `accept()`'s
+                multi-stage pipeline already exists to filter (`entry_fan.py`'s own docstring: "about
+                one aim in eight brakes on the entry frame instead") -- not a new failure mode.
+              - **STILL SCOPED, NOT SILENT.** ``turnaround_first`` is not swept (every real backslide
+                measured so far already faces away; a facing-forward one still has the existing PRE
+                segment to clear the cone, untested in combination). The atom does not yet compose with
+                a PRE pre-turn -- it only runs bare off each ``n0``. Neither blocks the containment
+                claim; both are honest follow-up, not a gap these tests paper over.
+              - **NEXT: RE-LAUNCH THE REAL PASS.** Nothing from s150's own runs (all pre-fix) is
+                trustworthy evidence the space is barren on the 48 non-console herds -- that conclusion
+                is RETRACTED, not confirmed. `overnight run` is clear to launch for real now that
+                `verify-console` re-passed and the atom's own physics is gated; widen
+                ``turnaround_first`` and the PRE+atom composition only if the bare sweep comes back
+                empty.
 
       - [~] **RUNG 5's BLOCKER IS NEITHER THE DISTANCE NOR THE CONVERSION -- IT IS TETRA HITTING A
             WALL, AND THE GUARD THAT REFUSES IT STANDS IN FOR A MECHANIC THE CONSOLE GATED

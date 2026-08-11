@@ -69,6 +69,7 @@ while _rb != os.path.dirname(_rb) and not os.path.exists(os.path.join(_rb, 'pypr
 if _rb not in sys.path:
     sys.path.insert(0, _rb)
 
+from harness.tetrapush import away_walk as AW
 from harness.tetrapush import cross_engine as XE
 from harness.tetrapush import entry_camera as EC
 from harness.tetrapush import entry_fan as EF
@@ -76,6 +77,7 @@ from harness.tetrapush import entry_search as ES
 from harness.tetrapush import objective as O
 from harness.tetrapush import overnight_io as IO
 from harness.tetrapush import seeds as SD
+from tww_sim.land.plan_land._primitives import stick_for_bearing
 
 REPO = _rb
 LADDER = os.path.join(REPO, 'fixtures', 'courtyard_candidate_ladder.json')
@@ -389,6 +391,103 @@ def _step_batch(cores, sticks, l, csangle, nthreads):
     return out
 
 
+def _atom_junction(base, flips, rotate_side, rotate_off, csangle, cs_trail, n0, nthreads):
+    """**The escape atom's own recipe (`away_walk`'s module docstring, steps 2-4), per candidate,
+    natively** -- the fan's counterpart of `away_walk.escape_atom`, which cannot be a `_families`
+    member because its rotate and slam frames each need a DIFFERENT stick, derived from the
+    candidate's OWN flip, not a stick held constant like every other family.
+
+    ``flips`` is a list of WORLD BEARINGS (BAM), `away_walk.flip_arc`'s own output -- NOT a stick-byte
+    alphabet (session 151's own correction: a byte alphabet mixes in whatever magnitude each draw
+    happens to have, but `escape_atom` always drives the L-press at FULL deflection,
+    ``stick_for_bearing(flip, cs, msd=1.0)`` -- module docstring step 2, "full stick toward Tetra". A
+    partial-deflection draw is not the same input `escape_atom` was gated on, and comparing the two
+    directly is what caught this: `tests/test_overnight_driver.py`'s bit-exactness gate). Candidate
+    ``i``'s own flip bearing derives ``rot = flip +- rotate_off`` and ``slam = flip + 0x8000``
+    (`escape_atom`'s own formulas), each re-driven through `stick_for_bearing` at full deflection too.
+    The camera is FROZEN at ``cs0`` (the junction's own starting value) for all four frames, matching
+    `escape_atom`'s ``_clone_for_atom`` convention (its own documented ``cs_bill`` cost, not a new one).
+
+    Steps: `_fan` for the L-press + release (its existing per-candidate-single-stick shape already
+    fits those two, given full-deflection sticks precomputed from ``flips``), then `_step_batch` twice
+    more -- rotate, then slam -- with a freshly-derived per-candidate stick each time. A candidate that
+    leaves the follow bar during rotate/slam is dropped, same as `_fan`'s own ``alive_only``.
+
+    ``turnaround_first`` is NOT a parameter here (yet): every real backslide measured so far (session
+    151, off the locked console fixture) already faces away and fires without it, and a terminal that
+    does not can still clear the cone through the EXISTING `fan_exact` PRE segment before reaching this
+    junction. Widening this to sweep `away_walk`'s own ``turnaround_first`` is open, scoped work, not a
+    silent gap: a herd whose backslide faces TOWARD Tetra and whose PRE sweep cannot clear the cone
+    either is not yet reachable by this family.
+
+    Returns a list of ``dict(i, core, flip, rot, slam)`` -- ``i`` indexes ``flips``, ``core`` is the
+    post-slam state, ``flip``/``rot``/``slam`` the three stick byte pairs a caller needs to rebuild the
+    plan tuple's own segments (``flip`` already the full-deflection L-press/release stick, not the
+    bearing itself)."""
+    cs0 = csangle if cs_trail is None else int(cs_trail[n0])
+    sticks = [stick_for_bearing(int(f) & 0xFFFF, cs0, msd=1.0) for f in flips]
+    junc = _fan(base, sticks, [1, 0], csangle, cs_trail, n0, nthreads)
+    if not junc:
+        return []
+    off = int(rotate_off) if int(rotate_side) >= 0 else -int(rotate_off)
+    cand = []
+    for i, c in junc:
+        flip = int(flips[i]) & 0xFFFF
+        rot = stick_for_bearing((flip + off) & 0xFFFF, cs0, msd=1.0)
+        slam = stick_for_bearing((flip + 0x8000) & 0xFFFF, cs0, msd=1.0)
+        cand.append(dict(i=i, core=c, flip=sticks[i], rot=rot, slam=slam))
+    rot_cores = _step_batch([r['core'] for r in cand], [r['rot'] for r in cand], 0, cs0, nthreads)
+    for r, c in zip(cand, rot_cores):
+        r['core'] = c
+    slam_cores = _step_batch([r['core'] for r in cand], [r['slam'] for r in cand], 0, cs0, nthreads)
+    for r, c in zip(cand, slam_cores):
+        r['core'] = c
+    return [r for r in cand
+            if math.hypot(r['core'].pos_x - r['core']._tetra_x,
+                         r['core'].pos_z - r['core']._tetra_z) <= ES.FOLLOW_BAR]
+
+
+def _atom_candidates(base, walk, n0, csangle, cs_trail, s1_stride, alpha, flips, chunk,
+                     nthreads, collect, out, st, *, junction_cap=None, deadline=None, beat=None):
+    """**The escape-atom conversion, off ``n0`` base frames, then the ordinary family sweep for
+    whatever walk is left** -- `_atom_junction` composed into `fan_exact` the same way the PRE segment
+    already is: a junction, then `_families` again from each survivor.
+
+    ``flips`` (bearings, `away_walk.flip_arc`'s output) plays the PRE alphabet's role: the junction's
+    job, like the PRE's, is only to pick a DIRECTION to convert through, so it is deliberately a small,
+    dedicated sweep -- the continuation after it is where the search still needs `alpha`'s resolution."""
+    remaining = walk - n0 - ATOM_FRAMES
+    if remaining < 1:
+        return
+    for ro in ATOM_ROTATE_OFFS:
+        for side in ATOM_ROTATE_SIDES:
+            if deadline is not None and time.time() >= deadline:
+                st['deadline_cut'] = True
+                return
+            junc = _atom_junction(base, flips, side, ro, csangle, cs_trail, n0, nthreads)
+            st['atom_junctions'] = st.get('atom_junctions', 0) + len(junc)
+            st['atom_junctions_dead'] = (st.get('atom_junctions_dead', 0)
+                                         + len(flips) - len(junc))
+            for r in junc:
+                if junction_cap is not None and st['junctions'] >= junction_cap:
+                    st['junction_cap_hit'] = True
+                    return
+                if beat is not None and st['junctions'] % 64 == 0:
+                    beat(junctions=st['junctions'], at_cap=len(out))
+                st['junctions'] += 1
+                for fam in _families(remaining, 0, s1_stride):
+                    for c0 in range(0, len(alpha), chunk):
+                        part = alpha[c0:c0 + chunk]
+                        st['fleets'] += 1
+                        cores = _fan(r['core'], part, fam['lsched'], csangle, cs_trail,
+                                     n0 + ATOM_FRAMES, nthreads)
+                        collect(cores, lambda i, _p=part, _fl=r['flip'], _rt=r['rot'], _sl=r['slam'],
+                                _n0=n0, _f=fam:
+                                (_n0, _fl[0], _fl[1], 1, 1, _fl[0], _fl[1], 0, 1,
+                                 _rt[0], _rt[1], 0, 1, _sl[0], _sl[1], 0, 1)
+                                + tuple(_f['label'](_p[i][0], _p[i][1]))[1:])
+
+
 def _fan(base, sticks, lsched, csangle, cs_trail, cs_from, nthreads, *, alive_only=True):
     """Step one core per stick through ``lsched`` and return the endpoints at the LAST frame.
 
@@ -422,10 +521,6 @@ def _fan(base, sticks, lsched, csangle, cs_trail, cs_from, nthreads, *, alive_on
     return [(i, c) for i, c in enumerate(cores) if alive[i]]
 
 
-#: Frames the L may be HELD for in the switch family. j1 = 1 is the recipe (see `_families`); bounding it
-#: is a budget decision at depth, so it is a named knob logged per item, not a loop bound.
-LSWITCH_J1 = (1, 2)
-
 #: The per-item CLONE budget and the flip-alphabet strides `fan_exact` walks to meet it. 8 M leaves is
 #: ~400 s of one worker at the measured 74 k core-frames/s, which is what keeps a deep walk affordable.
 LEAF_BUDGET = 8_000_000
@@ -435,8 +530,21 @@ ALPHA_STRIDES = (1, 2, 3, 4, 6, 8, 16)
 #: MemoryError). Bounds it like `tail_beam` bounds the between-frame beam: nearest her, kept.
 PREFIX_CAP = 20000
 
+#: The atom junction's own knob grid -- `escape_atom.probe`'s own small sweep; `turnaround_first` is
+#: NOT yet swept, see `_atom_junction`'s docstring for why that is a scoped gap, not an oversight.
+ATOM_ROTATE_OFFS = AW.ROTATE_OFFS
+ATOM_ROTATE_SIDES = (1, -1)
 
-def _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l):
+#: The flip's own bearing sweep -- `away_walk.flip_arc`'s default step; the herd's down-bearing is
+#: always a member (what fired cleanly off the real console backslide, session 151).
+ATOM_FLIP_STEP = 0x400
+
+#: Frames the recipe itself fixes: L-press, release (the negation), rotate, backwards slam
+#: (`away_walk`'s module docstring, steps 2-4). Never a search variable.
+ATOM_FRAMES = 4
+
+
+def _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l, atom=True, n_flips=0):
     """Fleets `fan_exact` will build for this shape -- the clone budget's own arithmetic, so the
     alphabet can be sized BEFORE the first one is cloned."""
     n = sum(len(_families(walk, n0, 32)) for n0 in range(walk))
@@ -446,34 +554,31 @@ def _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l):
             j = walk - n0
             for jp in [p for p in pre_frames if p < j]:
                 n += len(pre_l) * (1 + pre * len(_families(walk - n0 - jp, 0, 32)))
+    if atom:
+        combos = len(ATOM_ROTATE_OFFS) * len(ATOM_ROTATE_SIDES)
+        for n0 in range(walk):
+            remaining = walk - n0 - ATOM_FRAMES
+            if remaining >= 1:
+                n += combos * n_flips * len(_families(remaining, 0, 32))
     return n
 
 
-def _families(walk, n0, s1_stride, lswitch_j1=LSWITCH_J1):
-    """The L SCHEDULES a ``walk``-frame plan can carry, off ``n0`` base frames -- the search's own
+def _families(walk, n0, s1_stride):
+    """The L SCHEDULE a ``walk``-frame plan can carry, off ``n0`` base frames -- the search's own
     structure, and every one of them is one fleet.
 
-    Two shapes, and the second is the one that matters:
-
-      * **uniform** -- one stick, L up or down for the whole walk. The ordinary walk-up, and the only
-        shape any pass before session 150 could express.
-      * **L-SWITCH** -- L held for ``j1`` frames then released for the rest, SAME stick. This is
-        `away_walk.escape_atom`'s recipe and the only known way a herd's untarget backslide reaches the
-        roll cap inside the budget: the `setSpeedAndAngleAtn` DIR_BACKWARD negation flips speedF to
-        +17.6 on the L frame, and releasing L returns the proc to MOVE, which is the only proc an
-        A-press rolls from (`clip_roll.dispatchable`). s149 measured the whole family: 104 at-cap
-        dispatchable states, first at frame 4.
+    **uniform** -- one stick, L up or down for the whole walk. The ordinary walk-up. The other known
+    way a herd's untarget backslide reaches the roll cap -- `away_walk.escape_atom`'s L-conversion,
+    rotate, backwards-slam recipe -- is NOT a member of this family: it needs a DIFFERENT stick per
+    frame (derived per candidate, not held), which is `_atom_junction` + `_atom_candidates`, run
+    alongside this in `fan_exact` (session 151; supersedes the s150 ``lswitch`` shape, which held one
+    stick through the release and never rotated or slammed -- see the module docstring's headline).
 
     ``label`` turns each into a plan tuple, so a hit's log is rebuildable from the plan alone."""
     j = walk - n0
-    out = []
-    for l in L_AXIS:
-        out.append(dict(kind='uniform', lsched=[l] * (j + 1),
-                        label=lambda sx, sy, _l=l, _j=j: (n0, sx, sy, _l, _j)))
-    for j1 in [x for x in lswitch_j1 if x < j]:
-        out.append(dict(kind='lswitch', lsched=[1] * j1 + [0] * (j - j1 + 1),
-                        label=lambda sx, sy, _j1=j1, _j=j: (n0, sx, sy, 1, _j1, sx, sy, 0, _j - _j1)))
-    return out
+    return [dict(kind='uniform', lsched=[l] * (j + 1),
+                label=lambda sx, sy, _l=l, _j=j: (n0, sx, sy, _l, _j))
+            for l in L_AXIS]
 
 
 #: The PRE segment: the stick that turns Tetra out of the front cone before the L frame -- see `fan_exact`
@@ -484,8 +589,8 @@ PRE_L = (0,)
 
 
 def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthreads=0, chunk=EF.CHUNK,
-              two_segment=True, junction_cap=None, pre_stride=PRE_STRIDE, pre_frames=PRE_FRAMES,
-              pre_l=PRE_L, deadline=None, beat=None, leaf_budget=None,
+              two_segment=True, atom=True, junction_cap=None, pre_stride=PRE_STRIDE,
+              pre_frames=PRE_FRAMES, pre_l=PRE_L, deadline=None, beat=None, leaf_budget=None,
               tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
     """Every distinct ``(endpoint, lean, speedF, Tetra)`` Link can stand on AT THE ROLL CAP after
     EXACTLY ``walk`` delivered frames, as ``(dict of key -> plan, stats)``.
@@ -505,8 +610,12 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
     are the ones that can reach contact at all (it closes ~4 u a frame from -17 u at walk 3). So the FLIP
     alphabet is coarsened until the item fits `LEAF_BUDGET`, and the stride it settled on is logged with
     the item (``alpha_stride``, ``alphabet``). Never the PRE: its job is only to rotate him."""
+    from harness.tetrapush.reposition import HerdLine
     out = {}
-    fleets_est = _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l)
+    hl = HerdLine.from_env(env)
+    flips = AW.flip_arc(hl, step=ATOM_FLIP_STEP) if atom else []
+    fleets_est = _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l, atom=atom,
+                                 n_flips=len(flips))
     budget = LEAF_BUDGET if leaf_budget is None else int(leaf_budget)
     a_stride = next((s for s in ALPHA_STRIDES
                      if fleets_est * len(EF.stick_alphabet(s)) <= budget),
@@ -514,7 +623,7 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
     alpha = EF.stick_alphabet(a_stride)
     st = dict(raw=0, sub_cap=0, off_cap_only=0, junctions=0, junctions_dead=0, fleets=0,
               families=0, alphabet=len(alpha), alpha_stride=a_stride, fleets_est=fleets_est,
-              leaves_est=fleets_est * len(alpha))
+              leaves_est=fleets_est * len(alpha), atom_junctions=0, atom_junctions_dead=0)
 
     def collect(cores, label):
         for i, c in cores:
@@ -536,6 +645,14 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
                 st['fleets'] += 1
                 cores = _fan(base, part, fam['lsched'], csangle, cs_trail, n0, nthreads)
                 collect(cores, lambda i, _p=part, _f=fam: _f['label'](_p[i][0], _p[i][1]))
+        if atom:
+            # the escape-atom conversion (L-conversion, rotate, backwards slam), then the ordinary
+            # family sweep for whatever walk is left -- see `_atom_candidates`.
+            _atom_candidates(base, walk, n0, csangle, cs_trail, s1_stride, alpha, flips, chunk,
+                             nthreads, collect, out, st, junction_cap=junction_cap, deadline=deadline,
+                             beat=beat)
+            if st.get('deadline_cut'):
+                return out, st
         if not two_segment:
             continue
         # the PRE segment, then the whole family set again off each junction. One fleet per junction, so
@@ -843,7 +960,7 @@ def prepared(unit, env, walls, top, *, cache=_PREPARED):
 
 
 def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads=0,
-             dflt_incumbent=None, on_event=None, two_segment=True, pre_stride=PRE_STRIDE,
+             dflt_incumbent=None, on_event=None, two_segment=True, atom=True, pre_stride=PRE_STRIDE,
              leaf_budget=None, tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
     """One ``(herd, walk length)`` item: prepare the herd, fan every plan of exactly that length, score
     it against every aimable configuration, and push what is genuine through the acceptance stack.
@@ -878,8 +995,8 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
     quals = configurations(csa, thrusts)
     tf = time.time()
     cands, fst = fan_exact(seed, env, walk, csa, trail, hold, s1_stride=s1_stride,
-                           nthreads=nthreads, two_segment=two_segment, pre_stride=pre_stride,
-                           deadline=deadline, leaf_budget=leaf_budget,
+                           nthreads=nthreads, two_segment=two_segment, atom=atom,
+                           pre_stride=pre_stride, deadline=deadline, leaf_budget=leaf_budget,
                            tail_frames=tail_frames, tail_beam=tail_beam, prefix_cap=prefix_cap,
                            beat=lambda **kw: IO.beat(d, item['item'], worker, walk=walk,
                                                      incumbent=inc, herd=item['herd'],
@@ -892,9 +1009,9 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
                thrusts=thrusts, incumbent=inc, csangle=csa, fan_seconds=t_fan,
                score_seconds=t_score, floor=item['floor'],
                totals={t: total_frames(item['herd'], walk, t) for t in thrusts},
-               two_segment=bool(two_segment), s1_stride=s1_stride, pre_stride=pre_stride,
-               lswitch_j1=list(LSWITCH_J1), leaf_budget=leaf_budget, prefix_cap=prefix_cap,
-               fan=fst, **st)
+               two_segment=bool(two_segment), atom=bool(atom), s1_stride=s1_stride,
+               pre_stride=pre_stride, atom_rotate_offs=list(ATOM_ROTATE_OFFS),
+               leaf_budget=leaf_budget, prefix_cap=prefix_cap, fan=fst, **st)
     ev(event='scored', item=item['item'], candidates=st['candidates'], genuine=st['genuine'],
        near=st['near'], fan_seconds=round(t_fan, 1), score_seconds=round(t_score, 1),
        at_cap=len(cands), raw=fst['raw'], n_contact=st['n_contact'],
@@ -1063,8 +1180,8 @@ def _env_for_worker():
 
 
 def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_cap=None,
-           s1_stride=32, two_segment=True, order=None, pre_stride=PRE_STRIDE, leaf_budget=None,
-           only=None, tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
+           s1_stride=32, two_segment=True, atom=True, order=None, pre_stride=PRE_STRIDE,
+           leaf_budget=None, only=None, tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
     """Pull items from the claim queue until the deadline. Nothing in this function is state: every
     item's outcome is on disk before the next one starts, so killing it loses at most one item.
 
@@ -1115,7 +1232,7 @@ def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_c
         try:
             rec = run_item(it, d, env, worker=worker_id, deadline=deadline,
                            s1_stride=s1_stride, nthreads=1, dflt_incumbent=inc0, on_event=ev,
-                           two_segment=two_segment, pre_stride=pre_stride,
+                           two_segment=two_segment, atom=atom, pre_stride=pre_stride,
                            leaf_budget=leaf_budget, tail_frames=tail_frames,
                            tail_beam=tail_beam, prefix_cap=prefix_cap)
             ev(event='item_done', item=it['item'], seconds=round(rec['seconds'], 1),
@@ -1131,8 +1248,8 @@ def worker(d, worker_id, *, deadline=None, resume=True, steal_after=None, walk_c
 
 
 def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=None, s1_stride=32,
-           two_segment=True, wait=True, only=None, leaf_budget=None, pre_stride=PRE_STRIDE,
-           tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
+           two_segment=True, atom=True, wait=True, only=None, leaf_budget=None,
+           pre_stride=PRE_STRIDE, tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
     """Write the run's configuration, spawn the workers, wait. The parent holds no search state."""
     run_id = run_id or time.strftime('s150-%Y%m%d-%H%M%S')
     d = IO.ensure(IO.run_dir(REPO, run_id))
@@ -1149,9 +1266,9 @@ def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=N
         cfg = dict(run_id=run_id, t0=t0, deadline=deadline, workers=int(workers),
                    hours=float(hours), incumbent0=O.TOTAL_INCUMBENT, trunc=int(trunc),
                    walk_cap=walk_cap, s1_stride=int(s1_stride), two_segment=bool(two_segment),
-                   walk_floor=WALK_FLOOR, thrusts=list(ES.THRUSTS), pre_stride=PRE_STRIDE,
-                   pre_frames=list(PRE_FRAMES), max_accept=MAX_ACCEPT,
-                   lswitch_j1=list(LSWITCH_J1), only=(sorted(only) if only else None),
+                   atom=bool(atom), walk_floor=WALK_FLOOR, thrusts=list(ES.THRUSTS),
+                   pre_stride=PRE_STRIDE, pre_frames=list(PRE_FRAMES), max_accept=MAX_ACCEPT,
+                   atom_rotate_offs=list(ATOM_ROTATE_OFFS), only=(sorted(only) if only else None),
                    leaf_budget=(int(leaf_budget) if leaf_budget else LEAF_BUDGET),
                    pre_stride_run=int(pre_stride), tail_frames=list(tail_frames),
                    tail_beam=int(tail_beam), prefix_cap=int(prefix_cap),
@@ -1182,7 +1299,7 @@ def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=N
         cmd = [sys.executable, '-u', '-m', 'harness.tetrapush.overnight', 'worker',
                'id=%s' % run_id, 'wid=w%02d' % k, 'deadline=%r' % deadline,
                'resume=%d' % (1 if resume else 1), 's1=%d' % s1_stride,
-               'two=%d' % (1 if two_segment else 0)]
+               'two=%d' % (1 if two_segment else 0), 'atom=%d' % (1 if atom else 0)]
         if walk_cap is not None:
             cmd.append('walk=%d' % walk_cap)
         if leaf_budget:
@@ -1339,7 +1456,7 @@ def main(argv=None):
         for it in sel:
             rec = run_item(it, d, env, worker='probe', deadline=dl, s1_stride=_i('s1', 32),
                            nthreads=_i('threads', 0), two_segment=bool(_i('two', 1)),
-                           pre_stride=_i('pre', PRE_STRIDE),
+                           atom=bool(_i('atom', 1)), pre_stride=_i('pre', PRE_STRIDE),
                            leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
                            tail_frames=(tuple(int(x) for x in opt['tail'].split(','))
                                         if 'tail' in opt else ()),
@@ -1358,7 +1475,7 @@ def main(argv=None):
                deadline=(float(opt['deadline']) if 'deadline' in opt else None),
                resume=bool(_i('resume', 1)), walk_cap=(_i('walk', 0) or None),
                s1_stride=_i('s1', 32), two_segment=bool(_i('two', 1)),
-               pre_stride=_i('pre', PRE_STRIDE),
+               atom=bool(_i('atom', 1)), pre_stride=_i('pre', PRE_STRIDE),
                leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
                only=(opt['only'].split(',') if 'only' in opt else None),
                tail_frames=(tuple(int(x) for x in opt['tail'].split(',')) if 'tail' in opt else ()),
@@ -1369,7 +1486,8 @@ def main(argv=None):
         launch(run_id=opt.get('id'), workers=_i('workers', 11), hours=float(opt.get('hours', 7)),
                resume=bool(_i('resume', 0)), trunc=_i('trunc', 0),
                walk_cap=(_i('walk', 0) or None), s1_stride=_i('s1', 32),
-               two_segment=bool(_i('two', 1)), pre_stride=_i('pre', PRE_STRIDE),
+               two_segment=bool(_i('two', 1)), atom=bool(_i('atom', 1)),
+               pre_stride=_i('pre', PRE_STRIDE),
                leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
                only=(opt['only'].split(',') if 'only' in opt else None),
                tail_frames=(tuple(int(x) for x in opt['tail'].split(',')) if 'tail' in opt else ()),
