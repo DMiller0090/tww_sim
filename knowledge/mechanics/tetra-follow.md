@@ -87,6 +87,22 @@ as `fixtures/courtyard_clip_s86_console.json` (`tests/test_clip_console.py`: bot
 every console sample of the roll). What her precision costs the clip verdict is priced in
 [../strategy/razor-prices-every-term.md](../strategy/razor-prices-every-term.md).
 
+**BUT THE SEARCH DOES NOT RUN THE WALLED ENGINE, AND TWO THINGS HIDE THAT** (session 149). The pass
+is a `FreeRun` *parameter*, and `seeds.make_freerun` - what every planner stage builds from - leaves
+``walls_tetra`` **None**, so a search carries the bare plow point and `objective.frame_is_wall_free`
+(refuse any frame with either actor inside its own cylinder) is the conservative stand-in for the
+missing pass. That prune is not a physical refusal, and reading a herd endpoint as dead off it is
+[[infeasible-needs-proof]]: on the s148 ladder's rung 5 the handover carries her 16.5 u a frame at a
+wall she has only +52.46 u of slack from, so the guard refuses her at **herd+4 on neutral input** and
+two beams died wholesale one frame past their at-cap cloud (0 of 205600 children, 100% on her guard).
+Wired, she instead pins at **z −940.25561523** - the same braced value the console locked - and moves
+0.13..1.96 u/frame against 9.48..7.00 unwalled; walled and unwalled are bit-identical up to the frame
+the guard fires, which is the self-gate for saying so. **And the NATIVE step ignores ``walls_tetra``
+entirely**: `LandCore.step_courtyard` has no BG pass, so `make_freerun(native=True)` walks her through
+the wall exactly like the unwalled Python path. A walled search is therefore Python-only, at **717
+clone+steps/s against 9406** - which is why the prune exists and why porting her `CrrPos` into the
+native step is what makes a walled beam affordable.
+
 ## Lock-on / talk / speak region (planner AVOID)
 
 Tetra's `attention_info` (`createInit`) sets `flags = LOCKON_TALK | ACTION_SPEAK` and

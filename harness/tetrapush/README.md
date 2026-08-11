@@ -1713,6 +1713,75 @@ from scratch. Land the edits first, then gate.
               is what opens the window from a razor to a door.
               **Session 70 took the frames back: the overshoot was not a rank or a keep, it was the
               PROBE POOL. See the box below.**
+      - [~] **RUNG 5's BLOCKER IS NEITHER THE DISTANCE NOR THE CONVERSION -- IT IS TETRA HITTING A
+            WALL, AND THE GUARD THAT REFUSES IT STANDS IN FOR A MECHANIC THE CONSOLE GATED
+            (session 149).** The ladder's only sub-console rung is not dead; both beams that died on
+            it died 100% on one prune, and the walled engine models what the prune was covering for.
+            - **EVERY NUMBER THE ENDGAME RESTS ON, RE-DERIVED AT THE CORRECTED LEAN**
+              (`_notes/s149_rung5.py`): rung 5's dispatch lean is **0**, measured by firing its own
+              aim and reading ``m351C`` at the entry frame, not inherited; all **9** census entries
+              re-read GENUINE there; ``need`` 101.94509 u and bound **100** reproduce exactly; the
+              terminal is cut_step 16 / **18** roll frames.
+            - **AND THE s144 "THRUST 14 ALONE" PINNING, RE-READ AT LEAN 0 RATHER THAN 648.** Thrust
+              13 is barren at BOTH leans (0 genuine, 0 unbroken); thrust 14 reads **51 genuine / 13
+              unbroken** at lean 0 against 40/8 at 648; thrust 15 reads **82/1** against 107/**0**.
+              So thrust 14 stays the pin on COST (18 roll frames against 19) but "thrust 14 alone" is
+              false at the true lean -- thrust 15 has an unbroken hit. And the lean-0 box is **WIDER
+              than the 648 one that replaced it**: along 47.50..112.50 (was 57.50..102.50), runway
+              185..265 (was 185..245), ``tetra_from_corner`` 97.50..182.50 (was 102.50..162.50),
+              ``l0_band`` 0.5736..4.8928 (was 3.0693..5.2277). s144's narrowing was the stale
+              mirror's.
+            - **ZERO OF THE 49 RUNGS IS AT THE ROLL CAP** -- read straight off the banked census,
+              no new compute: ``roll_nspeed`` of every delivered speedF is **5.00..12.73, never 26**.
+              Every bound on the ladder therefore prices a roll its own handover cannot dispatch, and
+              the missing term is the CONVERSION to speedF >= +17. **The 26 is a THRESHOLD, not a
+              locus to trade** (Dereck, s149): the cut frame's displacement is ``nspeed`` + the
+              **23.22 u** constant `ANM_CUT` root translate against a seam minimum of ~**49.46 u**
+              (`[[tetra-clip-map]]`), so at ``nspeed`` 5 the cut delivers 28.2 u and cannot cross the
+              wall at ANY entry -- which is also why 26 alone (49.22) still needs the ~1.23 u CC-push
+              ejection to tip it over. Do not reopen the sub-cap axis; s82 measured the same thing
+              from the other side (2 of 181 momenta genuine, both at the cap).
+            - **THE DISTANCE WAS NEVER THE BLOCKER.** From the HERD END -- not the census's
+              three-settle-frames state -- the cheapest dispatch point is **83.7 u = 4.92 frames at
+              the cap**, and every one of the 9 entries and its dispatch point is wall-free with
+              **117..171 u** of clearance (41 of 41 samples along the straight segment clear). The
+              census's 101.945 u is measured AFTER the backslide has spent **26.73 u** of runway on
+              the settle frames.
+            - **THE CONVERSION IS PAID, AT THE LIVE csangle, WITH NO CAMERA BILL**
+              (`_notes/s149_cap.py`, 82432 rollouts): **122 at-cap dispatchable frames / 104 distinct
+              states -- 2 at frame 4 (total 95) and 102 at frame 5 (total 96)**, 2 and 24 of them
+              talk-free, against a budget of 9. A first crude sweep read NONE because it had no
+              pre-frame: Tetra is IN the front cone at the handover, so a bare L locks the ACTOR into
+              proc 9, whose slide caps at speedF **12** and never reaches 17. The cone-clear frame is
+              the whole difference, and `away_walk`'s own recipe needed the SNAP csangle (a -1069 BAM
+              bill) only because it fixes the pre-frame to the ESS turnaround.
+            - **THE BLOCKER, MEASURED: TETRA'S WALL.** The handover carries her **16.5 u a frame** at
+              a wall she has only **+52.46 u** of slack from, and `objective.frame_is_wall_free`
+              refuses her at **herd+4 (slack -0.28) on NEUTRAL input** -- so the census state
+              (herd+3, +10.13) is ONE FRAME from illegal. Every one of stage A's 104 at-cap states
+              has her inside **+4.5..+12.4 u** of her own cylinder edge, i.e. less than one push
+              frame. That is what killed both beams wholesale at the next frame: **0 of 205600
+              children survived, 100% wall_tetra**, not follow and not Link (who never comes within
+              87 u of a wall).
+            - **AND THAT GUARD IS A PRUNE, NOT PHYSICS.** `seeds.make_freerun` leaves
+              ``walls_tetra`` **None**, so Tetra is a bare XZ plow point -- the configuration that
+              drove her 53 u THROUGH the courtyard back wall (s86) -- and `frame_is_wall_free` is the
+              conservative stand-in for the missing pass. The WALLED engine is the one the console
+              gated (`cross_engine.composite_rollout` defaults ``walls_tetra`` ON;
+              `rollstab.cc_stepper`: "a real, live-gated MECHANIC -- a wedged Tetra's own CC recoil is
+              canceled, so she HOLDS"). Measured (`_notes/s149_walled.py`): walled and unwalled are
+              **BIT-IDENTICAL through frame 3** and part exactly at frame 4 where the guard fires
+              (the self-gate), and the walled Tetra **BRACES at wall distance exactly 50.000**,
+              moving **0.13..1.96 u/frame** thereafter against 9.48..7.00 unwalled. So rung 5's 9
+              frames are intact -- and a braced Tetra is not a worse target but a **FIXED** one,
+              which is what a 1e-4 u razor wants.
+            - **TRAP: THE NATIVE STEP IGNORES ``walls_tetra``.** Measured all four ways --
+              native+walled passes through the wall exactly like native+unwalled; only the PYTHON
+              path braces. So a walled search runs at **717 clone+steps/s against the native 9406,
+              13x**, and porting Tetra's ``mObjAcch.CrrPos`` into `LandCore.step_courtyard` is what
+              makes a walled beam affordable.
+            - **NOTHING WAS DELIVERED, correctly:** `clip_roll.fire` never returned a CUT_F, so by
+              the standing rule there is no plan and no DTM.
       - [~] **``at_cap`` WAS THE RANK AND NOT THE PHYSICS -- IT IS FOUR FRAMES -- AND THEN THE LEAN
             EVERY TERMINAL HAS BEEN SOLVED AT SINCE s144 IS A STATE-2 SEED READ OFF A MIRROR THAT IS
             NEVER SYNCED (session 148).** Rung 3's single genuine entry, the ladder's only rung that
