@@ -111,22 +111,52 @@ def test_the_walk_letters_are_in_the_fans_own_alphabet():
         assert EF._decoded(int(plan[i]), int(plan[i + 1])) in alpha, plan[i:i + 2]
 
 
-@pytest.mark.xfail(strict=True, reason='s160: the default fan CANNOT express the console\'s own 2+2 '
-                                       'split (PRE_FRAMES = (1,)) and its pre letter (208, 110) is '
-                                       'absent from the 57-class stride-32 pre alphabet. Measured cost '
-                                       'of containing it: 95x the fleets. Delete this xfail when the '
-                                       'knobs are paid -- do not weaken the assertion.')
 def test_the_fan_enumeration_contains_the_console_plan():
     """**THE SEARCH MUST BE ABLE TO GENERATE ITS OWN KNOWN ANSWER** (`[[search-must-rediscover-known-
-    answer]]`), and at the default knobs it cannot.
+    answer]]`) -- at the knobs the driver runs at, which is the whole point of the check.
 
     `test_the_walk_letters_are_in_the_fans_own_alphabet` above checks ``stick_alphabet(1)``, which is a
-    FINER alphabet than `overnight.fan_exact` draws the PRE segment from -- so twelve green containment
-    checks coexisted with a fan that misses the console's own walk endpoint by 0.213 u, against a razor
-    strip 1.9e-04 u wide (`_notes/s160_contain.py`). This is that gap, as an assertion."""
+    FINER alphabet than `overnight.fan_exact` drew the PRE segment from at the s155-s159 knobs -- so
+    twelve green containment checks coexisted with a fan that missed the console's own walk endpoint by
+    0.213 u against a razor strip 1.9e-04 u wide (`_notes/s160_contain.py`). Session 161 paid the knobs
+    (`LEGACY_PRE_STRIDE` / `LEGACY_PRE_FRAMES` are what they were), so this is now an equality and not
+    an xfail -- and `tests/test_aimed_fan.py` carries the stronger form, the fan's own LEAF SET holding
+    the endpoint bit-exactly."""
     k = ON.containment_knobs()
     assert k['split_ok'] is True, 'split %s not in PRE_FRAMES %s' % (k['splits'], ON.PRE_FRAMES)
     assert k['pre_ok'] is True and k['hold_ok'] is True
+
+
+def test_the_legacy_knobs_are_still_the_ones_that_excluded_it():
+    """The s160 DIAGNOSIS, kept as a measurement rather than a memory: the knobs the search ran at for
+    five sessions exclude the console's plan on both axes, and the split is the half no alphabet can
+    fix. This is what says the fix was the knobs and not a coincidence."""
+    k = ON.containment_knobs(pre_stride=ON.LEGACY_PRE_STRIDE, pre_frames=ON.LEGACY_PRE_FRAMES)
+    assert k['split_ok'] is False and k['pre_ok'] is False
+    assert k['hold_ok'] is True, 'the HOLD letter was always in range -- only the pre and the split'
+    assert k['pre_classes'] == 57
+
+
+def test_pre_frames_all_is_every_split_a_walk_admits():
+    """``PRE_FRAMES_ALL`` cannot be a tuple, because the set depends on the walk: a 4-frame plan can
+    split 1+3, 2+2 or 3+1, and the console's is the middle one."""
+    assert ON.pre_frames_for(4, ON.PRE_FRAMES_ALL) == (1, 2, 3)
+    assert ON.pre_frames_for(1, ON.PRE_FRAMES_ALL) == ()
+    assert ON.pre_frames_for(4, (1,)) == (1,)
+
+
+def test_the_hold_alphabet_may_not_be_traded_for_the_leaf_budget():
+    """**THE TRAP IN "JUST RAISE THE PRE RESOLUTION".** `fan_exact` sizes the hold alphabet to
+    `LEAF_BUDGET`, so a 59x bigger pre makes the autoscaler coarsen the HOLD -- and the console's hold
+    letter exists at stride 1 and nowhere else, so containment breaks the other way. Pinned, the item
+    reports ``over_budget`` instead."""
+    fleets = ON._fleet_estimate(4, True, ON.CONTAINED_PRE_STRIDE, (1, 2, 3), ON.PRE_L, atom=False)
+    auto, over_auto = ON.alpha_for(fleets, ON.LEAF_BUDGET)
+    pinned, over_pin = ON.alpha_for(fleets, ON.LEAF_BUDGET, ON.CONTAINED_ALPHA_STRIDE)
+    assert auto > ON.CONTAINED_ALPHA_STRIDE and over_auto is False, 'the autoscaler coarsens the hold'
+    assert pinned == ON.CONTAINED_ALPHA_STRIDE and over_pin is True, 'pinned, and it says so'
+    k = ON.containment_knobs(contained=True, alpha_stride=auto)
+    assert k['hold_ok'] is False, 'a coarsened hold loses the console letter -- that is the trade'
 
 
 @pytest.fixture(scope='module')
@@ -170,10 +200,13 @@ def test_the_fan_primitive_reaches_the_console_endpoint_bit_for_bit(console_step
 
 
 def test_the_containment_gap_is_exactly_two_knobs_and_its_price_is_measured():
-    """The DIAGNOSIS, pinned: which knobs exclude the console's plan, the stride each letter needs, and
+    """The DIAGNOSIS, pinned: which knobs excluded the console's plan, the stride each letter needs, and
     what containment costs in fleets. Facts, so they are asserted exactly -- if a knob moves, this test
-    is what says the diagnosis above went stale."""
-    k = ON.containment_knobs()
+    is what says the diagnosis above went stale.
+
+    Asked at the LEGACY knobs, because that is what the diagnosis is about; s161 pays them, and the
+    price it pays is the ``fleets_default -> fleets_contained`` ratio below."""
+    k = ON.containment_knobs(pre_stride=ON.LEGACY_PRE_STRIDE, pre_frames=ON.LEGACY_PRE_FRAMES)
     assert k['splits'] == [(208, 110, 2), (169, 192, 2)] and k['n0'] == 0
     assert k['pre_stride_needed'] == 2, 'the pre letter exists at stride 1 and 2 and nowhere coarser'
     assert k['hold_stride_needed'] == 1, 'the HOLD letter needs stride 1 -- so the leaf budget cannot ' \
@@ -182,6 +215,9 @@ def test_the_containment_gap_is_exactly_two_knobs_and_its_price_is_measured():
     assert tuple(k['pre_frames_needed']) == (1, 2)
     assert (k['fleets_default'], k['fleets_contained']) == (353, 33563)
     assert 90.0 < k['factor'] < 100.0
+    # and the SHIPPED set, whose price is bigger still because it enumerates EVERY split, not just the
+    # console's own -- the number the README quotes and the aimed fan has to pay off
+    assert k['fleets_shipped'] == 40274
 
 
 def test_the_composite_log_is_the_console_log_row_for_row():
@@ -406,8 +442,10 @@ def test_summarise_reports_coverage_and_never_hides_a_drop(tmp_path):
 
 @pytest.mark.parametrize('walk', [1, 4])
 def test_the_pre_segment_is_only_ever_a_cone_clear_length(walk):
-    """`PRE_FRAMES` is a knob, but a pre segment longer than the walk is not a plan."""
-    assert all(p >= 1 for p in ON.PRE_FRAMES)
+    """`PRE_FRAMES` is a knob, but a pre segment longer than the walk is not a plan -- and since s161 it
+    is the `PRE_FRAMES_ALL` sentinel, so the length rule lives in `pre_frames_for` and is checked there
+    rather than on a tuple that no longer exists."""
+    assert all(1 <= p < walk for p in ON.pre_frames_for(walk, ON.PRE_FRAMES))
     assert ON.PRE_L == (0,), 'an L on the pre frame acquires the actor -- that is what it must avoid'
     assert ON.ATOM_FRAMES == 4, 'L-press, release, rotate, slam are the recipe -- never a budget knob'
     keep, _d = ON.units()

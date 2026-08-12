@@ -2317,6 +2317,52 @@ from scratch. Land the edits first, then gate.
                   a free box with zero over-budget tests.** s159's `sweep_par` re-benchmark exonerated the
                   box while measuring under the same contention. 4167 rows are banked in
                   `_generated/admit_map.jsonl` and the run can be restarted whenever the box is free.
+              - **SESSION 161 -- THE CONTAINMENT GAP IS CLOSED AND THE KNOBS ARE PAID; AIMING BUYS
+                2.4x, NOT 114x.** s160 handed over "make the fan contain the 101, then aim it". Both
+                halves are done and the second one is a measured NEGATIVE, which is the more useful of
+                the two results. New tracked module **`harness/tetrapush/aimed_fan.py`** (`reachable`,
+                `rank`, `annulus`, `aim_curve`, `step_bound`, `contain`; 12 gates in
+                `tests/test_aimed_fan.py`), KB `knowledge/model/aiming-the-fan.md` +
+                `fan-containment-gap.md` updated to CLOSED.
+                - **THE SHIPPED KNOBS NOW CONTAIN THE CONSOLE'S PLAN, and `verify-console` is green on
+                  all 16 checks** -- including the two that reported NOT CONTAINED at the end of s160.
+                  `PRE_FRAMES` is the `PRE_FRAMES_ALL` sentinel expanded per walk by `pre_frames_for`
+                  (**every** split a walk admits, not the console's own 2+2 -- a knob set fitted to the
+                  known answer would contain exactly one plan); `PRE_STRIDE` is 2; and the hold alphabet
+                  is **PINNED** at stride 1 by `alpha_for`, so `LEAF_BUDGET` can no longer buy a finer
+                  pre by coarsening the hold. An item that does not fit reports `over_budget`. The old
+                  values are kept NAMED as `LEGACY_PRE_STRIDE` / `LEGACY_PRE_FRAMES` because the s160
+                  diagnosis is a measurement about them; the `xfail(strict)` is deleted and replaced by
+                  an equality. `containment_knobs` / `verify_console` now take the knobs as arguments
+                  and answer **at the values the run will use**, which is the one thing the s160
+                  version could not do.
+                - **THE PRICE, CALIBRATED: 353 -> 40274 fleets (114x), 0.357 s a junction, ~2 h an
+                  item at walk 4** against the legacy ~1 min. Shipped anyway: a search that cannot emit
+                  its own known answer measures nothing.
+                - **AIMING DOES NOT PAY IT OFF, and that is the session's real finding.** The target
+                  from `entry_aim` is a CURVE (`aim_curve` walks the level curve and re-aims; 14 of 24
+                  samples genuine, spanning 5.09 u of walk endpoint) because the fan's lattice is
+                  0.2-0.4 u and a point is unhittable at that resolution. Against it: the admissible
+                  junction prune is **1.4x** (the reach disc is nearly the whole reachable set --
+                  displacement over 3 stepped frames runs 3.35..53.15 u against a 57 u disc), and the
+                  lossless ORDERING is ~**2.4x** on time-to-first-hit (ranked against its own delivered
+                  endpoint the console's junction lands **1366th of 3355**). The reason is measured: the
+                  hold segment steers the at-cap endpoint over a **33 degree arc** covering ~12 x 25 u,
+                  and that arc's bearing window is per-junction, not a constant (union over 12 sampled
+                  junctions: 41% of the circle). **Aiming localises the razor and not the fan.**
+                - **TWO CHEAPER IDEAS MEASURED AND REFUSED.** Coarse-then-refine on the held stick is
+                  impossible to make lossless: adjacent byte-grid classes land endpoints a median
+                  0.156 u apart but up to **54.2 u** apart, so a Lipschitz bound over a coarse cell is
+                  54 u wide and prunes nothing. And `at_cap` -- which discards ~70% of leaves AFTER
+                  cloning them -- is not a threshold in the decoded magnitude: at the console's own hold
+                  length **521 magnitude groups are MIXED**, so the angle decides and a magnitude prune
+                  would drop real candidates.
+                - **THE PRUNE'S OWN BUG, PINNED AS A GATE.** `reachable`'s ``frames`` is STEPPED, not
+                  delivered -- a hold of `j` delivered frames is `_fan`'s `j+1` schedule. The first
+                  draft passed the delivered count, bounding the console's own junction at 38.0 u when
+                  it needs 57.0, and pruned **20130 of 20130** junctions including the branch that
+                  contains the answer. Also pinned: a ONE-stepped-frame probe reads a spread of exactly
+                  zero (at `input_delay = 1` the stick has not acted), so nothing may be measured on it.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled

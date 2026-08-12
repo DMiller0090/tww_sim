@@ -3,13 +3,16 @@
 **Answers:** My search reports 0 genuine over hundreds of items - is the space empty, or can my
 GENERATOR not express the answer? What does a containment gate actually have to check? Which of my
 barren results survive finding out? What does containing the known answer cost?
-**Status:** MEASURED (session 160) on the flooded-Hyrule Tetra corner, against the LOCKED console
-delivery fixture. Gated in [`tests/test_overnight_driver.py`](../../tests/test_overnight_driver.py) - one
-`xfail(strict)` for the gap itself, one that pins the diagnosis, and one that proves the fan's own
-primitive reaches the endpoint bit for bit. The rule it belongs to is Dereck's, session 151: a search is
-not trusted until it rediscovers a known answer.
+**Status:** MEASURED (session 160) and **CLOSED (session 161)** on the flooded-Hyrule Tetra corner,
+against the LOCKED console delivery fixture. The containing knobs are the shipped ones; `verify-console`
+is green on all 16 checks including the two that reported NOT CONTAINED. Gated in
+[`tests/test_overnight_driver.py`](../../tests/test_overnight_driver.py) - the containment equality, the
+legacy diagnosis, the split expansion, and the leaf-budget trade - and in
+[`tests/test_aimed_fan.py`](../../tests/test_aimed_fan.py) for the stronger form, the fan's own LEAF SET.
+The rule it belongs to is Dereck's, session 151: a search is not trusted until it rediscovers a known
+answer.
 **Source:** [`harness/tetrapush/overnight.py`](../../harness/tetrapush/overnight.py)
-(`containment_knobs`, `verify_console`, `fan_exact`, `_families`).
+(`containment_knobs`, `verify_console`, `fan_exact`, `alpha_for`, `pre_frames_for`).
 
 ---
 
@@ -28,7 +31,7 @@ how near its 98 618 candidates come to the console's delivered walk endpoint:
 So the fan misses the one plan known to work by about **1100 strip-widths** - and it is not a near miss
 that a finer sweep of the same shape closes, because the shape itself is wrong.
 
-## Two knobs exclude it, and neither is the razor
+## Two knobs excluded it, and neither is the razor
 
 The console's plan is `(0, 208, 110, 0, 2, 169, 192, 0, 2)`: no base frames, then its first letter held
 **2** frames, then its second held **2**.
@@ -60,24 +63,44 @@ The general lesson, and it is the one to carry to the next search: **verify cont
 alphabet and the plan SHAPE the run actually enumerates, at the knob values it will run with** - not
 against the finest ones the module can express. `containment_knobs` reports both, plus the price.
 
-## What containment costs
+## What containment costs, and it was paid
 
 `_fleet_estimate` at walk 4, two-segment, atom off:
 
 | knobs | fleets |
 |---|---|
-| default (`PRE_STRIDE` 32, `PRE_FRAMES` (1,)) | 353 |
-| containing (stride 2, `PRE_FRAMES` (1, 2)) | 33 563 |
+| legacy (`LEGACY_PRE_STRIDE` 32, `LEGACY_PRE_FRAMES` (1,)) | 353 |
+| minimum containing (stride 2, `PRE_FRAMES` (1, 2)) | 33 563 |
+| **shipped** (stride 2, every split a walk admits) | **40 274** |
 
-**95x**, and the default fan already costs ~56 s an item on this hardware. That is a real decision, not a
-bug fix - which is why the numbers are gated rather than the knobs quietly raised.
+**114x**, calibrated at **0.357 s a junction / ~2 h an item** against the legacy ~1 min. Session 161
+shipped it anyway: a search that cannot emit its own known answer measures nothing, so the affordability
+problem belongs to the enumeration's shape and not to its coverage. Three things make the price honest
+rather than hidden:
+
+* `PRE_FRAMES` is now the `PRE_FRAMES_ALL` sentinel, expanded per walk by `pre_frames_for` - **every**
+  split a walk admits, not just the console's own 2+2, because a knob set fitted to the known answer
+  would contain exactly one plan.
+* the hold alphabet is **PINNED** at stride 1 (`alpha_for`), so the leaf budget can no longer buy a
+  finer pre by coarsening the hold. An item that does not fit reports `over_budget` instead.
+* `containment_knobs` and `verify_console` take the knobs as arguments and answer **at the values the
+  run will use**, which is the one thing the s160 version could not do.
+
+## Aiming does not pay it off
+
+The obvious discount - compute where the walk has to END ([entry-strip.md](entry-strip.md)) and skip the
+junctions that cannot reach it - was built and measured in session 161, and it is small: see
+[aiming-the-fan.md](aiming-the-fan.md). The admissible prune is **1.4x** and the lossless ordering about
+**2.4x** on time-to-first-hit. Containment's 114x is still unpaid.
 
 ## What this invalidates, and what it does not
 
-**Suspect:** every "0 genuine" the driver has reported since it started running items - the s155 sweep,
-the s159 barren re-read's premise that those items were "rolling from a place where no position of hers
-can clip", and any bound argued from a fan's coverage. Those runs used a generator that provably cannot
-produce the one plan known to work, so their zeros are statements about the generator's reach first.
+**Suspect:** every "0 genuine" the driver reported from when it started running items until session 160 -
+the s155 sweep, the s159 barren re-read's premise that those items were "rolling from a place where no
+position of hers can clip", and any bound argued from a fan's coverage. Those runs used a generator that
+provably cannot produce the one plan known to work, so their zeros are statements about the generator's
+reach first. Closing the gap does not retroactively make them measurements; the items have to be re-run
+at the shipped knobs.
 
 **Unaffected:** everything measured on the razor rather than on the enumeration - the genuine residual
 band and its sufficiency ([genuine-residual-band.md](genuine-residual-band.md)), the 16 ms screen and the

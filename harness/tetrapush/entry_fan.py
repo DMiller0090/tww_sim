@@ -173,7 +173,20 @@ def stick_alphabet(stride=1):
 
     NOT used by `iter_fan`: the one-segment fan is gated key AND value against the Python reference,
     which enumerates bytes and lets the LAST duplicate win, so collapsing it would change the plans
-    it reports. Two-segment passes have no such contract."""
+    it reports. Two-segment passes have no such contract.
+
+    MEMOISED per stride (it is a pure function of one int, and the stride-1 build decodes the 65536-pair
+    grid three times), returning a fresh list so a caller may still slice or reorder it."""
+    got = _ALPHABET_CACHE.get(int(stride))
+    if got is None:
+        got = _ALPHABET_CACHE[int(stride)] = _stick_alphabet(int(stride))
+    return list(got)
+
+
+_ALPHABET_CACHE = {}
+
+
+def _stick_alphabet(stride):
     out, seen = [], set()
     for p in stick_grid(stride):
         k = _decoded(*p)

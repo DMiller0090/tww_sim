@@ -631,6 +631,7 @@ def _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l, atom=True,
     n = sum(len(_families(walk, n0, 32)) for n0 in range(walk))
     if two_segment:
         pre = len(EF.stick_alphabet(pre_stride))
+        pre_frames = pre_frames_for(walk, pre_frames)
         for n0 in range(walk):
             j = walk - n0
             for jp in [p for p in pre_frames if p < j]:
@@ -642,6 +643,28 @@ def _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l, atom=True,
             if remaining >= 1:
                 n += combos * n_flips * len(_families(remaining, 0, 32))
     return n
+
+
+def alpha_for(fleets_est, budget, alpha_stride=None):
+    """**THE HOLD ALPHABET'S STRIDE, and whether the budget was allowed to choose it.**
+
+    Pulled out of `fan_exact` so the trade it makes is testable without cloning 4.6e8 cores. Two modes,
+    and the difference is the whole containment question:
+
+      * ``alpha_stride is None`` -- the AUTOSCALER: coarsen until the item fits ``budget``. Affordable,
+        and it is what let a run report coverage it did not have, because the console's hold letter
+        exists at stride 1 and nowhere else (`containment_knobs`).
+      * ``alpha_stride`` given -- PINNED. Containment is a property of the alphabet and may not be
+        traded for the budget, so an item that does not fit says ``over_budget`` instead of quietly
+        dropping the letters that matter.
+
+    Returns ``(stride, over_budget)``."""
+    if alpha_stride is None:
+        s = next((s for s in ALPHA_STRIDES if fleets_est * len(EF.stick_alphabet(s)) <= budget),
+                 ALPHA_STRIDES[-1])
+    else:
+        s = int(alpha_stride)
+    return s, bool(fleets_est * len(EF.stick_alphabet(s)) > budget)
 
 
 def _families(walk, n0, s1_stride):
@@ -664,15 +687,45 @@ def _families(walk, n0, s1_stride):
 
 #: The PRE segment: the stick that turns Tetra out of the front cone before the L frame -- see `fan_exact`
 #: for why a plan without one tops out at speedF 12.000, and why stride 32 buys the depth that matters.
-PRE_STRIDE = 32
-PRE_FRAMES = (1,)
+#: The s155-s159 values, kept NAMED because the s160 diagnosis is a measurement about them: they exclude
+#: the console's own plan -- knowledge/model/fan-containment-gap.md.
+LEGACY_PRE_STRIDE = 32
+LEGACY_PRE_FRAMES = (1,)
 PRE_L = (0,)
+
+#: ``pre_frames=PRE_FRAMES_ALL`` -> every ``jp`` a walk of this length admits (`pre_frames_for`). A tuple
+#: cannot say that, because the set depends on the walk.
+PRE_FRAMES_ALL = 'all'
+
+#: The pre alphabet that contains the console's own first letter ``(208, 110)`` -- present at stride 1 and
+#: 2 and in no coarser grid (`containment_knobs`, pinned in `tests/test_overnight_driver.py`).
+CONTAINED_PRE_STRIDE = 2
+
+#: The hold alphabet the console's own second letter ``(169, 192)`` needs. PINNED, because coarsening the
+#: hold to pay for a finer pre breaks containment the other way (`alpha_for`).
+CONTAINED_ALPHA_STRIDE = 1
+
+#: **THE SHIPPED KNOBS ARE THE CONTAINING ONES** (s161): every reader of these -- `fan_exact`, `worker`,
+#: `launch`, `containment_knobs`, `verify_console` -- runs at the set that holds the console's plan.
+PRE_STRIDE = CONTAINED_PRE_STRIDE
+PRE_FRAMES = PRE_FRAMES_ALL
+
+
+def pre_frames_for(walk, pre_frames):
+    """The pre-segment splits enumerated for a walk of ``walk`` frames.
+
+    ``PRE_FRAMES_ALL`` -> ``1 .. walk - 1``, which is every split a two-segment plan of this length can
+    have; a tuple is passed through and filtered by `fan_exact` per ``n0`` as before."""
+    if pre_frames == PRE_FRAMES_ALL:
+        return tuple(range(1, max(int(walk), 1)))
+    return tuple(int(p) for p in pre_frames)
 
 
 def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthreads=0, chunk=EF.CHUNK,
               two_segment=True, atom=True, junction_cap=None, pre_stride=PRE_STRIDE,
               pre_frames=PRE_FRAMES, pre_l=PRE_L, deadline=None, beat=None, leaf_budget=None,
-              tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
+              tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP, contained=True,
+              alpha_stride=CONTAINED_ALPHA_STRIDE, target=None, target_tol=None, target_prune=False):
     """Every distinct ``(endpoint, lean, speedF, Tetra)`` Link can stand on AT THE ROLL CAP after
     EXACTLY ``walk`` delivered frames, as ``(dict of key -> plan, stats)``.
 
@@ -690,21 +743,55 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
     full-resolution alphabet makes a 7-frame walk cost fifteen times a 3-frame one -- and the deep walks
     are the ones that can reach contact at all (it closes ~4 u a frame from -17 u at walk 3). So the FLIP
     alphabet is coarsened until the item fits `LEAF_BUDGET`, and the stride it settled on is logged with
-    the item (``alpha_stride``, ``alphabet``). Never the PRE: its job is only to rotate him."""
+    the item (``alpha_stride``, ``alphabet``). Never the PRE: its job is only to rotate him.
+
+    **``contained=True`` IS THE KNOB SET THAT HOLDS THE ONE PLAN KNOWN TO WORK** (s161): every split
+    (`PRE_FRAMES_ALL`), the stride-2 pre alphabet, and the hold PINNED at stride 1 so the autoscaler
+    cannot pay for the finer pre by coarsening the hold -- which would break containment the other way,
+    since the console's two letters need opposite ends of the alphabet (`containment_knobs`). It is
+    measured at 40274 fleets against the default's 353 at walk 4, so it is not a default: it is what
+    ``target`` makes affordable.
+
+    **``target`` AIMS THE ENUMERATION** (s161, `aimed_fan`): an ``(x, z)`` walk endpoint -- or a
+    sequence of them, since the razor's target is a strip and not a point -- that the plan has to reach.
+    `entry_aim.aim` puts an entry on the strip and `entry_aim.walk_end_for` inverts it to the endpoint.
+
+    It does TWO things, and only one of them is a prune:
+
+      * ``target_prune=True`` drops junctions `aimed_fan.reachable` says cannot reach the target in the
+        frames they have left, BEFORE their |alpha| fleets are cloned. Admissible, and measured at only
+        **1.4x** on the console item -- the reach disc is nearly the whole reachable set, so this does
+        not pay for containment's 114x and is off by default.
+      * ORDERING, always, and it is lossless: `aimed_fan.rank` puts the junctions whose at-cap leaves
+        land ON the target first. That is what a deadline reads, so ``covered`` becomes the part of the
+        space that could have hit rather than an arbitrary prefix.
+
+    ``target_tol`` widens the prune (default `aimed_fan.REACH_TOL`). Logged as ``target_pruned`` /
+    ``target_kept``, never silent."""
     from harness.tetrapush.reposition import HerdLine
+    from harness.tetrapush import aimed_fan as AF
     out = {}
     hl = HerdLine.from_env(env)
     flips = AW.flip_arc(hl, step=ATOM_FLIP_STEP) if atom else []
+    if contained:
+        pre_stride = CONTAINED_PRE_STRIDE if pre_stride == LEGACY_PRE_STRIDE else pre_stride
+        pre_frames = PRE_FRAMES_ALL if pre_frames == LEGACY_PRE_FRAMES else pre_frames
+    # ``alpha_stride='auto'`` is the OPT-OUT: it hands the hold alphabet back to the leaf budget, which
+    # is affordable and not contained -- `verify_console(alpha_stride=...)` will say so.
+    alpha_stride = None if alpha_stride == 'auto' else alpha_stride
+    pre_frames = pre_frames_for(walk, pre_frames)
     fleets_est = _fleet_estimate(walk, two_segment, pre_stride, pre_frames, pre_l, atom=atom,
                                  n_flips=len(flips))
     budget = LEAF_BUDGET if leaf_budget is None else int(leaf_budget)
-    a_stride = next((s for s in ALPHA_STRIDES
-                     if fleets_est * len(EF.stick_alphabet(s)) <= budget),
-                    ALPHA_STRIDES[-1])
+    a_stride, over = alpha_for(fleets_est, budget, alpha_stride)
     alpha = EF.stick_alphabet(a_stride)
     st = dict(raw=0, sub_cap=0, off_cap_only=0, junctions=0, junctions_dead=0, fleets=0,
               families=0, alphabet=len(alpha), alpha_stride=a_stride, fleets_est=fleets_est,
-              leaves_est=fleets_est * len(alpha), atom_junctions=0, atom_junctions_dead=0)
+              leaves_est=fleets_est * len(alpha), atom_junctions=0, atom_junctions_dead=0,
+              pre_stride=int(pre_stride), pre_frames=list(pre_frames), contained=bool(contained),
+              alpha_pinned=alpha_stride is not None, over_budget=over)
+    if target is not None:
+        st.update(target=[float(target[0]), float(target[1])], target_pruned=0, target_kept=0)
 
     def collect(cores, label):
         for i, c in cores:
@@ -744,6 +831,18 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
             for lp in pre_l:
                 jcs = _fan(base, pre, [lp] * jp, csangle, cs_trail, n0, nthreads)
                 st['junctions_dead'] += len(pre) - len(jcs)
+                if target is not None:
+                    # STEPPED frames, not delivered -- the hold below runs `_families`' j+1 schedule.
+                    r = walk - n0 - jp + 1
+                    if target_prune:
+                        # the subtree prune: |alpha| clones per junction, so this is where it pays
+                        keep_jcs = [(i1, jc) for i1, jc in jcs
+                                    if AF.reachable(jc, target, r, tol=target_tol)]
+                        st['target_pruned'] += len(jcs) - len(keep_jcs)
+                        jcs = keep_jcs
+                    # and then ORDER what is left, which is lossless and is what a deadline reads
+                    jcs = AF.rank(jcs, target, r)
+                    st['target_kept'] += len(jcs)
                 for i1, jc in jcs:
                     if junction_cap is not None and st['junctions'] >= junction_cap:
                         st['junction_cap_hit'] = True
@@ -1335,9 +1434,15 @@ def console_candidate():
                 n_console=int(d['plan']['n_console']))
 
 
-def containment_knobs(cc=None, strides=(1, 2, 4, 8, 16, 32, 64)):
+def containment_knobs(cc=None, strides=(1, 2, 4, 8, 16, 32, 64), *, pre_stride=None, pre_frames=None,
+                      alpha_stride=None, contained=False):
     """**WHAT THE FAN'S ENUMERATION WOULD HAVE TO BE TO CONTAIN THE CONSOLE'S OWN PLAN**, and what that
-    costs (session 160).
+    costs (session 160) -- **AT THE KNOBS A RUN IS ABOUT TO USE** (session 161).
+
+    The knob arguments default to the module's own, which is the question s160 asked ("does the SHIPPED
+    default contain it": no). Pass ``contained=True``, or the three knobs, to ask it of the containing
+    set -- that is what `verify_console` does, so a run cannot report containment against a
+    configuration it will not run at.
 
     A search is not trusted until it rediscovers a known answer (`[[search-must-rediscover-known-
     answer]]`), and `verify_console`'s alphabet check tested `entry_fan.stick_alphabet(1)` while
@@ -1355,10 +1460,20 @@ def containment_knobs(cc=None, strides=(1, 2, 4, 8, 16, 32, 64)):
     pre_classes, fleets_default, fleets_contained, factor)``. The fleet numbers are
     `_fleet_estimate`'s own, so the cost of containment is a measured multiple and not an adjective."""
     cc = console_candidate() if cc is None else cc
+    if contained:
+        pre_stride = CONTAINED_PRE_STRIDE if pre_stride is None else pre_stride
+        pre_frames = PRE_FRAMES_ALL if pre_frames is None else pre_frames
+        alpha_stride = CONTAINED_ALPHA_STRIDE if alpha_stride is None else alpha_stride
+    pre_stride = PRE_STRIDE if pre_stride is None else int(pre_stride)
+    alpha_stride = 1 if alpha_stride is None else int(alpha_stride)
     plan = from_triples(cc['plan'])
     segs = [(int(plan[i]), int(plan[i + 1]), int(plan[i + 2]), int(plan[i + 3]))
             for i in range(1, len(plan), 4)]
-    sets = {s: {EF._decoded(*p) for p in EF.stick_alphabet(s)} for s in strides}
+    walk = int(cc['walk'])
+    pre_frames = PRE_FRAMES if pre_frames is None else pre_frames
+    pf = pre_frames_for(walk, pre_frames)
+    sets = {s: {EF._decoded(*p) for p in EF.stick_alphabet(s)}
+            for s in sorted(set(strides) | {pre_stride, alpha_stride})}
     pre, hold = segs[0], segs[-1]
     need = {}
     for tag, seg in (('pre', pre), ('hold', hold)):
@@ -1367,20 +1482,24 @@ def containment_knobs(cc=None, strides=(1, 2, 4, 8, 16, 32, 64)):
         need[tag] = max(ok) if ok else None
     jp = pre[3]                                     # the pre segment's own delivered frames
     n0 = int(plan[0])
-    walk = int(cc['walk'])
-    a_pre = tuple(sorted(set(PRE_FRAMES) | {jp}))
-    d = _fleet_estimate(walk, True, PRE_STRIDE, PRE_FRAMES, PRE_L, atom=False)
+    a_pre = tuple(sorted(set(pf) | {jp}))
+    # LEGACY price, minimum containing price, and what the run costs today
+    d = _fleet_estimate(walk, True, LEGACY_PRE_STRIDE, LEGACY_PRE_FRAMES, PRE_L, atom=False)
     c = _fleet_estimate(walk, True, need['pre'] or 1, a_pre, PRE_L, atom=False)
+    shipped = _fleet_estimate(walk, True, PRE_STRIDE, PRE_FRAMES, PRE_L, atom=False)
     return dict(splits=[(s[0], s[1], s[3]) for s in segs], n0=n0,
-                split_ok=bool(len(segs) == 1 or jp in PRE_FRAMES),
-                pre_ok=bool(EF._decoded(pre[0], pre[1]) in sets[PRE_STRIDE]),
-                hold_ok=bool(EF._decoded(hold[0], hold[1]) in sets[1]),
+                split_ok=bool(len(segs) == 1 or jp in pf),
+                pre_ok=bool(EF._decoded(pre[0], pre[1]) in sets[pre_stride]),
+                hold_ok=bool(EF._decoded(hold[0], hold[1]) in sets[alpha_stride]),
                 pre_stride_needed=need['pre'], hold_stride_needed=need['hold'],
-                pre_classes=len(sets[PRE_STRIDE]), pre_frames_needed=a_pre,
-                fleets_default=d, fleets_contained=c, factor=(c / d if d else None))
+                pre_classes=len(sets[pre_stride]), pre_frames_needed=a_pre,
+                pre_stride_used=pre_stride, pre_frames_used=list(pf), alpha_stride_used=alpha_stride,
+                fleets_default=d, fleets_contained=c, fleets_shipped=shipped,
+                factor=(c / d if d else None))
 
 
-def verify_console(env=None, incumbent=None):
+def verify_console(env=None, incumbent=None, *, contained=False, pre_stride=None, pre_frames=None,
+                   alpha_stride=None):
     """**IS THE BANKED 101 INSIDE THIS SEARCH'S SPACE?** Measured, phase by phase, never asserted.
 
     `[[search-space-contains-human]]`: a search whose range does not intrinsically contain the known-good
@@ -1431,14 +1550,23 @@ def verify_console(env=None, incumbent=None):
     chk('its walk letters are in the fan alphabet', not missing,
         'letters %s, missing %s of %d classes' % (letters, missing, len(alpha)))
     # **AND IN THE ALPHABET THE RUN ACTUALLY DRAWS THEM FROM** (s160): the check above is the stride-1
-    # grid, and the pre segment is not -- knowledge/model/fan-containment-gap.md.
-    kn = containment_knobs(cc)
+    # grid, and the pre segment is not -- knowledge/model/fan-containment-gap.md. Asked at the knobs
+    # passed in, so a run reports containment for the configuration it will actually enumerate (s161).
+    kn = containment_knobs(cc, pre_stride=pre_stride, pre_frames=pre_frames,
+                           alpha_stride=alpha_stride, contained=contained)
+    out['knobs'] = dict((k, kn[k]) for k in ('pre_stride_used', 'pre_frames_used',
+                                             'alpha_stride_used', 'fleets_default',
+                                             'fleets_contained', 'factor'))
     chk('its SPLIT SHAPE is enumerated at the run\'s PRE_FRAMES', kn['split_ok'],
         'plan splits %s, driver enumerates n0 + jp in %s + a uniform hold'
-        % (kn['splits'], tuple(PRE_FRAMES)))
+        % (kn['splits'], tuple(kn['pre_frames_used'])))
     chk('its pre letter is in the alphabet the run DRAWS the pre segment from', kn['pre_ok'],
         'pre stride %d = %d classes; the letter needs stride <= %s'
-        % (PRE_STRIDE, kn['pre_classes'], kn['pre_stride_needed']))
+        % (kn['pre_stride_used'], kn['pre_classes'], kn['pre_stride_needed']))
+    chk('its HOLD letter is in the alphabet the run holds at', kn['hold_ok'],
+        'hold stride %d; the letter needs stride <= %s -- a leaf budget that coarsens the hold to '
+        'pay for the pre breaks containment the other way'
+        % (kn['alpha_stride_used'], kn['hold_stride_needed']))
     chk('its walk length round-trips the L-capable encoding', plan_frames(plan) == cc['walk'],
         'plan %s -> %d frames, fixture says %d' % (list(plan), plan_frames(plan), cc['walk']))
     prep = prepare(cc['unit'], env)
