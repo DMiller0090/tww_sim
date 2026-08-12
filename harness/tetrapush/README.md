@@ -2075,6 +2075,48 @@ from scratch. Land the edits first, then gate.
                   per entry in the plane; the march is finite, so ``genuine == 0`` means "none in this
                   arc" and ``tested`` belongs in every quote; and the marched ARC depends on the seed
                   entry, so counts move with it while the live/dead verdict does not (gated).
+              - **SESSION 157 -- THE PREFILTER CANNOT EXIST, BECAUSE THE WALL BRACE PINS THE WHOLE CUT
+                FRAME: OUT OF CONTACT THE ENTRY DOES NOTHING, AND THE RAZOR'S ONE FREE VARIABLE IS WHERE
+                TETRA STANDS AT THE CUT.** s156 asked for "prune the 97%, predicting the cut step's
+                position as ``entry + sum(dx, dz)``". Measured before building on it, **both halves of
+                that recipe are false**, and what replaced them is stronger. New tracked module
+                **`harness/tetrapush/cut_contact.py`** (`braced_row`, `braced_invariance`, `cut_slice`,
+                `zero_bearing`, `target_ring`), 9 gates in `tests/test_cut_contact.py`, KB page
+                `knowledge/model/braced-cut-frame.md`. Probes: `_notes/s157_*.py`.
+                - **THE ENTRY IS INERT OUT OF CONTACT, BIT-EXACTLY.** Over the whole REACHABLE entry box
+                  (`reach_radius`, 94 u) an untouched roll returns **one distinct ``old``, Co centre,
+                  ``new`` and residual for 169 entries** -- every entry drives the roll into the same
+                  wall and `CrrPos` returns Link to the same braced point. It is a property of the BOX:
+                  the same 169 entries at radius 400 u give 129/129/125/129. So s156's "outside contact
+                  the residual is a dead constant" now has its mechanism, and everything the entry buys
+                  a search it buys THROUGH her plow.
+                - **THE ARITHMETIC FREE PATH IS 255 u WRONG, AND CONTACT IS NOT THE PRUNABLE THING.**
+                  ``entry + sum(dx, dz)`` ignores the wall correction: a contact test on it keeps **0 of
+                  2304** entries that are genuinely in contact. And contact is not rare -- on a real
+                  item's rows **99.3% plow her 23-68 u** while only **2.2%** end with any different
+                  cut-frame state, because the brace eats Link's half of the ejection. The saving is
+                  real (97.8% of rows ARE one constant) but not reachable through geometry: the
+                  necessary condition (she is anywhere near the swept no-Tetra path, inflated by her own
+                  plow) keeps 94-100% of rows, and the tight point test keeps 61.5% AND LEAKS.
+                - **SO THE RAZOR IS A MAP OVER ONE 2-D VARIABLE, AND `ShoveCtx` ALREADY TAKES IT.**
+                  ``placed_step`` puts her anywhere in the schedule, so `cut_slice` places her ON the
+                  contact step and reads the razor off the native sim -- ~66 us a point, no fan, and
+                  entry-invariant (gated bit-exact). Handed the position the console's herd left her in,
+                  it reproduces that row's push to 1.5e-03 and its residual to 1e-02.
+                - **THE AIM, PRICED AGAINST THE ONLY KNOWN ANSWER.** `target_ring` bisects the
+                  residual's zero per bearing off the braced Co centre (scan first: deep in the overlap
+                  the residual STEPS, and a blind bisection reports the jump as a target, dist 34.93 at
+                  ``resid`` +20.5). On the bearing the console used, the ring sits at **76.73543 u**
+                  against the **76.78111 u** she actually stood at -- **aim error 0.046 u**. It is an
+                  AIM, not a plan: the slice pins ``old``, and the accepted 101's own ``old`` is 0.0127 u
+                  off the brace, worth ~1e-02 of residual against a razor 1e-04 wide.
+                - **AND THE BARREN ITEM IS PRICED IN HER COORDINATE.** ``gap = |resid| / |d resid /
+                  d dist|`` over **261k rows** of walk 8 / thrust 13 (all 55 cells, 6000 candidates):
+                  closest row **1.006 u**, median in-contact row 414 u, against the delivered 101's
+                  **7.7e-04 u**. Nothing that item can build gets within a unit of where she has to be.
+                  Her reachable set is not free either -- the rows that reach contact are the ones
+                  plowed INTO the wall, which pins her cut-frame ``z`` at -940.255615, while the
+                  delivered row stopped 0.36 u short of that pin.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
