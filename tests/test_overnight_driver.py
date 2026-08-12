@@ -111,6 +111,79 @@ def test_the_walk_letters_are_in_the_fans_own_alphabet():
         assert EF._decoded(int(plan[i]), int(plan[i + 1])) in alpha, plan[i:i + 2]
 
 
+@pytest.mark.xfail(strict=True, reason='s160: the default fan CANNOT express the console\'s own 2+2 '
+                                       'split (PRE_FRAMES = (1,)) and its pre letter (208, 110) is '
+                                       'absent from the 57-class stride-32 pre alphabet. Measured cost '
+                                       'of containing it: 95x the fleets. Delete this xfail when the '
+                                       'knobs are paid -- do not weaken the assertion.')
+def test_the_fan_enumeration_contains_the_console_plan():
+    """**THE SEARCH MUST BE ABLE TO GENERATE ITS OWN KNOWN ANSWER** (`[[search-must-rediscover-known-
+    answer]]`), and at the default knobs it cannot.
+
+    `test_the_walk_letters_are_in_the_fans_own_alphabet` above checks ``stick_alphabet(1)``, which is a
+    FINER alphabet than `overnight.fan_exact` draws the PRE segment from -- so twelve green containment
+    checks coexisted with a fan that misses the console's own walk endpoint by 0.213 u, against a razor
+    strip 1.9e-04 u wide (`_notes/s160_contain.py`). This is that gap, as an assertion."""
+    k = ON.containment_knobs()
+    assert k['split_ok'] is True, 'split %s not in PRE_FRAMES %s' % (k['splits'], ON.PRE_FRAMES)
+    assert k['pre_ok'] is True and k['hold_ok'] is True
+
+
+@pytest.fixture(scope='module')
+def console_stepped():
+    """The console's own two letters stepped through `overnight._fan` -- the fan's OWN primitive, the same
+    base core, the same camera trail -- as the 2 + 2 split the fixture records."""
+    from harness.tetrapush import entry_fan as EF
+    env = SD.load_env()
+    cc = ON.console_candidate()
+    prep, hold, trail = ON.prepared(cc['unit'], env, O.courtyard_walls(), cc['walk'])
+    plan = ON.from_triples(cc['plan'])
+    csa = ON.aim_camera(plan, cc['walk'], trail)
+    n0 = int(plan[0])
+    segs = [(int(plan[i]), int(plan[i + 1]), int(plan[i + 2]), int(plan[i + 3]))
+            for i in range(1, len(plan), 4)]
+    base, _run = EF.base_core(n0, seed=prep['seed'], env=env, hold=hold)
+    (sx1, sy1, l1, j1), (sx2, sy2, l2, j2) = segs
+    jcs = ON._fan(base, [(sx1, sy1)], [l1] * j1, csa, trail, n0, 0)
+    cores = ON._fan(jcs[0][1], [(sx2, sy2)], [l2] * (j2 + 1), csa, trail, n0 + j1, 0)
+    return cc, prep, cores[0][1]
+
+
+def test_the_fan_primitive_reaches_the_console_endpoint_bit_for_bit(console_stepped):
+    """**THE MACHINERY REACHES IT; ONLY THE ENUMERATION DOES NOT.** This is what makes the xfail above a
+    coverage gap rather than a modelling one: hand `_fan` the console's own letters at its own split and
+    the walk endpoint comes back BIT-IDENTICAL to the locked fixture's ``hit['walk']``, at the cap, with
+    the fixture's own roll lean -- and its roll entry is the delivered entry, 0-ULP
+    (`[[zero-ulp-tests-only]]`)."""
+    from harness.tetrapush import entry_aim as EA
+    from harness.tetrapush import entry_fan as EF
+    from harness.tetrapush import entry_search as ES
+    cc, prep, c = console_stepped
+    want = CC['walk']
+    assert (ON._bits(c.pos_x), ON._bits(c.pos_z)) == (ON._bits(want[0]), ON._bits(want[1]))
+    assert ON.at_cap(c.speedF) is True and EF._is_rollable(c) is True
+    assert ES.lean_at_roll(int(c.m351C) & 0xFFFF) == cc['m351C']
+    e = ES.roll_entry((c.pos_x, c.pos_z), cc['facing'], ES.ROLL_NSPEED)
+    assert (ON._bits(e[0]), ON._bits(e[1])) == (ON._bits(cc['entry'][0]), ON._bits(cc['entry'][1]))
+    p = EA.price(cc['facing'], cc['m351C'], cc['thrust'], e, tuple(prep['seed']['tetra']))
+    assert p['genuine'] is True and p['offset_u'] == 0.0
+
+
+def test_the_containment_gap_is_exactly_two_knobs_and_its_price_is_measured():
+    """The DIAGNOSIS, pinned: which knobs exclude the console's plan, the stride each letter needs, and
+    what containment costs in fleets. Facts, so they are asserted exactly -- if a knob moves, this test
+    is what says the diagnosis above went stale."""
+    k = ON.containment_knobs()
+    assert k['splits'] == [(208, 110, 2), (169, 192, 2)] and k['n0'] == 0
+    assert k['pre_stride_needed'] == 2, 'the pre letter exists at stride 1 and 2 and nowhere coarser'
+    assert k['hold_stride_needed'] == 1, 'the HOLD letter needs stride 1 -- so the leaf budget cannot ' \
+                                         'absorb a bigger pre by coarsening it'
+    assert k['pre_classes'] == 57
+    assert tuple(k['pre_frames_needed']) == (1, 2)
+    assert (k['fleets_default'], k['fleets_contained']) == (353, 33563)
+    assert 90.0 < k['factor'] < 100.0
+
+
 def test_the_composite_log_is_the_console_log_row_for_row():
     """**The driver rebuilds the delivered movie exactly.**
 

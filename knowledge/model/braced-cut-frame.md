@@ -45,6 +45,11 @@ residual is a dead constant" as an observation; this is its mechanism. Everythin
 search, it buys through the pushed actor - by changing WHEN the roll first reaches her, hence how many
 frames of plow she gets, hence where she is standing on the frame the cut consumes.
 
+That channel is worth measuring rather than dismissing: **in contact it carries 0.31-0.51 residual per u
+of entry**, the same order as her own axis, which makes the entry an aimable variable and the razor's
+target a strip ~1.2e-04 u wide - [entry-strip.md](entry-strip.md). "The entry is inert" is a statement
+about the out-of-contact rows this section sweeps, not about a plan that reaches her.
+
 **The bare roll-stab is one row per configuration.** At the accepted configuration it reads
 `resid -0.8609402`, `push (0, 0)`, `genuine False` - the 0.33 u short landing this corner is known for,
 now stated as a constant rather than a sample.

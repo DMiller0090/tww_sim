@@ -1335,6 +1335,51 @@ def console_candidate():
                 n_console=int(d['plan']['n_console']))
 
 
+def containment_knobs(cc=None, strides=(1, 2, 4, 8, 16, 32, 64)):
+    """**WHAT THE FAN'S ENUMERATION WOULD HAVE TO BE TO CONTAIN THE CONSOLE'S OWN PLAN**, and what that
+    costs (session 160).
+
+    A search is not trusted until it rediscovers a known answer (`[[search-must-rediscover-known-
+    answer]]`), and `verify_console`'s alphabet check tested `entry_fan.stick_alphabet(1)` while
+    `fan_exact` draws its PRE segment from `stick_alphabet(PRE_STRIDE)`. Measured at the default knobs:
+
+      * the console's plan is ``(0, 208, 110, 0, 2, 169, 192, 0, 2)`` -- a **2 + 2** split, and
+        ``PRE_FRAMES = (1,)`` cannot express it at any alphabet;
+      * its pre letter ``(208, 110)`` is in the stride-1 and stride-2 class sets and **in none coarser**,
+        so the 57-class stride-32 pre alphabet excludes it;
+      * its hold letter ``(169, 192)`` is in the stride-1 set ONLY -- which is the trap in "just raise the
+        pre resolution": `fan_exact` sizes ``alpha`` to `LEAF_BUDGET`, so a 118x bigger pre makes the
+        autoscaler coarsen the HOLD and break containment the other way. Both segments have to be paid.
+
+    Returns ``dict(splits, split_ok, pre_ok, hold_ok, pre_stride_needed, hold_stride_needed,
+    pre_classes, fleets_default, fleets_contained, factor)``. The fleet numbers are
+    `_fleet_estimate`'s own, so the cost of containment is a measured multiple and not an adjective."""
+    cc = console_candidate() if cc is None else cc
+    plan = from_triples(cc['plan'])
+    segs = [(int(plan[i]), int(plan[i + 1]), int(plan[i + 2]), int(plan[i + 3]))
+            for i in range(1, len(plan), 4)]
+    sets = {s: {EF._decoded(*p) for p in EF.stick_alphabet(s)} for s in strides}
+    pre, hold = segs[0], segs[-1]
+    need = {}
+    for tag, seg in (('pre', pre), ('hold', hold)):
+        k = EF._decoded(seg[0], seg[1])
+        ok = [s for s in sorted(sets) if k in sets[s]]
+        need[tag] = max(ok) if ok else None
+    jp = pre[3]                                     # the pre segment's own delivered frames
+    n0 = int(plan[0])
+    walk = int(cc['walk'])
+    a_pre = tuple(sorted(set(PRE_FRAMES) | {jp}))
+    d = _fleet_estimate(walk, True, PRE_STRIDE, PRE_FRAMES, PRE_L, atom=False)
+    c = _fleet_estimate(walk, True, need['pre'] or 1, a_pre, PRE_L, atom=False)
+    return dict(splits=[(s[0], s[1], s[3]) for s in segs], n0=n0,
+                split_ok=bool(len(segs) == 1 or jp in PRE_FRAMES),
+                pre_ok=bool(EF._decoded(pre[0], pre[1]) in sets[PRE_STRIDE]),
+                hold_ok=bool(EF._decoded(hold[0], hold[1]) in sets[1]),
+                pre_stride_needed=need['pre'], hold_stride_needed=need['hold'],
+                pre_classes=len(sets[PRE_STRIDE]), pre_frames_needed=a_pre,
+                fleets_default=d, fleets_contained=c, factor=(c / d if d else None))
+
+
 def verify_console(env=None, incumbent=None):
     """**IS THE BANKED 101 INSIDE THIS SEARCH'S SPACE?** Measured, phase by phase, never asserted.
 
@@ -1385,6 +1430,15 @@ def verify_console(env=None, incumbent=None):
     missing = [p for p in letters if EF._decoded(*p) not in alpha]
     chk('its walk letters are in the fan alphabet', not missing,
         'letters %s, missing %s of %d classes' % (letters, missing, len(alpha)))
+    # **AND IN THE ALPHABET THE RUN ACTUALLY DRAWS THEM FROM** (s160): the check above is the stride-1
+    # grid, and the pre segment is not -- knowledge/model/fan-containment-gap.md.
+    kn = containment_knobs(cc)
+    chk('its SPLIT SHAPE is enumerated at the run\'s PRE_FRAMES', kn['split_ok'],
+        'plan splits %s, driver enumerates n0 + jp in %s + a uniform hold'
+        % (kn['splits'], tuple(PRE_FRAMES)))
+    chk('its pre letter is in the alphabet the run DRAWS the pre segment from', kn['pre_ok'],
+        'pre stride %d = %d classes; the letter needs stride <= %s'
+        % (PRE_STRIDE, kn['pre_classes'], kn['pre_stride_needed']))
     chk('its walk length round-trips the L-capable encoding', plan_frames(plan) == cc['walk'],
         'plan %s -> %d frames, fixture says %d' % (list(plan), plan_frames(plan), cc['walk']))
     prep = prepare(cc['unit'], env)

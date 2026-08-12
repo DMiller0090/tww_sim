@@ -39,7 +39,7 @@ duty cycle is a measured caveat and not an assumption.
 usage:
     python -m harness.tetrapush.admit_map gate            # the rediscovery gate: both known clips
     python -m harness.tetrapush.admit_map one <facing> <lean> <thrust>
-    python -m harness.tetrapush.admit_map map [out.jsonl] [arc] [step]
+    python -m harness.tetrapush.admit_map map [out.jsonl] [arc] [step]   # RESUMES its own jsonl
 """
 import json
 import math
@@ -343,24 +343,52 @@ def screen(facing, lean, thrust, *, entry=None, ctx=None, sch=None, resid=None, 
     return out
 
 
+def banked(path):
+    """``{(cell, thrust, lean_signed)}`` already on disk -- what `screen_space`'s ``resume`` skips.
+
+    Tolerates a truncated final line: the map appends and flushes per row, so a run killed mid-write
+    leaves one partial, and a resume that raised on it would be no resume at all."""
+    done = set()
+    if not path or not os.path.exists(path):
+        return done
+    with open(path) as fh:
+        for line in fh:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            done.add((int(r['cell']), int(r['thrust']), int(r.get('lean_signed', r['lean']))))
+    return done
+
+
 def screen_space(cells=None, thrusts=None, leans=None, *, entry=None, step=STATION_STEP, arc=ARC,
-                 first_only=True, out=None, log=None):
+                 first_only=True, out=None, log=None, resume=False):
     """The whole map: every (cell, thrust, lean class), through ONE `entry_search.CtxPool`.
 
     Yields each `screen` verdict and, with ``out``, appends it to a JSONL as it goes -- a map that dies
     at configuration 9000 should still be readable. The pool compiles the courtyard once per
-    (cell, thrust) instead of once per configuration, which is 135 builds instead of 17415."""
+    (cell, thrust) instead of once per configuration, which is 135 builds instead of 17415.
+
+    ``resume`` skips the (cell, thrust, lean) rows ``out`` already holds, so a full map is a KILLABLE
+    job rather than a 7-hour hostage -- which is the whole reason it exists: s159 left one running and
+    s160 had to choose between the box and 1.5 h of banked rows. The rows are `banked`'s own key, not a
+    row count, so an interrupted run resumes correctly even though the queue order is not the file
+    order."""
     cells = ES.aim_cells() if cells is None else cells
     thrusts = ES.THRUSTS if thrusts is None else thrusts
     leans = lean_classes() if leans is None else leans
     pool = ES.CtxPool()
+    done = banked(out) if resume else set()
     fh = open(out, 'a') if out else None
-    n = adm = 0
+    n = adm = skip = 0
     t0 = time.time()
     try:
         for facing, _byts, _sibs in cells:
             for thrust in thrusts:
                 for lean in leans:
+                    if (ES.aim_cell(facing), int(thrust), int(lean)) in done:
+                        skip += 1
+                        continue
                     ctx, sch, resid = pool.get(facing, int(lean) & 0xFFFF, thrust)
                     r = screen(facing, lean, thrust, entry=entry, ctx=ctx, sch=sch, resid=resid,
                                step=step, arc=arc, first_only=first_only)
@@ -372,8 +400,8 @@ def screen_space(cells=None, thrusts=None, leans=None, *, entry=None, step=STATI
                         fh.flush()
                     yield r
                 if log:
-                    log('cell %4d thrust %2d done: %d screened, %d admit  (%.0fs)'
-                        % (ES.aim_cell(facing), thrust, n, adm, time.time() - t0))
+                    log('cell %4d thrust %2d done: %d screened, %d admit, %d resumed  (%.0fs)'
+                        % (ES.aim_cell(facing), thrust, n, adm, skip, time.time() - t0))
     finally:
         if fh:
             fh.close()
@@ -549,11 +577,13 @@ def main(argv):
             print('REDISCOVERY GATE FAILED -- refusing to bank a map whose screen cannot find a '
                   'known clip')
             return 1
-        print('gate PASS; mapping 45 cells x %d thrusts x %d lean classes -> %s'
-              % (len(ES.THRUSTS), len(lean_classes()), out))
+        have = banked(out)
+        print('gate PASS; mapping 45 cells x %d thrusts x %d lean classes -> %s (%d already banked)'
+              % (len(ES.THRUSTS), len(lean_classes()), out, len(have)))
         n = adm = 0
         t0 = time.time()
-        for r in screen_space(arc=arc, step=step, out=out, log=lambda s: print('  ' + s, flush=True)):
+        for r in screen_space(arc=arc, step=step, out=out, resume=True,
+                              log=lambda s: print('  ' + s, flush=True)):
             n += 1
             adm += bool(r['admits'])
         print('%d configurations screened, %d admit (%.2f%%) in %.0f s'

@@ -14,6 +14,7 @@ Every assertion here is exact: bit patterns, counts, and booleans, never a toler
 Kept inside the per-test budget by pinning the arc on the expensive negative and by leaning on
 `lean_runs`'s cache; the wide-arc measurements live in `_notes/s159_*.py` and the KB.
 """
+import json
 import struct
 
 import pytest
@@ -181,6 +182,28 @@ def test_her_seeds_land_on_the_razor_and_in_contact():
         _gx, _gz, mag, r, _o = AM.resid_grad(ctx, rf, c['entry'], s)
         assert mag > 0.0, 'a seed out of contact has no razor to walk'
         assert abs(r) < AM.CORRECT_TOL, 'a seed must already be ON the curve, not near a jump'
+
+
+def test_a_banked_map_resumes_instead_of_re_screening(tmp_path):
+    """**A 7-HOUR MAP MUST BE KILLABLE.** ``resume`` skips exactly the (cell, thrust, lean) rows the
+    JSONL already holds -- including past a truncated final line, which is what a killed run leaves.
+
+    Screens nothing: the point is the bookkeeping, and a gate that re-ran the map to test its resume
+    would be the very thing the budget rule forbids."""
+    p = tmp_path / 'map.jsonl'
+    cells, thrust, leans = ES.aim_cells()[:1], 15, AM.lean_classes()[:3]
+    cell = ES.aim_cell(cells[0][0])
+    with open(p, 'w') as fh:
+        for lean in leans:
+            fh.write(json.dumps(dict(cell=cell, thrust=thrust, lean=lean & 0xFFFF,
+                                     lean_signed=lean, admits=False)) + '\n')
+        fh.write('{"cell": 2552, "thr')                  # the row the kill interrupted
+    assert AM.banked(str(p)) == {(cell, thrust, lean) for lean in leans}
+    assert AM.banked(str(tmp_path / 'nothing.jsonl')) == set()
+    got = list(AM.screen_space(cells=cells, thrusts=[thrust], leans=leans, out=str(p), resume=True))
+    assert got == []
+    # and without resume it would screen them -- checked by the flag alone, not by paying for it
+    assert AM.banked(str(p)) == {(cell, thrust, lean) for lean in leans}
 
 
 @pytest.mark.parametrize('lean', [-775, 0, 266])

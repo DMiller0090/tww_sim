@@ -2258,6 +2258,65 @@ from scratch. Land the edits first, then gate.
                   `entrymap` refuse to run without it): both delivered configurations are screened
                   from their own entries with HER SEED FOUND BY THE SCREEN's own ray fan, and both
                   come back admitting. `[[search-must-rediscover-known-answer]]`.
+              - **SESSION 160 -- THE SEARCH CANNOT GENERATE ITS OWN KNOWN ANSWER, AND THE RAZOR'S
+                TARGET IS A 1.2e-04 u STRIP IN THE ENTRY PLANE.** s159 handed over "plan into the
+                admitting entry region". Pricing what a plan would have to do to get there found
+                something upstream of every entry question: **the driver's fan misses the console's own
+                delivered walk endpoint by 0.213 u** and contains no bit-exact copy of it, so ten
+                sessions of "0 genuine" were produced by a generator that provably cannot emit the one
+                plan known to work. New tracked module **`harness/tetrapush/entry_aim.py`** (`entry_grad`,
+                `offset_u`, `price`, `aim`, `walk_end_for`; 12 gates in `tests/test_entry_aim.py`), new
+                `overnight.containment_knobs` + 2 new `verify_console` checks + 3 gates, KB
+                `knowledge/model/{entry-strip,fan-containment-gap}.md`. Probes `_notes/s160_*.py`.
+                - **THE TWO KNOBS THAT EXCLUDE IT, AND NEITHER IS THE RAZOR.** The console's plan is
+                  `(0, 208, 110, 0, 2, 169, 192, 0, 2)` -- a **2 + 2** split. `PRE_FRAMES = (1,)` is one
+                  pre frame then a UNIFORM hold, so that shape is not in the family set at any alphabet;
+                  and `PRE_STRIDE = 32` draws the pre segment from **57 decoded classes of 11405**, which
+                  do not include its first letter (present at stride 1 and 2, **nowhere coarser**). Its
+                  HOLD letter needs stride 1, so `LEAF_BUDGET`'s autoscaler cannot absorb a bigger pre by
+                  coarsening the hold -- it would break containment the other way. Price of containing
+                  it: `_fleet_estimate` **353 -> 33563 fleets, 95x**, on a fan that already costs ~56 s
+                  an item. Gated `xfail(strict)` + a pinned-diagnosis test, not silently raised.
+                - **THE MACHINERY REACHES IT BIT-EXACT; ONLY THE ENUMERATION DOES NOT.** Hand
+                  `overnight._fan` the console's own two letters at its own split, off the same base core
+                  and camera trail: the walk endpoint is **BIT-IDENTICAL** to the locked fixture's own
+                  `hit['walk']`, at the cap, `lean_at_roll` = its own 64761, and its roll entry is the
+                  delivered entry 0-ULP, `genuine`, `offset_u` exactly 0. So this is a COVERAGE gap.
+                - **WHY 12 GREEN CONTAINMENT CHECKS COEXISTED WITH IT.** `verify_console` tested the
+                  letters against `stick_alphabet(1)` -- a finer alphabet than the run draws the pre
+                  segment from -- and never tested the SPLIT SHAPE. Everything downstream of generation
+                  was honest. The lesson for the next search: **verify containment against the alphabet
+                  and plan shape the run will actually enumerate, at the knobs it will run with.**
+                - **AND THE TARGET NOW HAS A UNIT A WALK CAN STEER.** `|d resid / d ENTRY|` is **0.3095
+                  and 0.5062 per u** at the two delivered configurations -- the SAME ORDER as
+                  `|d resid / d HER|` (0.3457, 0.2589) -- so `razor_band.band_distance` was only
+                  unsteerable because nobody divided it by the gradient. Band width over leverage =
+                  **strip 1.235e-04 u / 6.807e-05 u**, and `offset_u` prices any row at ~15 us against
+                  the ~1 s a screen costs. The band is **SUFFICIENT ALONG THE ENTRY AXIS TOO**: over
+                  +-0.02 u, 875 of 160801 rows are in-band and **exactly those 875 are genuine** (642 of
+                  160801, same agreement, at s154's). `aim` walks the entry onto the band and ends on the
+                  sim's `genuine`: displaced **0.70 u** it returns a clip in 4-5 steps (~50 ms) -- at the
+                  console's configuration a NEW one, 0.0745 u from the delivered row.
+                - **HER POSITION IS ONE POINT PER ITEM, WHICH IS WHY THE ENTRY IS THE AXIS.** All 98618
+                  at-cap candidates of the console item's fan share ONE Tetra placement (span
+                  **0.000000 u** -- a 4-frame walk never touches her), so per item the razor has exactly
+                  one free variable. Also measured there: the fan spans **45 cells x 128 of the 129 lean
+                  classes** and **32488 distinct (cell, thrust, lean class, 10 u entry) keys**, so a
+                  per-key screen oracle is ~9 h an item and cannot be the router; and its endpoint
+                  lattice is **0.2-0.4 u**, three orders coarser than the strip.
+                - **TWO TRAPS THIS SESSION WALKED INTO, BOTH NOW DOCUMENTED.** Referencing a band at the
+                  row of MAXIMUM overlap (Link buried in her) reads `|grad|` ~**3000 per u** and every
+                  cell as EMPTY -- reference it at a GRAZING row (`overnight.CLIP_TARGET`). And the band
+                  DRIFTS with the entry: the aimed clip sits 7% above a band read 0.70 u away, so the
+                  residual prices a row and only the sim verdicts one.
+                - **THE FULL-MAP RUN IS RESUMABLE NOW** (`admit_map.banked` + `screen_space(resume=)`,
+                  and `map` resumes by default). s159 left a 17415-configuration map running; s160 found
+                  it 22% in at 12 threads and had to choose between the box and 1.5 h of banked rows.
+                  **That run is also the s159 handoff's "the suite costs 50 s more than s158": the
+                  default `pytest` was 139 s contended, 130 s with the map at Idle priority and 75.5 s on
+                  a free box with zero over-budget tests.** s159's `sweep_par` re-benchmark exonerated the
+                  box while measuring under the same contention. 4167 rows are banked in
+                  `_generated/admit_map.jsonl` and the run can be restarted whenever the box is free.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
