@@ -296,6 +296,35 @@ def plan_frames(plan):
     return int(plan[0]) + sum(int(x) for x in plan[4::4])
 
 
+def l_press_frames(plan):
+    """**Every frame index this plan presses L on a RISING EDGE**, earliest first -- the blip's own
+    edges, which is what `entry_camera.aim_camera` needs to know which camera the aim frame reads.
+
+    A segment holding L for ``j`` frames is ONE edge (at its start); consecutive L segments are one
+    edge too. The base ``n0`` frames never press it (`hold_row` releases the button and the trigger
+    deliberately), so a plan's first L segment is always a rising edge."""
+    k, prev, out = int(plan[0]), 0, []
+    for i in range(1, len(plan), 4):
+        _sx, _sy, l, j = plan[i:i + 4]
+        if int(l) and not prev:
+            out.append(k)
+        prev = int(l)
+        k += int(j)
+    return tuple(out)
+
+
+def aim_camera(plan, walk, cs_trail):
+    """The csangle THIS plan's A-press frame decodes against: `entry_camera.aim_camera` at the plan's
+    own L edges. What `score` resolves each candidate's (facing, aim byte) pair at."""
+    return EC.aim_camera(cs_trail, walk, l_press_frames(plan))
+
+
+def aim_cell_map(csangle):
+    """``cell -> (facing, aim bytes)`` at one camera: `configurations` without the thrust cross
+    product, for a caller that already has its thrusts and needs the CELL's own byte."""
+    return dict((ES.aim_cell(f), (f, list(b))) for (f, b, _s) in ES.aim_cells(int(csangle) & 0xFFFF))
+
+
 def hold_row(seed):
     """The walk's template row: the herd's last delivered row with the buttons, the trigger and the
     C-stick Y released.
@@ -322,6 +351,29 @@ def plan_rows(hold, plan):
                             buttons=(PAD_L if int(l) else 0),
                             triggerL=(TRIG_L if int(l) else 0)))
     return out
+
+
+def plan_from_rows(rows):
+    """`plan_rows` INVERTED: the plan tuple for a run of recorded input rows, run-length-encoded.
+
+    What turns a stretch of a real delivered movie into a candidate this driver can price -- the
+    console's own conversion off a herd cut short of it, say (session 154's rediscovery split: the
+    console's log rows 71..81 ARE the answer at ``walk=11``, and this is how they are read back as a
+    plan rather than authored as one). ``n0`` is always 0: a recorded run carries its own sticks from
+    its first frame, and the base hold is the herd's, not the plan's.
+
+    Round-tripping it is the containment question itself -- ``plan_rows(hold, plan_from_rows(rows)) ==
+    rows`` says the recorded segment is expressible in this driver's own encoding, and a caller that
+    cares should check it rather than assume (a row differing in a field the plan cannot carry, a
+    C-stick move mid-walk, would fail that comparison and not this function)."""
+    plan = [0]
+    for r in rows:
+        seg = (int(r['stickX']), int(r['stickY']), 1 if int(r.get('buttons', 0)) & PAD_L else 0)
+        if len(plan) > 1 and tuple(plan[-4:-1]) == seg:
+            plan[-1] += 1
+        else:
+            plan += [seg[0], seg[1], seg[2], 1]
+    return tuple(plan)
 
 
 def from_triples(plan):
@@ -835,7 +887,7 @@ CLIP_BAND = (0.0, 3.0)
 BAND_IS_NOT_PREFILTERABLE = True
 
 
-def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=256):
+def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=256, cam=None):
     """Score a candidate dict against every configuration, at each candidate's OWN Tetra.
 
     Grouped by ``(facing, thrust, lean, nspeed)`` -- the four things that pick the baked roll schedule
@@ -854,7 +906,25 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
     ``near`` row (capped at ``near_cap``, ``near_capped`` says if any were dropped) -- is recorded in
     FULL, the same shape as a genuine ``hit``, in ``best_overlap_row`` / ``best_resid_row`` / ``near_rows``
     (Dereck, s152: a near-miss the search finds and then throws away, keeping only the scalar, is exactly
-    what forces an expensive re-run just to look at it -- this is the fix, not another recompute)."""
+    what forces an expensive re-run just to look at it -- this is the fix, not another recompute).
+
+    ``cam`` (session 154) is a callable ``plan -> csangle``: the camera THAT PLAN'S OWN A-press frame
+    decodes against (`aim_camera`). Without it every candidate is priced against ``quals``, one camera
+    for the whole item -- which is wrong for every plan that presses L, because the followCamera blip
+    moves the aim frame's csangle by up to 81 BAM (five sine cells, measured off the console's own
+    conversion) and the aim BYTE recorded beside a facing then reaches a different facing, so
+    `confirm_entry` refuses the hit. That is what refused the walk=11 rediscovery hit and what put
+    s152's facing deltas in three discrete buckets.
+
+    The fix costs nothing, because A CELL IS ONE RAZOR DRAW AT ANY CAMERA: every term a facing reaches
+    goes through ``jmaTable[angle >> 4]``, so two facings in one cell bake a bit-identical schedule and a
+    bit-identical 26 u entry step (`entry_search.aim_cell`, gated 0-ULP by
+    `test_the_aim_alphabet_resolves_to_the_sine_table_cell`). So the sweep runs per CELL over exactly
+    today's lean groups and batches -- one ctx per (cell, lean, thrust), the cell's own representative
+    facing -- and only the (facing, aim) pair RECORDED is resolved per candidate, at its own camera. What
+    the camera changes is the BYTE, not the draw. Cells the union of cameras reaches but this item's own
+    does not are swept too; a cell no candidate can aim at ITS camera is skipped for that candidate and
+    counted in ``unaimable``, never silently scored."""
     global CO_R_SUM
     if CO_R_SUM is None:
         from harness.tetrapush import terminal as TM
@@ -862,67 +932,87 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
     pool = ES.CtxPool() if pool is None else pool
     items = list(cands.items())
     hits, n_eval, n_near = [], 0, 0
-    n_band = 0
+    n_band, n_unaimable, n_priced = 0, 0, 0
     n_contact, n_neg, n_pos = 0, 0, 0
     best_ovl, best_resid = -1e30, None      # 'best' = NEAREST `CLIP_TARGET`, never the max
     best_ovl_row, best_resid_row = None, None
     near_rows, near_capped = [], False
-    by_roll = {}
+    by_roll, cams = {}, {}
     for k, plan in items:
-        by_roll.setdefault(ES.lean_at_roll(k[2]), []).append((k, plan))
+        cs = None if cam is None else int(cam(plan)) & 0xFFFF
+        if cs is not None and cs not in cams:
+            cams[cs] = aim_cell_map(cs)
+        by_roll.setdefault(ES.lean_at_roll(k[2]), []).append((k, plan, cs))
 
-    def _row(k, plan, e, o, fac, thrust, lean, aim, cell, resid_val, ovl):
+    # the DRAWS, cell-major then thrust as `configurations` orders them (see the docstring)
+    thrusts = sorted({int(q['thrust']) for q in quals})
+    if cam is None:
+        draws = [(q['cell'], q['facing'], q['aim'], q['thrust']) for q in quals]
+    else:
+        reps = {}
+        for cs in sorted(cams):
+            for cell, (f, b) in cams[cs].items():
+                reps.setdefault(cell, (f, b))
+        draws = [(cell, reps[cell][0], reps[cell][1], t) for cell in sorted(reps) for t in thrusts]
+
+    def _row(k, plan, e, o, fac, thrust, lean, aim, cell, resid_val, ovl, cs):
         return dict(entry=[e[0], e[1]], walk=[k[0], k[1]], m351C_walk=k[2],
                    m351C=lean, facing=fac, aim=list(aim), thrust=thrust,
                    b_step=thrust + 2, resid=resid_val, nspeed=ES.ROLL_NSPEED,
-                   push=[o[5], o[6]], plan=list(plan), cell=cell,
+                   push=[o[5], o[6]], plan=list(plan), cell=cell, csangle=cs,
                    tetra=[k[-2], k[-1]], overlap=ovl,
                    walkable=bool(XE.TA.is_walkable(k[0], k[1]) and XE.TA.is_walkable(e[0], e[1])))
 
-    for q in quals:
-        fac, thrust = q['facing'], q['thrust']
+    for cell, fac_rep, aim_rep, thrust in draws:
         for lean, group in by_roll.items():
-            ctx, sch, resid = pool.get(fac, lean, thrust, nspeed=ES.ROLL_NSPEED)
+            ctx, sch, resid = pool.get(fac_rep, lean, thrust, nspeed=ES.ROLL_NSPEED)
             for c0 in range(0, len(group), batch):
                 part = group[c0:c0 + batch]
-                ents = [ES.roll_entry((k[0], k[1]), fac, ES.ROLL_NSPEED) for k, _ in part]
+                ents = [ES.roll_entry((k[0], k[1]), fac_rep, ES.ROLL_NSPEED) for k, _p, _c in part]
                 rows = ctx.sweep_par([(k[-2], k[-1], e[0], e[1])
-                                      for (k, _), e in zip(part, ents)], 0, extra=True)
+                                      for (k, _p, _c), e in zip(part, ents)], 0, extra=True)
                 n_eval += len(rows)
-                for (k, plan), e, o in zip(part, ents, rows):
+                for (k, plan, cs), e, o in zip(part, ents, rows):
+                    fac, aim = (fac_rep, aim_rep) if cs is None else cams[cs].get(cell, (None, None))
+                    if fac is None:
+                        n_unaimable += 1          # this cell is not aimable at THIS plan's camera
+                        continue
+                    n_priced += 1
                     ovl = CO_R_SUM - math.hypot(o[10] - o[12], o[11] - o[13])
                     r = resid(o)
                     if CLIP_BAND[0] <= ovl <= CLIP_BAND[1]:
                         n_band += 1              # the only scorings that could have been a clip
                     if abs(ovl - CLIP_TARGET) < abs(best_ovl - CLIP_TARGET):
                         best_ovl = ovl
-                        best_ovl_row = _row(k, plan, e, o, fac, thrust, lean, q['aim'], q['cell'], r, ovl)
+                        best_ovl_row = _row(k, plan, e, o, fac, thrust, lean, aim, cell, r, ovl, cs)
                     if ovl >= 0.0:
                         n_contact += 1
                         n_neg += r < 0.0
                         n_pos += r > 0.0
                         if best_resid is None or abs(r) < abs(best_resid):
                             best_resid = r
-                            best_resid_row = _row(k, plan, e, o, fac, thrust, lean, q['aim'], q['cell'],
-                                                  r, ovl)
+                            best_resid_row = _row(k, plan, e, o, fac, thrust, lean, aim, cell,
+                                                  r, ovl, cs)
                     if not o[0]:
                         if abs(r) < near_probe:
                             n_near += 1
                             if len(near_rows) < near_cap:
-                                near_rows.append(_row(k, plan, e, o, fac, thrust, lean, q['aim'],
-                                                      q['cell'], r, ovl))
+                                near_rows.append(_row(k, plan, e, o, fac, thrust, lean, aim,
+                                                      cell, r, ovl, cs))
                             else:
                                 near_capped = True
                         continue
-                    hits.append(_row(k, plan, e, o, fac, thrust, lean, q['aim'], q['cell'], r, ovl))
-    return hits, dict(candidates=len(items), evaluations=n_eval, genuine=len(hits), near=n_near,
-                      configurations=len(quals), n_contact=n_contact, resid_neg=n_neg,
+                    hits.append(_row(k, plan, e, o, fac, thrust, lean, aim, cell, r, ovl, cs))
+    return hits, dict(candidates=len(items), evaluations=n_priced, swept=n_eval, genuine=len(hits),
+                      near=n_near, configurations=len(draws), n_contact=n_contact, resid_neg=n_neg,
                       resid_pos=n_pos, bracketed=bool(n_neg and n_pos),
+                      cameras=len(cams), cells=len(draws) // max(1, len(thrusts)),
+                      unaimable=n_unaimable,
                       best_overlap=(None if best_ovl <= -1e29 else best_ovl),
                       best_overlap_row=best_ovl_row,
                       best_resid_in_contact=best_resid, best_resid_row=best_resid_row,
                       band=list(CLIP_BAND), band_draws=n_band,
-                      band_share=(n_band / n_eval if n_eval else 0.0),
+                      band_share=(n_band / n_priced if n_priced else 0.0),
                       near_rows=near_rows, near_capped=near_capped)
 
 
@@ -1042,7 +1132,9 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
         return rec
     IO.beat(d, item['item'], worker, walk=walk, incumbent=inc, herd=item['herd'],
             unit_of=item['unit'])
-    csa = int(trail[walk]) & 0xFFFF              # the camera the AIM frame decodes against
+    # the camera an L-FREE plan's aim frame decodes against; a plan that presses L reads its own
+    # (`score(cam=...)` below), and this stays the item's reported reference
+    csa = EC.aim_camera(trail, walk)
     quals = configurations(csa, thrusts)
     tf = time.time()
     cands, fst = fan_exact(seed, env, walk, csa, trail, hold, s1_stride=s1_stride,
@@ -1054,7 +1146,7 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
                                                      unit_of=item['unit'], **kw))
     t_fan = time.time() - tf
     ts = time.time()
-    hits, st = score(cands, quals)
+    hits, st = score(cands, quals, cam=lambda p: aim_camera(p, walk, trail))
     t_score = time.time() - ts
     row = dict(item=item['item'], unit=item['unit'], herd=item['herd'], walk=walk, worker=worker,
                thrusts=thrusts, incumbent=inc, csangle=csa, fan_seconds=t_fan,
@@ -1184,9 +1276,8 @@ def verify_console(env=None, incumbent=None):
     prep = prepare(cc['unit'], env)
     chk('its herd is wall-inert and rule-4 clean', prep['ok'], prep['reason'] or 'clean')
     hold = hold_row(prep['seed'])
-    trail = EC.cam_trail(int(hold.get('substickX', 128)), frames=cc['walk'] + TRAIL_PAD,
-                         seed=prep['seed'], env=env)
-    csa = int(trail[cc['walk']]) & 0xFFFF
+    trail = EC.CamTrail(int(hold.get('substickX', 128)), cc['walk'] + TRAIL_PAD, prep['seed'], env)
+    csa = aim_camera(plan, cc['walk'], trail)
     quals = configurations(csa, [cc['thrust']])
     cells = {q['cell'] for q in quals}
     chk('its facing cell is enumerated at the aim camera', ES.aim_cell(cc['facing']) in cells,
@@ -1196,6 +1287,13 @@ def verify_console(env=None, incumbent=None):
     sibs = {tuple(s) for (_f, _b, sib) in ES.aim_cells(csa) for s in sib}
     chk('its aim bytes are in the aim alphabet', tuple(cc['aim']) in (aims | sibs),
         'aim %s; %d cell aims, %d siblings' % (cc['aim'], len(aims), len(sibs)))
+    # and the PAIR, not just the membership (s154): the byte -> facing map moves with the camera, so a
+    # byte can be in the alphabet while reaching a facing five cells from the one it is recorded beside
+    reach = dict((tuple(b), f) for f, b in ES.aim_alphabet(csa))
+    chk('its aim byte REACHES its own facing at the aim camera',
+        reach.get(tuple(cc['aim'])) == cc['facing'],
+        'aim %s at csangle %d reaches %s, fixture facing %d'
+        % (cc['aim'], csa, reach.get(tuple(cc['aim'])), cc['facing']))
     hit = dict(entry=cc['entry'], walk=None, m351C_walk=None, m351C=cc['m351C'],
                facing=cc['facing'], aim=cc['aim'], thrust=cc['thrust'], b_step=cc['thrust'] + 2,
                resid=cc['resid'], nspeed=cc['nspeed'], plan=list(plan),

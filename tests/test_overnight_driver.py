@@ -14,8 +14,9 @@ answers:
   * **the checkpoint layer**, because the run has to survive being killed. Claiming, resuming and the
     cross-process incumbent are exercised for real in a tmpdir.
 
-Fast by construction: nothing here steps the sim (`tests/conftest.py` enforces a 1.5 s per-test budget
-and a 120 s whole-selection one). The simulating end-to-end check is the driver's own
+Fast by construction (`tests/conftest.py` enforces a 1.5 s per-test budget and a 120 s whole-selection
+one): the only stepping here is the POSITIVE CONTROL's own herd replay and the camera trail beside it,
+both module-scoped and paid once. The simulating end-to-end check is the driver's own
 ``verify-console`` command, which is a research run and not a gate.
 """
 import json
@@ -342,6 +343,16 @@ def test_the_pre_segment_is_only_ever_a_cone_clear_length(walk):
 
 # --------------------------------------------------------------------------- the positive control
 
+def _console_candidate_for_score(prep):
+    """The console clip as ONE candidate + its one configuration, the shape `overnight.score` takes."""
+    from harness.tetrapush import entry_search as ES
+    key = (CC['walk'][0], CC['walk'][1], CC['m351C_walk'], 17.0,
+           prep['seed']['tetra'][0], prep['seed']['tetra'][1])
+    quals = [dict(facing=CC['facing'], aim=list(CC['aim']), thrust=CC['thrust'],
+                  cell=ES.aim_cell(CC['facing']), siblings=0)]
+    return {key: ON.from_triples(CC['plan'])}, quals
+
+
 @pytest.fixture(scope='module')
 def console_scored():
     """The console's own clip through `overnight.score` -- the search's OWN scoring path.
@@ -351,15 +362,11 @@ def console_scored():
     scored a single configuration known to be genuine -- and a systematic defect in `score` would have
     looked exactly like the 0 genuine it reported. A search with no positive control cannot tell "the
     space is empty here" from "my scorer is broken"."""
-    from harness.tetrapush import entry_search as ES
     from harness.tetrapush import seeds as SD
     env = SD.load_env()
     prep = ON.prepare(ON.console_herd(), env)
-    key = (CC['walk'][0], CC['walk'][1], CC['m351C_walk'], 17.0,
-           prep['seed']['tetra'][0], prep['seed']['tetra'][1])
-    quals = [dict(facing=CC['facing'], aim=list(CC['aim']), thrust=CC['thrust'],
-                  cell=ES.aim_cell(CC['facing']), siblings=0)]
-    hits, st = ON.score({key: ON.from_triples(CC['plan'])}, quals)
+    cands, quals = _console_candidate_for_score(prep)
+    hits, st = ON.score(cands, quals)
     return hits, st, prep
 
 
@@ -389,3 +396,102 @@ def test_the_clip_band_is_where_the_delivered_clip_actually_sits(console_scored)
     assert ON.CLIP_BAND[0] <= hits[0]['overlap'] <= ON.CLIP_BAND[1]
     assert abs(ON.CLIP_TARGET - hits[0]['overlap']) < 1e-3
     assert st['band_draws'] == 1 and st['band_share'] == 1.0
+
+
+# ------------------------------------------------------------------- the plan's own aim camera
+
+class _StubTrail:
+    """A `entry_camera.CamTrail` stand-in whose value ENCODES which corrections it carries, so the
+    lookup can be gated without replaying a camera: ``[i]`` is ``1000 * (1 + len(l_frames)) + i``."""
+
+    def __init__(self, l_frames=()):
+        self.l_frames = tuple(int(x) for x in l_frames)
+
+    def __getitem__(self, i):
+        return 1000 * (1 + len(self.l_frames)) + int(i)
+
+    def from_l(self, lf):
+        return _StubTrail(self.l_frames + (int(lf),))
+
+
+def test_l_press_frames_reads_every_rising_edge_of_the_real_plan_shapes():
+    """The blip's edges, off the shapes `fan_exact` actually enumerates.
+
+    `hold_row` releases L on the base frames deliberately, so a plan's first L segment is always a
+    rising edge; a segment holding it for j frames is ONE edge, and the atom's release-then-continue
+    shape can raise a SECOND (`_atom_candidates`' own reason for composing its trail)."""
+    assert ON.l_press_frames((0, 208, 110, 0, 4)) == ()                    # uniform, L up
+    assert ON.l_press_frames((3, 208, 110, 1, 4)) == (3,)                  # uniform, L held from n0
+    atom = (2, 176, 247, 1, 1, 176, 247, 0, 1, 195, 14, 0, 1, 77, 3, 0, 1, 241, 59, 0, 5)
+    assert ON.l_press_frames(atom) == (2,)                                 # the conversion's own press
+    cont = atom[:-4] + (241, 59, 1, 5)                                     # ... + an L_AXIS l=1 tail
+    assert ON.l_press_frames(cont) == (2, 2 + ON.ATOM_FRAMES), (
+        'the continuation re-presses L after the junction released it -- a second, independent edge')
+
+
+def test_the_aim_camera_reads_the_aim_frame_index_through_the_plans_own_blips():
+    """Two failure modes in one lookup, both gated here without a camera replay.
+
+    The INDEX is `entry_camera.aim_frame`'s ``walk + 1`` -- the A-press is delivered on index ``walk``
+    and the target is computed when it is ACTED, one frame later (measured s95, re-measured s154 at
+    walk 2..5 off the herd-71 seed where the chase is still climbing: 18/18 unanimous). And the
+    CORRECTIONS are the plan's own L edges, composed in order."""
+    from harness.tetrapush import entry_camera as EC
+    walk = 11
+    assert EC.aim_frame(walk) == walk + 1
+    assert ON.aim_camera((0, 208, 110, 0, 11), walk, _StubTrail()) == 1000 + walk + 1
+    assert ON.aim_camera((3, 208, 110, 1, 8), walk, _StubTrail()) == 2000 + walk + 1
+    atom = (2, 176, 247, 1, 1, 176, 247, 0, 1, 195, 14, 0, 1, 77, 3, 0, 1, 241, 59, 1, 5)
+    assert ON.aim_camera(atom, walk, _StubTrail()) == 3000 + walk + 1, (
+        'a plan pressing L twice must read the second blip through the first one own settle')
+    # a plain sequence cannot correct a blip, and must say so rather than return the wrong camera
+    with pytest.raises(TypeError):
+        ON.aim_camera(atom, walk, tuple(range(20)))
+    assert ON.aim_camera((0, 208, 110, 0, 11), walk, tuple(range(20))) == walk + 1
+
+
+def test_plan_from_rows_round_trips_the_console_conversion():
+    """`plan_from_rows` is `plan_rows` inverted, and the round trip IS the containment question:
+    the console's own conversion off ``log[:71]`` must be expressible in this driver's encoding.
+
+    Its SHAPE is the finding (session 154): four atom frames -- L+flip, flip, rotate, slam -- and then
+    a THREE-segment continuation, where `_families` offers exactly one held stick. So the human's own
+    11-frame answer at walk 11 is not a member of the enumerated set, whatever the camera does."""
+    herd = 71
+    rows = [dict(r) for r in FIX['log'][herd:FIX['plan']['a_i']]]
+    plan = ON.plan_from_rows(rows)
+    hold = dict(rows[0], stickX=FIX['log'][herd - 1]['stickX'], stickY=FIX['log'][herd - 1]['stickY'],
+                buttons=0, triggerL=0)
+    assert ON.plan_rows(hold, plan) == rows
+    assert ON.plan_frames(plan) == FIX['plan']['a_i'] - herd
+    segs = [tuple(plan[i:i + 4]) for i in range(1, len(plan), 4)]
+    assert [s[3] for s in segs[:ON.ATOM_FRAMES]] == [1] * ON.ATOM_FRAMES
+    assert segs[0][2] == 1 and segs[1][2] == 0 and segs[0][:2] == segs[1][:2]
+    assert len(segs) - ON.ATOM_FRAMES == 3, (
+        'the human continuation is 3 held sticks; `_families` enumerates 1, so this plan is outside '
+        'the fan own reach and a 0-genuine sweep off this herd says nothing about the herd')
+
+
+def test_the_scoring_path_prices_the_console_clip_at_its_own_aim_camera(console_scored):
+    """The positive control again, through the ``cam`` path this time: the recorded (facing, aim) pair
+    must be resolved at the plan's OWN camera and must still be the console's own, bit for bit.
+
+    A cell is one razor draw at any camera, so switching the pair may not move the razor: same resid,
+    same push, same overlap as the single-configuration control above."""
+    from harness.tetrapush import entry_camera as EC
+    from harness.tetrapush import entry_search as ES
+    from harness.tetrapush import seeds as SD
+    hits0, _st0, prep = console_scored
+    env = SD.load_env()
+    hold = ON.hold_row(prep['seed'])
+    trail = EC.CamTrail(int(hold.get('substickX', 128)), CC['frames'] + ON.TRAIL_PAD,
+                        prep['seed'], env)
+    cands, quals = _console_candidate_for_score(prep)
+    hits, st = ON.score(cands, quals, cam=lambda p: ON.aim_camera(p, CC['frames'], trail))
+    assert st['cameras'] == 1 and st['unaimable'] == 0
+    got = [h for h in hits if h['cell'] == ES.aim_cell(CC['facing'])]
+    assert len(got) == 1, 'the console own cell is not genuine on the per-camera path'
+    assert got[0]['facing'] == CC['facing'] and got[0]['aim'] == list(CC['aim'])
+    assert got[0]['csangle'] == EC.aim_camera(trail, CC['frames'])
+    assert (got[0]['resid'], got[0]['push'], got[0]['overlap']) == (
+        hits0[0]['resid'], hits0[0]['push'], hits0[0]['overlap'])

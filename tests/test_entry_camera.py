@@ -207,6 +207,85 @@ def test_camtrail_from_l_composes_a_second_press_onto_the_first():
     assert [composed[i] for i in range(3, 12)] != [single[i] for i in range(3, 12)]
 
 
+# ------------------------------------------------------------------- the AIM side of the same blip
+
+#: (plan, aim) of the s153 sweep's own walk=11 genuine hit -- an atom candidate pressing L at n0=3,
+#: refused at `confirm_entry` on facing (predicted 40723, measured 40712). The real case, not a synthetic.
+WALK11_REFUSED = ((3, 104, 252, 1, 1, 104, 252, 0, 1, 0, 103, 0, 1, 152, 0, 0, 1, 112, 2, 0, 4),
+                  [86, 182])
+
+
+@pytest.fixture(scope='module')
+def herd71():
+    """**THE REDISCOVERY SEED**: the console's own herd with its real conversion REMOVED (``log[:71]``),
+    which is the state the s152/s153 sweep searched from. The console's own answer off it is not a
+    mystery -- its own log rows 71..81 are 11 delivered frames and the A-press is row 82 -- so the known
+    answer sits at ``walk = a_i - 71 = 11`` and totals the locked cut frame exactly."""
+    from harness.tetrapush import objective as O
+    from harness.tetrapush import overnight as ON
+    from harness.tetrapush import seeds as SD
+    with open(_fx('courtyard_clip_s90_console.json')) as fh:
+        fix = json.load(fh)
+    herd = 71
+    walk = int(fix['plan']['a_i']) - herd
+    env = SD.load_env()
+    unit = dict(unit='s154_herd71', herd=herd, log=[dict(r) for r in fix['log'][:herd]])
+    prep, hold, trail = ON.prepared(unit, env, O.courtyard_walls(), walk)
+    assert prep['ok'], prep.get('reason')
+    return dict(fix=fix, env=env, seed=prep['seed'], hold=hold, trail=trail, walk=walk, herd=herd)
+
+
+@pytest.mark.parametrize('case', ['console conversion', 'walk=11 refused hit'])
+def test_the_aim_camera_is_the_one_the_roll_really_latches_at(herd71, case):
+    """**THE AIM SIDE OF THE FOLLOWCAMERA BLIP** -- what s153 fixed for the walk's own stepping and
+    explicitly scoped OUT here, on the grounds that the aim lookup was "a coarse pre-filter, not a
+    source of false acceptances". It is a source of false predictions, and this is the gate.
+
+    `overnight.configurations` is handed ONE camera per item, read off the L-FREE trail. Every plan that
+    presses L reads a different one: the blip freezes the yaw chase where it stands, so the aim frame
+    of the console's own conversion decodes against **34325 against the L-free trail's 34406 -- 81 BAM,
+    five sine cells** -- and the walk=11 hit's own press, 8 frames before its aim frame, lands 11 BAM
+    out. Those are exactly s152's three discrete facing buckets, and 11 BAM is enough to cross a cell
+    (2545 vs 2544), which is a different razor draw and an aim byte that reaches neither.
+
+    So: the corrected camera must predict the facing a REAL A-press measures, bit-exact, and the L-free
+    one must not. Both cases are real plans -- the console's own conversion, read back off the locked
+    fixture's rows with `overnight.plan_from_rows`, and the sweep's own refused hit."""
+    from harness.tetrapush import overnight as ON
+    fx, seed, env, trail, walk = (herd71['fix'], herd71['seed'], herd71['env'],
+                                  herd71['trail'], herd71['walk'])
+    if case == 'console conversion':
+        rows_h = [dict(r) for r in fx['log'][herd71['herd']:int(fx['plan']['a_i'])]]
+        plan, aim = ON.plan_from_rows(rows_h), list(fx['hit']['aim'])
+        assert ON.plan_rows(herd71['hold'], plan) == rows_h, (
+            'the console conversion is not expressible in the driver plan encoding off this hold row')
+    else:
+        plan, aim = WALK11_REFUSED
+    l_frames = ON.l_press_frames(plan)
+    assert l_frames, 'both cases press L -- that is the whole point of them'
+
+    hit = dict(plan=list(plan), aim=list(aim), entry=None, walk=None, facing=None, m351C=None,
+               nspeed=ES.ROLL_NSPEED, thrust=int(fx['hit']['thrust']))
+    conf = ES.confirm_entry(hit, seed=seed, env=env, rows=ON.plan_rows(herd71['hold'], plan))
+    assert conf['ok']['rolled']
+    measured = int(conf['measured']['facing'])
+    _run, rows = ES.continue_walk(conf['frames'], log=seed['log'], env=env)
+
+    fixed = EC.aim_camera(trail, walk, l_frames)
+    plain = EC.aim_camera(trail, walk)
+    assert fixed == int(rows[EC.aim_frame(walk)]['csangle']) & 0xFFFF, (
+        'the corrected trail is not the camera the wired replay carries at the aim frame')
+    assert fixed != plain, 'this case must exercise the blip, not a settled camera'
+    reach_fixed = dict((tuple(b), f) for f, b in ES.aim_alphabet(fixed))
+    reach_plain = dict((tuple(b), f) for f, b in ES.aim_alphabet(plain))
+    assert reach_fixed.get(tuple(aim)) == measured, (
+        'aim %s at the corrected camera %d reaches %s, the real A-press rolled at %s'
+        % (aim, fixed, reach_fixed.get(tuple(aim)), measured))
+    assert reach_plain.get(tuple(aim)) != measured, (
+        'the L-free camera %d already predicted the measured facing %d -- this case cannot regress'
+        % (plain, measured))
+
+
 # ------------------------------------------------------------------------- the counting
 
 def test_the_camera_alphabet_is_deduped_on_the_trail():

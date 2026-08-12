@@ -412,6 +412,40 @@ def aim_frame(frames):
     return int(frames) + 1
 
 
+def aim_camera(cs_trail, frames, l_frames=()):
+    """**The csangle a plan's ROLL FACING really latches against** -- `aim_frame`'s index, read through
+    the trail the plan's own L presses leave behind (session 154).
+
+    Two things move it away from the ``cs_trail[frames]`` a caller reaches for, and both were measured
+    off the LOCKED console delivery rather than reasoned (`_notes/s154_aim_camera_check.py`,
+    `_notes/s154_aim_frame_index.py`):
+
+      * the INDEX is `aim_frame`'s ``frames + 1``, not ``frames``: the A-press is delivered on trail
+        index ``frames`` and the target is computed when it is ACTED, one frame later. Inert on a
+        settled camera -- which is exactly why it survived -- and 17 BAM out at walk 2 off the herd-71
+        seed, where the yaw chase is still climbing;
+      * every L press in the plan fires `LandCamera`'s followCamera blip, which freezes the chase where
+        it stands (`cam_trail`'s ``l_frame``). The console's own conversion presses L on its first walk
+        frame, and the aim frame 11 frames later reads **34325 against the L-free trail's 34406 -- 81
+        BAM, five sine cells**, so the aim BYTE the L-free alphabet pairs with a facing reaches a
+        different facing entirely.
+
+    ``l_frames`` are the RISING EDGES, earliest first (`overnight.l_press_frames`); they compose, so a
+    plan that presses L twice reads the second blip off the first one's own settle. A plain sequence
+    trail is accepted and used as-is -- correct only for an L-free plan, which is checked, not assumed."""
+    idx = aim_frame(frames)
+    l_frames = tuple(int(x) for x in l_frames)
+    if not l_frames:
+        return int(cs_trail[idx]) & 0xFFFF
+    if not hasattr(cs_trail, 'from_l'):
+        raise TypeError('a plan that presses L at %s needs a CamTrail to correct the blip, not a '
+                        'plain sequence' % (l_frames,))
+    t = cs_trail
+    for lf in l_frames:
+        t = t.from_l(lf)
+    return int(t[idx]) & 0xFFFF
+
+
 def aim_at(cell, subx, frames=4):
     """The aim bytes that reach ``cell`` at the camera THIS plan arrives with, or None.
 
