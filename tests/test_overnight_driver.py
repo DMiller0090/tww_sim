@@ -139,10 +139,16 @@ def test_the_legacy_knobs_are_still_the_ones_that_excluded_it():
 
 def test_pre_frames_all_is_every_split_a_walk_admits():
     """``PRE_FRAMES_ALL`` cannot be a tuple, because the set depends on the walk: a 4-frame plan can
-    split 1+3, 2+2 or 3+1, and the console's is the middle one."""
+    split 1+3, 2+2 or 3+1, and the console's is the middle one.
+
+    And it is a STRING, so anything that used to normalise the knob with ``list(...)`` now silently
+    records ``['a', 'l', 'l']`` -- which is what the run config did until this gate. It has to survive a
+    JSON round trip as the sentinel and expand on the far side."""
     assert ON.pre_frames_for(4, ON.PRE_FRAMES_ALL) == (1, 2, 3)
     assert ON.pre_frames_for(1, ON.PRE_FRAMES_ALL) == ()
     assert ON.pre_frames_for(4, (1,)) == (1,)
+    rt = json.loads(json.dumps(ON.PRE_FRAMES))
+    assert rt == ON.PRE_FRAMES and ON.pre_frames_for(4, rt) == (1, 2, 3)
 
 
 def test_the_hold_alphabet_may_not_be_traded_for_the_leaf_budget():

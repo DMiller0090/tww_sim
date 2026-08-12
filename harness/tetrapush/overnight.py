@@ -791,7 +791,9 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
               pre_stride=int(pre_stride), pre_frames=list(pre_frames), contained=bool(contained),
               alpha_pinned=alpha_stride is not None, over_budget=over)
     if target is not None:
-        st.update(target=[float(target[0]), float(target[1])], target_pruned=0, target_kept=0)
+        # a point or a whole curve -- the strip is not a point (`aimed_fan.aim_curve`)
+        pts = [target] if AF._is_point(target) else list(target)
+        st.update(target=[[float(p[0]), float(p[1])] for p in pts], target_pruned=0, target_kept=0)
 
     def collect(cores, label):
         for i, c in cores:
@@ -1712,7 +1714,7 @@ def launch(run_id=None, workers=11, hours=7.0, resume=False, trunc=0, walk_cap=N
                    hours=float(hours), incumbent0=O.TOTAL_INCUMBENT, trunc=int(trunc),
                    walk_cap=walk_cap, s1_stride=int(s1_stride), two_segment=bool(two_segment),
                    atom=bool(atom), walk_floor=WALK_FLOOR, thrusts=list(ES.THRUSTS),
-                   pre_stride=PRE_STRIDE, pre_frames=list(PRE_FRAMES), max_accept=MAX_ACCEPT,
+                   pre_stride=PRE_STRIDE, pre_frames=PRE_FRAMES, max_accept=MAX_ACCEPT,
                    atom_rotate_offs=list(ATOM_ROTATE_OFFS), only=(sorted(only) if only else None),
                    leaf_budget=(int(leaf_budget) if leaf_budget else LEAF_BUDGET),
                    pre_stride_run=int(pre_stride), tail_frames=list(tail_frames),
