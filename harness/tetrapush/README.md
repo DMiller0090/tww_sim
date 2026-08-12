@@ -2193,6 +2193,71 @@ from scratch. Land the edits first, then gate.
                   measured 0 of 289 at every bearing including the console's own, and False on the
                   delivered placement itself. The module and both docstrings now say so, and a gate
                   pins it. The slice stays a good AIM; it was never a verdict.
+              - **SESSION 159 -- THE ADMITTING SET IS MAPPED, AND THE AXIS THAT DECIDES IT IS THE
+                ENTRY, AT COURTYARD SCALE.** s158 handed over "screen (cell x thrust x lean x entry)
+                and bank the admitting set". Three measurements reshaped it before it was run, and the
+                map that came out contains a console-derived fact reproduced by a different
+                instrument. New tracked module **`harness/tetrapush/admit_map.py`** (`lean_runs`,
+                `lean_cell`, `her_seeds`, `walk_curve`, `station_band`, `screen`, `screen_space`,
+                `entry_map`, `nearest_admitting_entry`, `gate`), 14 gates in
+                `tests/test_admit_map.py`, KB pages `knowledge/model/{lean-cells,razor-zero-curve,
+                admitting-entry-region}.md` + history
+                `knowledge/history/the-barren-item-dead-on-every-axis.md`. Probes `_notes/s159_*.py`.
+                - **THE LEAN HAS CELLS, EXACTLY AS THE AIM DOES.** Fingerprinting the BAKED SCHEDULE
+                  across the 1040 reachable leans (`entry_lean.census`, contiguous -775..+266) returns
+                  **129 distinct schedules** in 129 contiguous runs 1 to 32 BAM wide, and the
+                  partition is bit-identical at cells 2525/2545/2552/2554/2581 and thrusts 13/14/15.
+                  So configuration space is 45 x 3 x 129 = **17415 configurations, enumerated** -- and
+                  s158's warning that "a lean sweep coarser than ~180 BAM reports FALSE zeros" stops
+                  applying, because nothing is sampled. Same argument as `aim_cell`, one axis over.
+                - **``resid = 0`` IS A CURVE, AND EVERY VERDICT BEFORE THIS ONE READ ONE POINT OF IT.**
+                  It runs the length of a ~160 u contact region. Walking it with a ladder at every
+                  station: the console's own configuration is **51 of 188 stations admitting (27%)**
+                  over 116 u, s154's is 98 of 123 (80%). **A one-station screen therefore misses an
+                  admitting configuration three times in four**, which is what `razor_band.admits`
+                  does and what every s158 negative rests on. Two traps in walking it, both now gated:
+                  the corrector CANNOT use an absolute tolerance (``resid`` is quantized at ~4e-06, so
+                  a 1e-08 target rejects every station after the seed and read a 116 u curve as 1 u),
+                  and OUT OF CONTACT ``|grad|`` is exactly 0.0, so the locate is a ray fan and not a
+                  Newton. A ray's sign change is not always a zero either -- one bisected to
+                  ``|resid| = 68.4`` against a local slope of 24/u -- so `her_seeds` keeps only
+                  brackets a Newton can bring onto the curve.
+                - **THE ENTRY IS THE SEPARATING AXIS; THE LEAN IS NOT.** The 2x2 cross at cell 2552 /
+                  thrust 15, her seed located per configuration: the BARREN w10_t15's own lean
+                  **admits** at the console's entry, the console's own lean **does not admit** at the
+                  barren entry, and the two entries are **106 u apart**. s158 swept the entry over
+                  +-0.8 u and +-5 u with her seed PINNED, which is 1-5% of that distance at ~8x the
+                  false-negative rate (re-locating her per entry takes a +-0.8 u plane from 8.7% to
+                  **69.6%**). So "the barren item is dead on every axis" is MIGRATED to history: it is
+                  dead near its own entry, and its disqualification is a WALK problem, not a dead end.
+                - **THE MAP, at the tabulated entry: 1080 screens (45 cells x 3 thrusts x 8 lean
+                  classes), 74 admit (6.9%), 1465 s.** **Thrust 13 admits at 0 of 45 cells** --
+                  independently reproducing s144's console-derived "thrust 13 bisects 2390 razor roots
+                  and converts none of them", from a different instrument. Thrust 14: 6 of 45; thrust
+                  15: 12 of 45. Five (cell, thrust) pairs admit at EVERY sampled lean --
+                  **(2551,15) (2552,14) (2552,15) (2553,15) (2561,15)** -- the console's own among
+                  them, and 2561 is the cell s92 flagged as carrying dust at a walkable entry. 13 more
+                  are partial in the lean, so the lean is a weak axis rather than an inert one.
+                - **AND THE MAP AT ONE ENTRY RANKS, IT NEVER BOUNDS -- with this work's own
+                  counterexample.** `entry_map` over the box spanned by the two delivered entries at
+                  10 u: the console's configuration admits at **47 of 225 entries (20.9%)** and s154's
+                  accepted 101 at **97 of 225 (43.1%)** -- but s154's cell 2545 / thrust 15 reads
+                  **0 of 8 lean classes** in the tabulated-entry table above, and it DELIVERED. So do
+                  not prune a cell off that table. A fifth to two fifths of the delivered
+                  neighbourhood admitting is also what makes this a plannable target: a walk has to
+                  land in a region, not hit a point.
+                - **0 OF 15 BARREN ITEMS ADMIT AT THEIR OWN ENTRY** (both controls fired first at the
+                  same settings). One -- `w09_t15`, cell 2561 -- admits **48.0 u away**; 14 admit
+                  nowhere inside 48 u (ring probes at arc 12 u, so those are weaker negatives than
+                  each item's own full-arc zero). **The sweep's barrenness was never a density
+                  problem**: every item was rolling from a place where no position of hers can clip,
+                  which is why 4014 s over ten workers returned nothing and why widening the
+                  enumeration there could not have helped. `nearest_admitting_entry` prices the fix in
+                  u of Link's roll entry -- a quantity a planner can steer, unlike `band_distance`.
+                - **THE REDISCOVERY GATE IS BUILT INTO THE TOOL** (`admit_map gate`, and `map` /
+                  `entrymap` refuse to run without it): both delivered configurations are screened
+                  from their own entries with HER SEED FOUND BY THE SCREEN's own ray fan, and both
+                  come back admitting. `[[search-must-rediscover-known-answer]]`.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
