@@ -1948,6 +1948,75 @@ from scratch. Land the edits first, then gate.
                   interchangeable now that the aim camera is per-plan. It can only LOSE a draw, never
                   invent one. The one-line fix is to append the plan's own `aim_camera` to `collect`'s
                   key, at the cost of a larger candidate set; unmeasured, so unshipped.
+              - **SESSION 155 -- THE RE-RUN SWEEP IS COMPLETE AND BARREN, AND FOR A NAMED REASON: EVERY
+                NEAR-RAZOR ROW IS REFUSED BY THE BARRIER.** 21 items, walk 5..12 x every admissible
+                thrust -- exactly ``walk + thrust <= 25``, which is what BEATS 101 off herd=71
+                (``total = 75 + walk + thrust``) -- all of them run, none bound-retired, at the corrected
+                aim camera. **0 genuine, 0 deliverable; the banked 101 STANDS.** 4014 s over 10 workers.
+                `_notes/s155_sweep_{item,launch}.py`, per-item JSON + log in `_notes/s155_sweep/`,
+                table via `_notes/s155_rollup.py`.
+                - **THE ITEMS SPLIT IN TWO, and only one half is about the search.** Walk 5 and 6 (six
+                  items, totals 93-96, never swept before) reach **`n_contact = 0`** -- she is
+                  **12.7-15.2 u out of reach** at every thrust, so those totals are barren for a PHYSICAL
+                  reason and no enumeration widening touches them. Walk 7..12 are in contact and get
+                  deeper with depth (170 scorings at walk 7, **380,860** at walk 12), 14 of the 15
+                  BRACKET the razor, and the closest approach is **|resid| = 3.11e-06 u at walk 12 /
+                  thrust 13** with **overlap 1.225884 -- 1.6e-05 off the 1.2259 clip target**.
+                - **WHY THEY MISS, MEASURED (`_notes/s155_why_not_genuine.py`).** `_shovec`'s acceptance
+                  is THREE tests -- ``(not blocked) and in_front(old) and crossed(new)`` -- and it
+                  reports only the AND, so ``genuine = 0`` beside a 3e-6 residual reads as a mystery. It
+                  is not. Re-evaluating the recorded near-razor rows (**38/38 across walks 7..10**) at
+                  their own configuration: **every one is refused at the FIRST test -- the swept lunge
+                  path hits the wall (`wall_hit`)** -- and 22 of them additionally never cross a seam
+                  plane, with **overlap -2.7..-5.7** (no contact at the cut, so no push, so the lunge
+                  falls short). The control is what makes that a finding rather than a bug report:
+                  **s154's own accepted 101 re-evaluates GENUINE through the same probe** --
+                  `blocked=False`, `in_front=True`, `crossed=True`, both seam-plane values -0.845, its
+                  `resid` reproduced bit-identically.
+                - **SO `resid` IS BLIND TO THE THING THAT REFUSES THESE ROWS.** It is the cut RAY's
+                  signed offset from the seam vertex, and **a ray can aim through a wall** -- which is
+                  why walk 9 / thrust 14 reached **2.09e-05, closer to the razor than the console's own
+                  genuine 6.24e-05**, with no clip. This is `[[banded-proxy-needs-its-newton]]`
+                  generalised: the proxy does not merely mis-rank, it cannot see the binding constraint.
+                  Recorded from now on rather than re-derived: every row `score` singles out carries
+                  ``pred`` (the two seam-plane values) and ``why`` (`blocked`/`line_hit`/`wall_hit`/
+                  `in_front`/`crossed`), gated by a positive control on the delivered clip
+                  (`test_a_scored_row_carries_the_acceptances_own_three_terms`). Honest limit: ``why`` is
+                  computed for the SINGLED-OUT rows (every genuine hit, the two bests, the capped near
+                  set), never per evaluation, so it describes the near-razor population and not the whole
+                  in-contact one. The rows this sweep banked predate the field; the probe reads them.
+                - **THE ENUMERATION GAP s154 NAMED IS CLOSED (its item 1).** `_steered_tail`'s headline is
+                  "PER-FRAME STEERING AFTER THE CONVERSION" and it built prefixes from `_families`/PRE
+                  ONLY -- so it could steer only after a UNIFORM walk, never after the conversion a real
+                  backslide reaches the cap through. It now takes ``flips`` and builds ATOM-JUNCTION
+                  prefixes too, including ``remaining == 0`` (steer straight off the slam). Two more
+                  instances of s154's own lesson rode along and are fixed in the same place: the
+                  per-prefix CAMERA (`_trail_for` -- a prefix that pressed L has already fired the blip,
+                  and `_fan` only ever corrected the edges inside its OWN schedule, so every steered
+                  frame after an atom junction AND after a `_families` L_AXIS hold read the L-free
+                  trail), and the pool RANK (the seed's Tetra where she moves 36.7 u across a conversion
+                  that plows her -- now the prefix's own). **Containment is measured on BOTH filters**:
+                  the shape delivers the console's own 11 rows bit-for-bit, and its `at_cap` PREFIX filter
+                  admits her prefix at every ``k <= 5`` -- her conversion DIPS below the cap on the slam
+                  and the two frames after it (**nspeed 13 / 15 / 18 at delivered frames 3-5**) and holds
+                  **17.0 / nspeed 26 from frame 6**, so the dip sits inside the prefix where nothing
+                  filters it (`_notes/s155_atcap_through_the_console_conversion.py`). **Cost class
+                  changed**: the old pool was ~empty off a backslide (the default cap never bound) and
+                  every atom junction converts, so it is now ``flips x 8 combos x families x |alpha|``
+                  before the cap and the first steered depth costs ``|pfx| x |alpha|`` clones -- 20000 x
+                  11405 = 228 M, minutes, and a probe timed out learning it. Size `prefix_cap`/`alpha`
+                  per run; ``prefix_cap_hit`` says when it bound.
+                - Suite **1271 passed** (was 1267), 70 s, exit 0. The budget gate named a PRE-EXISTING
+                  test at 1.52 s (s153's `test_cam_trail_l_frame_reproduces_the_wired_cameras_
+                  followcamera_blip_0_ulp`): its herd replay was inside the inner loop, so it paid nine
+                  when three would do. Hoisted -> **1.26 s**, same nine cases asserted. Its remaining
+                  cost is nine WIRED herd replays, so trim cases if it ever drifts again -- never the
+                  budget.
+                - **PERF, for sizing the next run**: 10 workers x 1 OpenMP thread is only ~**1.75x** one
+                  12-thread process on the SCORE stage (not the fan's 3.8x -- `sweep_par` scales better
+                  with threads than the fan does), and a pinned straggler leaves 11 cores idle at the tail
+                  of a run, so `s155_sweep_launch.py` hands each spawn ``cpu // min(workers, left)``
+                  threads.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled

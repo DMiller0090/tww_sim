@@ -770,13 +770,29 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
     if tail_frames:
         _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chunk, nthreads,
                       s1_stride, pre_stride, pre_frames, pre_l, tail_frames, tail_beam, deadline,
-                      beat=beat, prefix_cap=prefix_cap)
+                      beat=beat, prefix_cap=prefix_cap, flips=flips)
     return out, st
+
+
+def _trail_for(cs_trail, plan):
+    """The trail a PREFIX's own continuation reads through: the L rising edges the prefix has already
+    delivered, composed onto the item's trail (`entry_camera.CamTrail.from_l`).
+
+    Read off the plan tuple itself (`l_press_frames`), so it cannot disagree with the schedule that built
+    it. `_fan` already corrects for edges inside its OWN schedule; nothing corrected for an edge a
+    PREVIOUS segment delivered, which is every steered frame after an atom junction and every one after a
+    `_families` L_AXIS hold."""
+    if cs_trail is None:
+        return None
+    t = cs_trail
+    for f in l_press_frames(plan):
+        t = t.from_l(f)
+    return t
 
 
 def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chunk, nthreads,
                   s1_stride, pre_stride, pre_frames, pre_l, tail_frames, tail_beam, deadline,
-                  beat=None, prefix_cap=PREFIX_CAP):
+                  beat=None, prefix_cap=PREFIX_CAP, flips=()):
     """**PER-FRAME STEERING AFTER THE CONVERSION** -- the one coverage gap the family set leaves, and the
     draw multiplier where contact is already made.
 
@@ -786,19 +802,61 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
     bracketed) the binding constraint is no longer distance but DRAWS: 112 in-contact scorings expressing
     one best |resid| of 1.55e-01 against a ~1e-4 acceptance.
 
-    It is affordable because the at-cap set is SMALL -- but ``pfx`` is a pool of LIVE CLONES, not numbers,
-    so "affordable in fleets" and "affordable in memory" are two different budgets and only the first one
-    is `LEAF_BUDGET`. Fan the ordinary families at ``walk - k``, keep the at-cap prefixes UNDER
-    `PREFIX_CAP`, and re-fan the last ``k`` frames over the full alphabet from each; k=2 beams between the
-    two frames on distance to her, the contact gradient's own driver.
+    **``flips`` steers off the ATOM JUNCTION too (session 155), which is what the headline above always
+    claimed and the code did not do.** The prefixes were built from `_families`/PRE only, so "steering
+    after the conversion" could only steer after a UNIFORM walk -- and the conversion that reaches the cap
+    off a real backslide is `_atom_junction`'s (L-press, release, rotate, backwards slam). The console's
+    own 11 frames are that atom EXACTLY, followed by a THREE-segment continuation ((241,59) x3, (208,110)
+    x2, (169,192) x2), where `_families` offers ONE held stick: so its own input was not a member of the
+    enumerated set at ``walk=11`` at any camera (session 154's second, independent containment gap). An
+    atom junction, a uniform continuation, then ``tail_frames=(4,)`` is the shape that contains it, and it
+    is this branch. ``remaining == 0`` (steer straight off the slam) is admitted too -- one prefix per
+    junction rather than per alphabet draw, so it is nearly free.
+
+    Each prefix carries the TRAIL its own steered frames read through (`_trail_for`, off the prefix plan's
+    own L edges), because a prefix that pressed L has already fired the followCamera blip and the frames
+    after it read the FROZEN chase, never the L-free reference. That is true of every atom prefix by
+    construction and of every `_families` L_AXIS hold, and neither corrected for it before this: `_fan`
+    only ever corrected the edges inside its own schedule (session 153's fix, session 154's aim half --
+    the same bug in two places, and a trail derived from the plan is the shape that cannot repeat it).
+
+    ``pfx`` is a pool of LIVE CLONES, not numbers, so "affordable in fleets" and "affordable in memory"
+    are two different budgets and only the first one is `LEAF_BUDGET`. Fan the ordinary families at
+    ``walk - k``, keep the at-cap prefixes UNDER `PREFIX_CAP`, and re-fan the last ``k`` frames over the
+    full alphabet from each; k=2 beams between the two frames on distance to her, the contact gradient's
+    own driver.
+
+    **SIZE `prefix_cap` AND ``alpha`` DELIBERATELY: the atom branch changed the cost class.** Off a
+    backslide the ordinary families reach the cap almost never, so the pool used to be nearly empty and
+    the default cap never bound; every atom junction converts, so the pool is now
+    ``flips x 8 knob combos x families x |alpha|`` before the cap, and the first steered depth costs
+    ``|pfx| x |alpha|`` clones (at the default 20000 x 11405 that is 228 M -- minutes, not seconds). The
+    cap is the knob, ``prefix_cap_hit`` says when it bound, and the beam bounds every depth after the
+    first.
 
     ``at_cap`` is read on the PREFIX core here, one delivered byte before the endpoint: the conversion
     holds speedF at ~17.6 once it has fired, so it is a filter on the same population and not a
-    different test. Logged as ``tail_prefixes`` / ``tail_leaves`` / ``prefix_cap_hit``."""
+    different test. The pool is ranked on the prefix's OWN tracked Tetra, never the seed's -- she moves
+    36.7 u across the console's own conversion, so a prefix that plowed her is nearer than the seed point
+    says (`score`'s ``with_tetra`` rule, which this ranking silently broke). Logged as ``tail_prefixes``
+    (what survived the cap and got steered), ``tail_atom_prefixes`` (what the atom branch GENERATED, so
+    the two together say how hard the cap bit), ``tail_leaves`` and ``prefix_cap_hit``."""
     st['tail_prefixes'] = st.get('tail_prefixes', 0)
+    st['tail_atom_prefixes'] = st.get('tail_atom_prefixes', 0)
     st['tail_leaves'] = st.get('tail_leaves', 0)
     st['prefix_cap_hit'] = st.get('prefix_cap_hit', False)
-    tx, tz = seed['tetra']
+
+    def feet(c):
+        return math.hypot(c.pos_x - c._tetra_x, c.pos_z - c._tetra_z)
+
+    def keep(pfx):
+        """Rank-and-truncate NOW, before the pool grows further -- a prefix far from contact cannot
+        become the razor's winner after k more frames."""
+        if len(pfx) > prefix_cap:
+            pfx.sort(key=lambda t: t[2])
+            del pfx[prefix_cap:]
+            st['prefix_cap_hit'] = True
+
     for k in sorted(x for x in tail_frames if 1 <= x < walk):
         w0 = walk - k
         pfx = []
@@ -821,32 +879,66 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
                             if not at_cap(c.speedF):
                                 continue
                             head = ((n0,) if ps is None else (n0, ps[0], ps[1], lp, jp))
-                            d = math.hypot(c.pos_x - tx, c.pos_z - tz)
-                            pfx.append((head + tuple(fam['label'](part[i][0], part[i][1]))[1:], c, d))
-                    if len(pfx) > prefix_cap:
-                        # rank-and-truncate NOW, before the pool grows further -- a prefix far from
-                        # contact cannot become the razor's winner after k more frames
-                        pfx.sort(key=lambda t: t[2])
-                        pfx = pfx[:prefix_cap]
-                        st['prefix_cap_hit'] = True
+                            pfx.append((head + tuple(fam['label'](part[i][0], part[i][1]))[1:],
+                                        c, feet(c)))
+                    keep(pfx)
                     if beat is not None:
                         beat(tail_k=k, tail_n0=n0, tail_pfx=len(pfx))
                 if deadline is not None and time.time() >= deadline:
                     st['deadline_cut'] = True
                     return
+            # THE ATOM JUNCTION AS A PREFIX -- see the docstring: the conversion a real backslide
+            # actually reaches the cap through, steered afterwards instead of held
+            remaining = w0 - n0 - ATOM_FRAMES
+            if not flips or remaining < 0:
+                continue
+            jtrail = cs_trail if cs_trail is None else cs_trail.from_l(n0)
+            for ro in ATOM_ROTATE_OFFS:
+                for side in ATOM_ROTATE_SIDES:
+                    junc = _atom_junction(base, flips, side, ro, csangle, cs_trail, n0, nthreads)
+                    st['atom_junctions'] = st.get('atom_junctions', 0) + len(junc)
+                    st['atom_junctions_dead'] = (st.get('atom_junctions_dead', 0)
+                                                 + len(flips) - len(junc))
+                    for r in junc:
+                        head = (n0, r['flip'][0], r['flip'][1], 1, 1, r['flip'][0], r['flip'][1], 0, 1,
+                                r['rot'][0], r['rot'][1], 0, 1, r['slam'][0], r['slam'][1], 0, 1)
+                        if not remaining:
+                            if at_cap(r['core'].speedF):
+                                pfx.append((head, r['core'], feet(r['core'])))
+                                st['tail_atom_prefixes'] += 1
+                            continue
+                        for fam in _families(remaining, 0, s1_stride):
+                            for c0 in range(0, len(alpha), chunk):
+                                part = alpha[c0:c0 + chunk]
+                                st['fleets'] += 1
+                                for i, c in _fan(r['core'], part, fam['lsched'][:-1], csangle,
+                                                 jtrail, n0 + ATOM_FRAMES, nthreads):
+                                    if not at_cap(c.speedF):
+                                        continue
+                                    pfx.append((head + tuple(fam['label'](part[i][0],
+                                                                          part[i][1]))[1:],
+                                                c, feet(c)))
+                                    st['tail_atom_prefixes'] += 1
+                            keep(pfx)
+                    if beat is not None:
+                        beat(tail_k=k, tail_n0=n0, tail_pfx=len(pfx),
+                             tail_atom=st['tail_atom_prefixes'])
+                    if deadline is not None and time.time() >= deadline:
+                        st['deadline_cut'] = True
+                        return
         pfx.sort(key=lambda t: t[2])
-        pfx = [(p, c) for p, c, _d in pfx[:prefix_cap]]
+        pfx = [(p, c, _trail_for(cs_trail, p)) for p, c, _d in pfx[:prefix_cap]]
         st['tail_prefixes'] += len(pfx)
         for depth in range(k):
             nxt = []
             last = depth == k - 1
-            for pi, (plan, c) in enumerate(pfx):
+            for pi, (plan, c, tr) in enumerate(pfx):
                 for c0 in range(0, len(alpha), chunk):
                     part = alpha[c0:c0 + chunk]
                     st['fleets'] += 1
                     st['tail_leaves'] += len(part)
                     sched = [0, 0] if last else [0]
-                    for i, cc in _fan(c, part, sched, csangle, cs_trail,
+                    for i, cc in _fan(c, part, sched, csangle, tr,
                                       plan_frames(plan) + depth, nthreads):
                         p2 = tuple(plan) + (part[i][0], part[i][1], 0, 1)
                         if last:
@@ -857,8 +949,7 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
                             else:
                                 st['sub_cap'] += 1
                         elif at_cap(cc.speedF):
-                            nxt.append((p2, cc, math.hypot(cc.pos_x - cc._tetra_x,
-                                                           cc.pos_z - cc._tetra_z)))
+                            nxt.append((p2, cc, feet(cc), tr))
                 if beat is not None and pi % 32 == 0:
                     beat(tail_k=k, tail_depth=depth, tail_prefix=pi, tail_of=len(pfx))
                 if deadline is not None and time.time() >= deadline:
@@ -868,7 +959,7 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
                 nxt.sort(key=lambda t: t[2])
                 st['tail_beam_kept'] = min(len(nxt), int(tail_beam))
                 st['tail_beam_seen'] = len(nxt)
-                pfx = [(p, c) for p, c, _d in nxt[:int(tail_beam)]]
+                pfx = [(p, c, tr) for p, c, _d, tr in nxt[:int(tail_beam)]]
 
 
 # --------------------------------------------------------------------------- the razor
@@ -955,12 +1046,35 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
                 reps.setdefault(cell, (f, b))
         draws = [(cell, reps[cell][0], reps[cell][1], t) for cell in sorted(reps) for t in thrusts]
 
+    def _why(o):
+        """**WHY a row is not genuine, in the acceptance's own three terms** (session 155).
+
+        `_shovec`'s acceptance is ``(not blocked) and in_front(old) and crossed(new)``, and it reports
+        only the AND -- so ``genuine = 0`` beside a ``|resid|`` of 2e-5 (measured this session at walk 9)
+        reads as a mystery. It is not: every near-razor row across walks 7-9 turned out to be refused at
+        the FIRST test, the swept lunge path hitting the wall, while the one row that ever delivered
+        (s154's accepted 101) has it clear. ``resid`` cannot see that -- it is the cut RAY's offset from
+        the seam vertex, and a ray can aim through a wall.
+
+        Computed off the row's own old/new via the Python reference `geometry_tetra` (the native block
+        test is `crr_pos_walls` transcribed), only for the rows this function SINGLES OUT (every genuine
+        hit, the two bests, the capped near set), so it never touches the hot path."""
+        from harness.rollstab import geometry_tetra as GT
+        po, pn = GT.p32(o[1], o[2]), GT.p32(o[3], o[4])
+        _p, info = GT.crr_pos_walls(po, pn, GT.TRIS)
+        return dict(blocked=bool(info['line_hit'] or info['wall_hit']),
+                    line_hit=bool(info['line_hit']), wall_hit=bool(info['wall_hit']),
+                    in_front=bool(GT.in_front(po)),
+                    crossed=bool(o[8] < 0.0 or o[9] < 0.0))
+
     def _row(k, plan, e, o, fac, thrust, lean, aim, cell, resid_val, ovl, cs):
+        # ``pred`` = the seam-plane values at the pre-CrrPos cut endpoint (the ``extra=True`` row's own
+        # fields 8-9), ``why`` = the acceptance's three terms -- see `_why`
         return dict(entry=[e[0], e[1]], walk=[k[0], k[1]], m351C_walk=k[2],
                    m351C=lean, facing=fac, aim=list(aim), thrust=thrust,
                    b_step=thrust + 2, resid=resid_val, nspeed=ES.ROLL_NSPEED,
                    push=[o[5], o[6]], plan=list(plan), cell=cell, csangle=cs,
-                   tetra=[k[-2], k[-1]], overlap=ovl,
+                   tetra=[k[-2], k[-1]], overlap=ovl, pred=[o[8], o[9]], why=_why(o),
                    walkable=bool(XE.TA.is_walkable(k[0], k[1]) and XE.TA.is_walkable(e[0], e[1])))
 
     for cell, fac_rep, aim_rep, thrust in draws:

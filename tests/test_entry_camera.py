@@ -131,18 +131,20 @@ def test_cam_trail_l_frame_reproduces_the_wired_cameras_followcamera_blip_0_ulp(
     seed = ES.console_seed()
     frames = 8
     for subx in (254, 1, 200):
+        stick = (195, 164)
+        base = dict(seed['log'][-1], buttons=0, substickX=EC.delivered_byte(subx), substickY=0,
+                   stickX=stick[0], stickY=stick[1])
+        # the herd replay depends on ``subx`` alone, so it is paid once per camera and CLONED per
+        # l_frame -- the per-test budget is 1.5 s and nine replays of it is most of one
+        base_core, _run0 = EF.base_core(0, seed=seed, hold=dict(
+            base, stickX=seed['log'][-1]['stickX'], stickY=seed['log'][-1]['stickY']))
         for l_frame in (0, 3, 6):
             trail = EC.cam_trail(subx, frames, l_frame=l_frame)
-            stick = (195, 164)
-            base = dict(seed['log'][-1], buttons=0, substickX=EC.delivered_byte(subx), substickY=0,
-                       stickX=stick[0], stickY=stick[1])
             holds = [dict(base) for _ in range(frames)]
             holds[l_frame] = dict(holds[l_frame], buttons=0x40, triggerL=255)     # one L frame
             _run, rows = ES.continue_walk(holds)
             wired = [(r['x'], r['z'], r['m351C'], r['speedF']) for r in rows]
 
-            base_core, _run0 = EF.base_core(0, seed=seed, hold=dict(
-                base, stickX=seed['log'][-1]['stickX'], stickY=seed['log'][-1]['stickY']))
             core = base_core.clone(base_core.pe.clone_state())
             fleet = N.CourtyardFleet([core], 1)
             got = []

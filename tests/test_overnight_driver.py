@@ -379,6 +379,27 @@ def test_the_search_scoring_path_calls_the_known_clip_genuine(console_scored):
     assert hits[0]['push'] == CC['push']
 
 
+def test_a_scored_row_carries_the_acceptances_own_three_terms(console_scored):
+    """**A ROW MUST SAY WHY IT IS NOT GENUINE.** `_shovec`'s acceptance is
+    ``(not blocked) and in_front(old) and crossed(new)`` and it reports only the AND, so ``genuine = 0``
+    beside a ``|resid|`` of 2e-5 reads as a mystery -- and answering it used to mean re-running the item.
+
+    Session 155 measured what it hides: every near-razor row across walks 7-9 of the re-run sweep is
+    refused at the FIRST test, the swept lunge path hitting the wall
+    (`_notes/s155_why_not_genuine.py`, 24/24), which ``resid`` structurally cannot see -- it is the cut
+    RAY's offset from the seam vertex, and a ray can aim through a wall. So every row `score` singles out
+    now carries ``pred`` (the seam-plane values) and ``why``.
+
+    This is the positive control for that diagnostic: on the ONE clip known to be genuine, all three
+    terms must read clear and both plane values must be negative. A diagnostic that called the delivered
+    clip blocked would be worse than none."""
+    hits, _st, _prep = console_scored
+    w = hits[0]['why']
+    assert w == dict(blocked=False, line_hit=False, wall_hit=False, in_front=True, crossed=True), w
+    assert hits[0]['pred'][0] < 0.0 and hits[0]['pred'][1] < 0.0, (
+        'the delivered clip crossed BOTH seam planes; pred %r' % (hits[0]['pred'],))
+
+
 def test_the_lean_and_the_entry_the_search_predicts_are_the_delivered_ones(console_scored):
     """Two links in the chain that turn a walk endpoint into a razor sample, checked against console."""
     from harness.tetrapush import entry_search as ES
@@ -470,6 +491,118 @@ def test_plan_from_rows_round_trips_the_console_conversion():
     assert len(segs) - ON.ATOM_FRAMES == 3, (
         'the human continuation is 3 held sticks; `_families` enumerates 1, so this plan is outside '
         'the fan own reach and a 0-genuine sweep off this herd says nothing about the herd')
+
+
+# ------------------------------------------------------- steering after the ATOM conversion (s155)
+
+def test_the_prefix_trail_carries_the_blips_the_prefix_itself_delivered():
+    """`_trail_for`: a prefix's continuation reads the camera its OWN L presses left behind.
+
+    `_fan` corrects for the edges inside its own schedule and nothing corrected for an edge a PREVIOUS
+    segment delivered -- which is every steered frame after an atom junction (its first act is an
+    L-press) and every one after a `_families` L_AXIS hold. Same class of defect as the aim camera
+    s154 fixed: a per-item constant standing in for a per-candidate truth."""
+    plain = (0, 208, 110, 0, 4)
+    atom = (2, 176, 247, 1, 1, 176, 247, 0, 1, 195, 14, 0, 1, 77, 3, 0, 1)
+    assert ON._trail_for(None, atom) is None
+    assert ON._trail_for(_StubTrail(), plain)[7] == 1000 + 7, 'an L-free prefix must not be corrected'
+    assert ON._trail_for(_StubTrail(), atom)[7] == 2000 + 7, 'the atom press is one edge'
+    assert ON._trail_for(_StubTrail(), atom + (241, 59, 1, 3))[9] == 3000 + 9, (
+        'a continuation re-pressing L after the junction released it is a second edge')
+    assert ON._trail_for(_StubTrail(), (3, 208, 110, 1, 4))[8] == 2000 + 8, (
+        'an L_AXIS uniform hold presses L too -- it was reading the L-free trail as well')
+
+
+def test_the_steered_tail_steers_off_the_atom_conversion_and_not_only_a_uniform_walk(atom_seed):
+    """**THE AXIS THE HEADLINE ALWAYS CLAIMED.** `_steered_tail` built its prefixes from `_families`/PRE
+    only, so "per-frame steering after the conversion" could steer only after a UNIFORM walk -- and the
+    conversion a real backslide reaches the cap through is `_atom_junction`'s (L-press, release, rotate,
+    backwards slam). Handed ``flips``, the prefixes are atom junctions too.
+
+    Deliberately tiny (2 flip bearings, a 15-draw alphabet, a 16-prefix cap): this gates the SHAPE and
+    the plumbing, not a search result. Both branches must fire -- ``remaining == 1`` at ``n0 = 0`` (a
+    uniform continuation between the slam and the steering) and ``remaining == 0`` at ``n0 = 1`` (steering
+    straight off the slam) -- and every plan must deliver exactly the walk it claims."""
+    from harness.tetrapush import away_walk as AW
+    from harness.tetrapush.reposition import HerdLine
+    env, seed, hold, cs0 = atom_seed['env'], atom_seed['seed'], atom_seed['hold'], atom_seed['cs0']
+    flips = AW.flip_arc(HerdLine.from_env(env), step=ON.ATOM_FLIP_STEP)[:2]
+    alpha = EF.stick_alphabet(64)
+    walk, k = 6, 1
+
+    def tail(use_flips):
+        out, st = {}, dict(raw=0, sub_cap=0, fleets=0)
+        ON._steered_tail(out, st, seed, env, walk, cs0, None, hold, alpha, EF.CHUNK, 0, 32,
+                         ON.PRE_STRIDE, (), ON.PRE_L, (k,), 400, None, flips=use_flips,
+                         prefix_cap=16)
+        return out, st
+
+    out, st = tail(flips)
+    assert st['tail_atom_prefixes'] > 0 and st['tail_prefixes'] > 0
+    assert out, 'the atom-prefixed tail produced no at-cap rollable candidate at all'
+    shapes = set()
+    for plan in out.values():
+        segs = [tuple(plan[i:i + 4]) for i in range(1, len(plan), 4)]
+        assert ON.plan_frames(plan) == walk, (plan, ON.plan_frames(plan))
+        assert ON.l_press_frames(plan) == (plan[0],), (
+            'every one of these converts through the atom, whose first act is the L-press')
+        assert [s[2] for s in segs[:ON.ATOM_FRAMES]] == [1, 0, 0, 0], plan
+        assert segs[0][:2] == segs[1][:2], 'the press and the release hold the same full-deflection stick'
+        assert [s[3] for s in segs[-k:]] == [1] * k, 'the steered frames are one delivered byte each'
+        shapes.add(len(segs))
+    assert shapes == {ON.ATOM_FRAMES + k, ON.ATOM_FRAMES + 1 + k}, (
+        'both prefix depths must fire -- a uniform continuation after the slam AND steering straight '
+        'off it; got segment counts %s' % sorted(shapes))
+
+    bare, st0 = tail(())
+    assert st0['tail_atom_prefixes'] == 0 and not bare, (
+        'without flips the same call reaches nothing at the cap -- which is the gap: off a real '
+        'backslide the uniform families do not convert, so the tail axis had nothing to steer from')
+
+
+def test_the_steered_tail_shape_contains_the_console_conversion():
+    """**CONTAINMENT, and no simulation in it.** The console's own 11 delivered frames are the atom
+    recipe EXACTLY plus a THREE-segment continuation, so they are not a member of the `_families` set at
+    any camera (`test_plan_from_rows_round_trips_the_console_conversion`). The shape that DOES contain
+    them is this axis: an atom junction, a uniform continuation, then ``tail_frames=(4,)`` steering the
+    last four frames -- prefix = atom + 3x(241,59), steered = 208,110 / 208,110 / 169,192 / 169,192.
+
+    Built from the console's OWN rows and checked back against them row for row, so it is the recorded
+    input that is shown to be expressible, not a plausible-looking tuple. The steered frames are drawn
+    from the item's own ``alpha``, so containment is exact at stride 1 and a COARSENED stride quantises
+    these bytes onto a neighbouring class -- that is the discretisation each item logs as ``alpha_stride``,
+    not a property of this shape.
+
+    The axis also FILTERS its pool on `overnight.at_cap` at ``walk - k``, so the shape containing the plan
+    is not the same claim as the filter admitting it. Measured on the wired engine
+    (`_notes/s155_atcap_through_the_console_conversion.py`): the console's own conversion DIPS below the
+    cap on its slam and the two frames after it (nspeed 13 / 15 / 18 at delivered frames 3-5) and holds
+    17.0 / nspeed 26 from frame 6 on -- so the prefix frame is at the cap for every ``k <= 5``, the dip
+    sits inside the prefix where nothing filters it, and k=4 is admitted."""
+    herd, k = 71, 4
+    rows = [dict(r) for r in FIX['log'][herd:FIX['plan']['a_i']]]
+    hold = dict(rows[0], stickX=FIX['log'][herd - 1]['stickX'], stickY=FIX['log'][herd - 1]['stickY'],
+                buttons=0, triggerL=0)
+    plan = ON.plan_from_rows(rows)
+    segs = [tuple(plan[i:i + 4]) for i in range(1, len(plan), 4)]
+    w0 = len(rows) - k
+    # the axis's own template at this walk: the atom's four frames, ONE held continuation to w0, then k
+    # single steered frames -- each field taken from the recording, none of them authored
+    cont = w0 - ON.ATOM_FRAMES
+    assert cont >= 1 and segs[ON.ATOM_FRAMES][3] >= cont, (
+        'the recorded continuation is shorter than the prefix this k needs')
+    template = (0,) + tuple(x for s in segs[:ON.ATOM_FRAMES] for x in s) \
+        + (segs[ON.ATOM_FRAMES][0], segs[ON.ATOM_FRAMES][1], 0, cont) \
+        + tuple(x for r in rows[w0:] for x in (int(r['stickX']), int(r['stickY']), 0, 1))
+    assert ON.plan_frames(template) == len(rows) == FIX['plan']['a_i'] - herd
+    assert ON.plan_rows(hold, template) == rows, (
+        'the axis shape does not deliver the console conversion row for row')
+    tsegs = [tuple(template[i:i + 4]) for i in range(1, len(template), 4)]
+    assert len(tsegs) == ON.ATOM_FRAMES + 1 + k
+    assert [s[3] for s in tsegs] == [1] * ON.ATOM_FRAMES + [cont] + [1] * k
+    assert ON.l_press_frames(template) == (0,)
+    assert len({(s[0], s[1]) for s in tsegs[ON.ATOM_FRAMES + 1:]}) > 1, (
+        'the point of the steering is that the last frames are NOT one held stick')
 
 
 def test_the_scoring_path_prices_the_console_clip_at_its_own_aim_camera(console_scored):
