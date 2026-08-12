@@ -1847,6 +1847,107 @@ from scratch. Land the edits first, then gate.
                 file a script overwrites in place can be STALE (session 152's own 8-hour-old pre-fix
                 output) and looks identical to a fresh result by content alone -- check its mtime against
                 wall-clock time before trusting any of its numbers.
+              - **SESSION 154 -- `[[search-must-rediscover-known-answer]]` IS SATISFIED. THE SEARCH
+                ITSELF PRODUCED A GENUINE, CONFIRMED, DELIVERABLE PLAN AT TOTAL 101, AND THE THING THAT
+                HAD BEEN REFUSING IT WAS THE AIM CAMERA -- so the 7..13 sweep's "0 deliverable" was that
+                bug's artefact and DISCRETIZATION was the wrong suspect.** The accepted plan, off
+                `log[:71]` at walk=11 / thrust=15 (`_notes/s154_walk11_refixed.{py,json,log}`):
+                `plan=[3, 104,252,1,1, 104,252,0,1, 0,103,0,1, 152,0,0,1, 112,2,0,4]`,
+                `aim=[88,179]`, `facing=40727`, `cell=2545`, `csangle=34395`, `resid=1.966531e-04`,
+                `overlap=3.221763` -> `agree` **deliverable / genuine / handover_ok / cut_ok /
+                `worst_ulp=0` / `cut_i=101`**, `accept() ok=True stage=deliverable total=101`
+                (`verdict=False` only because 101 cannot BEAT 101). **It is NOT the console's own plan**
+                -- its conversion fires at n0=3 and holds ONE stick for four frames, where the human's
+                fires at n0=0 and holds three -- so this is the pipeline finding its own answer at the
+                console's own cost, not replaying it. **It is the SAME candidate s153 reported as
+                "genuine but refused", with the same razor draw and a bit-identical `resid`: only the
+                recorded aim BYTE changed** (`[86,182]` -> `[88,179]`), which is exactly what the fix
+                does. So that hit was a TRUE positive the broken byte->facing map was hiding -- the
+                opposite of the walk=9 case, which really was a false positive.
+                In the order they were measured, none of them reasoned:
+                - **The arithmetic first, because it reframes the whole sweep.** The rediscovery seed is
+                  `log[:71]` and the console's A-press is row `a_i = 82`, so its own answer off that seed
+                  is its own rows 71..81 -- **`walk = 82 - 71 = 11`**, and `total_frames(71, 11, 15) =
+                  101` = the locked cut frame. The one depth of the seven that produced a genuine razor
+                  hit is the one where a known-good answer is known to exist. s153 did not connect the
+                  two.
+                - **ROOT CAUSE, and it is the third camera case s153 explicitly scoped OUT** ("a coarse
+                  pre-filter, not a source of false acceptances" -- that reasoning was wrong).
+                  `configurations()` is handed ONE camera per item off the L-FREE trail, and every plan
+                  that presses L -- every atom candidate, by construction -- latches its roll facing
+                  against a different one, because the blip FREEZES the yaw chase where it stands while
+                  the L-free chase keeps climbing. Measured on the console's own conversion (L on its
+                  first walk frame): real **34325** against the L-free trail's **34406 -- 81 BAM, five
+                  sine cells**. On s153's own refused walk=11 hit (L pressed 8 frames before its aim
+                  frame): **11 BAM**, which still crosses a cell (2545 vs 2544). **Those ARE s152's three
+                  discrete facing buckets**: the delta is the freeze point sampled at different
+                  press-to-aim offsets, so -81/-31/-11 is one curve, not three phenomena. Its own
+                  off-by-one rode along: the facing latches against `entry_camera.aim_frame`'s
+                  `trail[walk + 1]`, not `trail[walk]` -- re-measured 18/18 at walk 2..5 off this seed
+                  where the chase is still climbing (17 BAM at walk 2), inert wherever the camera has
+                  settled, which is why it survived.
+                - **THE ACCEPTANCE STACK IS SOUND -- it was only ever the enumeration.** Fed the human's
+                  own 11 rows off herd=71 (read back with the new `overnight.plan_from_rows`, not
+                  authored), `confirm_entry` passes every flag, the razor returns
+                  `resid = +6.242939e-05` -- the LOCKED fixture's own value -- overlap `+1.225899`,
+                  `cross_engine.agree` is `deliverable=True` with `worst_ulp=0` at `cut_i=101`, and
+                  `accept()` is `ok=True, stage=deliverable, total=101` (`verdict=False` only because 101
+                  cannot beat 101). **GOTCHA that cost the first pass:** score her at the SEED's Tetra and
+                  the same plan reads `genuine=False, overlap=-15.34` -- she moves **36.7 u** across the
+                  human's own conversion, and `score` uses each candidate's OWN walk-endpoint Tetra
+                  (s150's `with_tetra`), never the seed's.
+                - **THE FIX COSTS NOTHING, because a CELL is one razor draw at ANY camera** -- every term
+                  a facing reaches goes through `jmaTable[angle >> 4]`, so two facings in one cell bake a
+                  bit-identical schedule and a bit-identical 26 u entry step (already gated 0-ULP by
+                  `test_the_aim_alphabet_resolves_to_the_sine_table_cell`). So `score(cam=...)` sweeps per
+                  CELL over exactly the old lean groups and batches, and only the `(facing, aim)` pair it
+                  RECORDS is resolved per candidate at that candidate's own camera. New:
+                  `entry_camera.aim_camera`, `overnight.l_press_frames` / `aim_camera` / `aim_cell_map` /
+                  `plan_from_rows`; `unaimable`/`cameras`/`cells` join the stats and each row carries the
+                  `csangle` it was priced at, so nothing is dropped silently. `verify_console` now checks
+                  the PAIR (byte REACHES its own facing), not just alphabet membership -- membership alone
+                  passed while the pair was five cells apart. Gates: the corrected camera must predict the
+                  facing a real A-press measures and the L-free one must not, on BOTH real cases; the
+                  index and the composed edges without a replay; the positive control re-run through the
+                  per-camera path with identical resid/push/overlap. Full default suite **1267 passed**
+                  (was 1261), 69 s. Commit `736db77`.
+                - **SO THE SWEEP'S OWN VERDICT DOES NOT STAND, AND THE RE-RUN PROVED IT.** Every atom
+                  candidate at every walk 7..13 was priced against the wrong aim camera, so "0
+                  deliverable" was a statement about a broken byte->facing map, NOT about the herd and NOT
+                  about `alpha_stride` (s153's own leading hypothesis). Re-running walk=11 / thrust=15
+                  with the fix -- same seed, same fan (319167 candidates, bit-identical), only the camera
+                  changed -- turns `genuine=1, refused` into **`genuine=1, ACCEPTED, total=101`** (the
+                  headline above). The run's own bookkeeping: `cameras=4` distinct aim cameras among the
+                  candidates, `cells=56` swept (the union, against 43 at the single L-free camera -- a
+                  30% cost, and score went 341.9 s -> 441.5 s for it), `unaimable=4168443` pairs skipped
+                  because that cell is not aimable at that candidate's own camera, `evaluations=13704909`
+                  priced, `best_overlap=1.22592287` (2.3e-5 off the console's own +1.2259 target),
+                  `best_resid_in_contact=1.85e-05`, `bracketed=True`.
+                - **WHAT THAT CHANGES ABOUT THE NEXT RUN.** The pipeline is now proven end to end on a
+                  plan it found itself, so a barren item is finally evidence about the item. **Every walk
+                  in the old sweep needs re-running** -- and the ones that MATTER are the ones that beat
+                  101: at thrust 15 off this herd that is walk 7..10 (totals 97..100), since walk 11 only
+                  ties. The old numbers there are void, not negative.
+                - **AND A SECOND, INDEPENDENT CONTAINMENT GAP, which no camera fix touches -- REAL, but
+                  NOT blocking**: the human's own 11 frames are the 4-frame atom recipe EXACTLY (L+flip,
+                  flip, rotate, slam) followed by a **THREE-segment** continuation ((241,59) x3,
+                  (208,110) x2, (169,192) x2), and `_families` enumerates exactly ONE held stick. So the
+                  console's own INPUT is not a member of the enumerated set at walk=11 whatever the camera
+                  does; the search cleared the gate with a plan of its own instead, which is the stronger
+                  outcome but not the one the gate's name implies. It still costs coverage: the axis that
+                  would contain the human's shape is `_steered_tail`, and it was OFF in the sweep AND
+                  builds its prefixes from `_families`/PRE only, never from the atom junction (despite its
+                  own docstring's "PER-FRAME STEERING AFTER THE CONVERSION" headline). Sized recipe: atom
+                  junction -> uniform continuation -> `tail_frames=(4,)` contains the human's own exactly
+                  (prefix = atom + 3x(241,59), steered = 208,110 / 208,110 / 169,192 / 169,192). Gated now
+                  (`test_plan_from_rows_round_trips_the_console_conversion`) so the shape claim cannot
+                  drift.
+                - **KNOWN, SCOPED, NOT SILENT**: the fan's candidate key is the physical endpoint
+                  `(pos, m351C, speedF, tetra)`, so two plans reaching a bit-identical endpoint with
+                  DIFFERENT L-press frames collapse to one dict entry -- and they are no longer
+                  interchangeable now that the aim camera is per-plan. It can only LOSE a draw, never
+                  invent one. The one-line fix is to append the plan's own `aim_camera` to `collect`'s
+                  key, at the cost of a larger candidate set; unmeasured, so unshipped.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled

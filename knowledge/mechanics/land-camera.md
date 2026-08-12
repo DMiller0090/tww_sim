@@ -111,10 +111,20 @@ injected-csangle reference. The camera's per-frame inputs, all from the sim's ow
   *target*; the view-cache only *chases* it, at the 0.66/frame cushion. So releasing the stick
   hands over a globe still in flight, and csangle keeps moving until the chase lands. Measured on
   console (session 78, `tests/test_plan_console.py`): a plan holding C-stick X at 255 through its
-  last roll hands its escape 144 BAM of unconverged chase, which is collected on the very next
-  frame - `34181 → 34330 → 34325`, constant thereafter. The trap this sets is reading `run.csangle`
-  at a handoff and treating it as the value in force for what follows; take the settled value off a
-  run that has actually stepped a neutral frame.
+  last roll hands its escape 144 BAM of unconverged chase. The trap this sets is reading
+  `run.csangle` at a handoff and treating it as the value in force for what follows; take the
+  settled value off a run that has actually stepped a neutral frame.
+- **Where that chase LANDS and where an L press STOPS it are two different values, ~81 BAM apart.**
+  Off the same courtyard handoff, an input that never touches L converges geometrically on the
+  target the stick left behind - `34181 → 34330 → 34380 → 34397 → 34403 → 34405 → 34406`, closing
+  0.662/0.658/0.654/0.667/0.667 of the remaining gap per frame, which is the 0.66 cushion and takes
+  **~6 frames** to land. Press L on the first frame instead and the followCamera blip pins it at
+  **34325** - one frame of the blip's own yaw (`34330 → 34325`), then constant, because the blip
+  re-targets to where the chase stands and leaves it nothing to close. So "the chase lands" and "an
+  L press froze it" have different destinations, and reading a settled value off an L-pressing
+  capture measures the second while looking like the first (measured session 154 off the locked
+  `courtyard_clip_s90_console.json`; it is what let the Tetra-push search price every L-pressing
+  candidate's roll facing 81 BAM - five sine cells - off the camera it really rolls at).
 - **The zeldaret decomp is unusable for these functions.** `manualCamera` is an empty stub;
   `followCamera`/`lockonCamera` are Nonmatching with a *wrong header binding*: the
   `cSGlobe` SETTER `U`/`V` methods are swapped in `include/SSystem/SComponent/c_angle.h`.
