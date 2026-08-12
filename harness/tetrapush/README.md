@@ -1822,6 +1822,31 @@ from scratch. Land the edits first, then gate.
                 surfaces** -- that is what would satisfy s151's hard gate for real; a 0-genuine walk=9 on
                 its own does not (`[[search-must-rediscover-known-answer]]`, and this session did not
                 widen past 9).
+              - **SAME SESSION, ITEM (3) IS ALSO DONE: THE WIDENED SWEEP RAN TO COMPLETION, AND THE
+                ANSWER IS 0 DELIVERABLE PLANS ACROSS WALK 7..13.** `_notes/s152_rediscover_run.py`
+                (unmodified) + a resume continuation for 11-13 after an external stop, both fixes in
+                place throughout, checkpointed to `_notes/s152_rediscover_results.json` (one continuous
+                record, mtime-verified fresh). **Six of seven walk depths (7/8/9/10/12/13) are cleanly
+                `genuine=0`.** Walk 11 produced ONE genuine razor hit (thrust=15, `resid=1.967e-04`)
+                refused at `confirm_entry` -- the same "genuine but refused" shape as the original
+                walk=9 case, NOT YET DIAGNOSED (the diagnostic script exists, `_notes/
+                s153_walk11_diagnostic.py`, launched and killed before printing anything). **Every walk's
+                own `best_overlap` lands within ~1e-4..2e-4 of the 1.2259 clip target** -- consistently
+                close, never exact, across the WHOLE range, which points at the DISCRETIZATION
+                (`alpha_stride`, `ATOM_ROTATE_OFFS`, `ATOM_FLIP_STEP`) being the limiting factor here, not
+                the walk range. **`[[search-must-rediscover-known-answer]]` is therefore NOT YET
+                satisfied** by this herd (`log[:71]`, the console's own herd with its real conversion
+                stripped) at this discretization -- this sweep retires the walk=9 false positive for
+                real (three fixes deep now: the native-confirm_entry regression, the single blip, the
+                composed double blip) but does not itself produce a rediscovered, deliverable plan.
+                **NEXT**: diagnose walk=11's refusal first (cheap, one candidate); then either widen
+                `alpha_stride`/`ATOM_ROTATE_OFFS`/`ATOM_FLIP_STEP` (the more principled move given how
+                consistently every walk lands close-but-not-quite) or report this sweep's own finding and
+                let Dereck decide between finer discretization on this herd or searching the other 48
+                non-console rungs instead. **A real trap hit and resolved along the way**: a checkpoint
+                file a script overwrites in place can be STALE (session 152's own 8-hour-old pre-fix
+                output) and looks identical to a fresh result by content alone -- check its mtime against
+                wall-clock time before trusting any of its numbers.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
