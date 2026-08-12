@@ -81,26 +81,24 @@ At the accepted configuration, on the bearing the console's own herd used:
 
     ring distance   76.73543 u        where she actually stood   76.78111 u        aim error  0.046 u
 
-## Read a ring point as an aim, never as a plan
+## The slice is an aim, and its `genuine` is not a verdict
 
 The slice pins `old` at the braced value and a real plan's is not exactly that: the accepted 101 sits
-**0.0127 u** off it, an earlier frame's push, which moves its residual by ~1e-02 - a hundred times the
-razor's own width. So a ring point is good to ~5e-02 u, and the last 1e-04 is what the entry lattice is
-for (`entry_dust` marches it, one f32 ULP at a time).
-The ring says WHERE TO PUT HER; it never says a plan clips.
+**0.0127 u** off it, an earlier frame's push, which moves its residual by ~1e-02. A clip lives in a
+residual interval about 3e-05 wide, so that error is ~300 band-widths: `cut_slice` reports
+`genuine = False` on the very placement that DELIVERED, and `target_ring(lattice=...)` returns 0 genuine
+at every bearing including the console's own. Nothing in this module may be read as "this does not
+clip"; the verdict is [`razor_band.genuine_band`](genuine-residual-band.md), at full fidelity.
 
-## What it prices, on the item that came back barren
+The ring itself carries a second, separate correction: it solves for `resid = 0`, and the accepting set
+is a strictly positive interval that excludes zero. It locates the right neighbourhood and then points
+at the one value inside it that the razor refuses - see
+[genuine-residual-band.md](genuine-residual-band.md), and
+[the history page](../history/the-ring-and-the-gap-aimed-at-the-residual-zero.md) for the aim-and-gap
+recipe it replaces.
 
-The useful form of "how far is this herd from a clip" is her own radial position: `|resid|` divided by
-`|d resid / d dist|`, both read off the sim. Over 261 000 rows of walk 8 / thrust 13 - all 55 cells,
-6000 candidates:
+## Where her reachable set is pinned
 
-| | closest row | median in-contact row | s154's delivered 101 |
-|---|---|---|---|
-| gap to the razor | **1.006 u** | 414 u | **7.7e-04 u** |
-
-Nothing that item can build gets within a unit of where she has to be, while the plan that delivered
-was three orders of magnitude closer. The far-field numbers are a local Newton step and not a distance -
-quote the small ones. And her reachable set is not free either: the rows that reach contact at all are
-the ones plowed into the wall, which pins her cut-frame `z` at -940.255615 for most of them, while the
-delivered row stopped **0.36 u** short of that pin.
+Her position at the cut is not free either: the rows that reach contact at all are the ones plowed into
+the wall, which pins her cut-frame `z` at -940.255615 for most of them, while the delivered row stopped
+**0.36 u** short of that pin.

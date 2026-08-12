@@ -2117,6 +2117,61 @@ from scratch. Land the edits first, then gate.
                   Her reachable set is not free either -- the rows that reach contact are the ones
                   plowed INTO the wall, which pins her cut-frame ``z`` at -940.255615, while the
                   delivered row stopped 0.36 u short of that pin.
+                  **(s158 CORRECTS BOTH NUMBERS IN THIS SUB-BULLET: ``gap`` prices the distance to
+                  ``resid = 0``, which no clip is at, and the 1.006 u is the 6000-candidate SAMPLE's
+                  minimum -- the item's own banked `best_resid_row` prices at 0.0301 u through the
+                  identical formula. Read the s158 block below.)**
+              - **SESSION 158 -- THE RAZOR IS A POSITIVE RESIDUAL INTERVAL AND ``resid = 0`` IS NOT IN
+                IT, SO EVERY ZERO-SEEKING TOOL IN THIS WORK AIMS AT THE ONE VALUE THE RAZOR REFUSES.**
+                s157 asked whether a herd can REACH the ring. The sweep's own banked numbers already
+                answered that -- 14 of 15 in-contact items report ``bracketed=True`` and the closest
+                gets to ``|resid| = 3.11e-06``, nearer zero than the console's own genuine 6.24e-05 --
+                so the fork's "no densifier fixes it" branch is refuted and the question changed:
+                every one of those crossings re-evaluates ``wall_hit`` (s155's 38/38, re-measured), so
+                what is unreachable is not the ring. New tracked module
+                **`harness/tetrapush/razor_band.py`** (`genuine_band`, `in_band`, `band_distance`,
+                `zero_is_outside`), 8 gates in `tests/test_razor_band.py`, KB page
+                `knowledge/model/genuine-residual-band.md` + history page
+                `knowledge/history/the-ring-and-the-gap-aimed-at-the-residual-zero.md`. Probes:
+                `_notes/s158_*.py`.
+                - **THE MEASUREMENT, ON BOTH ROWS THAT ARE KNOWN TO CLIP.** Sweep HER WALK-END POSITION
+                  over her own plane at FULL FIDELITY (``placed_step = 0``, her own plow, the row's own
+                  ``old``) and read ``genuine`` off the sim. The genuine placements occupy one narrow
+                  strictly POSITIVE residual interval: the console's own clip
+                  **[+5.796e-05, +9.918e-05]** (7 values, 301/301, overlap +1.2259), s154's accepted
+                  101 **[+1.628e-04, +1.967e-04]** (4 values, 510/510, overlap +3.2218). Each delivered
+                  row sits inside its own interval, **neither interval contains zero**, and inside one
+                  the residual is **SUFFICIENT** -- no row lands in it and fails, in every one of the
+                  20+ configurations measured. Both controls reproduce their recorded residual 0-ULP.
+                - **SO A ROW AT ``resid = 0`` IS NOT NEAR THE RAZOR, IT IS PAST IT.** This is the
+                  mechanism under s155's "every near-razor row is refused by the barrier" and s156's
+                  "one f32 ULP either side is ``wall_hit``": a ULP of Tetra IS a residual quantum, and
+                  the interval is a handful of quanta wide. `band_distance` is the ranking key that
+                  implies -- signed, 0 inside, negative on the short side ``|resid|`` ranks first.
+                - **THE INTERVAL IS PER CONFIGURATION -- DO NOT CARRY A NUMBER.** Cell 2545 sits ~3x
+                  further from zero than cell 2552 and the two do not overlap; cell 2551 lands at
+                  [+1.66e-05, +4.42e-05] at overlap +1.512. Stable against the lean over +-8 and the
+                  entry over ~0.05 u; a **+-0.02 u scan of her plane (~0.5 s)** returns the same
+                  interval as one 2.5x wider and one 2x finer.
+                - **HER POSITION IS QUANTIZED INTO THE RESIDUAL.** 160801 placements return only
+                  ~1900-4700 DISTINCT residual values (~86 placements each), and the genuine ones take
+                  4 and 7 distinct values -- a band is reachable RUNGS, not a continuum, so a row
+                  between two rungs cannot be nudged onto one by moving her a ULP.
+                - **AND WHERE HER POSITION IS NOT THE MISSING VARIABLE.** A +-0.6 u scan of her plane
+                  (641601 placements) at each of the 15 barren items' own best-row configurations
+                  returns **no genuine placement at all**, while the identical scan at both clipping
+                  configurations finds them -- so the controls establish the scan's sensitivity before
+                  the zero is read as a result. Widened to **+-2 u (7,112,889 placements)** on two of
+                  them it is STILL zero, and one of the two is w10_t15 on **cell 2552 / thrust 15 --
+                  the console's own cell and thrust**, where a band demonstrably exists at the console's
+                  own entry. Those rows are disqualified by their ENTRY/configuration, not by where she
+                  stands, and the deciding variable is upstream of her. Quote it with its window.
+                - **THE s157 TOOL IS CORRECTED IN PLACE, NOT DELETED.** `cut_slice`'s pinned ``old``
+                  puts its residual ~1e-02 out = ~300 band-widths, so its ``genuine`` -- and
+                  `target_ring`'s ``lattice_genuine``/``live`` -- are FALSE NEGATIVES near the razor:
+                  measured 0 of 289 at every bearing including the console's own, and False on the
+                  delivered placement itself. The module and both docstrings now say so, and a gate
+                  pins it. The slice stays a good AIM; it was never a verdict.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled

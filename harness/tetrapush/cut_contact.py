@@ -32,6 +32,15 @@ that: s154's accepted 101 sits 0.0127 u off it (an earlier frame's push), which 
 ~1e-02 -- a hundred times the razor's own width. So a ring bearing/distance is an AIM, good to ~0.1 u,
 and the last 1e-04 is what the entry lattice is for (`entry_dust`). Read the ring as where to put her,
 never as a plan.
+
+**AND THE ``genuine`` FLAGS HERE ARE FALSE NEGATIVES NEAR THE RAZOR** (s158, measured). That same 1e-02
+is ~300 times the width of the interval a clip actually lives in, so `cut_slice` reports
+``genuine = False`` on the very placement that DELIVERED, and `target_ring(lattice=...)` comes back 0 of
+289 at every bearing including the console's own. Nothing in this module may be read as "this does not
+clip". The verdict is `razor_band.genuine_band`, which reads the razor at full fidelity (``placed_step
+= 0``, her own plow, the row's own ``old``) -- and which also measures the thing the ring's ``resid = 0``
+target gets wrong: the genuine set is a strictly positive residual interval that EXCLUDES zero
+(knowledge/model/genuine-residual-band.md).
 """
 import math
 import struct
@@ -111,7 +120,11 @@ def cut_slice(facing, lean, thrust, tetras, *, nspeed=None, entry=None, ctx=None
     input left is her position, which is exactly the CC pair the cut frame's push comes from.
 
     Returns one ``dict(tetra, dist, push, resid, genuine, overlap, new)`` per placement, in order.
-    ``dist`` is her distance from the braced Co centre -- contact needs it under `CO_R_SUM`."""
+    ``dist`` is her distance from the braced Co centre -- contact needs it under `CO_R_SUM`.
+
+    ``genuine`` here is NOT a verdict: the pinned ``old`` puts this residual ~1e-02 off the row a plan
+    would really get, and a clip lives in an interval ~3e-05 wide, so this flag is False on the
+    delivered placement itself (s158). Use `razor_band.genuine_band`."""
     ctx, sch, resid = _build(facing, lean, thrust, nspeed, ctx, sch, resid)
     e = (sch['link_x0'], sch['link_z0']) if entry is None else (f32(entry[0]), f32(entry[1]))
     pts = [(t[0], t[1], e[0], e[1]) for t in tetras]
@@ -195,7 +208,11 @@ def target_ring(facing, lean, thrust, *, step=64, nspeed=None, ctx=None, sch=Non
     so a scan finer than her own ULP re-tests one point (the s156 lesson, in the new coordinate).
 
     Returns ``dict(braced, points, live, bearings, genuine)`` -- ``points`` the bracketed ring, ``live``
-    the subset with a genuine placement on the lattice."""
+    the subset with a genuine placement on the lattice.
+
+    ``live``/``genuine``/``lattice_genuine`` inherit `cut_slice`'s false negative and measure the SLICE,
+    not the razor: at the accepted configuration this returns 0 of 289 on every bearing, the console's
+    own included. The ring is where to PUT her; whether a placement clips is `razor_band.genuine_band`."""
     from harness.tetrapush import entry_dust as ED
     ctx, sch, resid = _build(facing, lean, thrust, nspeed, ctx, sch, resid)
     br = braced_row(facing, lean, thrust, ctx=ctx, sch=sch, resid=resid) if braced is None else braced
