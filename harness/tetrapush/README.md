@@ -2017,6 +2017,64 @@ from scratch. Land the edits first, then gate.
                   with threads than the fan does), and a pinned straggler leaves 11 cores idle at the tail
                   of a run, so `s155_sweep_launch.py` hands each spawn ``cpu // min(workers, left)``
                   threads.
+              - **SESSION 156 -- THE BARREN SWEEP IS EXPLAINED BY TWO MEASURED NUMBERS, AND THE AXIS THAT
+                DECIDES A CLIP IS THE ROLL FACING, NOT THE ENTRY DENSITY AND NOT THE HERD DEPTH.** The
+                s155 handoff asked for the entry-region scan and the fork it settles (a sliver missed by
+                microns vs a region the walk never reaches). It is NEITHER, and the reason both readings
+                were unavailable is that **every existing probe of the entry sampled BELOW the entry's own
+                quantum**: `ShoveCtx._run` starts from ``f32(link_x0), f32(link_z0)``, so the reachable
+                entries form an f32 LATTICE with a **1.220703125e-04 u** pitch, while
+                `configuration_band` steps 1e-05 u and `locus_scan` 2e-05 u -- ~12 consecutive "samples"
+                are the SAME entry, so their "0 genuine" was one lattice rung's worth of evidence.
+                New tracked tool: **`harness/tetrapush/entry_dust.py`** (`dust_density`, `cell_dust`,
+                `live_cells`, `needed_multiplier`) marches the residual zero exactly as `locus_scan` does
+                but tests the true BIT-STEPPED lattice neighbourhood at each station, so its denominator
+                is entries TESTED. **~0.5 s per configuration, no fan.** Gates:
+                `tests/test_entry_dust.py` (9). Probes: `_notes/s156_*.py`.
+                - **NUMBER ONE -- 97.0% of the sweep's evaluations could never have clipped, and the
+                  sweep already recorded it.** At walk 12, ``n_contact = 380,860`` of
+                  ``evaluations = 12,807,108`` = **2.97% in contact**. Outside contact the push is zero,
+                  `old` is the same wall-braced point, the bare roll-stab lands 0.33 u short and the
+                  razor's residual is a DEAD CONSTANT (the gated
+                  `test_the_cut_frame_push_is_what_moves_the_razor_and_it_is_zero_at_links_endpoint`).
+                  Verified directly at w12_t13's own best-overlap endpoint: cells 2540..2575 read overlap
+                  **-2.7 to -10.9 u**, and `dust_density` names them ``no leverage at the seed`` rather
+                  than inventing a zero density.
+                - **NUMBER TWO -- the in-contact 3% sit at configurations 40-112x poorer in dust than the
+                  one that delivered.** Per reachable f32 entry: s154's accepted 101 measures **228
+                  genuine of 5265** (1 in 23) over a 300 u march; the barren items' in-contact near-razor
+                  rows measure **0 or 1 of 891..2511** each (w07_t13 0/891, w07_t15 0/1701, w08_t13
+                  0/1620, w08_t14 0/1053, w08_t15 0/2511, w07_t14 1/1215). Together the two numbers are
+                  the arithmetic of "0 genuine out of 12.8 M": the effective search was ~3% of nominal at
+                  ~1/50th the hit density.
+                - **THE AXIS IS THE FACING (the aim CELL).** At a FIXED (lean, thrust, Tetra), adjacent
+                  16-BAM cells go from **1 in 6** to **0 of ~4700**: cell 2551 **719/4617**, cell 2545
+                  **228/5265**, cell 2552 **86/4455**, cells 2548 and 2544 **0/4941 and 0/4779** -- with
+                  ``grad`` between 0.41 and 0.76 for all of them, so it is not a dead or a steep razor
+                  doing it. Facings 40817 and 40823 (both cell 2551) return BIT-IDENTICAL marches, so a
+                  cell is one probe, as `aim_cell` already claims for the draw.
+                - **HERD DEPTH IS EXONERATED, and so is `grad`-at-the-seed.** Holding the accepted row's
+                  configuration and sliding Tetra along the herd line, density is a flat **3.9e-2..5.7e-2
+                  at every depth where contact exists** -- including 45 u DEEPER than the console's own
+                  spot -- and 0 (no leverage) shallower, where she is not there to be pushed. The live
+                  cell SET barely moves over that 45 u (\{2545, 2551\} at +0 and +20 u, \{2551\} at
+                  +45 u). At +59 u ``grad`` is 51.9 and the density is still 3.9e-2, so the s156 working
+                  hypothesis that a steep seed gradient predicts barrenness is FALSE and is not what the
+                  tool reports.
+                - **SO s155's "38/38 wall_hit" IS THE SHAPE OF A NEAR MISS, NOT A SEPARATE CONSTRAINT.**
+                  Under the rigid entry translation the search actually varies, the segment's LINE test
+                  stays clear and it is the endpoint's proximity to the wall chord that flips; one f32
+                  ULP either side of the accepted entry is ``wall_hit``. `resid` is blind to it because it
+                  is the cut ray's offset from the seam vertex, and the genuine set is dust ON that razor,
+                  not a band around ``resid = 0`` -- at the accepted row exactly ONE of eleven lattice
+                  entries is genuine and it sits at ``resid = +1.9665e-04``, with ``resid = 0`` itself
+                  refused.
+                - **HONEST LIMITS, recorded with the tool**: ``genuine`` counts sweep-level
+                  PREDICTIONS (`overnight.accept` is what makes one a plan, and about one aim in eight
+                  brakes on the entry frame); ``density`` is per lattice point tested NEAR THE LOCUS, not
+                  per entry in the plane; the march is finite, so ``genuine == 0`` means "none in this
+                  arc" and ``tested`` belongs in every quote; and the marched ARC depends on the seed
+                  entry, so counts move with it while the live/dead verdict does not (gated).
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
