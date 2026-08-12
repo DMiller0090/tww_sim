@@ -135,3 +135,51 @@ def test_the_slice_cannot_decide_genuine_and_this_is_why_the_band_is_read_at_ful
                       resid=resid)[0]
     assert bool(real[0]) is True and sl['genuine'] is False
     assert abs(sl['resid'] - resid(real)) > 100.0 * 3.4e-05
+
+
+# ------------------------------------------------------------------ the admissibility screen
+
+#: w10_t15's own best row off the s155 sweep: the CONSOLE'S OWN cell 2552 and thrust 15, at a different
+#: lean and entry -- and barren on every axis swept (7.1 M placements of hers, 6561 entries, 16384 leans).
+B_FACING, B_LEAN, B_THRUST = 40839, 0, 15
+B_TETRA = (-1642.8582763671875, -911.8379516601562)
+B_ENTRY = (-1599.9014892578125, -862.4032592773438)
+
+
+def test_the_screen_fires_on_both_configurations_that_clip():
+    """`admits` is only a screen if it never misses a live configuration at its own entry. Both known
+    clips come back positive, bracketed, and the residual it finds sits inside that configuration's own
+    band -- so the cheap detector and the expensive scan are measuring the same thing."""
+    a = RB.admits(A_FACING, A_LEAN, A_THRUST, A_ENTRY, A_TETRA)
+    c = RB.admits(C_FACING, C_LEAN, C_THRUST, C_ENTRY, C_TETRA)
+    assert a['genuine'] > 0 and c['genuine'] > 0
+    assert a['bracketed'] and c['bracketed']
+    assert RB.in_band(RB.genuine_band(A_FACING, A_LEAN, A_THRUST, A_ENTRY, A_TETRA), a['lo'])
+
+
+def test_the_screen_agrees_with_the_full_scan_over_the_window_it_shares():
+    """Priced against `genuine_band` either side of the console's entry, at the ``half`` the screen's
+    own reach justifies: same verdict inside the admitting region and outside it. The screen walks the
+    gradient out to `LOCATE_SPAN`, so it is NOT bounded by a tighter scan box -- compared against the
+    default +-0.02 u window it reports genuine where that window has none, which is the screen being
+    right and the box being small."""
+    for de in (0.0, 1.0):
+        e = (C_ENTRY[0] + de, C_ENTRY[1])
+        scr = RB.admits(C_FACING, C_LEAN, C_THRUST, e, C_TETRA)
+        band = RB.genuine_band(C_FACING, C_LEAN, C_THRUST, e, C_TETRA, half=0.03, step=5.0e-4)
+        assert bool(scr['genuine']) == bool(band['genuine']), de
+
+
+def test_a_barren_configuration_is_refused_on_the_axis_the_search_can_move():
+    """The negative this session rests on, pinned: the barren item shares the console's cell and thrust
+    and admits nothing at its own entry -- and not at any lean either, which is the axis a walk can
+    actually steer. Swept at 512 BAM here to stay a one-second gate; the session swept 16384 at 4 BAM."""
+    assert RB.admits(B_FACING, B_LEAN, B_THRUST, B_ENTRY, B_TETRA)['genuine'] == 0
+    assert not any(RB.admits(B_FACING, k, B_THRUST, B_ENTRY, B_TETRA)['genuine']
+                   for k in range(0, 65536, 512))
+
+
+def test_the_screen_costs_a_plane_scan_divided_by_two_hundred():
+    """What makes it a screen rather than a measurement: `genuine_band` reads ~161k placements, this
+    reads ~806, so a configuration SPACE is affordable where a plane scan per point is not."""
+    assert RB.admits(A_FACING, A_LEAN, A_THRUST, A_ENTRY, A_TETRA)['tested'] < 1000

@@ -2166,6 +2166,27 @@ from scratch. Land the edits first, then gate.
                   the console's own cell and thrust**, where a band demonstrably exists at the console's
                   own entry. Those rows are disqualified by their ENTRY/configuration, not by where she
                   stands, and the deciding variable is upstream of her. Quote it with its window.
+                - **AND THE AXIS THAT DECIDES IT IS SCREENABLE IN 16 ms** (`razor_band.admits`, added
+                  after the first s158 commit, when Dereck asked whether the "the entry is the live
+                  axis" line in the handoff had been MEASURED -- it had not, and measuring it moved it).
+                  Since ``genuine`` is exactly ``resid`` inside the band, ONE march along the residual's
+                  gradient (401 rungs over +-5e-04, ~806 placements) answers "does this configuration
+                  clip for ANY position of hers". It fires on both controls and agrees with the full
+                  plane scan at 11 of 12 entries around the console's own (the miss is at the admitting
+                  region's EDGE, 33 genuine of 160801 against 301 at the centre). For scale: s155 spent
+                  **4014 s over ten workers** to conclude "0 genuine" for 21 items.
+                - **SO THE BARREN ITEM IS DEAD ON EVERY AXIS, NOT SHORT OF SEARCH.** w10_t15 shares the
+                  console's **cell 2552 and thrust 15**. Swept at its own entry: **0 of 16384 leans**
+                  (full 16-bit range, 4 BAM apart); **0 of 6561 entries** over a +-0.8 u PLANE and 0 of
+                  501 over +-5 u along x; **0 of 7,112,889 placements** of hers over +-2 u. The console's
+                  own configuration lights up under every one of those same sweeps. Nothing to densify.
+                - **THE ADMITTING SET'S SHAPE, at the console's configuration.** The **lean window is
+                  ~181 BAM wide** with its own lean inside it (two contiguous windows within +-400,
+                  ``-118..+62`` and ``+75..+78``) -- so a lean sweep coarser than ~180 BAM steps over it
+                  and reports a FALSE zero, which is exactly what a 128-apart sweep does (1 bucket of
+                  512). The admitting ENTRY set is **diffuse, not a blob**: 571 of 6561 entries (8.7%)
+                  over the whole +-0.8 u plane, while a single line through it at ``dz = 0`` admits only
+                  ``-0.08..+0.06`` of +-5 u swept. One line samples a strip badly.
                 - **THE s157 TOOL IS CORRECTED IN PLACE, NOT DELETED.** `cut_slice`'s pinned ``old``
                   puts its residual ~1e-02 out = ~300 band-widths, so its ``genuine`` -- and
                   `target_ring`'s ``lattice_genuine``/``live`` -- are FALSE NEGATIVES near the razor:

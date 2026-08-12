@@ -119,6 +119,68 @@ def band_distance(band, resid_value):
     return 0.0
 
 
+#: The residual range `admits` sweeps either side of her own zero, at ~2.5e-06 a rung: an order of
+#: magnitude past both measured bands, and a band is ~4e-05 wide, so nothing in range is stepped over.
+LADDER_RESID = 5.0e-04
+LADDER_N = 401
+LOCATE_N = 401
+LOCATE_SPAN = 0.06
+
+
+def admits(facing, lean, thrust, entry, tetra, *, ladder=LADDER_RESID, n=LADDER_N, nspeed=None,
+           ctx=None, sch=None, resid=None):
+    """**DOES THIS CONFIGURATION CLIP FOR ANY POSITION OF HERS?** ~16 ms, three batched sweeps.
+
+    `genuine_band` answers it by scanning her plane, which costs 0.5-14 s and so cannot screen a
+    configuration SPACE. This walks the one axis that matters instead: since ``genuine`` is exactly
+    ``resid`` inside the band, marching her along the residual's own gradient visits every residual
+    level in the range, so a ladder finer than a band cannot miss one. It locates her residual's zero
+    first (`LOCATE_SPAN` along the gradient), then places her at ``n`` rungs spanning ``+-ladder``.
+
+    Returns ``dict(genuine, tested, bracketed, lo, hi)``. ``bracketed`` False means her residual never
+    crossed zero in the locating span, so the ladder was centred on the smallest |resid| seen instead
+    and a negative is weaker -- it is reported rather than folded away.
+
+    **Priced against the full scan**: at twelve entries around the console's own it agrees with
+    `genuine_band` (at ``half=0.05``) on eleven, and the miss is at the admitting region's EDGE, where
+    the full scan finds 33 genuine of 160801 against 301 at the centre. It walks the gradient out to
+    `LOCATE_SPAN`, so it is not bounded by a tighter scan box and will report genuine where a +-0.02 u
+    window has none. Read a positive as certain and a single negative as "not at this configuration, to
+    this detector" -- a zero over a swept RANGE is the strong form, and that is how it is meant to be
+    used."""
+    if ctx is None:
+        ctx, sch, resid = ES.build_fast(facing, lean, thrust, nspeed=nspeed)
+
+    def sweep(pts):
+        o = ctx.sweep_par([(p[0], p[1], entry[0], entry[1]) for p in pts], 0, extra=True)
+        return [(bool(r[0]), resid(r)) for r in o]
+
+    h = 1e-3
+    g = sweep([(tetra[0] + h, tetra[1]), (tetra[0] - h, tetra[1]),
+               (tetra[0], tetra[1] + h), (tetra[0], tetra[1] - h)])
+    gx, gz = (g[0][1] - g[1][1]) / (2.0 * h), (g[2][1] - g[3][1]) / (2.0 * h)
+    mag = math.hypot(gx, gz)
+    if mag <= 0.0:
+        return dict(genuine=0, tested=4, bracketed=False, lo=None, hi=None)
+    gx, gz = gx / mag, gz / mag
+    ts = [-LOCATE_SPAN + 2.0 * LOCATE_SPAN * i / (LOCATE_N - 1) for i in range(LOCATE_N)]
+    loc = sweep([(tetra[0] + t * gx, tetra[1] + t * gz) for t in ts])
+    at, bracketed = None, False
+    for i in range(LOCATE_N - 1):
+        if (loc[i][1] < 0.0) != (loc[i + 1][1] < 0.0):
+            at, bracketed = 0.5 * (ts[i] + ts[i + 1]), True
+            break
+    if at is None:
+        at = ts[min(range(LOCATE_N), key=lambda i: abs(loc[i][1]))]
+    half = ladder / mag
+    us = [at - half + 2.0 * half * i / (n - 1) for i in range(n)]
+    rungs = sweep([(tetra[0] + t * gx, tetra[1] + t * gz) for t in us])
+    g_ok = [r for r in rungs if r[0]]
+    return dict(genuine=len(g_ok), tested=len(rungs) + len(loc) + 4, bracketed=bracketed,
+                lo=(min(r[1] for r in g_ok) if g_ok else None),
+                hi=(max(r[1] for r in g_ok) if g_ok else None))
+
+
 def zero_is_outside(band):
     """The headline, as a predicate: does this configuration refuse ``resid = 0``?
 
