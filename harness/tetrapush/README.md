@@ -2363,6 +2363,44 @@ from scratch. Land the edits first, then gate.
                   it needs 57.0, and pruned **20130 of 20130** junctions including the branch that
                   contains the answer. Also pinned: a ONE-stepped-frame probe reads a spread of exactly
                   zero (at `input_delay = 1` the stick has not acted), so nothing may be measured on it.
+              - **SESSIONS 162+163 -- THE CONTAINED PIPELINE RAN END-TO-END AND REDISCOVERED THE 101:
+                8 GENUINE, ONE OF THEM BIT-FOR-BIT THE CONSOLE'S OWN PLAN.** Session 162 (interrupted,
+                no handoff; salvaged in the s163 handoff) banked the stronger containment form --
+                `fixtures/courtyard_fan_containment.json`, the console's delivered walk endpoint found
+                at **d = 0.0** among the contained fan's 2.1M leaf keys (gate in `tests/test_aimed_fan.py`)
+                -- and fixed the `item` CLI so `incumbent=N` reaches `run_item`, not just the listing
+                (without it the rediscovery run searched at 101, where `max_walk` drops the console's
+                own thrust 15; gated in `tests/test_overnight_driver.py`).
+                - **THE REDISCOVERY RUN (s163): `overnight item console-w04 incumbent=102` at the
+                  shipped knobs, blind.** Result: **genuine 8** (near 11 081), all thrust 15 / total
+                  101, residuals 5.18e-05..1.14e-04, lean cells 2551/2552 -- and genuine #3 is
+                  **bit-exact the console's own containment-fixture plan** `(0,208,110,0,2,169,192,0,2)`.
+                  The saved incumbent confirms 0-ULP (`worst_ulp 0`, every check True, stage
+                  'deliverable', full input log in `_generated/overnight/s163-console-w04/plans/`).
+                  Dereck's s151 hard gate is now satisfied in its CLOSED-LOOP form: not "the fan
+                  contains the answer" (s161's geometry) but "the run, launched blind, finds it".
+                  Pre-s161 "0 genuine" items can now be re-run with a trusted generator.
+                - **THE PRICE, MEASURED ON A FULL ITEM: 7.1 h** (25 659 s: fan 13 038 + scoring
+                  12 619 at ~10 threads; 20 096 junctions -- 3x the jp=2 calibration slice, since
+                  `PRE_FRAMES_ALL` expands every split -- 459M raw leaves, 5.61M at-cap candidates,
+                  30.2M in-contact rows, ~3.7 GB peak). The s161 "~2 h an item" is 3.6x light; budget
+                  ~7 h at walk 4. The claim heartbeat freezes when the fan ends (the scoring half never
+                  beats), so a frozen counter with ~10 busy cores is the NORMAL shape of the slow half.
+                - **THE DENSITY ANSWER: 8, NOT HUNDREDS.** s161's expected-count arithmetic (~6900
+                  at-cap leaves/junction x a 5 u curve x the 1.2e-04 u strip) over-predicts by 1-2
+                  orders: the strip's genuine density is far thinner than the area ratio (the razor is
+                  a positive-interval CURVE, not an accepting band -- s158). Schedule items on measured
+                  counts, not that ratio.
+                - **THE WALK 1-4 LADDER (s162, complete): the frame-cheap half of the queue is DEAD.**
+                  `_notes/s162_ladder.jsonl` -- all 46 units x every admissible walk <= 4 (177 items,
+                  coarse fan, extent-robust): **exactly ONE row has any roll-to-Tetra contact at all,
+                  the console's own herd at walk 4** (3.1% of sampled rows, best in-contact |resid|
+                  7e-03, no band at the coarse draw). 31 of 46 herds end mid-backslide (speedF
+                  -25.45..-25.73) and burn walk frames converting before a roll can dispatch
+                  (`s162_ends.py`); rungs 42/43/45/47 are refused outright (walled-vs-unwalled herd
+                  divergence at frame 76/79). So beating 101 means walk >= 5 items at the shipped
+                  contained knobs, ~7 h each, in the frame-minimal order -- console-w04 itself yields
+                  exactly the 101 class and nothing cheaper reaches her.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled

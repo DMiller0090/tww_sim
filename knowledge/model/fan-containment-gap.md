@@ -3,8 +3,10 @@
 **Answers:** My search reports 0 genuine over hundreds of items - is the space empty, or can my
 GENERATOR not express the answer? What does a containment gate actually have to check? Which of my
 barren results survive finding out? What does containing the known answer cost?
-**Status:** MEASURED (session 160) and **CLOSED (session 161)** on the flooded-Hyrule Tetra corner,
-against the LOCKED console delivery fixture. The containing knobs are the shipped ones; `verify-console`
+**Status:** MEASURED (session 160), **CLOSED (session 161)**, and **PROVEN END-TO-END (session 163)**
+on the flooded-Hyrule Tetra corner, against the LOCKED console delivery fixture: the shipped driver,
+run as-is on the console item, emitted 8 genuine plans at total 101 - one of them bit-for-bit the
+console's own. The containing knobs are the shipped ones; `verify-console`
 is green on all 16 checks including the two that reported NOT CONTAINED. Gated in
 [`tests/test_overnight_driver.py`](../../tests/test_overnight_driver.py) - the containment equality, the
 legacy diagnosis, the split expansion, and the leaf-budget trade - and in
@@ -73,10 +75,12 @@ against the finest ones the module can express. `containment_knobs` reports both
 | minimum containing (stride 2, `PRE_FRAMES` (1, 2)) | 33 563 |
 | **shipped** (stride 2, every split a walk admits) | **40 274** |
 
-**114x**, calibrated at **0.357 s a junction / ~2 h an item** against the legacy ~1 min. Session 161
-shipped it anyway: a search that cannot emit its own known answer measures nothing, so the affordability
-problem belongs to the enumeration's shape and not to its coverage. Three things make the price honest
-rather than hidden:
+**114x**, calibrated at **0.357 s a junction / ~2 h an item** against the legacy ~1 min - and
+**measured at 7.1 h for the full console item** (session 163: 20 096 junctions, 3x the calibration
+slice, because `PRE_FRAMES_ALL` expands every split; 459M raw leaves, 5.6M at-cap candidates; fan
+3.6 h + scoring 3.5 h at ~10 threads, ~3.7 GB peak). Session 161 shipped it anyway: a search that
+cannot emit its own known answer measures nothing, so the affordability problem belongs to the
+enumeration's shape and not to its coverage. Three things make the price honest rather than hidden:
 
 * `PRE_FRAMES` is now the `PRE_FRAMES_ALL` sentinel, expanded per walk by `pre_frames_for` - **every**
   split a walk admits, not just the console's own 2+2, because a knob set fitted to the known answer
@@ -92,6 +96,22 @@ The obvious discount - compute where the walk has to END ([entry-strip.md](entry
 junctions that cannot reach it - was built and measured in session 161, and it is small: see
 [aiming-the-fan.md](aiming-the-fan.md). The admissible prune is **1.4x** and the lossless ordering about
 **2.4x** on time-to-first-hit. Containment's 114x is still unpaid.
+
+## The closed loop ran, and the fan emitted the answer (session 163)
+
+`overnight item console-w04 incumbent=102` at the shipped knobs - the exact pipeline a production
+sweep runs, no special-casing - produced **8 genuine plans, all thrust 15 / total 101** (residuals
+5.18e-05..1.14e-04, lean cells 2551/2552), and one of them is **bit-for-bit the console's own plan**
+`(0, 208, 110, 0, 2, 169, 192, 0, 2)` from the containment fixture. The saved incumbent's confirm
+stack reads `worst_ulp 0`, every check True, `stage: 'deliverable'`. This is the closed-loop form of
+Dereck's session-151 rule: not "the fan CONTAINS the answer" (s161's geometric claim) but "the run,
+launched blind, FINDS it".
+
+The density is the caveat that travels: **8 genuine, not the hundreds** the naive arithmetic
+(~6900 at-cap leaves a junction, a 5 u target curve, a 1.2e-04 u strip, 20k junctions) predicted -
+the strip's genuine density is 1-2 orders thinner than the area ratio, consistent with the razor
+being a positive-interval CURVE ([razor-zero-curve.md](razor-zero-curve.md)) rather than a band that
+accepts everything inside it. Price scheduling on measured counts, not on that ratio.
 
 ## What this invalidates, and what it does not
 
