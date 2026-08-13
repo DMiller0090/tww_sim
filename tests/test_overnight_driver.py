@@ -89,6 +89,29 @@ def test_the_console_herd_is_a_unit_with_room_to_be_found():
     assert u['walks'][CC['thrust']] >= CC['frames']
 
 
+def test_the_item_cli_hands_the_same_bound_to_the_listing_and_to_the_run(tmp_path, monkeypatch):
+    """``item <id> incumbent=N`` must run the item at N, not at the module's own bound (s162).
+
+    The listing half already took ``incumbent``; `run_item` did not, so the one run that is supposed to
+    rediscover the console 101 selected ``console-w04`` at 102 and then searched it at 101 -- where
+    `max_walk` drops the console's OWN thrust. A search that quietly narrows its thrust set below the
+    listing it printed is the `[[search-must-rediscover-known-answer]]` failure in the CLI."""
+    assert ON.max_walk(N_CONSOLE, CC['thrust'], CUT_I) < CC['frames'], 'thrust 15 is out at 101'
+    assert ON.max_walk(N_CONSOLE, CC['thrust'], CUT_I + 1) >= CC['frames'], 'and in at 102'
+    seen = {}
+
+    def _spy(item, d, env, **kw):
+        seen.update(item=item['item'], dflt_incumbent=kw.get('dflt_incumbent'))
+        return dict(item=item['item'], dropped=True, reason='spy')
+
+    monkeypatch.setattr(ON, 'run_item', _spy)
+    monkeypatch.setattr(ON.SD, 'load_env', lambda *a, **k: {})
+    monkeypatch.setattr(ON, 'REPO', str(tmp_path))
+    assert ON.main(['item', 'console-w04', 'incumbent=%d' % (CUT_I + 1)]) == 0
+    assert seen['item'] == 'console-w04'
+    assert seen['dflt_incumbent'] == CUT_I + 1
+
+
 # --------------------------------------------------------------------------- the plan encoding
 
 def test_the_plan_encoding_round_trips_the_console_walk():

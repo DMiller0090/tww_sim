@@ -1888,7 +1888,10 @@ def main(argv=None):
         return 0 if r['ok'] else 1
     if cmd == 'item':
         want = argv[0] if argv and '=' not in argv[0] else opt.get('item')
-        keep, _d = items(incumbent=_i('incumbent', O.TOTAL_INCUMBENT))
+        # ONE bound for BOTH halves (s162): it filtered the item LIST only, so `item console-w04
+        # incumbent=102` then ran at 101, where `max_walk` drops the console's own thrust.
+        inc = _i('incumbent', O.TOTAL_INCUMBENT)
+        keep, _d = items(incumbent=inc)
         sel = [x for x in keep if x['item'] == want or x['unit'] == want]
         if 'walk' in opt:
             sel = [x for x in sel if x['walk'] <= _i('walk', 99)]
@@ -1896,12 +1899,13 @@ def main(argv=None):
         if not os.path.exists(os.path.join(d, 'config.json')):
             IO.write_atomic(os.path.join(d, 'config.json'),
                             dict(run_id='probe', t0=time.time(), workers=1,
-                                 incumbent0=O.TOTAL_INCUMBENT, items=[], dropped=[]))
+                                 incumbent0=inc, items=[], dropped=[]))
         secs = float(opt.get('seconds', 0) or 0)
         dl = (time.time() + secs) if secs else None
         env = SD.load_env()
         for it in sel:
             rec = run_item(it, d, env, worker='probe', deadline=dl, s1_stride=_i('s1', 32),
+                           dflt_incumbent=inc,
                            nthreads=_i('threads', 0), two_segment=bool(_i('two', 1)),
                            atom=bool(_i('atom', 1)), pre_stride=_i('pre', PRE_STRIDE),
                            leaf_budget=(int(opt['leaf']) if 'leaf' in opt else None),
