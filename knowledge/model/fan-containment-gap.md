@@ -111,7 +111,11 @@ The density is the caveat that travels: **8 genuine, not the hundreds** the naiv
 (~6900 at-cap leaves a junction, a 5 u target curve, a 1.2e-04 u strip, 20k junctions) predicted -
 the strip's genuine density is 1-2 orders thinner than the area ratio, consistent with the razor
 being a positive-interval CURVE ([razor-zero-curve.md](razor-zero-curve.md)) rather than a band that
-accepts everything inside it. Price scheduling on measured counts, not on that ratio.
+accepts everything inside it. **Session 164 decomposed the gap on this run's own funnel**: the area
+arithmetic is roughly right about rows-on-the-strip (~200); the missing factor is the ACCEPTANCE
+(every recorded near row refused ``blocked``), and it concentrates in 2 of the 135 draws - which a
+~1-minute per-item probe can find without the fan. See
+[admitting-draws.md](admitting-draws.md); price scheduling on measured counts, not on the ratio.
 
 ## What this invalidates, and what it does not
 

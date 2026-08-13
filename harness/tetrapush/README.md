@@ -2401,6 +2401,22 @@ from scratch. Land the edits first, then gate.
                   divergence at frame 76/79). So beating 101 means walk >= 5 items at the shipped
                   contained knobs, ~7 h each, in the frame-minimal order -- console-w04 itself yields
                   exactly the 101 class and nothing cheaper reaches her.
+              - **SESSION 164 -- THE DENSITY GAP DECOMPOSED, AND A ~1-MINUTE PER-ITEM YIELD PROBE
+                (`harness/tetrapush/yield_probe.py`).** The s163 funnel's own data says the area
+                arithmetic was roughly RIGHT about rows-on-the-strip (~200 expected from the near-row
+                density); the missing factor is the ACCEPTANCE -- all 256 recorded near rows (one at
+                |resid| 3.7e-07) refuse ``blocked``, and the 8 genuine sit in **2 of the 135 (cell,
+                thrust) draws**. The probe walks every draw's entry-plane strip directly (gentle-vs-
+                cliff regime split -- the strip reads ~0.3/u, the never-genuine discontinuity
+                components ~650/u -- then 1 u stations, the sweep's own genuine flag per station,
+                derived herd leans, admissible reach): **~50 s an item vs the ~7 h fan.** Its own
+                rediscovery gate: at console-w04 the top-2 draws by in-reach stations are EXACTLY the
+                two that produced all 8 plans ((2551,15) x23, (2552,15) x19); 129/135 read zero.
+                Banked `fixtures/courtyard_yield_probe_console_w04.json`, gated
+                `tests/test_yield_probe.py` (8), KB `knowledge/model/admitting-draws.md`. **A zero is
+                a screen (sampling: 3 leans, 6 depth slices, 20-station arcs), never a proof** --
+                rank the ~7 h re-runs by score, kill nothing by it. First read of the walk>=5 queue:
+                the floor-order head probes 0 across the board (see the s164 handoff for the sweep).
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
