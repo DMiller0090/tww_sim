@@ -2415,8 +2415,16 @@ from scratch. Land the edits first, then gate.
                 Banked `fixtures/courtyard_yield_probe_console_w04.json`, gated
                 `tests/test_yield_probe.py` (8), KB `knowledge/model/admitting-draws.md`. **A zero is
                 a screen (sampling: 3 leans, 6 depth slices, 20-station arcs), never a proof** --
-                rank the ~7 h re-runs by score, kill nothing by it. First read of the walk>=5 queue:
-                the floor-order head probes 0 across the board (see the s164 handoff for the sweep).
+                rank the ~7 h re-runs by score, kill nothing by it. **The all-units sweep
+                (`_notes/s164_herd_sweep.json`): 14 of 39 units admit**; her frozen point is a HERD
+                property, so admittance is per-unit and walk only buys reach + the aimable cell
+                window. The annulus-corrected frame-minimal schedule (kept leaves live on a
+                ~16.1-17.0 u/stepped-frame annulus, and the disc-score is provably hollow without the
+                check -- rung07-w08's 15 all fall in the w08/w09 annulus gap): **rung05-w05 f95 (1
+                station) > rung05-w06 f96 (1) > rung05-w07 f97 (7) / rung10-w05 f97 (6) / rung06-w06
+                f97 (1) > rung05-w08 f98 (1) / rung07-w09 f98 (7)**. The floor-order head (rung04,
+                rung03/17/32/33, rung01/02) probes 0 ANYWHERE, so the s164 rung04-w05 run was killed
+                mid-fan and the slot repointed at rung05-w05 (`_generated/overnight/s164-rung05-w05`).
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
