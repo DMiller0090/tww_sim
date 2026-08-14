@@ -2441,16 +2441,23 @@ from scratch. Land the edits first, then gate.
                   the ONLY cap-ending admitting herd (end +18.5; the other 13 backslide at ~-25.5)
                   and its trustworthy dense sample puts its stations 43-60 u off-bearing: dead at
                   w06/w07.
-                - **The s164 overnight pivot: the s155 STEERED TAIL (`item ... tail=1,2
-                  tbeam=400`, `_steered_tail`)** -- the family set cannot convert-then-steer; the
-                  tail re-fans the last k frames over the full alphabet from contact-ranked at-cap
-                  prefixes at the SAME walk count (floor unchanged; the branch that contains the
-                  console's own w11 plan). **rung05-w05+tail (floor 95) is RUNNING**
-                  (`_generated/overnight/s164-rung05-w05-tail`, ~06:38Z 2026-08-14, 8 h deadline)
-                  -- the one item whose plain fan BRACKETED the razor (6 in-contact rows, best
-                  |resid| 3.3), so its bearings provably reach her. Triage for every other
-                  admitting item: coarse fan + score (the s162 ladder recipe at walk 5,
-                  ~5-10 min/item) for plain-fan CONTACT first; tail-run only those.
+                - **The s164 overnight pivot -- the s155 STEERED TAIL -- ran on rung05-w05 and is
+                  INERT AT WALK 5** (completed naturally at 6.2 h, result bit-identical to plain;
+                  post-mortem in the s164 handoff): `tail_atom_prefixes = 0` against 336 atom
+                  junctions because walk 5 only admits atom(4)+steer(1) via the `remaining == 0`
+                  branch, whose `at_cap` gate reads THE SLAM FRAME where the conversion has not
+                  fired -- a dead branch invisible at the walk-11 scale it was built for
+                  (candidate one-line fix awaiting Dereck: test at_cap a frame later). The k=2
+                  pool is empty off backslide herds, and the k=1 family-steer exhausts into
+                  sub-cap drops + held-stick duplicates (235.3M leaves, 0 new candidates). So
+                  **rung05-w05 is EXHAUSTED at floor 95** (plain + tail; its 100.7 u station is
+                  past the item's measured 74.1 u cloud edge) and `tail=` only matters at
+                  walk >= 6-7 after the slam-frame gate is fixed. **rung05-w07 (floor 97, plain,
+                  NO deadline -- Dereck: run items to completion) is RUNNING**
+                  (`_generated/overnight/s164-rung05-w07`, ~15:20Z 2026-08-14): same-herd reach
+                  anchor 74.1 + 2x17 ~ 108 u covers its 100.7 u station. Next after it:
+                  rung10-w05 plain (f97; the 10-min shipped-knob triage's closest approach,
+                  -9.8 u; triage table in the s164 handoff).
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
