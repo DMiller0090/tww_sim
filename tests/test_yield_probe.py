@@ -98,3 +98,23 @@ def test_fixture_provenance():
     assert fx['n_draws'] == len(fx['draws']) == 135
     assert fx['reach'] == YP.AF.MAX_STEP * (fx['walk'] + 1)
     assert len(fx['leans']) == 3
+
+
+# ------------------------------------------------------------ the kept-edge reach anchor (s164 late)
+
+def test_kept_edge_extrapolation_is_admissible():
+    """One added walk frame buys at most one cap step -- the anchor plus MAX_STEP per frame."""
+    assert YP.kept_edge_reach(74.1, 5, 5) == 74.1
+    assert YP.kept_edge_reach(74.1, 5, 7) == 74.1 + 2 * YP.AF.MAX_STEP
+
+
+def test_run_kept_edge_reads_the_cloud_edge(tmp_path):
+    """The measured edge is `best_overlap_row`'s endpoint distance from the herd end -- the number
+    the rung05-w05 post-mortem was built on (74.1 u vs the probe's 100.7 u station)."""
+    import json as J
+    d = tmp_path / 'run'
+    d.mkdir()
+    row = dict(best_overlap_row=dict(walk=[3.0, 4.0]))
+    (d / 'progress.jsonl').write_text(J.dumps(row) + '\n')
+    assert YP.run_kept_edge(str(d), (0.0, 0.0)) == 5.0
+    assert YP.run_kept_edge(str(tmp_path / 'missing'), (0.0, 0.0)) is None

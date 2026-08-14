@@ -197,6 +197,31 @@ def draw_admittance(fac, lean, thrust, tetra):
                 ends=[[e[0], e[1]] for e in ends], reason='')
 
 
+def kept_edge_reach(edge_u, walk_measured, walk):
+    """Per-herd reach from a MEASURED cloud edge -- the honest anchor for mid-backslide herds.
+
+    31 of 46 herds end mid-backslide and burn walk frames converting (s162), so their kept cloud
+    is conversion-limited: rung05's walk-5 fan measured its edge toward her at 74.1 u where the
+    disc says 114 and the annulus arithmetic 97-102 (`admitting-draws.md`, the two reach regimes).
+    ``edge_u`` comes from a completed run's ``best_overlap_row`` walk endpoint (its distance from
+    the herd end); each added walk frame is at most one cap step, so the extrapolation is
+    admissible the same way the disc is -- only anchored where the cloud actually ended."""
+    return float(edge_u) + AF.MAX_STEP * (int(walk) - int(walk_measured))
+
+
+def run_kept_edge(run_dir, link_end):
+    """The measured cloud edge toward her off a completed run: ``best_overlap_row``'s walk
+    endpoint, as a distance from the herd end. None when the run has no progress row yet."""
+    p = os.path.join(run_dir, 'progress.jsonl')
+    if not os.path.exists(p):
+        return None
+    rows = [json.loads(l) for l in open(p) if l.strip()]
+    if not rows or not rows[-1].get('best_overlap_row'):
+        return None
+    w = rows[-1]['best_overlap_row']['walk']
+    return math.hypot(w[0] - link_end[0], w[1] - link_end[1])
+
+
 def herd_end_lean(item, env):
     """The herd's own m351C at its last frame -- the lean the fan's walks drift around."""
     import warnings
@@ -210,15 +235,15 @@ def herd_end_lean(item, env):
     return int(run.link.m351C) & 0xFFFF
 
 
-def item_yield(item, env, *, leans=None, on_draw=None):
+def item_yield(item, env, *, leans=None, on_draw=None, reach=None):
     """The probe over EVERY draw of one queue item: ``dict(item, draws, n_admitting, in_reach,
     score, seconds, ...)``.
 
     ``score`` is the count of admitting stations whose walk endpoint the fan can reach at this walk
-    length -- the ranking key. Reach is `aimed_fan.MAX_STEP` times the plan's stepped frames
-    (``walk + 1`` -- `aimed_fan.reachable`'s own convention), measured from the herd endpoint:
-    admissible-generous (the true at-cap set is an annulus inside that disc), so ``in_reach = 0``
-    over every draw really does mean the fan cannot meet any admitting station found."""
+    length -- the ranking key. ``reach`` defaults to the admissible disc, `aimed_fan.MAX_STEP` x
+    stepped frames (``walk + 1``) from the herd endpoint -- generous TWICE over for the
+    mid-backslide herds (see `kept_edge_reach`), so pass a measured per-herd reach when one exists;
+    ``in_reach = 0`` at the disc really does mean the fan cannot meet any station found."""
     from harness.tetrapush import objective as O
     from harness.tetrapush import overnight as ON
     from harness.tetrapush import entry_camera as EC
@@ -235,7 +260,7 @@ def item_yield(item, env, *, leans=None, on_draw=None):
         m0 = herd_end_lean(item, env)
         leans = [ES.lean_at_roll(m0), ES.lean_at_roll((m0 - LEAN_SPREAD) & 0xFFFF),
                  ES.lean_at_roll((m0 + LEAN_SPREAD) & 0xFFFF)]
-    reach = AF.MAX_STEP * (walk + 1)
+    reach = AF.MAX_STEP * (walk + 1) if reach is None else float(reach)
     draws = []
     for q in quals:
         best = None
@@ -280,6 +305,7 @@ def main(argv=None):
             print('no such item %r at incumbent %d' % (want, inc))
             return 1
         r = item_yield(sel[0], env,
+                       reach=(float(opt['reach']) if 'reach' in opt else None),
                        on_draw=lambda d: (print('  cell %4d thrust %2d lean %5d  ADMITS %2d, %d in reach'
                                                 % (d['cell'], d['thrust'], d['lean'], d['n_admit'],
                                                    d['in_reach']), flush=True)
