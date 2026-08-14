@@ -2418,13 +2418,28 @@ from scratch. Land the edits first, then gate.
                 rank the ~7 h re-runs by score, kill nothing by it. **The all-units sweep
                 (`_notes/s164_herd_sweep.json`): 14 of 39 units admit**; her frozen point is a HERD
                 property, so admittance is per-unit and walk only buys reach + the aimable cell
-                window. The annulus-corrected frame-minimal schedule (kept leaves live on a
-                ~16.1-17.0 u/stepped-frame annulus, and the disc-score is provably hollow without the
-                check -- rung07-w08's 15 all fall in the w08/w09 annulus gap): **rung05-w05 f95 (1
-                station) > rung05-w06 f96 (1) > rung05-w07 f97 (7) / rung10-w05 f97 (6) / rung06-w06
-                f97 (1) > rung05-w08 f98 (1) / rung07-w09 f98 (7)**. The floor-order head (rung04,
-                rung03/17/32/33, rung01/02) probes 0 ANYWHERE, so the s164 rung04-w05 run was killed
-                mid-fan and the slot repointed at rung05-w05 (`_generated/overnight/s164-rung05-w05`).
+                window. The floor-order head (rung04, rung03/17/32/33, rung01/02) probes 0 ANYWHERE,
+                so the s164 rung04-w05 run was killed mid-fan and the slot repointed at rung05-w05
+                (floor 95, its one in-reach station at 100.7 u).
+                - **rung05-w05 RAN AND RETURNED 0 (2.75 h): the failure was REACH, not admittance,
+                  and it re-priced the whole schedule.** 255 664 at-cap candidates, 6 in-contact
+                  rows of 35.2M, 0 near, best overlap -2.8 -- the fan's cloud edge toward her is
+                  **74.1 u** (`best_overlap_row`), well short of the probe's 100.7 u station. Root
+                  cause: this herd (like 31/46, s162) ends MID-BACKSLIDE and burns walk frames
+                  converting, so the console-calibrated 16.1-17.0 u/stepped-frame annulus does NOT
+                  transfer -- the kept cloud is conversion-limited. No stick-only walk ends at cap
+                  (the conversion needs the L-frame DIR_BACKWARD flip; a bare rollout with the
+                  at-cap filter keeps NOTHING), so the kept edge is anchored on a completed run's
+                  `best_overlap_row` + <=17 u/frame, or a small fan. KB updated
+                  (`admitting-draws.md`, the two reach regimes).
+                - **The corrected schedule ranks stations INSIDE the kept cloud**: rung06-w05 f96
+                  (5 stations at 38.8-54.8 u, herd-74 raw reach 102 u@6-stepped) > rung10-w05 /
+                  rung08-w05 f97 (dozens of interior stations: nearest 61.5 / 44.3 u) >
+                  rung07-w09+ f98 (its 35 stations all sit 158+ u out; herd-72 raw reach is the
+                  longest, 129 u@6-stepped, so w09-w10). rung05's remaining rungs need w07+ for
+                  their 100.7 u station; rung14 needs w07+ (111.8). **rung06-w05 is RUNNING**
+                  (`_generated/overnight/s164-rung06-w05`, launched 2026-08-14 ~01:32Z, 12 h
+                  deadline); a genuine there is total 96, beating the bank by 5.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled

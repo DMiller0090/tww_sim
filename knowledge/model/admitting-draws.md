@@ -77,11 +77,22 @@ by in-reach admitting stations, not only by frame floor.
 ``n_admit > 0`` is ground truth; **zero is a screen**. The probe samples 3 leans, 6 depth slices,
 +-15 u of lateral, 20 stations an arc - a component crossing no sampled slice, or admitting only at
 an unsampled lean, is invisible. Reach is `aimed_fan.MAX_STEP` x stepped frames from the herd
-endpoint: admissible-generous (the true at-cap set is an annulus inside that disc), so "admits but
-none in reach" is a real verdict while "in reach" alone does not promise the fan's lattice lands a
-row on a ~1.2e-04 u strip. The generosity is not academic: the kept leaves live on a **~16.1-17.0 u
-per stepped frame** annulus ([aiming-the-fan.md](aiming-the-fan.md)), and s164's rung07 measured a
-disc-score 15 at walk 8 whose stations ALL fall in the gap between walk 8's annulus and walk 9's -
-one more walk frame put 7 stations inside the measured band. **Check the annulus before buying the
-disc.** Use the score to ORDER the ~7 h runs; never to declare an item dead
-(`[[infeasible-needs-proof]]`).
+endpoint: admissible-generous, so "admits but none in reach" is a real verdict while "in reach"
+alone does not promise the fan meets the station. **What bounds the real cloud depends on how the
+herd ENDS**, and s164 paid one item run to learn it:
+
+* a herd that ends at cap walks ~16.1-17.0 u a stepped frame and its kept leaves live on that thin
+  annulus ([aiming-the-fan.md](aiming-the-fan.md); the console's shape);
+* a herd that ends **mid-backslide** (31 of 46 do - the s162 census) burns frames converting, and
+  its kept cloud is **conversion-limited**: rung05's walk-5 fan put its edge toward her at
+  **74.1 u** where the raw full-stick rollout reads 94 and the annulus arithmetic promised 97-102.
+  The probe's one in-reach station sat at 100.7 u - real (sim-genuine), but past the true edge -
+  and the run returned 0 genuine with 6 in-contact rows out of 35.2M. The prediction failed on
+  REACH, not on admittance. No stick-only walk ends at cap at all (the conversion needs the
+  L-frame DIR_BACKWARD flip), so the kept edge cannot be read off a bare rollout: anchor it on a
+  completed run's own `best_overlap_row` (the cloud's edge toward her) plus <=17 u a frame, or pay
+  a small fan.
+
+Stations INSIDE a conversion-limited cloud are the ones that count; a lone station at the edge is
+the shape that just returned zero. Use the score to ORDER the ~7 h runs; never to declare an item
+dead (`[[infeasible-needs-proof]]`).
