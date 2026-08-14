@@ -2432,14 +2432,25 @@ from scratch. Land the edits first, then gate.
                   at-cap filter keeps NOTHING), so the kept edge is anchored on a completed run's
                   `best_overlap_row` + <=17 u/frame, or a small fan. KB updated
                   (`admitting-draws.md`, the two reach regimes).
-                - **The corrected schedule ranks stations INSIDE the kept cloud**: rung06-w05 f96
-                  (5 stations at 38.8-54.8 u, herd-74 raw reach 102 u@6-stepped) > rung10-w05 /
-                  rung08-w05 f97 (dozens of interior stations: nearest 61.5 / 44.3 u) >
-                  rung07-w09+ f98 (its 35 stations all sit 158+ u out; herd-72 raw reach is the
-                  longest, 129 u@6-stepped, so w09-w10). rung05's remaining rungs need w07+ for
-                  their 100.7 u station; rung14 needs w07+ (111.8). **rung06-w05 is RUNNING**
-                  (`_generated/overnight/s164-rung06-w05`, launched 2026-08-14 ~01:32Z, 12 h
-                  deadline); a genuine there is total 96, beating the bank by 5.
+                - **rung06-w05 then ran 0 GENUINE WITH ZERO CONTACT, and the lesson is BEARING:**
+                  its stations sit radially inside its measured cloud band [81.3, 102.8] (150-s
+                  coarse-fan sample; the radial instrument validates -- rung05's sample [63.2,
+                  73.4] vs its real 74.1 edge) yet were never met. Radial reads do not schedule
+                  runs; neither do coarse-sample 2D reads (pre-stride coarsening deletes the
+                  turning plans -- bearing-biased junk except on dense cap-herd clouds). rung14 is
+                  the ONLY cap-ending admitting herd (end +18.5; the other 13 backslide at ~-25.5)
+                  and its trustworthy dense sample puts its stations 43-60 u off-bearing: dead at
+                  w06/w07.
+                - **The s164 overnight pivot: the s155 STEERED TAIL (`item ... tail=1,2
+                  tbeam=400`, `_steered_tail`)** -- the family set cannot convert-then-steer; the
+                  tail re-fans the last k frames over the full alphabet from contact-ranked at-cap
+                  prefixes at the SAME walk count (floor unchanged; the branch that contains the
+                  console's own w11 plan). **rung05-w05+tail (floor 95) is RUNNING**
+                  (`_generated/overnight/s164-rung05-w05-tail`, ~06:38Z 2026-08-14, 8 h deadline)
+                  -- the one item whose plain fan BRACKETED the razor (6 in-contact rows, best
+                  |resid| 3.3), so its bearings provably reach her. Triage for every other
+                  admitting item: coarse fan + score (the s162 ladder recipe at walk 5,
+                  ~5-10 min/item) for plain-fan CONTACT first; tail-run only those.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
