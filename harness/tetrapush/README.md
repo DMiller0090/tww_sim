@@ -2452,12 +2452,20 @@ from scratch. Land the edits first, then gate.
                   sub-cap drops + held-stick duplicates (235.3M leaves, 0 new candidates). So
                   **rung05-w05 is EXHAUSTED at floor 95** (plain + tail; its 100.7 u station is
                   past the item's measured 74.1 u cloud edge) and `tail=` only matters at
-                  walk >= 6-7 after the slam-frame gate is fixed. **rung05-w07 (floor 97, plain,
-                  NO deadline -- Dereck: run items to completion) is RUNNING**
-                  (`_generated/overnight/s164-rung05-w07`, ~15:20Z 2026-08-14): same-herd reach
-                  anchor 74.1 + 2x17 ~ 108 u covers its 100.7 u station. Next after it:
-                  rung10-w05 plain (f97; the 10-min shipped-knob triage's closest approach,
-                  -9.8 u; triage table in the s164 handoff).
+                  walk >= 6-7 after the slam-frame gate is fixed.
+                - **rung05-w07 (floor 97) then completed naturally (8.1 h, 1.01M candidates): 0
+                  genuine, and the ladder's residual axis moved from reach to DENSITY.** Contact
+                  6 -> 110 rows, first 21 in-band overlaps, best_overlap +1.27 (real contact),
+                  best in-contact |resid| 0.067 -- ~0.15 u off the strip through the entry
+                  gradient, ONE endpoint-lattice cell short. Reach fixed, bearing fine; the miss
+                  is 110 contact rows against the console item's 30.2M (five orders) -- this
+                  herd's cloud GRAZES her at its far edge, and more walk frames buy reach, not
+                  density. **rung10-w05 (floor 97, plain, no deadline) is RUNNING**
+                  (`_generated/overnight/s164-rung10-w05`, 2026-08-15): the best triage
+                  closest-approach (-9.8 u); its verdict decides whether ANY non-console herd
+                  sits ON her. If it also grazes, the plain ladder is density-starved everywhere
+                  and the moves are (a) the tail slam-frame at_cap gate fix (awaiting Dereck) or
+                  (b) an aim-solved last segment (`entry_aim.aim` -> `walk_end_for`).
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
