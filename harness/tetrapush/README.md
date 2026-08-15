@@ -2536,9 +2536,14 @@ from scratch. Land the edits first, then gate.
                   tables): **rung06-w05 = 97 (thrust-14 station 54.3 u from its herd end),
                   rung08/rung10-w05 = 98, rung05 = 98-99 (the s166 candidate = 99),
                   rung14/15 = 101+**. rung06/08/10 were dismissed on PLAIN-fan bearing/contact
-                  grounds that predate the camera axis -- the next session attacks THOSE first
-                  with the cap-entry + wired-camera pipeline (each needs its own Tetra-safe
-                  slew window + converting-cs measurement).
+                  grounds that predate the camera axis. **The standing objective (Dereck):
+                  the fastest CONFIRMED total with the camera variation, worked best-first by
+                  TRUE total** -- rung06 first with the cap-entry + wired-camera pipeline (each
+                  unit needs its own Tetra-safe slew window + converting-cs measurement), then
+                  rung08/10, then the rung05 polish; and the unexplored **truncation axis**
+                  (`units(trunc=)`: a herd cut k frames short drops the total by k and mints a
+                  NEW frozen point the 1-min yield probe can price) is the only banked lever
+                  that could go BELOW 97.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
