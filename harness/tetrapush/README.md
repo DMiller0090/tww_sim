@@ -2576,16 +2576,22 @@ from scratch. Land the edits first, then gate.
                   lean_e -260, near the t14b station 88 u out; f72=(160,255), rows
                   `_notes/s167_rung06/s167_r06_stageH.json`) -- 6.5x closer than s166's
                   rung05 candidate at a total 2 lower. Needed endpoint precision along the
-                  gradient ~1.1e-5 u; the byte lattice is a local min, so the live axes are
-                  paired near-perpendicular byte moves, MEASURED C-dead-zone-edge substick
-                  grades (zone [103,155] at this herd end), the f72 byte pair, and the lean
-                  family (final-turn structures quantize lean_w ~+-200; each lean's strip is
-                  a fresh ticket). Hop loops `s167_r06_stageJ/K.py` (+ logs) resume this;
-                  next session reads their logs FIRST (a hit prints GENUINE True), then
-                  `confirm_entry` (seed log = rung06 rows 0..72 with the f72 override, rows =
-                  f73 replacement + 5 walk rows, A-press replaces the razor-endpoint pad),
-                  `ON.prepared` walls/follow, `cross_engine.agree`, `objective.verdict`, DTM
-                  out of band. Full narrative
+                  gradient ~1.1e-5 u -- and the LATTICE THERE IS FROZEN: 89 of the winner's
+                  126 single lattice moves are exact no-ops, the smallest real endpoint
+                  step is **6.4e-2 u (180x the gap)**, and a 7476-pair scan improved
+                  nothing (the 16-BAM decode cells eat every fine knob: the s166 "substick
+                  ~1e-4 u/grade" expectation is DEAD -- C-dead-zone [103,155] edge grades
+                  slew cs under one decode cell and change no decode). So the finish is
+                  DENSITY, and the OVERNIGHT FAN is pointed at it (its s163-proven regime
+                  IS the cap-start herd): `_notes/s167_rung06/s167_overnight_rung06.py`,
+                  detached at session end -> `_generated/overnight/s167rung06/` (converted
+                  rung06-w05, seed verified at-cap + Tetra bit-exact, thrusts [13,14,15],
+                  incumbent 101, ~7 h). Thrust-14 genuine = total 97. NOTE rung06-c1
+                  (truncated) canNOT cap -- the flip needs both untarget decode frames. On
+                  a hit: `confirm_entry` (seed log = the MODIFIED 74-row herd),
+                  `ON.prepared` walls/follow, `cross_engine.agree`, `objective.verdict`,
+                  DTM out of band. A zero is a post-s161 trustworthy zero -> rung08/rung10
+                  converted the same way (98) next. Full narrative
                   `_notes/tetrapush-handoff-2026-08-15-session167.md`.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
