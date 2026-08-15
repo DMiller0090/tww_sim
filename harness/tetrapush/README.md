@@ -2544,6 +2544,49 @@ from scratch. Land the edits first, then gate.
                   (`units(trunc=)`: a herd cut k frames short drops the total by k and mints a
                   NEW frozen point the 1-min yield probe can price) is the only banked lever
                   that could go BELOW 97.
+              - **SESSION 167 -- EVERY HERD CONVERTS TO CAP-ENTRY (a two-byte stick decode,
+                Tetra-safe on all 49 rungs), AND THE rung06 TOTAL-97 LANDING SITS 3.55e-4 u
+                OFF THE STRIP.** Cap-entry is a STICK DECODE at the untarget frames, not a
+                camera state: camera-forward `(128,255)` on the last two herd rows converts
+                the untarget DURING the herd on **49/49 rungs** (walk starts +18.86..+19.00
+                at cap, direction free), every one with Tetra's frozen point `_bits`-exact --
+                the mid-backslide reach penalty was two bytes
+                (`knowledge/strategy/cap-entry-conversion.md`, conv survey
+                `_notes/s167_rung06/s167_conv_survey.json`). What cap-entry does NOT buy is
+                the TURN: the walk starts along the roll facing (toward her), stations sit
+                100-137 deg off it, so short walks cannot spend the turn (walk-3/4 cones stop
+                11-38 u short of everything; the straight-line 95/96-total rows in the
+                cap-entry re-rank `s167_rerank.json` are turn-infeasible) while walk 5
+                reaches a 137-deg station 88 u out to 0.83 u -- one more free turning row
+                comes from handing the herd's LAST row (still in the input pipe at herd end)
+                to the walk optimizer. Queue by turn-feasible true totals:
+                **rung06-w05 (2547,14) = 97 (the landing below) < rung08/rung10 t14 = 98 <
+                rung05 re-priced 98 at w6** (beats its own s166 99 candidate). Truncation is
+                an accounting shuffle here: c1-c3 re-label final-roll rows as walk rows (her
+                point is still through them), same physical timelines, no lever below the
+                turn-feasible totals (`s167_trunc_probe.json`).
+                - **The razor is per 16-BAM CELL, not per facing** (`jmaSinTable[angle>>4]`):
+                  ctx/band/stations at facings 40752 vs 40759 (both cell 2547) are
+                  bit-identical. An aimability gate checks the CELL (aimable at essentially
+                  every reachable camera); the confirm's exact-facing check reads the aim
+                  alphabet at the ARRIVAL cs, never the s164 table's facing (that was the
+                  plain fan's csa -- this cost half a session).
+                - **The landing (rung06-w05, cell 2547, thrust 14, herd 74 + walk 5 + 18 =
+                  97): 3.55e-4 u banded** (resid -0.001125 vs band [4.66e-5, 8.31e-5],
+                  lean_e -260, near the t14b station 88 u out; f72=(160,255), rows
+                  `_notes/s167_rung06/s167_r06_stageH.json`) -- 6.5x closer than s166's
+                  rung05 candidate at a total 2 lower. Needed endpoint precision along the
+                  gradient ~1.1e-5 u; the byte lattice is a local min, so the live axes are
+                  paired near-perpendicular byte moves, MEASURED C-dead-zone-edge substick
+                  grades (zone [103,155] at this herd end), the f72 byte pair, and the lean
+                  family (final-turn structures quantize lean_w ~+-200; each lean's strip is
+                  a fresh ticket). Hop loops `s167_r06_stageJ/K.py` (+ logs) resume this;
+                  next session reads their logs FIRST (a hit prints GENUINE True), then
+                  `confirm_entry` (seed log = rung06 rows 0..72 with the f72 override, rows =
+                  f73 replacement + 5 walk rows, A-press replaces the razor-endpoint pad),
+                  `ON.prepared` walls/follow, `cross_engine.agree`, `objective.verdict`, DTM
+                  out of band. Full narrative
+                  `_notes/tetrapush-handoff-2026-08-15-session167.md`.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
