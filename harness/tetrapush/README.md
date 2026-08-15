@@ -2525,6 +2525,20 @@ from scratch. Land the edits first, then gate.
                   via the final-turn structure. Scripts + per-stage results:
                   `_notes/s166_camera_landing/`; full narrative
                   `_notes/tetrapush-handoff-2026-08-15-session166.md`.
+                - **s166 END (Dereck: "why does adding camera add frames -- 95 should still be
+                  possible"): THE SCHEDULE'S FLOORS ARE NOT PLAN TOTALS, AND THE QUEUE IS
+                  RE-RANKED.** The camera added no frames -- the f95/f96/f97 labels are ITEM
+                  floors (thrust-13 arithmetic), but **thrust 13 admits NOWHERE at the probed
+                  placements** (3 facings x 7 leans + the 132-draw table; a screen, not a proof)
+                  and rung05's admitting stations are thrust 15 (one thrust-14 at 113 u), so even
+                  a walk-5 hit there totals 97, never 95. By TRUE admitting totals
+                  (herd + walk-needed + t_admit + 4, straight-line bounds off the banked draw
+                  tables): **rung06-w05 = 97 (thrust-14 station 54.3 u from its herd end),
+                  rung08/rung10-w05 = 98, rung05 = 98-99 (the s166 candidate = 99),
+                  rung14/15 = 101+**. rung06/08/10 were dismissed on PLAIN-fan bearing/contact
+                  grounds that predate the camera axis -- the next session attacks THOSE first
+                  with the cap-entry + wired-camera pipeline (each needs its own Tetra-safe
+                  slew window + converting-cs measurement).
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
