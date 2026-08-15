@@ -2593,6 +2593,22 @@ from scratch. Land the edits first, then gate.
                   DTM out of band. A zero is a post-s161 trustworthy zero -> rung08/rung10
                   converted the same way (98) next. Full narrative
                   `_notes/tetrapush-handoff-2026-08-15-session167.md`.
+              - **SESSION 168 -- THE OVERNIGHT IS MID-RUN (healthy) AND THE ZERO-QUEUE IS
+                PRE-ARMED.** The s167rung06 fan (PID checked live) is grinding: claim
+                heartbeat fresh, junction/at_cap counters advancing, launched 14:47 ->
+                expected done ~21:45 at the ~7 h measured price; nothing to read yet, so
+                this session pre-verified the "if it zeroes" queue instead. **rung08-w05,
+                rung10-w05 and rung06-w06 all convert Tetra-safe at cap under the same
+                two-byte override** (conv sF +18.8612..+18.8616, at_cap True, Tetra
+                `_bits` d = 0.0, thrusts [13,14,15] -- re-verified end-to-end through the
+                actual driver path, not just the s167 survey), and the ready-to-launch
+                parameterized driver is `_notes/s168_queue/s168_overnight_item.py`
+                (`python s168_overnight_item.py rung08-w05 101`; one fan at a time --
+                the claim heartbeat is the liveness signal, never the counters). Ordering
+                hint inside the 98s: the straight-line cap-entry re-rank carries **15
+                station rows for rung10 vs 7 for rung08 at total 98** (floor-priced hint,
+                not a cone-sim rank; s167's turn-feasibility verdicts stand). Full
+                narrative `_notes/tetrapush-handoff-2026-08-15-session168.md`.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
