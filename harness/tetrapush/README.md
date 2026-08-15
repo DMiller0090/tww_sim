@@ -2476,6 +2476,55 @@ from scratch. Land the edits first, then gate.
                 camera is the s131 dCamera_c model), and the herd RE-ENCODING under a moving
                 camera (same decoded bearings -> bit-exact herd). Method, exact knobs, and the
                 full plan: `_notes/tetrapush-handoff-2026-08-15-session165.md`.
+              - **SESSION 166 -- THE CAMERA AXIS IS REALIZABLE END-TO-END, AND THE LANDING IS 46
+                STRIP-WIDTHS OUT (0.0023 u) AT rung05-w07, TOTAL 99.** Dereck's mid-session steer
+                (csangle is C-STICK-DRIVEN; not every csangle is reachable in a given time from a
+                given state) is now the search's own constraint -- every stage below runs the WIRED
+                camera on real substick bytes, no injection anywhere.
+                - **The Tetra-safe pre-positioning window is the FINAL ROLL (f55-70) + the
+                  untarget (f71-72)**: substick slew there leaves her frozen point BIT-EXACT at
+                  both extremes (verified, `_bits`-equal) because her plow reads only Link's
+                  stick/camera-inert roll motion -- so the stations stand and NO herd re-encode is
+                  needed (s165's leg B dissolves for this window). Reachable herd-end csangle:
+                  **[0x6e68, 0xa8a2]** (natural 0x882d; the rung05 herd log already drives the
+                  C-stick 19L/13R/41N). Link's own f71-72 decode drifts <= 11 u -- absorbed by the
+                  walk search, and `prepare()` (walled/unwalled bit-identity + wall-free + follow)
+                  passes the slewed herd.
+                - **THE CAP-ENTRY REGIME (new, the plain fan structurally lacks it): hard-right
+                  slew to cs >= ~0xa5d7 at the f71-72 decode makes the untarget CONVERT DURING THE
+                  HERD** -- the walk starts at speedF **+18.5, already at cap**, no L frame spent.
+                  The window is narrow ([~0xa5d7, 0xa8a2]; left slew and partial deflections do
+                  not convert). At w06 its reach boundary is 9.03 u short of the (2551,15) station
+                  (floor 96 dead for that station in this regime); at **w07 (floor 97, total 99 at
+                  thrust 15) a per-frame descent closes to 0.098 u geometric**.
+                - **`confirm_entry` IS ALL-GREEN ON THE PHYSICS at the w07 arrival** (7 delivered
+                  rows + real A-press on the wired stack): walk endpoint bit-exact, ROLLED,
+                  **nspeed 26 -- the feared ~131-degree aim-swing entry brake does NOT fire**,
+                  facing = the commanded cell-2551 aim (aimable at the arrival camera), entry
+                  bit-exact vs `roll_entry`. The razor endpoint convention is "one step past the
+                  last delivered byte": an N-frame walk is N rows; feeding N+1 adds a spurious
+                  walk frame (cost a false 17 u mismatch before it was caught).
+                - **THE RAZOR'S LEAN CONVENTION IS PINNED BY THE CONSOLE CONTROL: config lean =
+                  the ENTRY-frame m351C** (`hit['m351C']` 64761 == `lean_at_roll` of
+                  `m351C_walk` 64345), so a search must score at
+                  `lean_at_roll(walk-end m351C)`. **Strips exist at EVERY lean** (draw_admittance
+                  ladder at (2551,15): -400..+200 all admit 9-17 stations) -- the "lean 25 is
+                  dead" reading was a fixed-entry artifact; but a station is genuine at its EXACT
+                  integer lean (strip ~5e-5 u wide, displaced ~0.1 u per lean unit), and the
+                  walk-end lean is quantized ~+-200 per final at-cap turning frame (sub-cap
+                  turning is lean-free -- the winner swings 14000 BAM early at sF 8-11 with lean
+                  0). Settled (lean-0) w07 arrivals top out 66.9 u short: the natural-lean strips
+                  are the target, scored per candidate at its own entry-lean.
+                - **The landing state: banded razor distance 2.3e-03 u** (resid +0.0032 vs band
+                  [4.6e-05, 7.8e-05]) at entry-lean -130, stalled at the bearing-encoder lattice.
+                  The final +-2-byte / +-2-substick cloud was a NULL PROBE -- 15625 tests of one
+                  point (inside one octagon-clamp cell / the C-stick dead zone;
+                  `[[probe-below-the-quantum]]`). The sub-lattice axes that remain: C-stick grades
+                  OUTSIDE the dead zone on the walk frames (~1-3 BAM csangle/grade), msd variation
+                  on EARLY frames (the final frames must keep at_cap), and the entry-lean choice
+                  via the final-turn structure. Scripts + per-stage results:
+                  `_notes/s166_camera_landing/`; full narrative
+                  `_notes/tetrapush-handoff-2026-08-15-session166.md`.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
