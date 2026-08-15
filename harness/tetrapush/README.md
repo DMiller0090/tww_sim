@@ -2460,12 +2460,22 @@ from scratch. Land the edits first, then gate.
                   gradient, ONE endpoint-lattice cell short. Reach fixed, bearing fine; the miss
                   is 110 contact rows against the console item's 30.2M (five orders) -- this
                   herd's cloud GRAZES her at its far edge, and more walk frames buy reach, not
-                  density. **rung10-w05 (floor 97, plain, no deadline) is RUNNING**
-                  (`_generated/overnight/s164-rung10-w05`, 2026-08-15): the best triage
-                  closest-approach (-9.8 u); its verdict decides whether ANY non-console herd
-                  sits ON her. If it also grazes, the plain ladder is density-starved everywhere
-                  and the moves are (a) the tail slam-frame at_cap gate fix (awaiting Dereck) or
-                  (b) an aim-solved last segment (`entry_aim.aim` -> `walk_end_for`).
+                  density. rung10-w05 (floor 97) then completed with ZERO contact (gap 9.7 u,
+                  thin 52.8k fan) -- every measured herd grazes or misses; the plain ladder is
+                  density-starved everywhere.
+              - **SESSION 165 -- THE CAMERA AXIS (Dereck's steer: new input variation, not slower
+                totals).** csangle is a real search knob: the stick decodes THROUGH it, so it
+                reshapes the backslide conversion (fires as early as f3) and buys **+15 u of
+                at-cap reach at walk 5** (89.0 u measured vs the fan's 74.1). At **walk 6 (floor
+                96) the camera-freed cloud CONTAINS the station radius** (max at-cap disp 105.9 u
+                vs the station's 100.7), and a 10-s (bearing, csangle, 2-segment) local search
+                landed **2.48 u from the f95/f96 station**. Floor 95 itself is CLOSED by cap
+                physics (100.7 u needed vs ~102 absolute / 89 measured at walk 5). Remaining to a
+                plan: the sub-lattice landing (Newton the endpoint onto the station), camera
+                DELIVERABILITY (slew during the herd -- the C-stick is idle ~80 frames; the wired
+                camera is the s131 dCamera_c model), and the herd RE-ENCODING under a moving
+                camera (same decoded bearings -> bit-exact herd). Method, exact knobs, and the
+                full plan: `_notes/tetrapush-handoff-2026-08-15-session165.md`.
             - **THE PIPELINE IS THE ONE THAT HAS EVER DELIVERED, POINTED SOMEWHERE NEW.**
               `entry_fan.iter_fan2`'s OpenMP `prange` fleet -> `ShoveCtx.sweep_par` ->
               `entry_search.confirm_entry` (a REAL A-press) -> `cross_engine.agree` (the walled
