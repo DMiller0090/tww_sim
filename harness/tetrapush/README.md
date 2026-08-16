@@ -2593,6 +2593,38 @@ from scratch. Land the edits first, then gate.
                   DTM out of band. A zero is a post-s161 trustworthy zero -> rung08/rung10
                   converted the same way (98) next. Full narrative
                   `_notes/tetrapush-handoff-2026-08-15-session167.md`.
+              - **SESSION 169 -- THE LADDER IS RE-PROBED ON THE FIXED STACK: w05 IS DEAD
+                LADDER-WIDE, THE TURNING ROW IS A ~14.6 u AXIS THE FAN CANNOT ENUMERATE,
+                AND THE rung06-w06 OVERNIGHT IS LAUNCHED ON THE MEASURED BEST VARIANT.**
+                The s168 aimed mini-beam generalized to a per-item re-probe
+                (`_notes/s169_queue/s169_reprobe.py`: converted herd, turning-row cone on
+                `log[nh-1]`, per-item razor stations as aim targets biased for the measured
+                recoil, 2-seg WALLED beam, leaves talk-gated + production-`score()`d), first
+                validated against the s168d rung06-w06 measurement (same best strip point,
+                resid -0.0255743 at cell 2556). The 10-item sweep measured TRUE reach per
+                thrust: **w05 unreachable everywhere** (rung08/rung10-w05 closest
+                41.13/33.79 u, rung05-w06 43.47, rung05-w07 10.80; rung04 has NO stations),
+                so no total below 98 physically exists on the sampled ladder head. Alive:
+                **rung06-w06 (total 98 at t14, reach 2.31 u, no contact at beam density)**,
+                **rung06-w07 (total 99 at t14, IN-CONTACT rows, best resid 2.1356e-05 --
+                half a band-width below the s167 genuine band [4.66e-5, 8.31e-5] -- ovl
+                +4.17)**, rung08-w06 marginal (6.61 u, no contact). t13 admits NOWHERE
+                (s166 confirmed on the fixed stack). The full-cone variant ranking
+                (45/45 turning rows) measured the canonical `(128,255)` conversion 16.93 u
+                from the t14 stations vs `(56,160)` at 2.31 u -- **every plain-converted fan
+                (incl. s167's 16-h zero) was structurally reach-starved**, so pre-s169
+                zeros are re-run queues twice over (recoil AND reach). KB:
+                `cap-entry-conversion.md` re-measured (unwalled cone numbers migrated to
+                `history/the-unwalled-cone-edge-priced-the-w05-ladder.md`). **LAUNCHED:**
+                `_notes/s169_queue/s169_overnight_item.py rung06-w06 56 160 101` ->
+                `_generated/overnight/s169rung06w06_v56_160/` (seed gated: sF +18.8616 at
+                cap, Tetra bit-exact; fleet est 1.5x w05, expect ~24-30 h, scoring half
+                heartbeat-silent as usual). On a hit: confirm chain -> `cross_engine.agree`
+                -> `objective.verdict` -> DTM out of band. On a zero: rung06-w07 (99,
+                contact proven) next via the same driver, best variant (32,160) t15 4.06 u /
+                t14 (56,160)-family -- re-rank its variants before launch. Camera-trail
+                softness measurement still queued (driver ready:
+                `_notes/s169_queue/s169_trail_softness.py`; run it while no fan is up).
               - **SESSION 168d -- THE FIXED STACK IS SHIPPED (walls + recoil + talk gate),
                 THE w05 STATIONS ARE PHYSICALLY UNREACHABLE, AND A w06 CANDIDATE IS
                 LIVE-VERIFIED 0-ULP THROUGH THE CUT.** The three fixes landed as commits

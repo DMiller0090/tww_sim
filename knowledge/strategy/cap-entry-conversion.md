@@ -6,8 +6,10 @@ reach the cap-entry regime? Which rungs can convert, and does converting move Te
 mid-backslide herd's at-cap walk direction-locked, and what does that make the real cost model?
 **Status:** validated offline (session 167) on the wired-camera native stack: 49/49 ladder rungs
 convert with Tetra's frozen point `_bits`-identical (`_notes/s167_rung06/s167_conv_survey.py`);
-the rung06 landing that used it sits at 3.6e-4 u banded (walk 5, total 97). Not yet live/DTM-
-confirmed.
+LIVE-confirmed s168c/d (the conversion caps at +18.861622 on console, raw-vs-delivered
+bit-identical, and a converted-herd + turning-row + walk + cut pick verified ALL-BIT-EXACT through
+the cut). Reach numbers below are the s169 WALLED fixed-stack measurements; every unwalled cone
+number is historical ([../history/the-unwalled-cone-edge-priced-the-w05-ladder.md](../history/the-unwalled-cone-edge-priced-the-w05-ladder.md)).
 **Source:** s166 handoff (the rung05 camera-slew route), s167 stage A4/conv-survey; the untarget
 tier itself is [../mechanics/brakeslide-ebs.md](../mechanics/brakeslide-ebs.md) +
 `harness/tetrapush/README.md` (proc-9 ATN_ACTOR model, sessions 3-10).
@@ -43,17 +45,23 @@ decode explicitly and the camera axis decouples from her entirely.
 
 A converted walk starts at cap **along the roll facing**, and every herd's final roll faces
 Tetra, while the entry strips stand between the herd end and her at bearings ~100-137 deg off
-that axis. Velocity direction at cap turns rate-limited, so short walks cannot spend the turn:
-at rung06 the walk-3/4 cones stop 11-38 u short of every banked station, while walk 5 reaches
-a 137-deg station 88 u out to under 1 u (the turn completes over distance). The honest walk
-bound for a station at distance d and turn theta is therefore NOT `ceil(d / 19)` - straight-line
-pricing admits 95/96-total rows whose turns are unreachable at their walk length. Price a
-station by the measured cone (a 30 s 2-seg sweep per herd), not the disc.
+that axis. Velocity direction at cap turns rate-limited, so short walks cannot spend the turn.
+The honest walk bound for a station at distance d and turn theta is therefore NOT `ceil(d / 19)`
+- straight-line pricing admits 95/96-total rows whose turns are unreachable at their walk length.
+Price a station by the measured cone ON THE WALLED ENGINE (a ~10 min aimed 2-seg beam per item,
+`_notes/s169_queue/s169_reprobe.py`), not the disc: the s169 ladder sweep measured **w05
+unreachable ladder-wide** (rung06-w05 10.15 u short at every turning-row variant, rung08/rung10-w05
+41.13/33.79 u, rung05-w06 43.47 u, rung05-w07 10.80 u, rung04 no stations at all), and the alive
+set is **rung06-w06 (2.31 u to a t14 station, total 98)**, **rung06-w07 (0.01 u, in-contact rows,
+total 99)** and marginally rung08-w06 (6.61 u, total 99).
 
 One more free turning row: the herd's LAST row is still in the input pipe when the herd ends
-(delay), so it acts on the first walk step - hand it to the walk optimizer (it is priced in the
-herd already). At rung06 that row moved the walk-5 cone edge from 5.7 u off the station family
-to 0.8 u.
+(delay), so it acts on the first walk step - and **the production fan cannot enumerate this axis**
+(its pre-frames are the walk's own split), so a fan launch must BAKE a measured variant into the
+herd log (`log[nh-1]`), gated the usual way (at-cap + Tetra `_bits` vs the natural herd). It is
+worth ~14.6 u of reach at rung06-w06: the canonical `(128,255)` conversion reaches 16.93 u from
+the t14 stations where the best measured variant `(56,160)` reaches 2.31 u - every plain-converted
+fan run before s169 was structurally reach-starved, so their zeros are re-run queues, not evidence.
 
 ## What this retires
 
