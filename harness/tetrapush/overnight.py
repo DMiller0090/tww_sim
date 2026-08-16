@@ -1391,7 +1391,8 @@ def prepared(unit, env, walls, top, *, cache=_PREPARED):
 
 def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads=0,
              dflt_incumbent=None, on_event=None, two_segment=True, atom=True, pre_stride=PRE_STRIDE,
-             leaf_budget=None, tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP):
+             leaf_budget=None, tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP,
+             target=None, target_prune=False):
     """One ``(herd, walk length)`` item: prepare the herd, fan every plan of exactly that length, score
     it against every aimable configuration, and push what is genuine through the acceptance stack.
 
@@ -1430,6 +1431,7 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
                            nthreads=nthreads, two_segment=two_segment, atom=atom,
                            pre_stride=pre_stride, deadline=deadline, leaf_budget=leaf_budget,
                            tail_frames=tail_frames, tail_beam=tail_beam, prefix_cap=prefix_cap,
+                           target=target, target_prune=target_prune,
                            beat=lambda **kw: IO.beat(d, item['item'], worker, walk=walk,
                                                      incumbent=inc, herd=item['herd'],
                                                      unit_of=item['unit'], **kw))
