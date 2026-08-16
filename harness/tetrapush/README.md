@@ -2593,6 +2593,37 @@ from scratch. Land the edits first, then gate.
                   DTM out of band. A zero is a post-s161 trustworthy zero -> rung08/rung10
                   converted the same way (98) next. Full narrative
                   `_notes/tetrapush-handoff-2026-08-15-session167.md`.
+              - **SESSION 168c -- LIVE DELIVERY OF A REFUTED HIT: THE SIM IS CONSOLE-0-ULP
+                THROUGH THE CONVERTED HERD + WALLED WALK, AND TWO MORE FAN FICTIONS FELL
+                OUT (Dereck-requested falsification, subagent-run).** refused#1 (walk plan
+                (2,90,178,0,1,173,190,0,2), t15, aim (87,191)) was DTM-delivered (boot-movie
+                splice + loadstate 1, truncate-and-read at N=74/80/81/86/95/104). Verdicts:
+                (1) **No clip -- the roll NEVER DISPATCHES: console spends the A on a
+                CONVERSATION** (proc 170 DEMO_TALK; A lands 78.675 u from Tetra, facing
+                5872 BAM off her bearing, inside the talk region). `confirm_entry`/`accept`
+                never model the talk-eat, so a confirm-ALL-GREEN plan can be a conversation
+                on console -- NEW acceptance gap, decomp lead `setTalkStatus`
+                (d_a_player_main.cpp:2139, `mpAttnEntryA` = the attention judgement's
+                A-action selection, NOT a plain dist/cone -- the console 101's A also lands
+                within 300 u and rolls). (2) **The console follows the WALLED timeline and
+                the fan enumerates UNWALLED**: this plan's own walk shoves Tetra into the
+                south wall (braces z=-940.2556); the WALLED sim is BIT-EXACT vs live
+                through herd + conversion + walk + both actors' braces (N=74 and N=80
+                all-bit-exact incl. facing/travel/speedF/proc), the unwalled engine is
+                9.204 u off from frame 78 -- so unwalled fan scoring is fiction wherever
+                the walk reaches a wall, which at these south-station items is the
+                productive region. (3) The delivery clamp (128,255)->(128,254) does NOT
+                break cap-entry conversion (live herd end +18.861622 at cap, raw-vs-
+                delivered replay bit-identical 104/104). Pad readback exonerates delivery
+                (A + aim latched exactly on the dispatch frame). **The s168rung06 fan was
+                KILLED** (~1.3 h in): its zero could not be trusted (wall gap) and its
+                positives could talk (talk gap). Next: model the talk-eat decomp-first,
+                wall the fan walk, re-mint the recoil fixture on the walled engine, THEN
+                relaunch. Artifacts: `_notes/s168_queue/live_falsify/` (six DTMs,
+                sim_reference.json, live_results.json, pad_readback.py). NOTE the s168b
+                recoil ground truths were minted on the UNWALLED engine -- the LAW stands
+                (engine-internal, and the walled live run confirms the walk physics), but
+                the fixture rows must be re-minted walled with the fan.
               - **SESSION 168b -- THE s167 OVERNIGHT'S ZERO IS INVALIDATED: THE ENTRY FRAME
                 RECOILS OFF TETRA, AND THE FAN NOW MODELS IT (0-ULP).** The run finished at
                 16.3 h (fan 8.7 + score 7.6): 9.4M candidates, 4 genuine at thrust 15
