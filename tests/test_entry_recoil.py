@@ -78,7 +78,7 @@ def test_out_of_contact_is_a_byte_identical_noop():
     from harness.tetrapush import entry_search as ES
     r = _rows()[0]
     k = list(r['key'])
-    k[6] += 500.0                                  # move Tetra far out of the Co disc
+    k[-2] += 500.0                                 # move Tetra far out of the Co disc
     k = tuple(k)
     assert ON.entry_recoil(k) is None
     e = ON.entry_corrected((k[0], k[1]), r['facing'], None)

@@ -78,6 +78,7 @@ from harness.tetrapush import objective as O
 from harness.tetrapush import overnight_io as IO
 from harness.tetrapush import seeds as SD
 from harness.tetrapush.from_f0 import cc_push_pair
+from harness.tetrapush import talk_gate as TG
 from tww_sim.core.fp import fadds
 from tww_sim.land.plan_land._primitives import stick_for_bearing
 
@@ -773,7 +774,7 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
               alpha_stride=CONTAINED_ALPHA_STRIDE, target=None, target_tol=None, target_prune=False):
     """Every distinct ``(endpoint, lean, speedF, exec Co centre, Tetra)`` Link can stand on AT THE
     ROLL CAP after EXACTLY ``walk`` delivered frames, as ``(dict of key -> plan, stats)``. The key is
-    ``(x, z, m351C, speedF, ccx, ccz, tx, tz)`` -- the exec centre joined it in s168 because the
+    ``(x, z, m351C, speedF, ccx, ccz, facing, tx, tz)`` -- the exec centre joined it in s168 because the
     entry-frame CC recoil (`entry_recoil`) is a function of it, so two plans at one endpoint with
     different poses are different candidates.
 
@@ -855,7 +856,7 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
             # (knowledge/mechanics/entry-frame-recoil.md; init_frame=False = the validated convention)
             cc = c.co_center_exec(init_frame=False)
             out[(c.pos_x, c.pos_z, int(c.m351C) & 0xFFFF, c.speedF,
-                 cc[0], cc[1], c._tetra_x, c._tetra_z)] = label(i)
+                 cc[0], cc[1], int(c.facing) & 0xFFFF, c._tetra_x, c._tetra_z)] = label(i)
 
     for n0 in range(0, walk):
         base, _run = EF.base_core(n0, seed=seed, env=env, hold=hold, walls=True)
@@ -1098,7 +1099,8 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
                             if EF._is_rollable(cc) and at_cap(cc.speedF):
                                 cen = cc.co_center_exec(init_frame=False)
                                 out[(cc.pos_x, cc.pos_z, int(cc.m351C) & 0xFFFF, cc.speedF,
-                                     cen[0], cen[1], cc._tetra_x, cc._tetra_z)] = p2
+                                     cen[0], cen[1], int(cc.facing) & 0xFFFF,
+                                     cc._tetra_x, cc._tetra_z)] = p2
                             else:
                                 st['sub_cap'] += 1
                         elif at_cap(cc.speedF):
@@ -1183,7 +1185,13 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
     best_ovl_row, best_resid_row = None, None
     near_rows, near_capped = [], False
     by_roll, cams = {}, {}
+    n_talkers = 0
     for k, plan in items:
+        # the talk-eat is a WALK-END property (aim-independent): the A never reaches the roll
+        # (knowledge/mechanics/talk-eat.md), so the candidate is dead at every draw
+        if TG.talk_eats_a(k[0], k[1], k[6], k[-2], k[-1]):
+            n_talkers += 1
+            continue
         cs = None if cam is None else int(cam(plan)) & 0xFFFF
         if cs is not None and cs not in cams:
             cams[cs] = aim_cell_map(cs)
@@ -1231,6 +1239,7 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
                    b_step=thrust + 2, resid=resid_val, nspeed=ES.ROLL_NSPEED,
                    push=[o[5], o[6]], plan=list(plan), cell=cell, csangle=cs,
                    tetra=[tc[0], tc[1]], tetra_walk=[k[-2], k[-1]], co_center=[k[4], k[5]],
+                   walk_facing=k[6],
                    recoil=(None if rec is None else [rec[0][0], rec[0][1]]),
                    overlap=ovl, pred=[o[8], o[9]], why=_why(o),
                    walkable=bool(XE.TA.is_walkable(k[0], k[1]) and XE.TA.is_walkable(e[0], e[1])))
@@ -1278,7 +1287,8 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
                                 near_capped = True
                         continue
                     hits.append(_row(k, plan, e, o, fac, thrust, lean, aim, cell, r, ovl, cs, rec))
-    return hits, dict(candidates=len(items), evaluations=n_priced, swept=n_eval, genuine=len(hits),
+    return hits, dict(candidates=len(items), talkers=n_talkers, evaluations=n_priced,
+                      swept=n_eval, genuine=len(hits),
                       near=n_near, configurations=len(draws), n_contact=n_contact, resid_neg=n_neg,
                       resid_pos=n_pos, bracketed=bool(n_neg and n_pos),
                       cameras=len(cams), cells=len(draws) // max(1, len(thrusts)),
@@ -1309,6 +1319,10 @@ def accept(hit, seed, unit, env, walk, walls=None):
     Returns the full record either way; ``ok`` is stage 2's ``deliverable``. Nothing counts without it."""
     out = dict(unit=unit['unit'], herd=unit['herd'], walk=walk, thrust=hit['thrust'],
                total=total_frames(unit['herd'], walk, hit['thrust']), hit=hit)
+    if 'walk_facing' in hit and TG.talk_eats_a(hit['walk'][0], hit['walk'][1], hit['walk_facing'],
+                                               hit['tetra_walk'][0], hit['tetra_walk'][1]):
+        out.update(ok=False, stage='talk')
+        return out
     hold = hold_row(seed)
     rows_in = plan_rows(hold, hit['plan'])
     log, ix = composite_log(seed, hit['plan'], hit['aim'], hit['thrust'])

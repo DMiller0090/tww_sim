@@ -1,7 +1,8 @@
 {
- "source": "s168c: engine-measured entry-frame ground truths off the CONVERTED rung06-w05 herd (log[72..73]=(128,255)), on the WALLED engine (wall_for_terminal from f0 -- the console-faithful timeline, live-bit-exact through the walk in s168c). key=(x,z,m351C,speedF,ccx,ccz,tx,tz), co centre at init_frame=False; measured = the first FRONT_ROLL frame. NOTE the sim rolls here; on console refused#1..4 TALK (the talk-eat is gated separately) -- these rows gate the RECOIL LAW arithmetic only.",
+ "source": "s168c: engine-measured entry-frame ground truths off the CONVERTED rung06-w05 herd (log[72..73]=(128,255)), WALLED engine (wall_for_terminal from f0 -- console-faithful, s168c live-bit-exact through the walk). key=(x,z,m351C,speedF,ccx,ccz,facing,tx,tz), co centre init_frame=False, facing = walk-end (the talk gate input); measured = the first FRONT_ROLL frame. The sim rolls here; on console refused#1..4 TALK (gated separately by talk_gate) -- these rows gate the RECOIL LAW arithmetic only.",
  "item": "rung06-w05",
  "csangle": 35543,
+ "tetra_y": 0.1632702350616455,
  "rows": [
   {
    "name": "stored-best",
@@ -29,6 +30,7 @@
     17.0,
     -1622.308837890625,
     -898.970703125,
+    36604,
     -1664.29052734375,
     -940.255615234375
    ],
@@ -68,6 +70,7 @@
     17.0,
     -1615.503173828125,
     -899.9525146484375,
+    34187,
     -1663.7491455078125,
     -940.255615234375
    ],
@@ -107,6 +110,7 @@
     17.0,
     -1612.5771484375,
     -901.2537841796875,
+    33547,
     -1660.8702392578125,
     -940.255615234375
    ],
@@ -146,6 +150,7 @@
     17.0,
     -1618.106689453125,
     -899.9088134765625,
+    35356,
     -1665.6322021484375,
     -940.255615234375
    ],
@@ -185,6 +190,7 @@
     17.0,
     -1616.538818359375,
     -899.8514404296875,
+    34483,
     -1665.303466796875,
     -940.255615234375
    ],
@@ -198,6 +204,5 @@
    ],
    "nspeed": 26.0
   }
- ],
- "tetra_y": 0.1632702350616455
+ ]
 }

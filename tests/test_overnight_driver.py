@@ -492,8 +492,10 @@ def _console_candidate_for_score(prep):
     broken-contact-at-entry regime), which is exactly why these expected values never moved."""
     from harness.tetrapush import entry_search as ES
     co_centre = (-1493.2637939453125, -768.9681396484375)
+    # walk-end facing 17734: engine-measured off the fixture's own log (s168 GT2, banked with
+    # provenance in tests/test_talk_gate.py) -- 22606 BAM off Tetra's bearing, so the A rolls
     key = (CC['walk'][0], CC['walk'][1], CC['m351C_walk'], 17.0, co_centre[0], co_centre[1],
-           prep['seed']['tetra'][0], prep['seed']['tetra'][1])
+           17734, prep['seed']['tetra'][0], prep['seed']['tetra'][1])
     quals = [dict(facing=CC['facing'], aim=list(CC['aim']), thrust=CC['thrust'],
                   cell=ES.aim_cell(CC['facing']), siblings=0)]
     return {key: ON.from_triples(CC['plan'])}, quals
