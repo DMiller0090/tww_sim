@@ -132,6 +132,20 @@ def target_angle_y(from_xyz, to_xyz):
                        fsubs(_f(to_xyz[2]), _f(from_xyz[2])))
 
 
+def attn_yaw_bam(dx, dz):
+    """The attention system's bearing: ``cSGlobe(delta).U()`` as ``SelectAttention`` computes it
+    (``d_attention.cpp:472-474``). NOT the raw table ``cM_atan2s``: ``cSPolar::Val``
+    (``c_angle.cpp``, US 80254214) stores ``Radian_to_SAngle(cM_atan2f(x, z))``, and ``cM_atan2f``
+    is ``9.58738E-5f * cM_atan2s(f1, f2)`` (``c_math.cpp:162-165``) while ``Radian_to_SAngle`` is
+    ``(s16)(rad * 10430.378f)`` (``c_angle.h:68``, float->int truncation toward zero). The f32
+    round trip shifts ~18% of bearings by +-1 BAM vs the raw table value, which moves the front-cone
+    boundary by 1 BAM at those bearings. (``cSGlobe::Formal`` only remaps the yaw for near-vertical
+    deltas -- elevation beyond +-90 deg -- unreachable inside the XZ<=300/|dy|<300 region.)"""
+    v = _s16(S.cM_atan2s(_f(dx), _f(dz)))
+    rad = fmuls(_f(9.58738e-5), float(v))       # cM_atan2f: s16 -> f32 radians
+    return _s16(int(fmuls(rad, _f(10430.378))))  # Radian_to_SAngle: f32 -> s16, trunc toward zero
+
+
 class Zl1FollowState:
     """Per-frame follow state of a type-5 (following) Tetra. Mirrors the fields the follow path
     touches: world position (f32 x/y/z), ``current.angle.y`` (s16 facing), ``speedF`` (f32), and
@@ -274,8 +288,9 @@ def zl1_attention_active(link_pos, link_facing, tetra_pos, link_attn_y=None):
     if fsqrt(_abs2_xz(dx, dz)) > ATTN_XZ_MAX:
         return False
     # check_flontofplayer (mask 0x0004): reject unless Link's facing error to Tetra <= 90 deg.
-    # angle1 = (dir Link->Tetra) - Link.shape_angle.y.
-    dir_to_tetra = S.cM_atan2s(dx, dz)
+    # angle1 = (dir Link->Tetra) - Link.shape_angle.y, the bearing via cSGlobe.U()'s atan2f
+    # round trip (attn_yaw_bam), which is +-1 BAM off the raw table at ~18% of bearings.
+    dir_to_tetra = attn_yaw_bam(dx, dz)
     face_err = abs(_s16(dir_to_tetra - _s16(link_facing)))
     if face_err > ATTN_FRONT_HALF_ANGLE:
         return False

@@ -139,6 +139,10 @@ locks Tetra instead). The lock-on release distance is also 300 (`mDistXZMaxRelea
 > During the roll-stab clip itself Link is in FRONT_ROLL/CUT (A = cut, not talk), so the talk risk is
 > in the **setup walk-up**, where an idle Link facing Tetra within 300 u shows the prompt.
 
+The A-press DECISION chain built on this region - how a roll's A gets eaten by a conversation, why
+the WALK-END state is the input, and the exact `cSGlobe.U()` bearing the cone compares (+-1 BAM off
+the raw table) - is its own page: [talk-eat.md](talk-eat.md) (`harness/tetrapush/talk_gate.py`).
+
 ## Values (canonical here; shared Co-push cylinder/weight in constants.md)
 
 `daNpc_Zl1_HIO_c` `a_prm_tbl` (`d_a_npc_zl1.cpp:85`) + `dist_table[0xAB]` (`d_att_dist.cpp`).
