@@ -2593,7 +2593,36 @@ from scratch. Land the edits first, then gate.
                   DTM out of band. A zero is a post-s161 trustworthy zero -> rung08/rung10
                   converted the same way (98) next. Full narrative
                   `_notes/tetrapush-handoff-2026-08-15-session167.md`.
-              - **SESSION 168 -- THE OVERNIGHT IS MID-RUN (healthy) AND THE ZERO-QUEUE IS
+              - **SESSION 168b -- THE s167 OVERNIGHT'S ZERO IS INVALIDATED: THE ENTRY FRAME
+                RECOILS OFF TETRA, AND THE FAN NOW MODELS IT (0-ULP).** The run finished at
+                16.3 h (fan 8.7 + score 7.6): 9.4M candidates, 4 genuine at thrust 15
+                (total 98!), ALL refused at confirm with `blocked=None`, 0 plans. The
+                post-mortem (`_notes/s168_queue/`) proved the refusals honest and the whole
+                scoring fictional: `confirm_entry` on the fan's own best row had every walk
+                flag bit-exact and ONLY `entry` off (~7.5 u) -- on the roll-dispatch frame
+                the engine resolves the CC pair off Link's WALK-END exec Co centre (the
+                1-frame pose lag) at walk-end positions, and the `cc_push_pair` halves land
+                on the post-roll-step Link and on Tetra (5.5-7.6 u each). A converted
+                herd's entries land INSIDE her 80 u Co disc, so all 9.4M candidates were
+                scored 5-8 u off reality: the 4 "genuine" die at their true entries (~0.86 u
+                off-strip) and **the 16-h zero says nothing about the item**. Every
+                pre-s168 result on an in-contact item is a re-run queue, not evidence; the
+                console regime (centre 184.5 u out, engine-checked) is untouched, which is
+                why s163's 8/8 never caught it. **The fix (proven forward 0-ULP on 5
+                engine-measured plans + cross-cell aim-independence, closed-loop green:
+                score -> confirm all six flags):** the candidate key carries the walk-end
+                exec centre (`co_center_exec(init_frame=False)`, key = `(x, z, m351C,
+                speedF, ccx, ccz, tx, tz)`), `entry_recoil` computes the pair once per key,
+                `entry_corrected`/`tetra_corrected` feed the razor. Out of contact it is a
+                byte-identical no-op (console positive control re-gated with its measured
+                centre). Gates: `tests/test_entry_recoil.py` +
+                `fixtures/courtyard_entry_recoil_s168.json`; full suite 1362 green in 1:27.
+                KB: `knowledge/mechanics/entry-frame-recoil.md`. **s168rung06 relaunched on
+                the fixed scorer** (same converted item/knobs; expect >16 h -- the
+                centre-split key weakens dedupe by an unmeasured factor). NOTE the s167
+                3.55e-4 landing was priced through the uncorrected pipeline -- treat its
+                gap as unmeasured until the re-run re-prices it.
+              - **SESSION 168a -- THE OVERNIGHT WAS MID-RUN (healthy) AND THE ZERO-QUEUE WAS
                 PRE-ARMED.** The s167rung06 fan (PID checked live) is grinding: claim
                 heartbeat fresh, junction/at_cap counters advancing, launched 14:47 ->
                 expected done ~21:45 at the ~7 h measured price; nothing to read yet, so

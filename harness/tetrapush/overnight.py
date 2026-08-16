@@ -77,6 +77,8 @@ from harness.tetrapush import entry_search as ES
 from harness.tetrapush import objective as O
 from harness.tetrapush import overnight_io as IO
 from harness.tetrapush import seeds as SD
+from harness.tetrapush.from_f0 import cc_push_pair
+from tww_sim.core.fp import fadds
 from tww_sim.land.plan_land._primitives import stick_for_bearing
 
 REPO = _rb
@@ -323,6 +325,40 @@ def aim_cell_map(csangle):
     """``cell -> (facing, aim bytes)`` at one camera: `configurations` without the thrust cross
     product, for a caller that already has its thrusts and needs the CELL's own byte."""
     return dict((ES.aim_cell(f), (f, list(b))) for (f, b, _s) in ES.aim_cells(int(csangle) & 0xFFFF))
+
+
+def entry_recoil(k):
+    """The ENTRY-FRAME CC push pair for one candidate key, or None when out of contact (s168).
+
+    On the roll-dispatch frame the engine resolves the Link<->Tetra Co pair off Link's WALK-END
+    exec Co centre (the 1-frame pose lag) at the walk-end positions, and the halves land on the
+    post-roll-step Link and on Tetra -- `cc_push_pair`, proven 0-ULP forward on 5 engine-measured
+    plans (`tests/test_entry_recoil.py`). The pair is a function of the CANDIDATE alone -- the aim
+    never enters it (validated across cells) -- so it computes once per key: ``k[4:6]`` is the exec
+    centre `fan_exact.collect` banked, ``k[-2:]`` the walk-end Tetra. The s167rung06 lesson: the
+    uncorrected `roll_entry` scored 9.4M candidates ~5-8 u off their true entries everywhere the
+    strip lives, minting 4 fictional genuine and an untrustworthy zero."""
+    lh, th_ = cc_push_pair((k[4], k[5]), (k[-2], k[-1]))
+    if lh == (0.0, 0.0) and th_ == (0.0, 0.0):
+        return None
+    return lh, th_
+
+
+def entry_corrected(walk_xz, facing, rec):
+    """`entry_search.roll_entry` plus the candidate's entry-frame recoil half. ``rec`` None (out of
+    contact) reduces to the plain roll entry byte-identically."""
+    e = ES.roll_entry(walk_xz, facing, ES.ROLL_NSPEED)
+    if rec is None:
+        return e
+    return fadds(e[0], rec[0][0]), fadds(e[1], rec[0][1])
+
+
+def tetra_corrected(k, rec):
+    """The candidate's Tetra at the razor's first frame: the walk-end point plus her entry-frame
+    push half. ``rec`` None reduces to the walk-end point byte-identically."""
+    if rec is None:
+        return k[-2], k[-1]
+    return fadds(k[-2], rec[1][0]), fadds(k[-1], rec[1][1])
 
 
 def hold_row(seed):
@@ -726,8 +762,11 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
               pre_frames=PRE_FRAMES, pre_l=PRE_L, deadline=None, beat=None, leaf_budget=None,
               tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP, contained=True,
               alpha_stride=CONTAINED_ALPHA_STRIDE, target=None, target_tol=None, target_prune=False):
-    """Every distinct ``(endpoint, lean, speedF, Tetra)`` Link can stand on AT THE ROLL CAP after
-    EXACTLY ``walk`` delivered frames, as ``(dict of key -> plan, stats)``.
+    """Every distinct ``(endpoint, lean, speedF, exec Co centre, Tetra)`` Link can stand on AT THE
+    ROLL CAP after EXACTLY ``walk`` delivered frames, as ``(dict of key -> plan, stats)``. The key is
+    ``(x, z, m351C, speedF, ccx, ccz, tx, tz)`` -- the exec centre joined it in s168 because the
+    entry-frame CC recoil (`entry_recoil`) is a function of it, so two plans at one endpoint with
+    different poses are different candidates.
 
     Frame-exact because the objective is frame-minimal: a unit is searched walk length by walk length,
     ascending, so its first hit is its best. Every base offset ``n0``, every L schedule (`_families`),
@@ -803,8 +842,11 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
             if not at_cap(c.speedF):
                 st['sub_cap'] += 1
                 continue
+            # the walk-end exec centre joins the key: `entry_recoil` is a function of it
+            # (knowledge/mechanics/entry-frame-recoil.md; init_frame=False = the validated convention)
+            cc = c.co_center_exec(init_frame=False)
             out[(c.pos_x, c.pos_z, int(c.m351C) & 0xFFFF, c.speedF,
-                 c._tetra_x, c._tetra_z)] = label(i)
+                 cc[0], cc[1], c._tetra_x, c._tetra_z)] = label(i)
 
     for n0 in range(0, walk):
         base, _run = EF.base_core(n0, seed=seed, env=env, hold=hold)
@@ -1045,8 +1087,9 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
                         if last:
                             st['raw'] += 1
                             if EF._is_rollable(cc) and at_cap(cc.speedF):
+                                cen = cc.co_center_exec(init_frame=False)
                                 out[(cc.pos_x, cc.pos_z, int(cc.m351C) & 0xFFFF, cc.speedF,
-                                     cc._tetra_x, cc._tetra_z)] = p2
+                                     cen[0], cen[1], cc._tetra_x, cc._tetra_z)] = p2
                             else:
                                 st['sub_cap'] += 1
                         elif at_cap(cc.speedF):
@@ -1134,7 +1177,8 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
         cs = None if cam is None else int(cam(plan)) & 0xFFFF
         if cs is not None and cs not in cams:
             cams[cs] = aim_cell_map(cs)
-        by_roll.setdefault(ES.lean_at_roll(k[2]), []).append((k, plan, cs))
+        # the entry-frame CC push pair ONCE per candidate: aim-independent (`entry_recoil`)
+        by_roll.setdefault(ES.lean_at_roll(k[2]), []).append((k, plan, cs, entry_recoil(k)))
 
     # the DRAWS, cell-major then thrust as `configurations` orders them (see the docstring)
     thrusts = sorted({int(q['thrust']) for q in quals})
@@ -1168,14 +1212,17 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
                     in_front=bool(GT.in_front(po)),
                     crossed=bool(o[8] < 0.0 or o[9] < 0.0))
 
-    def _row(k, plan, e, o, fac, thrust, lean, aim, cell, resid_val, ovl, cs):
-        # ``pred`` = the seam-plane values at the pre-CrrPos cut endpoint (the ``extra=True`` row's own
-        # fields 8-9), ``why`` = the acceptance's three terms -- see `_why`
+    def _row(k, plan, e, o, fac, thrust, lean, aim, cell, resid_val, ovl, cs, rec):
+        # ``pred``/``why`` as before; ``entry``/``tetra`` are the recoil-corrected values the razor
+        # scored, ``tetra_walk`` the fan's walk-end point, ``recoil`` Link's half (None = no contact)
+        tc = tetra_corrected(k, rec)
         return dict(entry=[e[0], e[1]], walk=[k[0], k[1]], m351C_walk=k[2],
                    m351C=lean, facing=fac, aim=list(aim), thrust=thrust,
                    b_step=thrust + 2, resid=resid_val, nspeed=ES.ROLL_NSPEED,
                    push=[o[5], o[6]], plan=list(plan), cell=cell, csangle=cs,
-                   tetra=[k[-2], k[-1]], overlap=ovl, pred=[o[8], o[9]], why=_why(o),
+                   tetra=[tc[0], tc[1]], tetra_walk=[k[-2], k[-1]], co_center=[k[4], k[5]],
+                   recoil=(None if rec is None else [rec[0][0], rec[0][1]]),
+                   overlap=ovl, pred=[o[8], o[9]], why=_why(o),
                    walkable=bool(XE.TA.is_walkable(k[0], k[1]) and XE.TA.is_walkable(e[0], e[1])))
 
     for cell, fac_rep, aim_rep, thrust in draws:
@@ -1183,11 +1230,14 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
             ctx, sch, resid = pool.get(fac_rep, lean, thrust, nspeed=ES.ROLL_NSPEED)
             for c0 in range(0, len(group), batch):
                 part = group[c0:c0 + batch]
-                ents = [ES.roll_entry((k[0], k[1]), fac_rep, ES.ROLL_NSPEED) for k, _p, _c in part]
-                rows = ctx.sweep_par([(k[-2], k[-1], e[0], e[1])
-                                      for (k, _p, _c), e in zip(part, ents)], 0, extra=True)
+                # the razor sweeps the RECOIL-CORRECTED entry and tetra (out of contact rec is
+                # None and both reduce byte-identically -- knowledge/mechanics/entry-frame-recoil.md)
+                ents = [entry_corrected((k[0], k[1]), fac_rep, rec)
+                        for k, _p, _c, rec in part]
+                rows = ctx.sweep_par([tetra_corrected(k, rec) + (e[0], e[1])
+                                      for (k, _p, _c, rec), e in zip(part, ents)], 0, extra=True)
                 n_eval += len(rows)
-                for (k, plan, cs), e, o in zip(part, ents, rows):
+                for (k, plan, cs, rec), e, o in zip(part, ents, rows):
                     fac, aim = (fac_rep, aim_rep) if cs is None else cams[cs].get(cell, (None, None))
                     if fac is None:
                         n_unaimable += 1          # this cell is not aimable at THIS plan's camera
@@ -1199,7 +1249,7 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
                         n_band += 1              # the only scorings that could have been a clip
                     if abs(ovl - CLIP_TARGET) < abs(best_ovl - CLIP_TARGET):
                         best_ovl = ovl
-                        best_ovl_row = _row(k, plan, e, o, fac, thrust, lean, aim, cell, r, ovl, cs)
+                        best_ovl_row = _row(k, plan, e, o, fac, thrust, lean, aim, cell, r, ovl, cs, rec)
                     if ovl >= 0.0:
                         n_contact += 1
                         n_neg += r < 0.0
@@ -1207,17 +1257,17 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
                         if best_resid is None or abs(r) < abs(best_resid):
                             best_resid = r
                             best_resid_row = _row(k, plan, e, o, fac, thrust, lean, aim, cell,
-                                                  r, ovl, cs)
+                                                  r, ovl, cs, rec)
                     if not o[0]:
                         if abs(r) < near_probe:
                             n_near += 1
                             if len(near_rows) < near_cap:
                                 near_rows.append(_row(k, plan, e, o, fac, thrust, lean, aim,
-                                                      cell, r, ovl, cs))
+                                                      cell, r, ovl, cs, rec))
                             else:
                                 near_capped = True
                         continue
-                    hits.append(_row(k, plan, e, o, fac, thrust, lean, aim, cell, r, ovl, cs))
+                    hits.append(_row(k, plan, e, o, fac, thrust, lean, aim, cell, r, ovl, cs, rec))
     return hits, dict(candidates=len(items), evaluations=n_priced, swept=n_eval, genuine=len(hits),
                       near=n_near, configurations=len(draws), n_contact=n_contact, resid_neg=n_neg,
                       resid_pos=n_pos, bracketed=bool(n_neg and n_pos),

@@ -484,9 +484,15 @@ def test_the_pre_segment_is_only_ever_a_cone_clear_length(walk):
 # --------------------------------------------------------------------------- the positive control
 
 def _console_candidate_for_score(prep):
-    """The console clip as ONE candidate + its one configuration, the shape `overnight.score` takes."""
+    """The console clip as ONE candidate + its one configuration, the shape `overnight.score` takes.
+
+    The s168 key carries the walk-end exec Co centre (`co_center_exec(init_frame=False)`); this one
+    is ENGINE-MEASURED off this exact walk replay. It sits 184.5 u from Tetra -- outside the 80 u Co
+    disc -- so `entry_recoil` is None and the s168 correction is INERT on the console clip (the
+    broken-contact-at-entry regime), which is exactly why these expected values never moved."""
     from harness.tetrapush import entry_search as ES
-    key = (CC['walk'][0], CC['walk'][1], CC['m351C_walk'], 17.0,
+    co_centre = (-1493.2637939453125, -768.9681396484375)
+    key = (CC['walk'][0], CC['walk'][1], CC['m351C_walk'], 17.0, co_centre[0], co_centre[1],
            prep['seed']['tetra'][0], prep['seed']['tetra'][1])
     quals = [dict(facing=CC['facing'], aim=list(CC['aim']), thrust=CC['thrust'],
                   cell=ES.aim_cell(CC['facing']), siblings=0)]
