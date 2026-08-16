@@ -250,7 +250,7 @@ def prepare(unit, env, walls=None):
             rows.append(dict(i=i, x=plain.link.pos_x, z=plain.link.pos_z,
                              tx=plain.tx, tz=plain.tz))
         lk = plain.link
-        seed = dict(tetra=(plain.tx, plain.tz), link=(lk.pos_x, lk.pos_z),
+        seed = dict(tetra=(plain.tx, plain.tz), ty=plain.ty, link=(lk.pos_x, lk.pos_z),
                     link_facing=int(lk.facing) & 0xFFFF, link_speedF=float(lk.speedF),
                     log=[dict(r) for r in unit['log']], n_scored=len(unit['log']),
                     n_last=len(unit['log']))
@@ -353,12 +353,21 @@ def entry_corrected(walk_xz, facing, rec):
     return fadds(e[0], rec[0][0]), fadds(e[1], rec[0][1])
 
 
-def tetra_corrected(k, rec):
+def tetra_corrected(k, rec, walls=None, ty=None):
     """The candidate's Tetra at the razor's first frame: the walk-end point plus her entry-frame
-    push half. ``rec`` None reduces to the walk-end point byte-identically."""
+    push half, then her own `mObjAcch.CrrPos` wall pass (``walls`` + her floor ``ty``) -- a braced
+    Tetra HOLDS instead of taking the push (s168c: all 5 walled ground truths keep x and clamp z
+    at the brace plane). ``rec`` None reduces to the walk-end point byte-identically."""
     if rec is None:
         return k[-2], k[-1]
-    return fadds(k[-2], rec[1][0]), fadds(k[-1], rec[1][1])
+    px, pz = fadds(k[-2], rec[1][0]), fadds(k[-1], rec[1][1])
+    if walls is not None:
+        from tww_sim.core.collision import acch_crr_pos
+        from tww_sim.core import npc_zl1 as NZ
+        y = 0.0 if ty is None else float(ty)
+        (px, _py, pz), _info = acch_crr_pos((k[-2], y, k[-1]), (px, y, pz), walls,
+                                            speed_y=0.0, wall_h=NZ.WALL_H, wall_r=NZ.WALL_R)
+    return px, pz
 
 
 def hold_row(seed):
@@ -849,7 +858,7 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
                  cc[0], cc[1], c._tetra_x, c._tetra_z)] = label(i)
 
     for n0 in range(0, walk):
-        base, _run = EF.base_core(n0, seed=seed, env=env, hold=hold)
+        base, _run = EF.base_core(n0, seed=seed, env=env, hold=hold, walls=True)
         for fam in _families(walk, n0, s1_stride):
             st['families'] += 1
             for c0 in range(0, len(alpha), chunk):
@@ -1004,7 +1013,7 @@ def _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chun
         w0 = walk - k
         pfx = []
         for n0 in range(0, w0):
-            base, _run = EF.base_core(n0, seed=seed, env=env, hold=hold)
+            base, _run = EF.base_core(n0, seed=seed, env=env, hold=hold, walls=True)
             shapes = [(None, 0, 0, base)]
             for jp in [p for p in pre_frames if p < w0 - n0]:
                 for lp in pre_l:
@@ -1122,7 +1131,8 @@ CLIP_BAND = (0.0, 3.0)
 BAND_IS_NOT_PREFILTERABLE = True
 
 
-def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=256, cam=None):
+def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=256, cam=None,
+          walls_tetra=None, tetra_y=None):
     """Score a candidate dict against every configuration, at each candidate's OWN Tetra.
 
     Grouped by ``(facing, thrust, lean, nspeed)`` -- the four things that pick the baked roll schedule
@@ -1215,7 +1225,7 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
     def _row(k, plan, e, o, fac, thrust, lean, aim, cell, resid_val, ovl, cs, rec):
         # ``pred``/``why`` as before; ``entry``/``tetra`` are the recoil-corrected values the razor
         # scored, ``tetra_walk`` the fan's walk-end point, ``recoil`` Link's half (None = no contact)
-        tc = tetra_corrected(k, rec)
+        tc = tetra_corrected(k, rec, walls_tetra, tetra_y)
         return dict(entry=[e[0], e[1]], walk=[k[0], k[1]], m351C_walk=k[2],
                    m351C=lean, facing=fac, aim=list(aim), thrust=thrust,
                    b_step=thrust + 2, resid=resid_val, nspeed=ES.ROLL_NSPEED,
@@ -1234,7 +1244,7 @@ def score(cands, quals, *, pool=None, batch=200000, near_probe=1e-3, near_cap=25
                 # None and both reduce byte-identically -- knowledge/mechanics/entry-frame-recoil.md)
                 ents = [entry_corrected((k[0], k[1]), fac_rep, rec)
                         for k, _p, _c, rec in part]
-                rows = ctx.sweep_par([tetra_corrected(k, rec) + (e[0], e[1])
+                rows = ctx.sweep_par([tetra_corrected(k, rec, walls_tetra, tetra_y) + (e[0], e[1])
                                       for (k, _p, _c, rec), e in zip(part, ents)], 0, extra=True)
                 n_eval += len(rows)
                 for (k, plan, cs, rec), e, o in zip(part, ents, rows):
@@ -1411,7 +1421,8 @@ def run_item(item, d, env, *, worker='w0', deadline=None, s1_stride=32, nthreads
                                                      unit_of=item['unit'], **kw))
     t_fan = time.time() - tf
     ts = time.time()
-    hits, st = score(cands, quals, cam=lambda p: aim_camera(p, walk, trail))
+    hits, st = score(cands, quals, cam=lambda p: aim_camera(p, walk, trail),
+                     walls_tetra=SD.courtyard_mesh(), tetra_y=seed.get('ty'))
     t_score = time.time() - ts
     row = dict(item=item['item'], unit=item['unit'], herd=item['herd'], walk=walk, worker=worker,
                thrusts=thrusts, incumbent=inc, csangle=csa, fan_seconds=t_fan,

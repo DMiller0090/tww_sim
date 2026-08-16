@@ -819,7 +819,7 @@ def walk_fan(seed=None, env=None, base_frames=(3, 4), stride=2, jmax=8, progress
     tx, tz = seed['tetra']
     out = {}
     for n0 in base_frames:
-        base, _ = continue_walk([hold] * n0, log=seed['log'], env=env)
+        base, _ = continue_walk([hold] * n0, log=seed['log'], env=env, walls=True)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             for sx in range(0, 256, stride):
@@ -956,7 +956,8 @@ def confirm_entry(hit, seed=None, env=None, rows=None):
     # `console_seed`'s log, so a hit off another herd was confirmed against the console's arrival.
     # native=True: the real A-press check `accept()` runs on every candidate -- worth the native
     # step's speed, still the full live `LandCamera` (`tests/test_native_camera.py` gates it 0-ULP).
-    run, rows = continue_walk(extra, log=seed['log'], env=env, native=True)
+    # walls=True (s168c): the console follows the walled timeline; the acceptance measures IT
+    run, rows = continue_walk(extra, log=seed['log'], env=env, native=True, walls=True)
     walk = next((r for r in rows if r['proc'] == FRONT_ROLL), None)
     k = rows.index(walk) if walk else None
     prev = rows[k - 1] if k else None
@@ -1091,7 +1092,7 @@ def entry_gradient(tetra, entry, *, facing=TAB_FACING, m351c=0, d=0.01, thrust=T
     return dict(resid=r0, gx=gx, gz=gz, grad=math.hypot(gx, gz))
 
 
-def continue_walk(extra, *, log=None, env=None, native=False):
+def continue_walk(extra, *, log=None, env=None, native=False, walls=False):
     """Replay the console-confirmed delivered log on a fresh `FreeRun`, then keep stepping `extra`
     (a list of raw input dicts). Returns (run, rows) with one row per EXTRA frame -- the reachability
     probe, seeded from the measured endpoint the handoff asks for.
@@ -1102,10 +1103,17 @@ def continue_walk(extra, *, log=None, env=None, native=False):
     that presses L and engages the attention lock (`tests/test_native_camera.py`). Off by default so
     the fan's own graft source (`entry_fan.base_core`/`walk_fan`) and `entry_camera.cam_trail` keep
     their exact, already-gated reference untouched; `confirm_entry` opts in, since it is the stage
-    `accept()` runs on every candidate and the one caller performance actually matters for."""
+    `accept()` runs on every candidate and the one caller performance actually matters for.
+
+    ``walls`` wires both actors' `dBgS_Acch::CrrPos` from f0 (`seeds.wall_for_terminal`): the
+    console follows the WALLED timeline (s168c, live-bit-exact through a Tetra wall brace), and a
+    herd is PROVEN wall-inert by `overnight.prepare`'s walled-vs-plain gate, so walling the whole
+    replay is byte-identical through the herd and console-faithful on the walk after it."""
     seed = console_seed()
     env = env or SD.load_env()
     run = SD.make_freerun(env, native=native)
+    if walls:
+        SD.wall_for_terminal(run)
     run.pre_seed_input(SD.dtm_input_at(env)(0))
     rows = []
     with warnings.catch_warnings():

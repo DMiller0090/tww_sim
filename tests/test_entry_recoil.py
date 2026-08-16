@@ -24,6 +24,13 @@ def _rows():
     return json.load(open(_FIX))['rows']
 
 
+def _tetra_env():
+    """Her wall pass's inputs: the SAME mesh the engine wires (`seeds.courtyard_mesh`, not the
+    filtered `objective.courtyard_walls`) + her floor y off the fixture."""
+    from harness.tetrapush import seeds as SD
+    return SD.courtyard_mesh(), json.load(open(_FIX))['tetra_y']
+
+
 def test_entry_recoil_reproduces_the_engine_bit_exact():
     """entry_corrected == the engine's measured entry, all 5 ground truths, 0-ULP."""
     for r in _rows():
@@ -37,11 +44,14 @@ def test_entry_recoil_reproduces_the_engine_bit_exact():
 
 
 def test_tetra_push_half_reproduces_the_engine_bit_exact():
-    """tetra_corrected == the engine's measured post-entry Tetra, all 5 ground truths, 0-ULP."""
+    """tetra_corrected (push half + her wall pass) == the engine's measured post-entry Tetra,
+    all 5 ground truths, 0-ULP. All five brace on the south wall (s168c), so this also gates
+    the CrrPos hold: x takes the slide, z stays at the brace plane."""
+    walls, ty = _tetra_env()
     for r in _rows():
         k = tuple(r['key'])
         rec = ON.entry_recoil(k)
-        t = ON.tetra_corrected(k, rec)
+        t = ON.tetra_corrected(k, rec, walls, ty)
         want = r['tetra_measured']
         assert (_bits(t[0]), _bits(t[1])) == (_bits(want[0]), _bits(want[1])), \
             '%s: tetra %r != measured %r' % (r['name'], t, want)

@@ -104,7 +104,7 @@ def graft(run):
     return core
 
 
-def base_core(n0, seed=None, env=None, hold=None):
+def base_core(n0, seed=None, env=None, hold=None, walls=False):
     """The fan's base state for ``n0`` extra held frames, as a native core: replay ``seed``'s own
     log on the wired Python run, hold ``n0`` frames, graft. Returns ``(core, run)`` -- the run is
     kept so a caller can diff against the Python reference.
@@ -117,7 +117,7 @@ def base_core(n0, seed=None, env=None, hold=None):
     default -- ``seed`` defaults to `console_seed`, whose log is the one that was being replayed."""
     seed = seed or ES.console_seed()
     hold = hold or dict(seed['log'][-1], buttons=0)
-    run, _ = ES.continue_walk([hold] * n0, log=seed['log'], env=env)
+    run, _ = ES.continue_walk([hold] * n0, log=seed['log'], env=env, walls=walls)
     return graft(run), run
 
 

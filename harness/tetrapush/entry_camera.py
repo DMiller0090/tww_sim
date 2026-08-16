@@ -139,7 +139,8 @@ def cam_trail(subx, frames=TRAIL_FRAMES, seed=None, env=None, cache=True, l_fram
         warnings.simplefilter('ignore')
         # the SEED's own log (s150): a trail measured on the console arrival is not the one a different
         # herd's camera delivers, and it is injected into the fan as if it were
-        _run, rows = ES.continue_walk(holds, log=seed['log'], env=env)
+        # walls=True (s168c): the trail is measured on the walled walk the fan now scores
+        _run, rows = ES.continue_walk(holds, log=seed['log'], env=env, walls=True)
     trail = tuple(int(r['csangle']) & 0xFFFF for r in rows)
     if cache:
         _TRAILS[key] = trail
