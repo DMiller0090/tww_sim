@@ -2593,6 +2593,42 @@ from scratch. Land the edits first, then gate.
                   DTM out of band. A zero is a post-s161 trustworthy zero -> rung08/rung10
                   converted the same way (98) next. Full narrative
                   `_notes/tetrapush-handoff-2026-08-15-session167.md`.
+              - **SESSION 168d -- THE FIXED STACK IS SHIPPED (walls + recoil + talk gate),
+                THE w05 STATIONS ARE PHYSICALLY UNREACHABLE, AND A w06 CANDIDATE IS
+                LIVE-VERIFIED 0-ULP THROUGH THE CUT.** The three fixes landed as commits
+                `855514b` (fan/confirm/trail on the WALLED timeline; Tetra's entry-frame
+                wall brace in `tetra_corrected` -- push half then her `CrrPos`, all 5
+                ground truths bit-exact), `43447fe` (the talk-eat predicate
+                `talk_gate.talk_eats_a`, decomp-cited, both ground truths + the
+                `attn_yaw_bam` +-1-BAM `cSGlobe.U()` fix), `cd41b7f` (the gate wired:
+                `score()` prunes talker CANDIDATES pre-draw -- walk-end facing joined the
+                key, layout `(x, z, m351C, speedF, ccx, ccz, facing, tx, tz)` -- and
+                `accept` refuses at `stage='talk'`; stats carry `talkers`). All 5 s167
+                "genuine" are talk-pruned at score time now. Suite 1372 green.
+                **Dereck's 10-min limited search**: the production fan's 10-min prefix
+                never reaches contact (2 runs, best overlap -9.63 u; target ordering
+                starves pre-junction); the aimed mini-beam (`_notes/s168_queue/
+                s168_aimed_mini*.py`, conversion-cone turning row + 2-seg beam on the
+                walled fleet) measured **the w05 station endpoints UNREACHABLE under true
+                physics -- closest 10.15 u at every turning-row variant** (s167's "0.83 u"
+                was unwalled fiction; the total-97 landing never physically existed), and
+                at w06 reached them (355 candidates) but **no cut touches her anywhere in
+                that cloud** (best overlap -4.97 u; the banked s164 admitting stations
+                presumed the pre-fix reach). The best-overlap w06 pick (t15, total 99,
+                plan (0,232,16,0,5,88,240,0,1), aim (56,254), herd v73=(32,160)) was
+                **DTM-delivered and truncate-and-read verified: ALL-BIT-EXACT live at herd
+                end / walk end / ENTRY / mid-roll / CUT frame** (dl=dt=0 at N=74/81/82/90/
+                101; `_notes/s168_queue/s168_live_verify.json`) -- the first end-to-end
+                console verification of the converted-herd + turning-row + walk + cut
+                pipeline on the fixed stack. Post-cut tail frames (N=105, proc 90) diverge
+                OUTSIDE the claim window (unmodeled cut aftermath) as expected. NEW GAP
+                measured en route: the fan's camera-TRAIL approximation puts turn-heavy
+                walk endpoints ~0.41 u off the real wired camera (raw-vs-delivered replay
+                differs; `confirm_entry` catches it -- the fan's razor numbers on such
+                walks are ~0.4-u-soft until confirmed). NEXT: the queue's totals re-price
+                AGAIN under true physics (w05 dead everywhere its cone is 10 u short;
+                station admissibility must be re-probed on the fixed stack -- the yield
+                probe needs the walled+recoil+talk treatment before it can order anything).
               - **SESSION 168c -- LIVE DELIVERY OF A REFUTED HIT: THE SIM IS CONSOLE-0-ULP
                 THROUGH THE CONVERTED HERD + WALLED WALK, AND TWO MORE FAN FICTIONS FELL
                 OUT (Dereck-requested falsification, subagent-run).** refused#1 (walk plan
