@@ -70,7 +70,9 @@ foot-chain joint matrix is built as:
 
 1. euler s16 (half-angle s16/2) → quaternion - `JMAEulerToQuat` (**non-fused**, see
    [fp-faithfulness](fp-faithfulness.md#fma-fusion-vs-non-fusion-the-load-bearing-distinction)),
-   `quat.euler_to_quat`.
+   `quat.euler_to_quat`. The half-angle is taken on the **signed** s16 - halving a raw u16 picks the
+   negated (bit-different) table entry, see
+   [euler-quat-signed-half](euler-quat-signed-half.md).
 2. optional **two-anim blend** - `JMAQuatLerp` (`quat.quat_lerp`: dot in f32, lerp in f64→f32,
    **no renormalize**), plus the non-fused translate/scale blend.
 3. quaternion → matrix - `mDoMtx_quat = PSMTXQuat` (fused-then-scaled off-diagonals; `fres`+Newton
@@ -148,9 +150,10 @@ via `fk.psmtx_inverse` (the retail **PSMTXInverse**: cofactor/determinant with a
 reciprocal, **not** a transpose - they diverge at non-axis facings because `worldBase`'s `R` from the
 sin/cos tables isn't exactly orthonormal; this is what made `waitturn`/`ebs` bit-exact). Run the chain
 from `cur = worldBase`, then apply `m37B4` (`FootFK` world mode).
-`LandState.step` feeds the current pre-integration `pos.x/pos.z/facing` each frame via
-`FootSpeedF.set_pos` - the FK quantizes the toe at world magnitude, so the driver **must** get the
-live position each frame.
+`LandState.step` feeds `pos.x/pos.z/facing` each frame via `FootSpeedF.set_pos` - the FK quantizes
+the toe at world magnitude, so the driver **must** get the live position each frame, and **which**
+position (and lean) is itself a law: the game draws AFTER `posMove`, upright on a proc-init frame -
+see [draw-base](draw-base.md).
 
 ## `jointCB1` foot rebuild (not IK)
 
@@ -201,3 +204,6 @@ Diagnostic rule: when a world-space-FK toe residual cancels between `m37B4` and 
 
 - [FP faithfulness](fp-faithfulness.md) · [Land sim](land-sim.md) ·
   [Land movement](../mechanics/land-movement.md) · [Animation / head-bob (swim)](../mechanics/animation.md).
+- [Draw base](draw-base.md) (where/when the pose is taken) · [Equipped anim set](equipped-anim-set.md)
+  (which anims get posed) · [WAIT stop pose](wait-stop-pose.md) (what gets posed while stopped, and
+  why the re-walk's first step depends on it).

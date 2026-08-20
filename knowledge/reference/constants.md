@@ -134,26 +134,11 @@ The legacy "−850 / −1650" community figures are the same bands, off by the a
 | Point-in-triangle tolerance | **±20.0** (area units) | `cM3d_CrossX/Y/Z_Tri` signed-area edge slack, both windings | decomp `c_m3d.cpp` |
 | `cM3d_IsZero` (kZero) | **1e-5** | float "is zero" threshold in the collision math | decomp `c_m3d.h` |
 
-See [mechanics/seam-clip.md](../mechanics/seam-clip.md) for how these produce the seam clip.
+How these produce the seam clip: [mechanics/seam-clip.md](../mechanics/seam-clip.md).
 
 ## Collision (actor Co push)
 
-The actor-vs-actor "Co" push (a [Tetra nudge](../mechanics/actor-push.md)). Distinct from the wall
-cylinder above. All live-confirmed on GZLJ01 (2026-07-06).
-
-| Constant | Value | Meaning | Source |
-|----------|-------|---------|--------|
-| Link Co radius | **30.0** (walking/rolling); 50.0 only if `checkGrabWear()` | Link body Co cylinder radius | decomp `daPy_lk_c::setCollision` (d_a_player_main.cpp:9762/9760) |
-| Link Co height | **≈107** walking (`40.1 + neck−toe`); 81.25 in FRONT_ROLL | Link body Co cylinder height | decomp same fn (:9794/9780) |
-| Link Co center | midpoint(root_jnt, neck_jnt) XZ; toe_jnt Y (feet in FRONT_ROLL) | animation-driven, **not** `current.pos` | decomp same fn (:9753/9792) |
-| Tetra Co radius / height | **50.0 / 140.0**, center = `current.pos` | Tetra (`Zl1`) body Co cylinder | live read |
-| Link weight / rank | **120** → rank **5** | `mStts.SetWeight(120)`; `dCcS::GetRank` | decomp `:11233`, `d_cc_s.cpp:153` |
-| Tetra weight / rank | **0x8C=140** → rank **5** (the `field_0x84F==5` variant; else 0xFF→10) | live read | decomp `d_a_npc_zl1.cpp:428` |
-| Push share (rank 5 vs 5) | **0.50 / 0.50** | `rank_tbl[5][5]=50` → Link takes 0.50× depth, Tetra recoils 0.50× | decomp `d_cc_s.cpp:138`, live |
-| Co deadzone | **1e-5** (`cM3d_IsZero(cross_len)`) | `dCcS::SetPosCorrect` skip threshold (base `cCcS` uses 1/125) | decomp `d_cc_s.cpp:190` |
-
-The **game uses `dCcS::SetPosCorrect`** (virtual override, JP 0x800AB1E4), whose weight split is the
-`rank_tbl` above - NOT the base `cCcS` mass-proportional split (JP 0x8024101C, never fires live).
+Cylinders, weights, the rank split, `Zl1` look-at clamps: [constants-npc.md](constants-npc.md) ([actor-push.md](../mechanics/actor-push.md)).
 
 <a id="land-sword-cut-roll-stab"></a>
 ## Land sword-cut (roll stab)
@@ -175,20 +160,19 @@ GZLJ01 savestate 7, 2026-07-06). Only the joint-0 (root) translate of `cutf.bck`
 | diagonal-aim turn (scale/max/min) | 30 / 0x3CDF / **0x1F40** | same | `cLib_addCalcAngleS(shape, m34D4, mTurn.f4/f0/f2)`; min ≫ diff → snap |
 | in-line thrust aim range (`CUT_DIR_FWD`) | **0x2000** | 0x2000 | `\|aim − roll_facing\| < this` stays CUT_F (`getDirectionFromAngle`); else CUT_L/R |
 
-The lunge = `speedF` (foot term, along `current.angle.y`) + the root-translate delta `m3700(t)−m3700(t−1)`
-(rotated by `shape_angle.y`); `m3700` is reset to 0 in `procCut*_init`, so frame 1 stacks the full root
-translate onto the carried roll speed. A **diagonal thrust** (roll straight, aim the stick + B) latches
-`m34D4` and snaps `shape=travel` to it on the first cut proc frame, rotating the tail by the aim while
-the 49.22 lunge stays along the roll facing (the diagonal 49.22 needs an aimed *roll*, live 2026-07-07).
-See [roll-stab.md](../mechanics/roll-stab.md) and [seam-clip.md](../mechanics/seam-clip.md).
+The lunge = `speedF` (foot term, along `current.angle.y`) + the root-translate delta
+`m3700(t)−m3700(t−1)` rotated by `shape_angle.y`; `m3700` resets to 0 in `procCut*_init`, so frame 1
+stacks the full root translate onto the carried roll speed. A **diagonal thrust** (roll straight, aim
+the stick + B) latches `m34D4` and snaps `shape=travel` to it on the first cut frame, rotating the tail
+while the 49.22 stays along the roll facing - a diagonal 49.22 needs an aimed *roll*. See
+[roll-stab.md](../mechanics/roll-stab.md), [seam-clip.md](../mechanics/seam-clip.md).
 
 <a id="land-movement"></a>
 ## Land movement (walk / roll / ATN / hops)
 
-The walk/run, brakeslide/EBS, roll, and ballistic-hop constants. Decomp `d_a_player_main.cpp` HIO
+Walk/run, brakeslide/EBS, roll, ballistic hops. Decomp `d_a_player_main.cpp` HIO
 (`mMove`/`mRoll`/`mAtnMove`/`mAtnMoveB`/`mSideStep`/`mBackJump`); live-validated bit-exact. Techs:
-[walk-run.md](../mechanics/walk-run.md) · [brakeslide-ebs.md](../mechanics/brakeslide-ebs.md) ·
-[roll.md](../mechanics/roll.md) · [ballistic-hops.md](../mechanics/ballistic-hops.md).
+[walk-run](../mechanics/walk-run.md) · [brakeslide-ebs](../mechanics/brakeslide-ebs.md) · [roll](../mechanics/roll.md) · [ballistic-hops](../mechanics/ballistic-hops.md).
 
 | Constant | Value | Meaning (field) |
 |----------|-------|-----------------|
@@ -205,7 +189,13 @@ The walk/run, brakeslide/EBS, roll, and ballistic-hop constants. Decomp `d_a_pla
 | direction cos thresholds (fwd / back) `mAtnMoveB.0x2C/0x30` | ≥0.99 → FORWARD · ≤−0.99 → BACKWARD (else side) | |
 | roll speed `clamp(speedF·field_0x18 + field_0x1C, field_0x20, cap)` | **×1.5 + 0.5, floor 5.0, cap 26.0** (= 0.5 + 17·1.5) | `mRoll` |
 | roll duration / exit frame `mRoll.field_0x10` | **17** (anim rate 1.1, ≈18 frames) | |
+| A-press → roll (ATTACK) stick floor | `mStickDistance > `**0.75** (×**0.5** while heavy); at or below → `PUT_AWAY`, sheathe, no roll | `mBasic.field_0x1C` / `mMove.field_0x80` (`setDoStatusBasic` 2220/2218 → 4318); [roll-attack-threshold.md](../mechanics/roll-attack-threshold.md) |
+| roll anim ctrl (rate / start / cut gate / end) | **1.1** / **0.0** / **17.0** / **19.0** → cut dispatchable on roll steps **15..17** | `mRoll.field_0x8/0xC/0x10`, `field_0x0`; [roll-cut-thrust-floor.md](../mechanics/roll-cut-thrust-floor.md) |
+| body lean decay `LandState.SLANT_DECAY` (`m351C`, `_set_move_slant_angle`) | **0.3499999940395355** per frame (undriven: −191 → 0 in 13 frames) | tilts the draw base and the Co centre; [roll-lean-decay.md](../mechanics/roll-lean-decay.md) |
 | roll-EBS (frame-perfect) | full-run roll → hold L+down through roll → release L into ESS-down → **≈ −23.1** | live |
+| WAIT idle blend `setMoveAnime(0, f28, f25, WAITS, WALK, 2)` | f28 **1.1** / f25 **0.8** | `mMove.field_0x38`/`0x40` |
+| low-life stop `ANM_WAITATOB` (rate / start / ctrl end / morf) | **0.6** / **0.0** / **12** / **6.0** | `mMove.field_0x68`/`0x6C`/`0x10`/`0x70`; end overrides the clip's own frameMax 13 |
+| `checkRestHPAnime` life threshold | `getLife() <= ` **6** (quarter-hearts) | `mMove.field_0xE`; see [wait-stop-pose.md](../model/wait-stop-pose.md) |
 | sidehop `procSideStep_init` | `nspeed = cM_scos(6200)·30`, `speed.y = cM_ssin(6200)·30`, gravity **−2.4** | `mSideStep` `d_a_player_HIO_data.inc:223` |
 | backflip `procBackJump_init` | `nspeed = 22.5`, `speed.y = 19.0`, gravity **−3.0** | `mBackJump` `:102` |
 | default gravity (grounded speed.y at CrrPos) | **−2.5**/fr | `mAutoJump.field_0xC`, reset by `commonProcInit` (5826) |
@@ -234,6 +224,21 @@ The big-reversal ground-turn constants. Decomp `mSlip`/`mTurn`/`mMove`; see
 | slip decel `mSlip.0x18/0x10/0x14` | cLib scale 0.6 / max 1.25 / min 0.1875 (~−1.25/fr) | |
 | WaitTurn facing pivot `mTurn.0x4/0x0/0x2` | `cLib_addCalcAngleS(scale 30, max 0x3CDF, min 0x1F40)` → ~0x1F40 (≈8000)/frame | |
 | MoveTurn facing sweep `cLib_addCalcAngleS(scale,max,min)` | 1-path 2 / (F0·4+0x4A56) / (F0·2) · slip-exit 3 / (F0·2) / F0 | F0 = `mMove.field_0x0` = 3000 |
+
+<a id="link-head-look"></a>
+## Link head-look
+
+`setNeckAngle`'s `m3564` twist (`d_a_player_main.cpp:8938-9169`); mechanic [link-head-look.md](../mechanics/link-head-look.md).
+
+| Constant | Value | Meaning (source) |
+|----------|-------|------------------|
+| head-centre / eye local offsets | (11.25, 0, 0) / (11.25, 18.75, 0) | `l_head_center_offset` / `l_eye_offset` (`d_a_player_main_data.inc:20`) |
+| look-pos cone | **±0x6000** of `m34DE` | `checkAttentionPosAngle` / :9014 |
+| chase `cLib_addCalcAngleS(scale,max,min)` | **3 / 0x1000 / 0x100** | :9157 |
+| pitch clamp | **[−10000, 8000]** | :9093 |
+| yaw clamp | **±14336** | HIO `mShip.m.field_0x0` (`d_a_player_HIO_data.inc:297`) |
+| yaw-freeze proximity | `absXZ(target − head centre) < `**30** | :9090 |
+| head-top offset | (40, 0, 0) | `head_offset` :11589 (`mHeadTopPos` :11592) |
 
 ## Camera (steering) - summary (full table migrates with the camera topic)
 

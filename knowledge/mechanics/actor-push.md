@@ -1,8 +1,9 @@
 # Actor-vs-actor "Co" push - how Tetra (or any actor) shoves Link
 
 **Answers:** How does another actor push Link (the "Tetra nudge")? What's the cyl-cyl overlap math
-and the weight/rank split? Which way and how far does Link get pushed, and on which frame? Can a
-Tetra push supply the extra displacement a seam clip needs when the roll/thrust falls just short?
+and the weight/rank split? Which way does Link get pushed, and on which frame? Can a Tetra push
+supply the extra displacement a seam clip needs when the roll/thrust falls just short? (How FAR a
+push moves an actor is [push-magnitude.md](push-magnitude.md).)
 **Status:** validated live - decomp-faithful port ([`tww_sim/core/cc_push.py`](../../tww_sim/core/cc_push.py))
 reproduces the game on GZLJ01. The overlap math (`cM3d_Cross_CylCyl`) matches 60/60; the weight split
 is the **`dCcS::SetPosCorrect` rank table** (NOT the base `cCcS` mass-proportional split), confirmed
@@ -16,7 +17,9 @@ and the roll-stab was live-reproduced at the corner - aim/wall-hold/bonk confirm
 **Source:** decomp `dCcS::SetPosCorrect` / `dCcS::GetRank` / `rank_tbl` (`d_cc_s.cpp:138/153/180`),
 `cM3d_Cross_CylCyl` (`c_m3d.cpp:1553`), `cCcD_Stts::PlusCcMove` (`c_cc_d.cpp`), `daPy_lk_c::posMove`
 + `daPy_lk_c::setCollision` (`d_a_player_main.cpp:9748`) + player/Tetra weights (`:11233`,
-`d_a_npc_zl1.cpp`). Constants: [reference/constants.md](../reference/constants.md#collision-actor-co-push).
+`d_a_npc_zl1.cpp`); the push's FP shape is read off the shipped JP binary (see
+[The FP shape](#the-fp-shape-load-bearing---read-this-before-touching-the-push)). Constants:
+[reference/constants-npc.md](../reference/constants-npc.md#collision-actor-co-push).
 
 ---
 
@@ -54,6 +57,26 @@ his share on the **next** frame, before his own movement and before the wall che
  overlap (computed from *N*'s settled + drawn positions) lands on frame *N+1*, **before** the wall
  is tested.
 
+## The FP shape (load-bearing - read this before touching the push)
+
+Both distance computations in the chain are **UNFUSED**, and the square root is the game's
+`std::sqrtf`, not a correctly-rounded one. Read off the shipped JP binary:
+
+| Site | JP address | Instructions |
+|------|-----------|--------------|
+| `cM3d_Cross_CylCyl` `dist_sq` | `0x8024C44C` | `fmuls f1,f2,f2` · `fmuls f0,f0,f0` · `fadds f4,f1,f0` |
+| `dCcS::SetPosCorrect` `objDistLen` | `0x800AB430` (correctY: `0x800AB394`) | the same three ops |
+| `std::sqrtf` (both) | inlined, e.g. `0x800AB444` | `frsqrte` + **3** double Newton steps, then one f32 round of `x*guess` (MSL `math.h`) |
+
+There is **no `fmadds` in either routine**. Do not assume the fused form because `PSVECMag` fuses -
+`PSVECMag` is a separate paired-single routine and its shape does not carry over. This is not
+rounding pedantry: fusing puts `cross_len` ~2 ULP high, which biases the push ~3e-6 u per frame, and
+a two-actor plow AMPLIFIES that ~1.4x per contact frame - over a few hundred contact frames it grows
+into a divergence of tens of units against the console. The port
+([`tww_sim/core/cc_push.py`](../../tww_sim/core/cc_push.py)) carries the unfused shape and its
+native twin is gated bit-for-bit against it
+([`tests/test_cc_push_native.py`](../../tests/test_cc_push_native.py)).
+
 ## Link & Tetra parameters (GZLJ01, live-confirmed)
 
 - **Link** weight **120** → `GetRank(120) = 5`. Body Co cylinder (`daPy_lk_c::setCollision`):
@@ -65,15 +88,11 @@ his share on the **next** frame, before his own movement and before the wall che
  it sways ~16–22 u from `current.pos` while walking and, during a **FRONT_ROLL lunge, leads the feet
  by 10–31 u** (peaks ~frame 5–6 of the roll). The offline port
  [`tww_sim/core/anim/body_cyl.roll_co_center(pos, facing, frame, shape_z)`](../../tww_sim/core/anim/body_cyl.py)
- runs the same world-space FK the walk foot chain uses and is **live-validated bit-exact** (GZLJ01,
- Link rolling pinned at a wall so pos/facing were constant): **0 ULP on every settled roll frame** once
- the `shape_z` body lean is fed in. The early-frame residual of the older clean-only port was **NOT** the
- oldframe-morf (that touches roll frame 0 only, `initOldFrameMorf(mRoll.field_0x14=2.0, 0, 0x2A)`) - it
- was the missing `setWorldMatrix` base `ZXYrotM` z-tilt by `shape_angle.z` (the MOVE turn lean
- `m351C>>1`, decaying ~35%/frame). Feed the **previous frame's** `shape_z` (the setWorldMatrix /
- setMoveSlantAngle one-frame lag) and it vanishes; the `jointBeforeCB` root tilt (`m34F2`/`m34F4`) is 0
- outside damage, and its `body_chn` rotation contributes nothing to the xz midpoint. See the module +
- `tests/test_body_cyl.py` + `fixtures/hyrule_roll_lean.json` (`harness/rollstab/capture_roll_lean.py`).
+ runs the same world-space FK the walk foot chain uses and is **live-validated bit-exact** once
+ **both** body-lean terms are fed in - the turn lean reaches the midpoint TWICE, one frame apart, and
+ the twist is a no-op below ~30 BAM and worth ~0.35 u at a real one. That, the two ports, and the
+ regime trap in gating them are [link-co-centre.md](link-co-centre.md)
+ (`tests/test_body_cyl.py`, `fixtures/hyrule_roll_lean.json`).
 - **Tetra** (NPC `Zl1`) body Co cylinder **R = 50, H = 140, center = `current.pos`** (feet). Weight
  is `0xFF` (immovable, GetRank 10) by default in `createInit`, but **`0x8C` = 140 (GetRank 5)** for
  the `field_0x84F == 5` variant - and the **flooded-Hyrule Tetra is live-confirmed as that variant**
@@ -175,6 +194,14 @@ pipeline assumes:
  open - Link's roll passes through that spot, so Tetra must arrive there only on the pre-clip frame (a
  following-NPC timing, or a late position-hack); see the handoff.
 
+## How FAR the push can move an actor per frame
+
+The magnitude half has its own page: [push-magnitude.md](push-magnitude.md). In one line, a single
+frame's push is exactly the overlap halved - `(R_link + R_actor - centre_distance) / 2`, measured to
+the animated centre above - so the SUSTAINED rate is set by the mean contact depth and settles at
+`|speedF| / 2` (13.0 u/frame at the roll cap). That is an average and not a per-frame bound: the pose
+swing lets one frame reach 18.84 u, and a shallow contact pushes proportionally less.
+
 ## Frame-lag caveat for setups
 
 The push consumed on the clip frame comes from the overlap **one frame earlier**. The model assumes a
@@ -183,8 +210,10 @@ Because Tetra (rank 5, same as Link) also recoils each overlap frame, a multi-fr
 hold the overlap for exactly the frame before the clip.
 
 ## See also
+- [mechanics/link-co-centre.md](link-co-centre.md) - where Link's pushing cylinder actually is, and the two turn-lean terms that tilt it.
+- [mechanics/push-magnitude.md](push-magnitude.md) - how far one frame of push moves an actor.
 - [mechanics/seam-clip.md](seam-clip.md) - the wall-corner clip this push feeds; `min_f32_clip` reachability.
 - [mechanics/collision.md](collision.md) - the DZB wall mesh and the `CrrPos` wall barriers.
-- [reference/constants.md](../reference/constants.md#collision-actor-co-push) - cylinder radii/heights, ranks.
+- [reference/constants-npc.md](../reference/constants-npc.md#collision-actor-co-push) - cylinder radii/heights, ranks.
 - [history/tetra-push-massprop-superseded.md](../history/tetra-push-massprop-superseded.md) - the
  superseded mass-proportional (cCcS, 0.538, R=50) model and why it was wrong.
