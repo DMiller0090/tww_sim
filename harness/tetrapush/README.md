@@ -2593,6 +2593,39 @@ from scratch. Land the edits first, then gate.
                   DTM out of band. A zero is a post-s161 trustworthy zero -> rung08/rung10
                   converted the same way (98) next. Full narrative
                   `_notes/tetrapush-handoff-2026-08-15-session167.md`.
+              - **SESSION 170 -- THE BAR IS BEATEN: TOTAL 98, GENUINE, ACCEPTED, AND THE
+                CLIP LANDED LIVE.** The s169 rung06-w06 fan completed clean (69.3 h: 38.6
+                gen + 30.7 score, no deadline cut) with **THREE genuine total-98 plans at
+                t14, all `accept()`-green** (confirm_entry six-flags, `cross_engine.agree`
+                worst_ulp 0 + bit-identical cut, `objective.verdict` true) -- the incumbent
+                is **98**, beating the banked console 101 by 3: **herd -4 (78->74, the
+                cap-entry conversion + (56,160) turning row), thrust -1 (15->14), walk +2
+                (4->6)**. Live-DTM verified (the s168 boot-splice protocol,
+                `_notes/s170_queue/s170_live_verify.py`): **Tetra bit-exact at EVERY
+                truncation end-to-end; Link bit-exact through mid-roll (i=89); the live cut
+                fired on schedule (i=98) and Link came to rest PAST the wall at
+                (-1751.784912, -1016.144958), displaced ~the predicted 50.2775 u lunge --
+                the clip happened live.** (The verify's walled comparator diverges at the
+                cut BY CONSTRUCTION -- `wall_for_terminal` cannot pass the seam -- so the
+                cut window's Link reference is the cross-engine composite, already 0-ULP
+                offline; a live bit-compare of the post-clip rest is still open.)
+                Deliverables: `_generated/overnight/s169rung06w06_v56_160/plans/
+                total098-rung06-w6-t14.{json,dtm}` (live-verified, facing 40752) and
+                `...-t14-f40609.{json,dtm}` (the recovered best-resid 3.2e-05 plan, facing
+                40609, offline-confirmed, lunge 51.078). GOTCHA FOUND: **`save_plan` names
+                by total-item-thrust, so the 3 plans collided on ONE file** -- the two lost
+                hits were recovered offline by single-key re-`score()`
+                (`_notes/s170_queue/s170_remint.py`; identity pinned by logged resid) --
+                fix the naming before the next multi-plan item. Also landed:
+                **`fan_exact(dry=True)`** (the SKELETON: exact per-junction work log, no
+                leaf fleets -- 50661 junctions / 202668 fleets exact vs the closed form's
+                101349, ~2x under) + the live progress mapper
+                (`_notes/s169_queue/s169_progress_probe.py`, claim junctions -> exact %);
+                scoring measured at ~343 rows/s (s167 basis, 38.5M rows = 31 h). OPEN:
+                mid-item checkpointing (a crash mid-item loses the WHOLE item -- resume is
+                item-granular, s170 finding; spill/resume designed, unbuilt) and the
+                scoring half's serial-orchestration headroom (~2.9-6.5 cores observed).
+                Full narrative `_notes/tetrapush-handoff-2026-08-19-session170.md`.
               - **SESSION 169 -- THE LADDER IS RE-PROBED ON THE FIXED STACK: w05 IS DEAD
                 LADDER-WIDE, THE TURNING ROW IS A ~14.6 u AXIS THE FAN CANNOT ENUMERATE,
                 AND THE rung06-w06 OVERNIGHT IS LAUNCHED ON THE MEASURED BEST VARIANT.**

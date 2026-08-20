@@ -558,7 +558,8 @@ def _atom_junction(base, flips, rotate_side, rotate_off, csangle, cs_trail, n0, 
 
 
 def _atom_candidates(base, walk, n0, csangle, cs_trail, s1_stride, alpha, flips, chunk,
-                     nthreads, collect, out, st, *, junction_cap=None, deadline=None, beat=None):
+                     nthreads, collect, out, st, *, junction_cap=None, deadline=None, beat=None,
+                     dry=False):
     """**The escape-atom conversion, off ``n0`` base frames, then the ordinary family sweep for
     whatever walk is left** -- `_atom_junction` composed into `fan_exact` the same way the PRE segment
     already is: a junction, then `_families` again from each survivor.
@@ -592,6 +593,13 @@ def _atom_candidates(base, walk, n0, csangle, cs_trail, s1_stride, alpha, flips,
                 if beat is not None and st['junctions'] % 64 == 0:
                     beat(junctions=st['junctions'], at_cap=len(out))
                 st['junctions'] += 1
+                if dry:
+                    fams = list(_families(remaining, 0, s1_stride))
+                    nchunks = (len(alpha) + chunk - 1) // chunk
+                    st['fleets'] += len(fams) * nchunks
+                    st.setdefault('skel', []).append(
+                        ('junc', st['junctions'] - 1, len(fams) * nchunks, remaining + 1))
+                    continue
                 for fam in _families(remaining, 0, s1_stride):
                     for c0 in range(0, len(alpha), chunk):
                         part = alpha[c0:c0 + chunk]
@@ -771,7 +779,8 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
               two_segment=True, atom=True, junction_cap=None, pre_stride=PRE_STRIDE,
               pre_frames=PRE_FRAMES, pre_l=PRE_L, deadline=None, beat=None, leaf_budget=None,
               tail_frames=(), tail_beam=400, prefix_cap=PREFIX_CAP, contained=True,
-              alpha_stride=CONTAINED_ALPHA_STRIDE, target=None, target_tol=None, target_prune=False):
+              alpha_stride=CONTAINED_ALPHA_STRIDE, target=None, target_tol=None, target_prune=False,
+              dry=False):
     """Every distinct ``(endpoint, lean, speedF, exec Co centre, Tetra)`` Link can stand on AT THE
     ROLL CAP after EXACTLY ``walk`` delivered frames, as ``(dict of key -> plan, stats)``. The key is
     ``(x, z, m351C, speedF, ccx, ccz, facing, tx, tz)`` -- the exec centre joined it in s168 because the
@@ -816,7 +825,15 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
         space that could have hit rather than an arbitrary prefix.
 
     ``target_tol`` widens the prune (default `aimed_fan.REACH_TOL`). Logged as ``target_pruned`` /
-    ``target_kept``, never silent."""
+    ``target_kept``, never silent.
+
+    ``dry=True`` is the SKELETON: walk the exact enumeration (base cores, junction fans, family
+    counts) but clone NO leaf fleet -- so it prices an item exactly instead of `_fleet_estimate`'s
+    closed form. Returns the usual ``(out, st)`` with ``out`` empty and ``st['skel']`` the ordered
+    work log, one row per costed step: ``('plain', n0, n_fleets, stepped_frames)`` for the
+    junction-free sweep and ``('junc', junction_index, n_fleets, stepped_frames)`` for every
+    atom/pre junction -- the same order the real run counts ``st['junctions']`` in, so a live
+    claim's counter maps onto a cumulative work fraction."""
     from harness.tetrapush.reposition import HerdLine
     from harness.tetrapush import aimed_fan as AF
     out = {}
@@ -858,21 +875,28 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
             out[(c.pos_x, c.pos_z, int(c.m351C) & 0xFFFF, c.speedF,
                  cc[0], cc[1], int(c.facing) & 0xFFFF, c._tetra_x, c._tetra_z)] = label(i)
 
+    nchunks = (len(alpha) + chunk - 1) // chunk
     for n0 in range(0, walk):
         base, _run = EF.base_core(n0, seed=seed, env=env, hold=hold, walls=True)
-        for fam in _families(walk, n0, s1_stride):
-            st['families'] += 1
-            for c0 in range(0, len(alpha), chunk):
-                part = alpha[c0:c0 + chunk]
-                st['fleets'] += 1
-                cores = _fan(base, part, fam['lsched'], csangle, cs_trail, n0, nthreads)
-                collect(cores, lambda i, _p=part, _f=fam: _f['label'](_p[i][0], _p[i][1]))
+        if dry:
+            fams = list(_families(walk, n0, s1_stride))
+            st['families'] += len(fams)
+            st['fleets'] += len(fams) * nchunks
+            st.setdefault('skel', []).append(('plain', n0, len(fams) * nchunks, walk - n0 + 1))
+        else:
+            for fam in _families(walk, n0, s1_stride):
+                st['families'] += 1
+                for c0 in range(0, len(alpha), chunk):
+                    part = alpha[c0:c0 + chunk]
+                    st['fleets'] += 1
+                    cores = _fan(base, part, fam['lsched'], csangle, cs_trail, n0, nthreads)
+                    collect(cores, lambda i, _p=part, _f=fam: _f['label'](_p[i][0], _p[i][1]))
         if atom:
             # the escape-atom conversion (L-conversion, rotate, backwards slam), then the ordinary
             # family sweep for whatever walk is left -- see `_atom_candidates`.
             _atom_candidates(base, walk, n0, csangle, cs_trail, s1_stride, alpha, flips, chunk,
                              nthreads, collect, out, st, junction_cap=junction_cap, deadline=deadline,
-                             beat=beat)
+                             beat=beat, dry=dry)
             if st.get('deadline_cut'):
                 return out, st
         if not two_segment:
@@ -910,6 +934,12 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
                         st['covered'] = st['junctions']
                         return out, st
                     st['junctions'] += 1
+                    if dry:
+                        fams = list(_families(walk - n0 - jp, 0, s1_stride))
+                        st['fleets'] += len(fams) * nchunks
+                        st.setdefault('skel', []).append(
+                            ('junc', st['junctions'] - 1, len(fams) * nchunks, walk - n0 - jp + 1))
+                        continue
                     for fam in _families(walk - n0 - jp, 0, s1_stride):
                         for c0 in range(0, len(alpha), chunk):
                             part = alpha[c0:c0 + chunk]
@@ -920,7 +950,7 @@ def fan_exact(seed, env, walk, csangle, cs_trail, hold, *, s1_stride=32, nthread
                                     _n0=n0, _f=fam:
                                     (_n0, _s[0], _s[1], _lp, _jp)
                                     + tuple(_f['label'](_p[i][0], _p[i][1]))[1:])
-    if tail_frames:
+    if tail_frames and not dry:                     # the skeleton prices the pre-tail fan only
         _steered_tail(out, st, seed, env, walk, csangle, cs_trail, hold, alpha, chunk, nthreads,
                       s1_stride, pre_stride, pre_frames, pre_l, tail_frames, tail_beam, deadline,
                       beat=beat, prefix_cap=prefix_cap, flips=flips)
