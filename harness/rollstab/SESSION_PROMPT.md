@@ -37,8 +37,10 @@ STANDING PRINCIPLE ON CALIBRATION (this is why past sessions drifted):
   seed it from a live run. Check the README ## Status for where this currently stands.
 
 READ, IN THIS ORDER, before proposing anything or touching code:
-  1. harness/rollstab/README.md: the pipeline, run protocol, verification, the
-     ## Status section (current state), and the "Dead ends" list.
+  1. harness/rollstab/README.md: the pipeline, run protocol, verification, and the ## Status
+     section (current state -- what is shipped, what is open and why). It is ~160 lines now; the
+     session-by-session log it used to carry is harness/rollstab/README-archive.md, which is
+     provenance, not state.
   2. harness/rollstab/ROADMAP.md: the multi-phase NORTH STAR (toward the Tetra seam
      clip) -- which phase is open and what its live-gated "done" is.
   3. The newest _notes/seam-clip-live-validation-handoff-*.md: this session's starting
@@ -80,6 +82,13 @@ knowledge/history/seam-clip-dead-ends.md. That is what keeps the ledger alive.
 STALL RULE: if you get stuck, or are about to spend real effort outside the handoff's
 plan, surface it before continuing.
 
+REPO CONTEXT (2026-08-20): main was split. A one-off Courtyard Tetra-push route planner had been the
+only thing worked on for ~170 sessions; it is parked on branch dmiller/courtyard-tetra-push (forked
+at c516cc3) and nothing on main depends on it. Generalizing THIS solver is the active work again.
+The era's general half was forward-ported: the native player engine, the land camera, the NPC
+look-at head and the attention/lock-on machine are all on main now, and the native driver has had
+that planner's search block cut out of it (tww_sim/core/anim/_anmc.pyx, no "courtyard" left in it).
+
 Savestate slot 5 = kaze flat room for roll clips. Savestate slot 3 = the WALK-STAB kaze r11 seam
 (session-28 pivot; durable anchor `tests/dolphin/anchors/kaze_r11_walkstab@twwgz.sav`, was the
 flooded-Hyrule Tetra corner (-1727,-990) for Phase C, slot reused). **Savestate slot 6 = the SHIPPED Tetra push-aside clip** (Phase T,
@@ -119,8 +128,10 @@ build these until asked):
   swap is instantaneous no-morf per the decomp. What remains is WIRING it into the scanner's ROLL
   dispatch (needs the roll-path solver) -- see the README ## Status "NEXT" list.
 - Body-lean physics: daPy_lk_c::jointBeforeCB per-joint leans + jointCB1 foot-plant IK (leg-angle
-  Z-bends, CLOTCH translate) + waist ground-tilt. NOTE (session 31): these are ALL ZERO on flat
-  ground and the MOMI joints (0x10/0x11) are FACE joints, NOT in the foot chain -- so this is NOT
-  the walk-stab "foot residual" (that was a sword/equip anim-set bug, dead-end #28). The MOMI lean
+  Z-bends, CLOTCH translate) + waist ground-tilt. NOTE: these are ALL ZERO on flat ground and the
+  MOMI joints (0x10/0x11) are FACE joints, NOT in the foot chain -- so this is NOT the walk-stab
+  "foot residual" (a sword/equip anim-set bug, dead-end #28) and it was NOT the late-FRONT_ROLL
+  pose drift either, which is now closed (the quaternion sign extension plus a FrameCtrl frame kept
+  in double). Body lean has been the prime suspect for two gaps and was neither. The MOMI lean
   (m3516/m3518/m351A, d_a_player_main.cpp:9487) is WIND-driven, not accel. Only matters on sloped
   ground / a non-zero-lean approach; verify live before modelling.
