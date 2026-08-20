@@ -21,7 +21,6 @@ from libc.string cimport memcpy
 from libc.math cimport (sqrt as _c_sqrt, hypot as _c_hypot, atan2 as _c_atan2,
                         fabs as _c_fabs, copysign as _c_copysign, fmod as _c_fmod,
                         rint as _c_rint, floor as _c_floor)
-from cython.parallel cimport prange, parallel
 
 # ---- single-precision primitives (identical to _fpc.pyx) -------------------------------------
 cdef inline double f32(double x) noexcept nogil: return <double><float>x
@@ -658,7 +657,7 @@ def co_center(double px, double py, double pz, long long facing, long long lean,
 
 
 # ---- dCcS::SetPosCorrect Co push (cc_push.co_move_pair) ----------------------------------------
-# The Courtyard CC push: obj1 (Link) and obj2 (Tetra) each ejected half the overlap depth, exact
+# The CC push: obj1 and obj2 each ejected half the overlap depth, exact
 # opposites for a same-rank pair. Bit-exact twin of tww_sim.core.cc_push.co_move_pair (XZ only,
 # dy=0). Rank table (d_cc_s.cpp:138) + GetRank (:153) inlined; is_zero threshold = collision 1e-5.
 DEF _CC_ISZERO = 1.0e-5               # collision.G_CM3D_F_ABS_MIN (NOT the mathlib 2^-18)
@@ -697,7 +696,7 @@ cdef int _co_move_pair_c(double c1x, double c1z, double r1, double h1,
                          int w1, int w2, double* out) noexcept nogil:
     """co_move_pair XZ core: fills out[0..3] = (v1x, v1z, v2x, v2z) -- obj1 (c1) and obj2 (c2)
     accumulated moves. Returns 1 if a push was applied, 0 (out zeroed) on no-overlap / deadzone /
-    both-immovable. Cylinders share the whole Y span here (courtyard flat floor), so the Y-overlap
+    both-immovable. Callers here share the whole Y span (flat floor), so the Y-overlap
     gate always passes; callers that need it must add it. Bit-exact port of cc_push.co_move_pair."""
     out[0] = 0.0; out[1] = 0.0; out[2] = 0.0; out[3] = 0.0
     cdef double dx = fsubs(c1x, c2x)
@@ -1092,13 +1091,13 @@ cdef class PoseEngine:
     cdef double _olds[12][3]
     cdef bint _has_old[12]
     # body_co store: the neck/head extras (BODY_CO_EXTRA slots 12-16 = joints 2,3,4,14,15), posed
-    # each frame with the SAME blend state as the feet (Stage 2 courtyard exec-centre). Index i =
+    # each frame with the SAME blend state as the feet (the exec-pass centre). Index i =
     # slot 12+i. The foot path leaves these untouched; only set when `_body_co` is on.
     cdef double _oldq_bc[5][4]
     cdef double _oldt_bc[5][3]
     cdef double _olds_bc[5][3]
     cdef bint _has_old_bc[5]
-    cdef bint _body_co              # pose the body_co extras each frame (courtyard; off in walk)
+    cdef bint _body_co              # pose the body_co extras each frame (off for a plain walk)
     cdef double _m_counter, _m_f8, _m_rate, _m_f10, _m_f14
     cdef double _base[12]           # worldBase (set by set_pos)
     cdef double _inv[12]            # m37B4 = PSMTXInverse(worldBase)
@@ -1626,7 +1625,7 @@ cdef class PoseEngine:
     def set_sword(self, bint sword):
         """mEquipItem == daPyItem_SWORD_e: the under-body walk/dash anims come from
         `mSwordAnmIndexTable` (ANM_WALK -> WALKS, ANM_DASH -> DASHS; getAnmData,
-        d_a_player_main.cpp:12950). Everything else in the courtyard set maps to itself (the table
+        d_a_player_main.cpp:12950). Everything else in the set maps to itself (the table
         ends at ANM_CUTTURNPWLR 0x1A, so ANM_ROLLF 0x32 falls through to mAnmDataTable), so this
         flag only re-points the two walk codes. Mirrors `FootSpeedF(sword=)`."""
         self._sword = sword
@@ -1794,7 +1793,7 @@ cdef class PoseEngine:
 
     def set_defer_draw(self, bint defer):
         """Draw at frame END from the post-posMove base (`FootSpeedF.defer_draw`). Carried by
-        `seed_from_foot`; `LandCore.step_courtyard` calls `_finish_draw_c` every frame."""
+        `seed_from_foot`; a coupled caller calls `_finish_draw_c` every frame."""
         self._defer_draw = defer
 
     def w_step(self, double nspeed, double msd, double anim_nspeed, bint has_anim):
@@ -1985,9 +1984,9 @@ cdef class PoseEngine:
         return self._idle_frame
 
     def seed_from_foot(self, foot, code2idx):
-        """Courtyard seeding bridge: copy a PYTHON `foot_speedf.FootSpeedF` (`foot_native=False`,
+        """Seeding bridge: copy a PYTHON `foot_speedf.FootSpeedF` (`foot_native=False`,
         the from-f0 FreeRun path) state INTO this fused C engine so `w_step`/`w_step_atn`/
-        `w_step_single` reproduce it bit-for-bit. The Python courtyard foot stream lives in the
+        `w_step_single` reproduce it bit-for-bit. The Python foot stream lives in the
         UnderAnimState (`foot.st`) + FootFK old-pose dicts (`foot.ff.old_*`, joint-keyed) + the
         posMoveFromFootPos toe stream (`foot.t1/t2/prev_f312/m35B4`); this method lands all of it
         in the C engine's own storage (12 foot-chain slots). Call on a fresh `clone_state()` engine
@@ -2027,7 +2026,7 @@ cdef class PoseEngine:
                 self._has_old[i] = True
             else:
                 self._has_old[i] = False
-        # body_co extras (courtyard exec centre): copy joints 2,3,4,14,15 -> body_co slots 0..4 from
+        # body_co extras (exec-pass centre): copy joints 2,3,4,14,15 -> body_co slots 0..4 from
         # the Python FootFK old-pose dicts, and arm `_body_co` so `_pose_toe_core` poses them each
         # frame. `ff.body_co` is False on the plain walk path -> the store stays inert.
         self._body_co = bool(getattr(ff, 'body_co', False))
@@ -2223,7 +2222,7 @@ DEF LD_NONE=4
 DEF _DEG_PER_RAD = 57.29577951308232
 
 # C-up-cancel (subjectivity freeze) input gates -- mirror land.py CUP_POSY / CUP_MAIN_MAX / C-DOWN.
-# AttentionLock / atn_actor (Courtyard Tetra push): NONE/LOCK/RELEASE + the front-of-player cone
+# AttentionLock / atn_actor: NONE/LOCK/RELEASE + the front-of-player cone
 # (attention.py FRONT_CONE_HALF) + setShapeAngleToAtnActor's cLib_addCalcAngleS knobs (2629).
 DEF _ATN_NONE=0
 DEF _ATN_LOCK=1
@@ -2411,11 +2410,11 @@ cdef double _cstick_posy_c(int csx, int csy) noexcept nogil:
 
 
 # Tetra's look-at head + Link's neck, resident in C -- the two models that generate the proc-9
-# re-aim eye, and (measured s128) 91% of the coupled courtyard step. Kept in its own file because
+# re-aim eye, and most of a coupled step's cost. Kept in its own file because
 # it is a distinct subsystem, `include`d rather than imported because `LandCore` runs it INSIDE
-# `_step_courtyard_nogil` and so needs its C state in this translation unit.
+# the coupled step and so needs its C state in this translation unit.
 include "_zl1c.pxi"
-# dBgS_Acch::CrrPos (both actors' BG wall pass) -- same reason: `_step_courtyard_nogil` braces Link
+# dBgS_Acch::CrrPos (both actors' BG wall pass) -- same reason: the coupled step braces Link
 # and Tetra INSIDE the frame, so the collision core has to be nogil C in this translation unit.
 include "_acchc.pxi"
 
@@ -2429,7 +2428,7 @@ cdef class CutAnimData:
     position, and the cut poses no foot chain (`land/procs/cut.py`).
 
     Built once from `core.anim.j3d_eval.load_anim(_generated/anim/link_anim_cuts.json)`, then IMMUTABLE
-    -- so a `LandCore.clone()` shares it by reference and a `prange` fleet reads it from every thread.
+    -- so a `LandCore.clone()` shares it by reference and a parallel fan-out reads it per thread.
     Slots follow `_cut_slot`: [0] = CUT_F, [1] = CUT_A."""
     cdef double* _t[2]
     cdef int _cnt[2][3]
@@ -2502,7 +2501,7 @@ cdef class LandCore:
     cdef int _inbuf[2][6]
     cdef long long _cam_yaw, _cam_target
     cdef double _cam_scale, _cam_pending_posx
-    # --- Courtyard Tetra-push coupled state (step_courtyard only; inert for the walk step) ---
+    # --- Coupled-actor state: CC push pair, actor lock, look pair, cut. A caller seeds these; the
     cdef public double pos_y                # Link world Y (constant in the push window; base rounding)
     cdef public double m351C                # setMoveSlantAngle lean state (s16 stored as double)
     cdef public double _draw_lean_c         # shape_angle.z at draw (s16(m351C)>>1)
@@ -2517,7 +2516,7 @@ cdef class LandCore:
     cdef public double _pend_tetra_x, _pend_tetra_z # Tetra CC push for THIS frame (matched pair)
     cdef int _cbuf[6]                       # delay-1 pending controller input
     cdef bint _has_cbuf
-    cdef bint _court_locked                 # mpAttnActorLockOn != NULL (courtyard; False in walk step)
+    cdef public bint _actor_locked           # mpAttnActorLockOn != NULL; a caller arms it (see step)
     cdef public bint low_life               # checkRestHPAnime's life half (seeded; wait-stop-pose.md)
     # --- the look pair, run INSIDE the frame (session 128): her Zl1Look + Link's NeckLook ---
     cdef Zl1LookCore _zl1
@@ -2531,7 +2530,7 @@ cdef class LandCore:
     cdef double _cut_m3700[3]               # previous frame's joint-0 root translate
     cdef double _cut_add_x, _cut_add_z      # THIS frame's rotated root-translate delta
     cdef public bint sword_drawn            # gates the roll->cut hand-off (seeded)
-    cdef bint _b_trig                       # swordTrigger(): B mItemTrigger RISING EDGE this frame
+    cdef public bint _b_trig                # swordTrigger(): B mItemTrigger RISING EDGE this frame
     cdef CutAnimData _cutanm                # joint-0 translate tracks (immutable, shared on clone)
     cdef bint _has_cutanm
     # --- dBgS_Acch::CrrPos, both actors (session 150): the BG wall pass INSIDE the frame ---
@@ -2608,7 +2607,7 @@ cdef class LandCore:
         self._cam_target = (self._cam_yaw - 1) & 0xFFFF
         self._cam_scale = cam_scale
         self._cam_pending_posx = 0.0
-        # Courtyard coupled state (inert unless step_courtyard drives it):
+        # Coupled-actor state (inert unless a caller drives it):
         self.pos_y = 0.0
         self.m351C = 0.0
         self._draw_lean_c = 0.0
@@ -2623,7 +2622,7 @@ cdef class LandCore:
         self._pend_link_x = 0.0; self._pend_link_z = 0.0
         self._pend_tetra_x = 0.0; self._pend_tetra_z = 0.0
         self._has_cbuf = False
-        self._court_locked = False
+        self._actor_locked = False
         self.low_life = False
         self._zl1 = None
         self._neck = None
@@ -2680,7 +2679,7 @@ cdef class LandCore:
                 c._inbuf[i][j] = self._inbuf[i][j]
         c._cam_yaw = self._cam_yaw; c._cam_target = self._cam_target
         c._cam_scale = self._cam_scale; c._cam_pending_posx = self._cam_pending_posx
-        # courtyard coupled state
+        # coupled-actor state
         c.pos_y = self.pos_y; c.m351C = self.m351C; c._draw_lean_c = self._draw_lean_c
         c._atn_state = self._atn_state; c._atn_fade = self._atn_fade
         c._atn_fade_frames = self._atn_fade_frames; c._atn_l_prev = self._atn_l_prev
@@ -2689,7 +2688,7 @@ cdef class LandCore:
         c._atn_eye_x = self._atn_eye_x; c._atn_eye_z = self._atn_eye_z; c._has_eye = self._has_eye
         c._pend_link_x = self._pend_link_x; c._pend_link_z = self._pend_link_z
         c._pend_tetra_x = self._pend_tetra_x; c._pend_tetra_z = self._pend_tetra_z
-        c._court_locked = self._court_locked; c._has_cbuf = self._has_cbuf
+        c._actor_locked = self._actor_locked; c._has_cbuf = self._has_cbuf
         c.low_life = self.low_life
         # the look pair: each clones its own state (the fan branches a node into an aim fan).
         c._zl1 = self._zl1.clone() if self._zl1 is not None else None
@@ -2900,10 +2899,10 @@ cdef class LandCore:
         cdef double f2 = jma_sin(iVar6)
         cdef double fVar4 = jma_cos(iVar6)
         cdef int uVar1 = self.direction
-        # The FWD/BACK branch is gated on mpAttnActorLockOn == NULL (a live actor-lock keeps mDirection
-        # on a SIDE -- the proc-9 strafe pose). `_court_locked` is False in the walk step (inert there).
+        # The FWD/BACK branch is gated on mpAttnActorLockOn == NULL: a live actor-lock keeps mDirection
+        # on a SIDE (the strafe pose). `_actor_locked` defaults False, so an unlocked step is unaffected.
         if self.msd > 0.05:
-            if (not self._court_locked) and (fVar4 <= _L_ATNB_COS_BACK or fVar4 >= _L_ATNB_COS_FWD):
+            if (not self._actor_locked) and (fVar4 <= _L_ATNB_COS_BACK or fVar4 >= _L_ATNB_COS_FWD):
                 self.direction = LD_BACKWARD if fVar4 <= _L_ATNB_COS_BACK else LD_FORWARD
             else:
                 if uVar1 == LD_BACKWARD or uVar1 == LD_FORWARD:
@@ -2923,11 +2922,11 @@ cdef class LandCore:
     cdef void _check_next_mode(self, bint l_held) noexcept nogil:
         cdef int cur = self.state
         cdef long long dist
-        # `_court_locked` (mpAttnActorLockOn != NULL) is set only by step_courtyard; it stays False in
-        # the walk step, so this branch is byte-identical to the pre-courtyard behaviour there.
-        if l_held or self._court_locked:
+        # `_actor_locked` (mpAttnActorLockOn != NULL) defaults False, so an unlocked step takes the
+        # plain L-held arm; a caller that arms it gets the ATN_ACTOR routing, as land/procs/move.py does.
+        if l_held or self._actor_locked:
             self.max_nspeed = _L_ATN_MAX
-            if self._court_locked:
+            if self._actor_locked:
                 self.state = LS_ATN_ACTOR_WAIT if _c_fabs(self.nspeed) <= 0.001 else LS_ATN_ACTOR_MOVE
             else:
                 self.state = LS_WAIT if _c_fabs(self.nspeed) <= 0.001 else LS_ATN_MOVE
@@ -3291,14 +3290,14 @@ cdef class LandCore:
         return d
 
 
-    # ================= Courtyard Tetra-push coupled step (step_courtyard) =====================
+    # ================= Coupled-actor surface: CC push, walls, look pair, cut ===================
     # The from-f0 FreeRun window: MOVE(6) <-> ATN_MOVE(7) <-> ATN_ACTOR_WAIT/MOVE(8/9) <-> FRONT_ROLL.
     # Adds the dAttention_c hold-mode lock machine + the actor-lock targeting procs 8/9 (re-aim +
     # DIR_BACKWARD negation) + the locked-actor checkNextMode/setBlendAtnMoveAnime gates + the posMove
     # CC-push consume, all resident in C. Physics port of harness/tetrapush/from_f0.FreeRun.step +
-    # land.state.LandState.step (the courtyard subset). speedF via the seeded fused PoseEngine.
+    # land.state.LandState.step. speedF via the seeded fused PoseEngine.
     @property
-    def court_shape_z(self):
+    def shape_z(self):
         """sim_shape_z: shape_angle.z = s16(m351C) >> 1 (the lean the from_f0 gate asserts)."""
         return _s16c(<long long>self.m351C) >> 1
 
@@ -3312,38 +3311,17 @@ cdef class LandCore:
         `_set_pos_c` on whatever the frame last drew at, which is exactly the base the wired
         `FootFK` carries -- and it is the last camera argument a native run could not supply.
 
-        In the courtyard regime the row is Link's constant world Y (flat floor, no m35C4 walk
-        lift, no m35B8 ground decay -- measured over procs 6/7/9/30, one distinct value). It is
-        exported live anyway: the camera should read the base from the engine that owns it, so a
-        ground model landing later moves this without touching the camera."""
+        On flat ground the row is Link's constant world Y (no m35C4 walk lift, no m35B8 ground
+        decay). It is exported anyway: the camera should read the base from the engine that owns
+        it, so a ground model landing later moves this without touching the camera."""
         return fadds(f32(92.5), self._pe._base[7])
-
-    def seed_courtyard(self, PoseEngine pe, double pos_y, long long m351c, int atn_state,
-                       double tetra_x, double tetra_z,
-                       double pend_link_x=0.0, double pend_link_z=0.0,
-                       double pend_tetra_x=0.0, double pend_tetra_z=0.0):
-        """Attach the courtyard-seeded fused PoseEngine (`pe.seed_from_foot(...)` on a fresh
-        clone_state) + the coupled-state seeds (pos_y for the FK base rounding, the m351C lean, the
-        AttentionLock state, Tetra's f0 feet). `pend_link_*`/`pend_tetra_*` = the f0->f1 CC push pair
-        (FreeRun's `seed_push`; the matched Link recoil + Tetra push consumed on the FIRST native
-        step) -- required only for the fully-native push mode (`step_courtyard(..., native_push=1)`).
-        setup() must have run first (physics scalar seeds)."""
-        self._pe = pe
-        self.pos_y = pos_y
-        self.m351C = <double>(m351c & 0xFFFF)
-        self._draw_lean_c = <double>(_s16c(m351c & 0xFFFF) >> 1)
-        self._atn_state = atn_state
-        self._tetra_x = tetra_x
-        self._tetra_z = tetra_z
-        self._pend_link_x = pend_link_x; self._pend_link_z = pend_link_z
-        self._pend_tetra_x = pend_tetra_x; self._pend_tetra_z = pend_tetra_z
 
     def co_center_exec(self, init_frame=None):
         """Link's exec-pass body-Co centre (cx, cz) for the frame this core LAST stepped -- the twin
         of `from_f0._computed_center`, and what a caller has to recompute the CC push pair after
         moving him.
 
-        Same base/lean conventions as `head_top_exec` and as the centre `step_courtyard` builds
+        Same base/lean conventions as `head_top_exec` and as the centre a coupled caller builds
         internally: the base takes the DRAW lean (zero on a proc-``*_init`` frame) and the BODY_CHN
         twist the post-update one. It exists because a native run's Python `LandState` is a
         field-holder whose pose is the SEED's -- computing the centre off it would silently use an
@@ -3365,7 +3343,7 @@ cdef class LandCore:
         """Link's exec-pass ``mHeadTopPos`` (x, y, z) for the frame this core LAST stepped -- the
         twin of `from_f0._computed_head_top`, and the one value Tetra's look model needs from him.
 
-        Same base/lean conventions as the body-Co centre computed in `step_courtyard`: the base takes
+        Same base/lean conventions as the body-Co centre computed in a coupled caller: the base takes
         the DRAW lean (zero on a proc-``*_init`` frame, `_init_frame`) and the BODY_CHN twist takes
         the post-update lean. ``neck`` = `NeckLook.local_38()` for the head jointBeforeCB twist, or
         None for untwisted.
@@ -3402,7 +3380,7 @@ cdef class LandCore:
         return ((m[0], m[1], m[2], m[3]), (m[4], m[5], m[6], m[7]), (m[8], m[9], m[10], m[11]))
 
     def seed_look(self, Zl1AnimData data, zl1, neck, head_mtx, double tetra_y):
-        """Wire the look pair INTO the step (session 128): from here `step_courtyard` runs her
+        """Wire the look pair INTO the step (session 128): from here a coupled caller runs her
         `Zl1Look` and Link's `NeckLook` itself and generates its own proc-9 re-aim eye, instead of
         being handed one per frame.
 
@@ -3462,7 +3440,7 @@ cdef class LandCore:
 
         Without this a mid-roll B is IGNORED by the C step, which is the gap `clip_roll.fire` used to
         have to step in Python for -- so it is seeded, never defaulted: a core that was not handed the
-        tracks refuses the cut (`_step_courtyard_nogil` flags it) instead of rolling on through it."""
+        tracks refuses the cut (the coupled step flags it) instead of rolling on through it."""
         self._cutanm = data
         self._has_cutanm = True
         self.sword_drawn = sword_drawn
@@ -3515,7 +3493,7 @@ cdef class LandCore:
         """Raise whatever the nogil frame could only FLAG -- call once per step, under the GIL.
 
         The C step must never silently run a branch it does not model, and it cannot raise from
-        `nogil`, so `_step_courtyard_nogil` sets a sticky flag and this converts it. Both cases are
+        `nogil`, so the coupled step sets a sticky flag and this converts it. Both cases are
         Link-wall consequences that only exist once his mesh is wired, which is why they arrived with
         it rather than before."""
         if self.bonk_unmodelled:
@@ -3597,13 +3575,6 @@ cdef class LandCore:
                 return _lldist(wall_ang, (self.facing + 0x8000) & 0xFFFF) <= 0x2000
         return False
 
-    def pre_seed_courtyard(self, int sx, int sy, int buttons, int triggerL):
-        """Seed the delay-1 controller buffer (the input the FIRST step_courtyard acts on) --
-        FreeRun.pre_seed_input at input_delay=1."""
-        self._cbuf[0] = sx; self._cbuf[1] = sy; self._cbuf[2] = buttons
-        self._cbuf[3] = triggerL; self._cbuf[4] = 128; self._cbuf[5] = 128
-        self._has_cbuf = True
-
     cdef inline bint _atn_locked(self) noexcept nogil:
         return self._atn_state == _ATN_LOCK or self._atn_state == _ATN_RELEASE
 
@@ -3681,484 +3652,9 @@ cdef class LandCore:
         self._set_shape_angle_to_atn_actor()
         self._set_normal_speed_f(f1, _L_ATN_SCL, _L_ATN_ACC, _L_ATN_DEC)
 
-    cdef void _set_move_slant_angle_c(self) noexcept nogil:
-        """daPy_lk_c::setMoveSlantAngle (state.py _set_move_slant_angle): the MOVE turn-lean m351C.
-        Uses the frame-START m34de, the current facing, and self.speedF (the actual integrated speed)."""
-        cdef double thresh = f32(0.95)
-        cdef double fvar1 = f32(_c_fabs(f32(self.speedF / self.max_nspeed)))
-        cdef double ratio
-        cdef long long tgt, sv, m
-        if self.state == LS_MOVE and fvar1 > thresh:
-            ratio = f32(f32(fvar1 - thresh) / f32(1.0 - thresh))
-            tgt = <long long>(f32(f32(f32(1.6) * <double>_s16c(self.m34de - self.facing)) * ratio))
-            m = <long long>self.m351C
-            self.m351C = <double>(_clib_addcalc_angles(m, tgt & 0xFFFF, 4, 200, 100))
-        else:
-            sv = <long long>(f32(<double>_s16c(<long long>self.m351C) * f32(0.35)))
-            if sv == 0:
-                self.m351C = 0.0
-            else:
-                self.m351C = <double>(((<long long>self.m351C) - sv) & 0xFFFF)
-
-    def step_courtyard(self, int sx, int sy, int buttons, int triggerL,
-                       long long csangle, double tetra_x, double tetra_z,
-                       double eye_x, double eye_z, int has_eye,
-                       double pend_link_x, double pend_link_z,
-                       double speedf_inject, int has_speedf_inject,
-                       int native_push=0):
-        """One coupled Courtyard frame (physics port of FreeRun.step + LandState.step). Injected
-        per-frame: `csangle` (camera value the physics reads) and the proc-9 re-aim `eye_x/z`
-        (has_eye). `speedf_inject`/`has_speedf_inject` overrides the native pose-engine speedF (for
-        the physics-first validation milestone). Returns the NATIVE pose-engine speedF (== self.speedF
-        when not injecting); the caller reads pos_x/pos_z/facing/travel/state/nspeed/court_shape_z +
-        self.speedF for the 0-ULP gate.
-
-        `native_push` == 0 (Stage 1 injected mode): the coupled push is INJECTED -- the Tetra feet
-        `tetra_x/z` (cone gate + proc-9 feet fallback + tracked point) and the incoming Link recoil
-        `pend_link_x/z` (posMove consume). `native_push` != 0 (Stage 2): the push is SELF-CONTAINED --
-        `tetra_x/z`/`pend_link_x/z` are ignored; the tracked Tetra XZ (`self._tetra_x/_tetra_z`) and
-        the recoil pair (`self._pend_link/_pend_tetra`) persist frame-to-frame. Each frame consumes
-        THIS frame's recoil in posMove, moves the tracked Tetra by THIS frame's push (rounded to f32
-        per axis), then rebuilds the exec-pass body-Co centre (`_pe._body_co_center` off the posed
-        neck chain) and computes NEXT frame's push pair (`_co_move_pair_c`). Only the eye + csangle
-        stay injected. Requires a `seed_courtyard(..., pend_link_*, pend_tetra_*)` seed.
-
-        Thin GIL wrapper over `_step_courtyard_nogil` (the whole coupled frame runs in C with the GIL
-        released; the fleet driver `prange`s that core across the search frontier -- Stage 4)."""
-        if self._has_twalls and native_push == 0:
-            raise ValueError("a wired Tetra mesh needs native_push=1: in the injected mode her "
-                             "position comes from the caller each frame, so her CrrPos would brace a "
-                             "point the next call overwrites")
-        return self._step_courtyard_nogil(sx, sy, buttons, triggerL, csangle, tetra_x, tetra_z,
-                                          eye_x, eye_z, has_eye, pend_link_x, pend_link_z,
-                                          speedf_inject, has_speedf_inject, native_push)
-
-    cdef double _step_courtyard_nogil(self, int sx, int sy, int buttons, int triggerL,
-                                      long long csangle, double tetra_x, double tetra_z,
-                                      double eye_x, double eye_z, int has_eye,
-                                      double pend_link_x, double pend_link_z,
-                                      double speedf_inject, int has_speedf_inject,
-                                      int native_push) noexcept nogil:
-        """The pure-C coupled Courtyard frame (see `step_courtyard`). No Python-object interaction:
-        operates entirely on this core's C state + the bound C `PoseEngine`, so `prange` fan-out over
-        an independent fleet preserves the exact 0-ULP result of stepping each core sequentially."""
-        # --- delay-1 controller buffer: act on the PREVIOUS call's input (input_delay=1) ---
-        cdef int asx = self._cbuf[0], asy = self._cbuf[1], abtn = self._cbuf[2], atrig = self._cbuf[3]
-        self._cbuf[0] = sx; self._cbuf[1] = sy; self._cbuf[2] = buttons; self._cbuf[3] = triggerL
-        if native_push == 0:
-            # injected mode: overwrite the tracked Tetra + the incoming recoil from the caller.
-            self._tetra_x = tetra_x; self._tetra_z = tetra_z
-            self._pend_link_x = pend_link_x; self._pend_link_z = pend_link_z
-        if not self._has_look:
-            self._atn_eye_x = eye_x; self._atn_eye_z = eye_z; self._has_eye = has_eye != 0
-        # setNeckAngle reads the frame-START m34DE, and her lookBack reads her PRE-plow position --
-        # both must be captured before anything below moves them (the Python step's own ordering).
-        cdef long long m34de_start = self.m34de
-        cdef double tetra_pre_x = self._tetra_x
-        cdef double tetra_pre_z = self._tetra_z
-        self.csangle = csangle & 0xFFFF
-        self._set_stick_data(asx, asy)
-        # Frame-START proc (this frame's mCurProc before any dispatch/_roll_init mutation): the
-        # from_f0 `init_frame` = "did a proc *_init run" = post-step state != THIS value (the
-        # previous frame's post-step state). Must be captured BEFORE the A-roll trigger, which
-        # sets state=FRONT_ROLL and would otherwise mask the roll-entry init_frame.
-        cdef int entry_state = self.state
-        cdef bint l_held = ((abtn & 0x40) != 0) or (atrig >= 200)
-        cdef bint a_pressed = (abtn & 0x100) != 0
-        # swordTrigger() (checkNextActionFromButton 4203): the B mItemTrigger RISING EDGE -- a HELD B
-        # is not an edge. Twin of state.py's `_b_trig`; it is what dispatches the roll's CUT.
-        self._b_trig = ((abtn & ~self._abtn_prev) & 0x200) != 0
-        self._abtn_prev = abtn
-        cdef bint moving = self.msd > 0.05
-        # attention machine (delay-1: l_atn == l_held); cone gate on the pre-dispatch pos/facing.
-        # target_exists=1: the courtyard step always has a driven Tetra, and she never despawns.
-        self._atn_update(l_held, self._atn_target_present(), True)
-        if l_held and not self._l_prev:
-            self.m34E6 = self.facing
-        # A dispatch: L-off attack roll only (the L-held jump does not occur in this window). The press
-        # is ATTACK only above mBasic.field_0x1C (setDoStatusBasic 2220); at or below it the game
-        # sheathes (PUT_AWAY, 2218) and there is no roll -- see land/hio.py ATTACK_MSD_MIN.
-        cdef bint grounded = (self.state == LS_WAIT or self.state == LS_FREE_WAIT
-                              or self.state == LS_MOVE or self.state == LS_ATN_MOVE)
-        if (a_pressed and grounded and not l_held and self.msd > _L_ATTACK_MSD_MIN
-                and (self.state == LS_MOVE or self.state == LS_ATN_MOVE)):
-            # With Link's mesh wired the press can be a SIDLE instead (setDoStatus SIDLE preempts
-            # ATTACK at a head-on wall) -- unmodelled on BOTH paths, so flag and refuse rather than
-            # roll. Twin of state.py's `sidle_blocked`, which rejects the input stream the same way.
-            if self._has_lwalls and self._sidle_blocks_roll():
-                self.sidle_unmodelled = True
-            else:
-                self.facing = self.target
-                self._roll_init()
-        cdef bint locked_actor = self._atn_locked()
-        self._court_locked = locked_actor       # steers the shared _check_next_mode / _update_atn_direction
-        cdef int proc = self.state
-        if proc == LS_WAIT or proc == LS_FREE_WAIT:
-            if locked_actor:
-                self.state = LS_ATN_ACTOR_WAIT
-                self._set_speed_and_angle_atn_actor()
-            elif l_held:
-                self.state = LS_ATN_MOVE
-                self._set_speed_and_angle_atn()
-            else:
-                self._set_speed_and_angle_normal(_L_F0, False)
-            self._check_next_mode(l_held)
-        elif proc == LS_MOVE:
-            self._set_speed_and_angle_normal(_L_F0, l_held)
-            self._check_next_mode(l_held)
-        elif proc == LS_ATN_MOVE:
-            self._set_speed_and_angle_atn()
-            self._check_next_mode(l_held)
-        elif proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT:
-            self._set_speed_and_angle_atn_actor()
-            self._check_next_mode(l_held)
-        elif proc == LS_WAIT_TURN:
-            self._proc_wait_turn(l_held)
-        elif proc == LS_MOVE_TURN:
-            self._proc_move_turn(l_held)
-        elif proc == LS_SLIP:
-            self._proc_slip(l_held)
-        elif proc == LS_FRONT_ROLL:
-            self._proc_roll(l_held)
-        elif proc == LS_CUT_F or proc == LS_CUT_A:
-            self._proc_cut(l_held)          # sword-thrust lunge; exits to WAIT past field_0xC
-
-        cdef int prev_dir = self.direction
-        if (self.state == LS_ATN_MOVE or self.state == LS_ATN_ACTOR_MOVE
-                or self.state == LS_ATN_ACTOR_WAIT):
-            self._update_atn_direction()        # _court_locked already set above (locked gate)
-        # ATN[_ACTOR] / WAIT -> MOVE: procMove_init re-triggers the oldframe-morf (6215). Twin of
-        # state.py's `_pending_morf` block; the WAIT arm needs `_started` for the same reason.
-        if (self.state == LS_MOVE
-                and (proc == LS_ATN_MOVE or proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT
-                     or ((proc == LS_WAIT or proc == LS_FREE_WAIT) and self._pe._started))):
-            self._pe._w_set_pending_c(_L_MOVE_REENTRY_MORF)
-
-        # --- pose + speedF (posMoveFromFootPos via the seeded fused engine) ---
-        # Pre-posMove base: the legacy (non-deferred) draw poses here. With the deferred draw on,
-        # `_finish_draw_c` re-sets the base at frame end and this is inert.
-        self._pe._set_pos_c(self.pos_x, self.pos_y, self.pos_z, self.facing, 0)
-        cdef double sf_native, f31, na, ratio
-        cdef long long r3, r3a
-        cdef int r27
-        cdef bint entered, morf_on, rest_hp
-        cdef double m3700[3]
-        cdef double sp5c[3]
-        cdef double cs, cc
-        cdef int st_now = self.state
-        self._cut_add_x = 0.0; self._cut_add_z = 0.0
-        if st_now == LS_FRONT_ROLL or st_now == LS_SLIP:
-            self._pe._w_step_single_c(self.nspeed, self.msd)
-            na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
-            sf_native = 0.0 if na < 0.05 else self.nspeed
-        elif (proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT
-              or st_now == LS_ATN_ACTOR_MOVE or st_now == LS_ATN_ACTOR_WAIT):
-            f31 = f32(_c_fabs(self.nspeed) / self.max_nspeed)
-            if st_now == LS_MOVE:
-                self._pe._w_step_c(self.nspeed, self.msd, 0.0, False)
-            else:
-                entered = not (proc == LS_ATN_ACTOR_MOVE or proc == LS_ATN_ACTOR_WAIT)
-                morf_on = entered or (self.direction != prev_dir)
-                self._pe._w_step_atn_c(self.nspeed, self.msd, self.direction, f31,
-                                       _L_MOVE_REENTRY_MORF if morf_on else 0.0, morf_on)
-            na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
-            sf_native = 0.0 if na < 0.05 else self.nspeed
-        elif st_now == LS_CUT_F or st_now == LS_CUT_A:
-            # Sword-thrust lunge: speedF (== nspeed, m3598 == 0, NO foot pose -- the toe stream
-            # freezes) + the posMove m34C2==1 root-translate delta rotated by shape_angle.y. On the
-            # entry frame m3700_prev == 0, so the whole root translate stacks (the ~23.22 u).
-            na = self.nspeed if self.nspeed >= 0.0 else -self.nspeed
-            sf_native = 0.0 if na < 0.05 else self.nspeed
-            _cut_m3700_c(self._cutanm, _cut_slot(st_now), self.cut_frame, m3700)
-            sp5c[0] = fsubs(m3700[0], self._cut_m3700[0])
-            sp5c[1] = fsubs(m3700[1], self._cut_m3700[1])
-            sp5c[2] = fsubs(m3700[2], self._cut_m3700[2])
-            self._cut_m3700[0] = m3700[0]; self._cut_m3700[1] = m3700[1]
-            self._cut_m3700[2] = m3700[2]
-            cs = jma_sin(self.facing); cc = jma_cos(self.facing)
-            self._cut_add_x = fadds(fmuls(sp5c[2], cs), fmuls(sp5c[0], cc))
-            self._cut_add_z = fsubs(fmuls(sp5c[2], cc), fmuls(sp5c[0], cs))
-        elif proc == LS_CUT_F or proc == LS_CUT_A:
-            # The cut EXITED to WAIT this frame (checkNextMode(1) set mNormalSpeed 0) -> position
-            # freezes, and the WAIT idle below must NOT pose (this arm precedes it, as in state.py).
-            sf_native = 0.0
-        elif st_now == LS_ATN_MOVE:
-            f31 = f32(_c_fabs(self.nspeed) / self.max_nspeed)
-            morf_on = (proc != LS_ATN_MOVE) or (self.direction != prev_dir)
-            sf_native = self._pe._w_step_atn_c(self.nspeed, self.msd, self.direction, f31,
-                                               _L_MOVE_REENTRY_MORF if morf_on else 0.0, morf_on)
-        elif st_now == LS_WAIT_TURN:
-            self._pe._w_step_single_c(self.nspeed, self.msd)
-            sf_native = 0.0
-        elif proc == LS_WAIT_TURN and st_now == LS_WAIT:
-            r3 = _s16c(self.facing - self.m34de)
-            r3a = r3 if r3 >= 0 else -r3
-            r27 = C_ATNWLS if r3 > 0 else C_ATNWRS
-            ratio = f32(f32(0.5) + f32(0.001 * <double>r3a))
-            if ratio > 1.0:
-                ratio = 1.0
-            self._pe._w_enter_wait_idle_c(ratio, r27, _L_MOVE_REENTRY_MORF, self.msd)
-            sf_native = 0.0
-        elif st_now == LS_WAIT and self._pe._started:
-            # THE WALK -> WAIT STOP: procWait_init (6068) / procWait (6093) keep posing while
-            # stopped, so the toe stream advances and the re-walk's f31_2 is the standing drift.
-            # Twin of state.py's WAIT branch; knowledge/model/wait-stop-pose.md.
-            rest_hp = self.low_life and not self._atn_locked()
-            if proc != LS_WAIT:                              # procWait_init
-                if rest_hp:
-                    self._pe._w_enter_wait_rest_hp_c()       # the ANM_WAITATOB single
-                    self._pe._w_step_single_c(0.0, self.msd)
-                else:
-                    self._pe._w_pose_idle_blend_c(self.msd, _L_MOVE_REENTRY_MORF)
-            elif self._pe._m34C3 == 0:                       # procWait, mid-single (6119)
-                if self._pe._fc0_rate < 0.01 or not rest_hp:
-                    self._pe._w_pose_idle_blend_c(self.msd, _L_MOVE_REENTRY_MORF)
-                else:
-                    self._pe._w_step_single_c(0.0, self.msd)
-            else:                                            # procWait, in the blend (6144)
-                self._pe._w_pose_idle_blend_c(self.msd, -1.0)
-            sf_native = 0.0
-        else:
-            sf_native = self._pe._w_step_c(self.nspeed, self.msd,
-                                           self._anim_nspeed if self._has_anim_nspeed else 0.0,
-                                           self._has_anim_nspeed)
-            self._has_anim_nspeed = False
-
-        self.speedF = f32(speedf_inject) if has_speedf_inject != 0 else sf_native
-
-        # --- world motion (speedF along travel) then the posMove CC recoil consume ---
-        cdef double d = self.speedF
-        cdef double px0 = self.pos_x, pz0 = self.pos_z      # frame-START pos = CrrPos's `old`
-        self.pos_x = f32(self.pos_x + f32(d * jma_sin(self.travel)))
-        self.pos_z = f32(self.pos_z + f32(d * jma_cos(self.travel)))
-        # posMove CC recoil (2558): consume THIS frame's Link recoil. self._pend_link is the injected
-        # value (native_push==0) or the pair computed at the end of the previous native frame.
-        self.pos_x = f32(self.pos_x + self._pend_link_x)
-        self.pos_z = f32(self.pos_z + self._pend_link_z)
-        # The sword-cut root-translate lunge (posMove m34C2==1) on top of the foot term -- zero except
-        # on a CUT frame, so the single-frame move is then foot + lunge (the ~49.22 u roll-stab).
-        if st_now == LS_CUT_F or st_now == LS_CUT_A:
-            self.pos_x = f32(self.pos_x + self._cut_add_x)
-            self.pos_z = f32(self.pos_z + self._cut_add_z)
-        # mAcch.CrrPos: after integration, before the deferred draw (the game's order).
-        if self._has_lwalls:
-            self._link_wall_pass(px0, pz0)
-        # Native coupling: move the tracked Tetra by THIS frame's push (matched to the recoil just
-        # consumed), rounding each axis to f32 (the plow amplifies any f64 residue -- README s29).
-        if native_push != 0:
-            self._tetra_x = f32(self._tetra_x + self._pend_tetra_x)
-            self._tetra_z = f32(self._tetra_z + self._pend_tetra_z)
-            # Her own mObjAcch.CrrPos, where Zl1FollowState.step runs it: a WEDGED Tetra BRACES (her
-            # CC recoil is cancelled by the wall) instead of being plowed through it -- which is the
-            # whole mechanic the clip is built on. Without this she went 53 u THROUGH the back wall.
-            if self._has_twalls:
-                self._tetra_wall_pass(tetra_pre_x, tetra_pre_z)
-        # end-of-frame: the draw lean (pre-update m351C), the setMoveSlantAngle update, m34de/m34ea.
-        self._draw_lean_c = <double>(_s16c(<long long>self.m351C) >> 1)
-        # The model is DRAWN here -- post-posMove base, no lean on a proc *_init frame (commonProcInit
-        # zeroed shape_angle.z before setWorldMatrix). Same law and same moment as the exec Co-centre
-        # below, because both come from the one mpCLModel->calc() per frame. No-op unless the seeded
-        # foot deferred (`PoseEngine.set_defer_draw`). Twin of state.py's finish_draw block.
-        cdef bint init_frame = self.state != entry_state
-        self._init_frame = init_frame      # `head_top_exec` needs this frame's zero-lean base rule
-        self._pe._finish_draw_c(self.pos_x, self.pos_y, self.pos_z, self.facing,
-                                0 if init_frame else <long long>self._draw_lean_c)
-        self._set_move_slant_angle_c()
-        self.m34de = self.facing
-        self.m34ea = self.m34dc
-        self._l_prev = l_held
-        # Native coupling: rebuild the exec-pass body-Co centre from the neck chain posed this frame,
-        # then compute NEXT frame's push pair (Link recoil obj1, Tetra push obj2). Runs AFTER
-        # setMoveSlantAngle so the BODY_CHN twist uses the post-update lean and the base uses the
-        # draw lean (0 on a proc-init frame) -- the from_f0._computed_center timing law.
-        cdef long long base_lean_v, body_lean_v
-        cdef double cxz[2]
-        cdef double push[4]
-        if native_push != 0:
-            body_lean_v = _s16c(<long long>self.m351C) >> 1
-            base_lean_v = 0 if init_frame else (<long long>self._draw_lean_c)
-            self._pe._body_co_center(self.pos_x, self.pos_y, self.pos_z, self.facing,
-                                     base_lean_v & 0xFFFF, -body_lean_v, cxz)
-            _co_move_pair_c(cxz[0], cxz[1], 30.0, 140.0,
-                            self._tetra_x, self._tetra_z, 50.0, 140.0,
-                            120, 0x8C, push)
-            self._pend_link_x = push[0]; self._pend_link_z = push[1]
-            self._pend_tetra_x = push[2]; self._pend_tetra_z = push[3]
-
-        # --- the look pair, in the Python step's order: neck, then her whole execute frame -------
-        # (session 128; knowledge/model/the-look-pair-in-c.md). The neck measures the CACHED
-        # previous-frame head matrix and the frame-START m34DE; her look then runs off the head
-        # matrix and mHeadTopPos this frame's neck twist produces, and her eyePos arms the NEXT
-        # frame's proc-9 re-aim -- which is the whole reason this belongs inside the frame.
-        cdef double hm[12]
-        cdef double ht[3]
-        cdef bint look_ok
-        if self._has_look:
-            look_ok = self._neck._select_look_pos_c(
-                self.pos_x, self.pos_z, self._zl1._eye[0], self._zl1._eye[2],
-                m34de_start, True, self._atn_locked(), self._atn_list_present)
-            self._neck._update_c(m34de_start, self.state, look_ok,
-                                 self._zl1._eye[0], self._zl1._eye[1], self._zl1._eye[2])
-            body_lean_v = _s16c(<long long>self.m351C) >> 1
-            base_lean_v = 0 if init_frame else (<long long>self._draw_lean_c)
-            # ONE chain walk, not two: `_head_top_impl` IS `_head_mtx_impl` plus the head-offset
-            # multiply (d_a_player_main.cpp:11592), so deriving the top from the matrix here is the
-            # same value by construction and saves a full 7-joint FK every frame.
-            self._pe._head_mtx(self.pos_x, self.pos_y, self.pos_z, self.facing,
-                               base_lean_v & 0xFFFF, -body_lean_v,
-                               self._neck._y, self._neck._z, self._neck._x, hm)
-            _mv_c(hm, _HEAD_TOP_OFF_X, 0.0, 0.0, ht)
-            memcpy(&self._neck._head_mtx[0], hm, 12 * sizeof(double))
-            self._zl1._step_c(tetra_pre_x, tetra_pre_z,
-                              self._tetra_x, self._tetra_y, self._tetra_z,
-                              self.pos_x, self.pos_z, ht[1])
-            self._atn_eye_x = self._zl1._eye[0]
-            self._atn_eye_z = self._zl1._eye[2]
-            self._has_eye = True
-        return sf_native
-
 
 cdef inline long long _lldist(long long a, long long b) noexcept nogil:
     """cLib_distanceAngleS: |signed s16 difference|."""
     cdef long long d = _s16c(a - b)
     return d if d >= 0 else -d
 
-
-# ==== Courtyard search-frontier fleet: OpenMP prange fan-out (Stage 4) ===========================
-cdef class CourtyardFleet:
-    """A batch of INDEPENDENT `LandCore` courtyard steppers, fanned across OpenMP threads with
-    `prange` so the search frontier is advanced in parallel. Each branch's per-frame step is an
-    independent deterministic C computation on its own C state (its own `PoseEngine` clone; the
-    keyframe `AnimData` is shared read-only), so the parallel run is BIT-IDENTICAL to stepping the
-    same fleet sequentially -- 0-ULP is preserved exactly (gated in test_courtyard_fleet_native.py).
-
-    Design mirrors `_shovec.ShoveCtx.sweep_par`: a Python list keeps the cores alive, and a C
-    `void**` of borrowed pointers is read under `nogil` (`<LandCore>ptr` is a pure pointer cast --
-    no refcount, so it is nogil-safe). The whole hot loop holds NO GIL. Inputs are marshalled once
-    (under the GIL, in `set_schedule`) into flat C arrays; `run_par`/`run_seq` never touch Python."""
-    cdef list _pylist                 # keeps the LandCore refs alive
-    cdef void** _cores                # borrowed LandCore pointers (indexed under nogil)
-    cdef Py_ssize_t _n
-    cdef int* _sched                  # input schedule, flat: [.,.].,sx,sy,buttons,triggerL per (row,frame)
-    cdef long long* _csched           # csangle per (row, frame)
-    cdef int _maxf                    # frames per schedule row
-    cdef bint _shared                 # one shared schedule row for every core (bench) vs one per core
-    cdef int _native_push
-
-    def __cinit__(self, cores, int native_push=1):
-        cdef Py_ssize_t i
-        self._pylist = list(cores)
-        self._n = len(self._pylist)
-        self._native_push = native_push
-        self._sched = NULL
-        self._csched = NULL
-        self._maxf = 0
-        self._shared = False
-        self._cores = <void**>malloc(self._n * sizeof(void*))
-        if self._cores == NULL:
-            raise MemoryError()
-        for i in range(self._n):
-            if not isinstance(self._pylist[i], LandCore):
-                raise TypeError("CourtyardFleet requires LandCore instances")
-            if (<LandCore>self._pylist[i])._has_twalls and native_push == 0:
-                raise ValueError("a wired Tetra mesh needs native_push=1 (see "
-                                 "LandCore.step_courtyard)")
-            self._cores[i] = <void*>(<LandCore>self._pylist[i])
-
-    def __dealloc__(self):
-        if self._cores != NULL:
-            free(self._cores)
-        if self._sched != NULL:
-            free(self._sched)
-        if self._csched != NULL:
-            free(self._csched)
-
-    property size:
-        def __get__(self):
-            return self._n
-
-    cdef void _alloc_sched(self, Py_ssize_t rows, int nf):
-        if self._sched != NULL:
-            free(self._sched)
-        if self._csched != NULL:
-            free(self._csched)
-        self._maxf = nf
-        self._sched = <int*>malloc(rows * nf * 4 * sizeof(int))
-        self._csched = <long long*>malloc(rows * nf * sizeof(long long))
-        if self._sched == NULL or self._csched == NULL:
-            raise MemoryError()
-
-    def set_schedule(self, schedules):
-        """Per-core input schedule. `schedules` = list (length == fleet size) of per-core frame lists;
-        each frame = (sx, sy, buttons, triggerL, csangle). All rows must share the frame count. Used
-        by the 0-ULP gate (each branch its own input stream, faithful to a real frontier)."""
-        cdef Py_ssize_t i, f
-        cdef int nf
-        if len(schedules) != self._n:
-            raise ValueError("schedule count != fleet size")
-        nf = len(schedules[0])
-        for i in range(self._n):
-            if len(schedules[i]) != nf:
-                raise ValueError("all per-core schedules must share the frame count")
-        self._alloc_sched(self._n, nf)
-        self._shared = False
-        for i in range(self._n):
-            for f in range(nf):
-                row = schedules[i][f]
-                self._sched[(i * nf + f) * 4 + 0] = <int>row[0]
-                self._sched[(i * nf + f) * 4 + 1] = <int>row[1]
-                self._sched[(i * nf + f) * 4 + 2] = <int>row[2]
-                self._sched[(i * nf + f) * 4 + 3] = <int>row[3]
-                self._csched[i * nf + f] = <long long>row[4]
-
-    def set_shared_schedule(self, frames):
-        """One schedule row cycled by EVERY core (memory O(nf), not O(n*nf)) -- the throughput bench:
-        each core runs the same DTM-window input stream from its own seeded state."""
-        cdef Py_ssize_t f
-        cdef int nf = len(frames)
-        self._alloc_sched(1, nf)
-        self._shared = True
-        for f in range(nf):
-            row = frames[f]
-            self._sched[f * 4 + 0] = <int>row[0]
-            self._sched[f * 4 + 1] = <int>row[1]
-            self._sched[f * 4 + 2] = <int>row[2]
-            self._sched[f * 4 + 3] = <int>row[3]
-            self._csched[f] = <long long>row[4]
-
-    cdef inline void _step_core_frame(self, Py_ssize_t i, int f) noexcept nogil:
-        cdef Py_ssize_t r = 0 if self._shared else i
-        cdef Py_ssize_t o = r * self._maxf + f
-        (<LandCore>self._cores[i])._step_courtyard_nogil(
-            self._sched[o * 4 + 0], self._sched[o * 4 + 1],
-            self._sched[o * 4 + 2], self._sched[o * 4 + 3],
-            self._csched[o], 0.0, 0.0, 0.0, 0.0, 0,
-            0.0, 0.0, 0.0, 0, self._native_push)
-
-    def run_seq(self, int nframes):
-        """Sequential reference: step every core `nframes` frames in order (the parallel gate's twin)."""
-        cdef Py_ssize_t i
-        cdef int f
-        if nframes > self._maxf:
-            raise ValueError("nframes exceeds schedule length")
-        for i in range(self._n):
-            for f in range(nframes):
-                self._step_core_frame(i, f)
-
-    def run_par(self, int nframes, int nthreads=0):
-        """OpenMP parallel: fan the cores across threads; each thread runs its cores' full `nframes`
-        independent runs, GIL released. Bit-identical to `run_seq`. `nthreads`==0 => OpenMP default."""
-        cdef Py_ssize_t i
-        cdef int f
-        if nframes > self._maxf:
-            raise ValueError("nframes exceeds schedule length")
-        if nthreads > 0:
-            with nogil, parallel(num_threads=nthreads):
-                for i in prange(self._n, schedule='static'):
-                    for f in range(nframes):
-                        self._step_core_frame(i, f)
-        else:
-            with nogil, parallel():
-                for i in prange(self._n, schedule='static'):
-                    for f in range(nframes):
-                        self._step_core_frame(i, f)

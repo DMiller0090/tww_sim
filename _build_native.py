@@ -20,7 +20,7 @@ _SOURCES = {
 }
 # _shovec's sweep_par and _anmc's CourtyardFleet.run_par use OpenMP (prange); MSVC flag. Exactness
 # is untouched: /openmp does not change FP codegen, and every op is an explicit <float> cast.
-_OMP = {"_shovec": ["/openmp"], "_anmc": ["/openmp"]}
+_OMP = {"_shovec": ["/openmp"]}          # only _shovec fans out with prange
 
 sel = [a for a in sys.argv[1:] if a in _SOURCES]
 exts = [Extension(_SOURCES[k].replace("/", ".").rsplit(".pyx", 1)[0].replace(".pyx", ""),

@@ -1,5 +1,5 @@
 """_acchc.pxi -- `dBgS_Acch::CrrPos` (the per-frame BG wall pass) as pure `noexcept nogil` C, for
-inclusion into `_anmc.pyx` so `LandCore.step_courtyard` can brace BOTH actors inside the frame.
+inclusion into `_anmc.pyx` so a coupled step can brace BOTH actors inside the frame.
 
 Faithful transcription of `core/collision.py`'s **acch_** layer -- `acch_line_check` (the
 whd-latching LineCheck with the VECAdd normal push and the ground-classed poly branch),
@@ -20,7 +20,7 @@ value after the 3 Newton refines, and gated as such), so unifying the two would 
 bug first rather than inherit it.
 
 Mesh contract: WALL tris in the game's WallCorrect traversal order (order is only visible when two
-non-coplanar walls engage in one frame). No AABB prefilter -- the courtyard mesh is 48 tris and the
+non-coplanar walls engage in one frame). No AABB prefilter -- a room mesh is tens of tris and the
 whole pass is far under the pose FK, so every tri is tested and exactness is structural.
 """
 
@@ -382,9 +382,9 @@ cdef class WallMesh:
     """An ordered WALL trilist flattened to C arrays: verts (n*9), planes (n*4), the per-tri
     `sqrtf_c(nx^2+nz^2)` and its reciprocal, and the identity candidate list.
 
-    IMMUTABLE once built, so a `LandCore.clone()` shares it by reference and `CourtyardFleet.run_par`
+    IMMUTABLE once built, so a `LandCore.clone()` shares it by reference and a parallel fan-out
     reads it concurrently from every thread -- exactly the `AnimData` contract. Build it ONCE per
-    mesh (`harness/tetrapush/seeds.courtyard_mesh()` is a module-level list) and hand the same object
+    mesh as a module-level list and hand the same object
     to every core; rebuilding per core would copy 48 tris per node of a beam."""
     cdef double* _vtx
     cdef double* _pla

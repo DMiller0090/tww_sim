@@ -1,9 +1,9 @@
 # ==== The look pair, resident in C: Tetra's Zl1Look + Link's NeckLook (session 128) =============
 #
-# `include`d into _anmc.pyx (one translation unit -- these run INSIDE `_step_courtyard_nogil`, so
+# `include`d into _anmc.pyx (one translation unit -- these run INSIDE the coupled step, so
 # they must reach LandCore/PoseEngine's C state without the GIL).
 #
-# WHY: s127 put the coupled courtyard frame in C and left these two in Python, because between them
+# WHY: the coupled frame went to C and left these two in Python, because between them
 # they are what produces the proc-9 re-aim eye. Measured in s128 they are 91% of the step -- her
 # 77.5%, the neck 13.4%, the C core itself 9.1% -- so this is the whole remaining win.
 #
@@ -763,7 +763,7 @@ cdef class NeckLookCore:
     cdef bint _select_look_pos_c(self, double px, double pz, double ex, double ez,
                                  long long m34de, bint have_eye, bint locked,
                                  bint list_present) noexcept nogil:
-        """The courtyard-reachable `sp18` selection (:9014-9046): the locked actor's eyePos, or the
+        """The reachable `sp18` selection (:9014-9046): the locked actor's eyePos, or the
         stocked lock-on list head's, both through the +-0x6000 cone of m34DE."""
         if not have_eye or not (locked or list_present):
             return False
