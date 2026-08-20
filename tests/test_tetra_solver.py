@@ -18,6 +18,8 @@ What IS locked in here, against the live golden (`fixtures/hyrule_tetra_geo.json
 Pure-geometry + offline (no Dolphin, fast). The full per-frame CUT_F ordering (push consume -> m34C2
 lunge -> CrrPos) is separately live-gated by `test_cc_rollstab.py`.
 """
+import pytest
+
 import struct
 
 from harness.rollstab import solver_tetra as ST
@@ -101,6 +103,7 @@ def test_bare_no_tetra_is_short():
     assert a["genuine"] is False
 
 
+@pytest.mark.slow
 def test_family_reuse_at_tetra_facing():
     """`solver`'s knob families take the Tetra clip facing via the new `F=` param (backward-compatible
     default = kaze). The solver_tetra search relies on this to aim the from-rest approach at GT.F."""

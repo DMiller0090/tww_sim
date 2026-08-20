@@ -1,6 +1,8 @@
 """Regression guard for the out-of-the-box seam-clip scanner
 (:mod:`harness.collision.seam_clip_check`). Offline (no Dolphin): the GanonL synthetic seam, the
 live-confirmed Hyrule (-1727,-990) f32 clip, and a flat seam that must be rejected."""
+import pytest
+
 import json
 import os
 import struct
@@ -48,6 +50,7 @@ def test_scanner_finds_hyrule_1727_needs_push():
     assert 49.0 < r["disp"] < 51.0, r["disp"]
 
 
+@pytest.mark.slow
 def test_scanner_rejects_flat_seam():
     """A flat (coplanar) seam must be screened out — no LineCheck miss, unclippable."""
     tris, link_y, S = _load("flat_seam_ram.json")
@@ -139,6 +142,7 @@ def test_scanner_rejects_step_riser():
     assert not hits, [tuple(round(x, 1) for x in c["S"]) for c in clips]
 
 
+@pytest.mark.slow
 def test_oblique_octagon_corners_not_false_negatives():
     """An obtuse corner clips only OFF the bisector, often across a wide window that excludes the
     head-on zone. The double-precision screen is orientation-dependent and returned EMPTY for 2 of 8

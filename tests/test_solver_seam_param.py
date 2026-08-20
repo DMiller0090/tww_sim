@@ -57,6 +57,7 @@ def test_explicit_seam_reproduces_shipped_hit_bitexact():
     assert r_def['stream'] == r_exp['stream']
 
 
+@pytest.mark.slow
 def test_seam_param_is_honored_by_families():
     """`seam` genuinely threads through: a different-yaw SeamGeo has a different F, so its start-crawl
     aim differs from the kaze default. (If the families still read the module-global, this would not

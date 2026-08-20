@@ -62,6 +62,7 @@ def test_chain_consts_bitexact():
             assert (cx, cz) == body_cyl.roll_co_center(f32(px), f32(pz), facing, frame, shape_z=lean)
 
 
+@pytest.mark.slow
 def test_cull_is_exact_on_roll6():
     FS = _fs()
     from harness.rollstab.cc_stepper import couple_replay

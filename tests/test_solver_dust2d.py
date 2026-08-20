@@ -48,6 +48,7 @@ def test_dust_dist_empty_cloud_is_inf():
     assert SV._dust_dist([], [], -40.0, 0.0) == float('inf')
 
 
+@pytest.mark.slow
 def test_dust2d_cache_roundtrip_and_points_are_genuine():
     # Coarse steps keep the scan to a few thousand pred_genuine calls; the cache key includes
     # the steps, so this never collides with a real draw's cache.

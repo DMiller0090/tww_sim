@@ -36,5 +36,5 @@ python_files = ["test_*.py"]
 norecursedirs = ["dolphin"]
 addopts = "-m 'not slow'"
 markers = [
-    "slow: deselect by default; longer planner/optimizer characterization cases",
+    "slow: deselect by default; anything over the 1 s per-test budget -- search/optimizer/camera-pool characterization that re-derives a measurement rather than gating a function. Run it with `pytest -m slow`. The budget is enforced by tests/conftest.py.",
 ]
