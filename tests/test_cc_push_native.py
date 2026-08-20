@@ -58,8 +58,8 @@ def test_cm_atan2s_native_matches_python_bit_exact():
 
 @pytest.mark.skipif(_N is None, reason="native _anmc not built")
 def test_co_move_pair_native_matches_python_bit_exact():
-    # Link (R=30, weight 120) vs Tetra-v5 (R=50, weight 0x8C) -- the Courtyard pair. Sweep the
-    # separations that occur in the herd window (feet 41-85 u apart) plus the deep-overlap band.
+    # Link (R=30, weight 120) vs a type-5 Zl1 (R=50, weight 0x8C). Sweep the separations a push
+    # actually visits (feet 41-85 u apart, so rim contact through no contact) plus deep overlap.
     CO_H = 104.6
     g = _lcg(7)
     n = 0
