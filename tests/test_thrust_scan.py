@@ -13,8 +13,14 @@ session-32 handoff plus the tier boundaries and the roll-required-but-no-space b
 import math
 import pytest
 
+
+from tests._anim_data import CUTS, require
+require(CUTS, "cut keyframe data")
 from harness.rollstab import thrust_scan as T
 from harness.rollstab import rest as C
+import os
+
+
 
 WALK_ANCHOR = 'kaze_r11_walkstab@twwgz'
 ROLL_ANCHOR = 'kaze_r11_rollstab_idle13@twwgz'

@@ -107,6 +107,6 @@ def test_rest_roll_pose_bitexact():
     (`quat.euler_to_quat`): a late-roll joint rotation crosses into negative s16, and halving the
     raw u16 lands 2048 sin-table entries away -- the equivalent NEGATED quaternion, whose
     independently-rounded table magnitudes differ by tens of ULP. Fixing the sign-extension closed
-    this and the Courtyard push's console frontier (`tests/test_node1_console.py`) together."""
+    this and a console-delivery frontier that used to sit on the same term."""
     bad, cut_row = _ship_diff(pose_rows=set(range(22, 45)))
     assert not bad, f"roll pose rows diverged: {bad}"

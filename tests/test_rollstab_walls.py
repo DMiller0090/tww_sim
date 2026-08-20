@@ -16,10 +16,15 @@ import sys
 
 import pytest
 
+
 _rb = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _rb not in sys.path:
     sys.path.insert(0, _rb)
 
+
+
+from tests._anim_data import CUTS, require
+require(CUTS, "cut keyframe data")
 from tww_sim.core.anim.foot_speedf import FootSpeedF  # noqa: E402
 from tww_sim.land.walls import load_geo_tris          # noqa: E402
 from harness.rollstab import rest as C                # noqa: E402

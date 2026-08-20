@@ -18,7 +18,7 @@ _SOURCES = {
     "_collc": "tww_sim/core/_collc.pyx",
     "_shovec": "tww_sim/core/_shovec.pyx",
 }
-# _shovec's sweep_par and _anmc's CourtyardFleet.run_par use OpenMP (prange); MSVC flag. Exactness
+# _shovec's sweep_par uses OpenMP (prange); MSVC flag. Exactness
 # is untouched: /openmp does not change FP codegen, and every op is an explicit <float> cast.
 _OMP = {"_shovec": ["/openmp"]}          # only _shovec fans out with prange
 

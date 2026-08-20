@@ -17,6 +17,9 @@ import math
 import os
 import struct
 
+
+from tests._anim_data import CUTS, require
+require(CUTS, "cut keyframe data")
 from tww_sim.core.collision import Tri, Plane
 from tww_sim.land.plan_land import world_angle_s16, stick_for_bearing
 from harness.collision.plan_seam_clip import plan_seam_clip, KROLL, A_BTN, B_BTN

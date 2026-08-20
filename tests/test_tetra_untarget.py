@@ -2,7 +2,7 @@
 
 Seeds a LandState at each push roll entry (constant-momentum roll -- no foot-warming needed) and
 replays the EXACT raw controller bytes extracted from the recorded movie GZLJ01.s02.dtm
-(fixtures/courtyard_push_dtm.json, baked by harness/tetrapush/dtm_inputs.py). Asserts the sim
+(fixtures/courtyard_push_dtm.json, baked from that movie's raw pad bytes). Asserts the sim
 reproduces the untarget brakeslide -- the roll exits into ATN_ACTOR_MOVE (proc 9) and speedF FLIPS
 26 -> the live value -- BIT-EXACT against the session-2 live capture, for BOTH push cycles:
 

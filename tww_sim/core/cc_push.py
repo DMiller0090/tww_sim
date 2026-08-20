@@ -52,7 +52,7 @@ correctly-rounded sqrt.
 
 This is a **0-ULP surface, not a rounding detail**: the fused form put ``cross_len`` ~2 ULP high, which
 biased the push ~3e-6 u/frame; the ~1.4x/contact-frame plow amplifier turned that into a 113 u miss by
-plan frame 241 (session 54's falsification, `tests/test_node1_console.py`). Pure stdlib + ``core.fp``.
+plan frame 241, measured on console. Pure stdlib + ``core.fp``.
 """
 from .fp import f32 as _f, fadds, fsubs, fmuls, fdivs
 from .collision import sqrtf_msl as fsqrt, is_zero

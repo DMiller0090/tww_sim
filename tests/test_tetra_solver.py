@@ -22,9 +22,15 @@ import pytest
 
 import struct
 
+
+from tests._anim_data import CUTS, require
+require(CUTS, "cut keyframe data")
 from harness.rollstab import solver_tetra as ST
 from harness.rollstab import geometry_tetra as GT
 from tww_sim.core.fp import f32
+import os
+
+
 
 
 def _bits(x):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AttentionLock: the dAttention_c hold-mode lock-on state machine (the untarget-latency model).
 
-This is the piece the Courtyard Tetra-push needed (`harness/tetrapush`): why releasing L mid-roll
+What it explains: why releasing L mid-roll
 does NOT untarget immediately, so the roll keeps exiting into the actor-lock proc (ATN_ACTOR_MOVE,
 proc 9) for a few frames, retaining ~-25.7 EBS instead of the plain-roll-EBS -23.5.
 

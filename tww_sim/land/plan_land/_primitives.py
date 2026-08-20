@@ -17,9 +17,8 @@ raw sticks (e.g. 128,197) read 1.0 in the sim while live PADClamp gives ~0.96 --
 ambiguous cap-boundary cell. `stick_for_bearing` emits the true corner for msd>=1 and msd*54 below it.
 It is MEMOISED (session 133): when the octagon clamp moves the analytic candidate the inverse falls
 into a byte-neighborhood scan of up to 529 clamped decodes -- **2.8 ms a call** against ~30 us when
-the analytic byte lands -- and its callers ask the same question repeatedly (`full_herd.junction_alphabet`
-walks a FIXED bearing ladder once per node per generation, half the alphabet's cost and 17% of a
-junction stage). The function is pure (it reads only module constants) and returns an immutable
+the analytic byte lands -- and its callers ask the same question repeatedly (a search walks a FIXED
+bearing ladder once per node per generation). The function is pure (it reads only module constants) and returns an immutable
 tuple, so a bounded `lru_cache` is exact, not an approximation.
 
 CLAMP-AWARE INVERSE: the decode (`main_stick_decode`) now runs the PADClamp octagon clamp, which shifts a

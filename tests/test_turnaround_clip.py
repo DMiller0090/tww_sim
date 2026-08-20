@@ -15,6 +15,9 @@ import os
 
 import pytest
 
+
+from tests._anim_data import CUTS, require
+require(CUTS, "cut keyframe data")
 from harness.rollstab import turnaround as T
 
 _HERE = os.path.dirname(os.path.abspath(__file__))

@@ -1,8 +1,8 @@
 """`stick_for_bearing`'s memo returns what the uncached inverse returns -- everywhere it is asked.
 
 The inverse falls into a byte-neighborhood scan of up to 529 clamped decodes when the octagon clamp
-moves its analytic candidate (2.8 ms a call, measured), and `full_herd.junction_alphabet` re-asks the
-same fixed bearing ladder once per node per generation. Memoising it is only safe because the
+moves its analytic candidate (2.8 ms a call, measured), and a search re-asks the same fixed bearing
+ladder once per node per generation. Memoising it is only safe because the
 function is pure, so this gates purity the way it can actually fail: the cached result must equal a
 FRESH computation over a sweep that spans both branches -- the analytic hit and the clamp search --
 and at partial magnitudes as well as full.

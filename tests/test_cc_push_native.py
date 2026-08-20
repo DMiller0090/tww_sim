@@ -10,9 +10,9 @@ while _d and not os.path.exists(os.path.join(_d, 'pyproject.toml')):
 if _d not in sys.path:
     sys.path.insert(0, _d)
 # <<< repo bootstrap
-"""Differential 0-ULP gate for the native Courtyard-step primitives (`_anmc.cm_atan2s` +
-`_anmc.co_move_pair_xz`) -- the two brand-new pieces the native `step_courtyard` needs (the
-attention cone gate / `setShapeAngleToAtnActor` re-aim, and the `dCcS::SetPosCorrect` CC push).
+"""Differential 0-ULP gate for the native coupled-actor primitives (`_anmc.cm_atan2s` +
+`_anmc.co_move_pair_xz`): the attention cone gate / `setShapeAngleToAtnActor` re-aim, and the
+`dCcS::SetPosCorrect` CC push.
 
 Each must be BIT-FOR-BIT identical to its pure-Python twin (`mathlib.cM_atan2s`,
 `cc_push.co_move_pair`) -- no tolerance (`[[zero-ulp-tests-only]]`). If the .pyd is absent the

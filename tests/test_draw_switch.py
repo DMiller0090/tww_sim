@@ -24,6 +24,9 @@ import os
 
 import pytest
 
+
+from tests._anim_data import WALK_DASH, require
+require(WALK_DASH, "the walk/dash anim banks")
 from harness.rollstab.validate_draw import run, run_auto, _summ
 
 _HERE = os.path.dirname(os.path.abspath(__file__))

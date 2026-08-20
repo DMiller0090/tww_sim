@@ -13,11 +13,18 @@ if _rb not in sys.path:
     sys.path.insert(0, _rb)
 
 import json
+
+
+from tests._anim_data import CUTS, require
+require(CUTS, "cut keyframe data")
 from tww_sim.core.fp import f32 as _f
 from tww_sim.land.land import LandState
 from tww_sim.land.constants import CUT_F
 from harness.rollstab.seamgeo import SeamGeo, derive_F
 from harness.rollstab import geometry as G
+import pytest
+
+
 
 _GEO = json.load(open(os.path.join(_rb, 'fixtures', 'kaze_r11_geo.json')))
 # csangle comes from STATE (the anchor's RAM snapshot), not a pasted literal -- the same field a

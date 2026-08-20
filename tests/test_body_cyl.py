@@ -133,8 +133,9 @@ def test_the_body_chn_twist_leaves_the_live_lean_golden_bit_exact():
     went unnoticed: feeding each frame's own POST-update lean as `body_lean` reproduces the same 0 ULP
     the untwisted call does. The capture's leans never exceed 28 past the exempt entry frames -- below
     the sine-table bucket where the twist first moves the midpoint -- so this fixture cannot decide
-    the term either way. What decides it is the courtyard console at leans of 388
-    (`tests/test_clip_console.py`); this asserts the fix did not disturb the older gate."""
+    the term either way. What decided it was a console delivery at leans an order of magnitude
+    larger; that gate went with the parked route planner, so this asserts only that the fix did not
+    disturb the older lean golden. See knowledge/history/co-centre-body-chn-twist.md."""
     fix = json.load(open(_LEAN))
     roll_rows = [r for r in fix["frames"] if r["proc"] == 30 and r.get("cyl")]
     assert max(abs(r["shape_z"]) for r in roll_rows[2:]) <= 30, (

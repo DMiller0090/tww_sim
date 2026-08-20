@@ -18,6 +18,9 @@ import os
 
 import pytest
 
+
+from tests._anim_data import CUTS, require
+require(CUTS, "cut keyframe data")
 from harness.rollstab import fast_shove as FS
 
 _HERE = os.path.dirname(os.path.abspath(__file__))

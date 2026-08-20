@@ -6,7 +6,8 @@ lock-on reticle is still fading out after L-release, and setSpeedAndAngleAtnActo
 negation flips the roll's +26 to a backward slide -- retaining ~-25.7 EBS instead of the plain roll's
 -23.5. These gate the MECHANIC decomp-faithfully; full 0-ULP position validation vs a clean live
 free-run capture is the follow-on (the single-stepped fixture's per-frame position deltas are
-jitter-corrupted, so it is scalar-ground-truth only). See harness/tetrapush/README.md.
+jitter-corrupted, so it is scalar-ground-truth only).
+See knowledge/mechanics/attention-lock-lifetime.md.
 """
 from tww_sim.land.attention import AttentionLock, NONE, LOCK, RELEASE
 from tww_sim.land.state import LandState

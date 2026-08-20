@@ -15,6 +15,9 @@ import struct
 
 import pytest
 
+
+from tests._anim_data import CUTS, require
+require(CUTS, "cut keyframe data")
 from tww_sim.core.cc_push import (co_move_pair, co_push_link, push_shares,
                                    WEIGHT_LINK, WEIGHT_TETRA_V5, WEIGHT_TETRA_DEFAULT)
 from tww_sim.core.fp import f32

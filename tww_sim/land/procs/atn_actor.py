@@ -12,7 +12,7 @@ brakeslide), then decaying with the gentle ``mAtnMove`` params instead of eating
 
 The locked actor's world XZ is supplied by the harness as ``self._atn_actor_pos`` (Tetra, from the
 coupled stepper). With none set the re-aim no-ops (``mpAttnActorLockOn == NULL`` guard), so this mixin
-is inert unless a lock-on actor is actively driven. See knowledge + harness/tetrapush/README.md.
+is inert unless a lock-on actor is actively driven. KB: mechanics/attention-lock-lifetime.md.
 """
 from __future__ import annotations
 from ...core import mathlib as S

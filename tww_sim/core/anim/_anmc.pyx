@@ -2484,7 +2484,17 @@ cdef void _cut_m3700_c(CutAnimData d, int slot, double frame, double* out) noexc
 cdef class LandCore:
     """C-resident LandState physics engine. Holds a reference to the shared PoseEngine (for speedF) and
     owns all per-frame physics/stick/camera state. `setup` seeds it; `step` advances one frame and
-    returns speedF; the caller (land.LandState) reads the public fields to sync + build the state tag."""
+    returns speedF; the caller (land.LandState) reads the public fields to sync + build the state tag.
+
+    COUPLED-ACTOR SURFACE, RESIDENT BUT NOT DISPATCHED. The cut arm (`_cut_init`/`_proc_cut`,
+    CutAnimData), the BG wall pass for both actors (`_acchc.pxi`, `seed_walls`, `_link_wall_pass`,
+    `_tetra_wall_pass`), the look pair (`_zl1c.pxi`, `seed_look`) and the attention update
+    (`_atn_update`) are all here and complete, but `step` calls NONE of them: the frame that drove
+    them was a route-search step that has been removed. So a native-only run does not cut and has no
+    wall pass. The pure-Python path in `land/` models all of it and is what the seam-clip solver
+    actually runs (every `harness/rollstab` entry point builds `LandState(native=False)`). Giving
+    this surface a general public driver is a behaviour change wanting live re-validation, not a
+    refactor -- do not wire it silently."""
     cdef PoseEngine _pe
     cdef public double pos_x, pos_z
     cdef public long long facing, travel, csangle
@@ -3294,8 +3304,8 @@ cdef class LandCore:
     # The from-f0 FreeRun window: MOVE(6) <-> ATN_MOVE(7) <-> ATN_ACTOR_WAIT/MOVE(8/9) <-> FRONT_ROLL.
     # Adds the dAttention_c hold-mode lock machine + the actor-lock targeting procs 8/9 (re-aim +
     # DIR_BACKWARD negation) + the locked-actor checkNextMode/setBlendAtnMoveAnime gates + the posMove
-    # CC-push consume, all resident in C. Physics port of harness/tetrapush/from_f0.FreeRun.step +
-    # land.state.LandState.step. speedF via the seeded fused PoseEngine.
+    # CC-push consume, all resident in C. Physics port of land.state.LandState.step. speedF via the
+    # seeded fused PoseEngine. NOTE: no public step dispatches this surface -- see the class docstring.
     @property
     def shape_z(self):
         """sim_shape_z: shape_angle.z = s16(m351C) >> 1 (the lean the from_f0 gate asserts)."""

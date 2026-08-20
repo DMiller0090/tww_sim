@@ -63,7 +63,7 @@ NECK_CHAIN = [0, 1, 2, 3, 4, 14]
 HEAD_CHAIN = [0, 1, 2, 3, 4, 14, 15]
 HEAD_TOP_OFF = (40.0, 0.0, 0.0)     # head_offset (d_a_player_main.cpp:11589)
 # J3D segment-scale-compensation joints on the neck chain (scale_compensate=1): mDoExt_setJ3DData
-# (m_Do_ext.cpp:47) row-scales their local 3x3 by 1/parentS. See harness/tetrapush/README.md (s16).
+# (m_Do_ext.cpp:47) row-scales their local 3x3 by 1/parentS. KB: mechanics/link-co-centre.md.
 BODY_CO_SSC = (3, 4, 14)
 
 

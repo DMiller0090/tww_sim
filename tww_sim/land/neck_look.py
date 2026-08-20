@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """NeckLook: Link's head-look twist ``m3564`` (``setNeckAngle``, d_a_player_main.cpp:8938-9169).
 
-The last named courtyard model gap (harness/tetrapush README, planner box): ``jointBeforeCB``
+``jointBeforeCB``
 twists Link's HEAD joint (CL_JNT_HEAD_JNT_e, 15) by ``local_38 = (m3564.y, m3564.z, m3564.x)``
 (:269-270), and ``m3564`` chases a look target each execute frame in ``setNeckAngle`` (:11571 --
 AFTER ``setMoveSlantAngle``, BEFORE ``mpCLModel->calc()``, so it reads the PREVIOUS frame's head
