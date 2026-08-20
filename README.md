@@ -7,6 +7,11 @@ frame-by-frame against the real game (single-precision arithmetic, the console c
 x598 pump scramble, FMA-faithful matrix/quaternion math — see [`KNOWLEDGE.md`](KNOWLEDGE.md)), plus
 an optional live-Dolphin validation harness.
 
+On top of the physics sits a **seam-clip solver**: given a room's collision mesh and a static
+starting state, it computes the controller inputs that clip Link through a wall seam, entirely
+offline, and the plan then reproduces on console bit-for-bit. Eleven seams across four rooms are
+shipped and gated this way -- see [`harness/rollstab/README.md`](harness/rollstab/README.md).
+
 The importable `tww_sim` package is **pure Python (standard library only) with no emulator
 dependency**, so other projects can depend on it to run simulations. It is split into
 `core/` (shared engine), `swim/` (superswimming), and `land/` (land movement); importing one
@@ -49,7 +54,9 @@ emit an animated HTML viewer with `viz=out.html`).
 | **`tww_sim/land/`** | The land library: `land` (walk/roll/turn physics) + `plan_land` (input planner). |
 | `tests/` | Offline `pytest` suite: unit tests for the physics helpers + golden/characterization tests freezing bit-exact sim/planner output (`test_*.py`, `golden/`). No Dolphin needed. |
 | `tests/dolphin/` | Live sim-vs-Dolphin validators (`run_tests.py`, `run_land_tests.py`, `verify_state.py`, `spotcheck_*`). Need a running Dolphin. |
-| `harness/` | Live-Dolphin research tooling — `capture/` (read game state), `validate/` (sim-vs-live), `dtm/` (movie authoring/playback), `search/` (live-grounded planning), `anim/` (J3D probes). Depends on `../tools/dolphin_mem`. |
+| **`harness/rollstab/`** | The seam-clip solver: mint an anchor, solve for a clipping cut, author a DTM, verify the clip live. Offline apart from the optional per-anchor verification gate. |
+| `harness/collision/` | DZB stage-collision reader, seam locator and room-wide clip screens. |
+| `harness/` | The rest of the live-Dolphin tooling — `capture/` (read game state), `validate/` (sim-vs-live), `dtm/` (movie authoring/playback), `search/` (live-grounded planning), `anim/` (J3D probes). Depends on `../tools/dolphin_mem`. |
 | `viz/` | HTML/JSON trajectory artifact builders (offline). |
 | `fixtures/` | Code-referenced baseline action sequences. |
 | `knowledge/` | The knowledge base (mechanics, strategy, sim/planner model, reference tables, JP addresses). |
@@ -96,7 +103,14 @@ Dolphin. Read [`../tools/DOLPHIN_CONTROL.md`](../tools/DOLPHIN_CONTROL.md) befor
 - The `swim_*` predictor variants in `tww_sim/swim/predict/` form an evolution chain and are kept
   as separate modules; consolidating them into one predictor is a known follow-up (each merge
   step must be re-validated bit-exact).
-- The 7 red `tests/test_land.py` bit-exact cases are the known land foot-FK ULP frontier (~1–2 ULP
-  on `pos_z`); they stay red until the sim closes the gap and are immutable per the locked-test rule.
+- The land layer is bit-exact: the foot-FK ULP frontier that used to leave `tests/test_land.py`
+  partly red is closed, and so is the late-FRONT_ROLL drawn-pose gap (it was the quaternion sign
+  extension plus a `FrameCtrl` frame kept in double, not an unmodelled body lean).
+- Three seams have REST-bit-exact anchors and verified-genuine dust but no delivered clip yet
+  (`seam97`, `seam97m`, `hseam2709`). All three are the same situation -- the dust is thin enough
+  that the per-draw hit expectation sits just under 1 inside the search budget -- not a model gap.
+- A one-off Courtyard Tetra-push route planner that this repo carried for ~170 sessions lives on
+  branch `dmiller/courtyard-tetra-push`, forked at `c516cc3`. It is parked, not abandoned; nothing
+  on `main` depends on it.
 - `bug#2` (dense-pump live divergence) is resolved as a pipe input-delivery artifact — DTM movie
   playback is the faithful delivery path, not the `advanceseq` pipe (see `KNOWLEDGE.md`).
