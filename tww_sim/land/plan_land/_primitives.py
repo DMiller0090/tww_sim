@@ -15,6 +15,12 @@ LIVE-FAITHFUL STICKS (hard-won): full deflection (255/1) and neutral (128,128) a
 partial magnitude (msd 0.3-0.7) is bit-exact; but the sim's msd = min(hypot/54, 1) CAPS, so near-full
 raw sticks (e.g. 128,197) read 1.0 in the sim while live PADClamp gives ~0.96 -- NEVER emit that
 ambiguous cap-boundary cell. `stick_for_bearing` emits the true corner for msd>=1 and msd*54 below it.
+It is MEMOISED (session 133): when the octagon clamp moves the analytic candidate the inverse falls
+into a byte-neighborhood scan of up to 529 clamped decodes -- **2.8 ms a call** against ~30 us when
+the analytic byte lands -- and its callers ask the same question repeatedly (`full_herd.junction_alphabet`
+walks a FIXED bearing ladder once per node per generation, half the alphabet's cost and 17% of a
+junction stage). The function is pure (it reads only module constants) and returns an immutable
+tuple, so a bounded `lru_cache` is exact, not an approximation.
 
 CLAMP-AWARE INVERSE: the decode (`main_stick_decode`) now runs the PADClamp octagon clamp, which shifts a
 near-full OFF-AXIS byte's decoded angle by up to ~167 s16. The analytic byte below assumes the naive
@@ -24,6 +30,7 @@ target (hard-filtered to the requested magnitude band). On-axis / inside the oct
 so the analytic candidate is returned unchanged (cardinals + partial creeps stay bit-identical).
 """
 from __future__ import annotations
+import functools
 import math
 import struct
 
@@ -62,8 +69,17 @@ def stick_for_bearing(theta_s16, csangle=0, msd=1.0):
     `msd` (0..1) sets the target mStickDistance = min(hypot(dz)/54, 1): 1.0 = full deflection
     (walk cap 17); a small msd creeps (the speed cap is msd*(17*msd) = 17*msd^2, so msd~0.06 is
     ~0.06 u/frame) -- used by `reach_precise` for the sub-unit final approach. The dead-zoned
-    magnitude is msd*54; the dead zone (15) is added back per axis so `_deadzone` recovers it."""
-    m34dc = (int(theta_s16) - int(csangle)) & 0xFFFF          # m34E8 = m34dc + csangle
+    magnitude is msd*54; the dead zone (15) is added back per axis so `_deadzone` recovers it.
+
+    The bearing and the camera enter ONLY as their difference, so the memo is keyed on that (see
+    `_stick_for_m34dc`) -- a caller sweeping a fixed bearing ladder under a moving camera, or a
+    moving bearing under a fixed one, hits the same cells either way."""
+    return _stick_for_m34dc((int(theta_s16) - int(csangle)) & 0xFFFF, msd)
+
+
+@functools.lru_cache(maxsize=16384)
+def _stick_for_m34dc(m34dc, msd=1.0):
+    """`stick_for_bearing` in its own coordinate: the walk want-target relative to the camera."""
     stick_s16 = (m34dc - 0x8000) & 0xFFFF                     # m34dc = stickAngle + 0x8000
     phi = math.radians(stick_s16 / 65536.0 * 360.0)          # stick_angle_deg convention
     # Dead-zoned magnitude for a target mStickDistance: full (msd>=1) -> the true corner (255/1);

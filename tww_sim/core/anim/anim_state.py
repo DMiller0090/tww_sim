@@ -52,6 +52,9 @@ ANIM_META = {
     'atndrs': (18, EMode_LOOP),  # ANM_ATNDRS (attention strafe, dash R)
     'atnwb': (20, EMode_LOOP),   # ANM_ATNWB  (attention back walk); setBlendAtnBackMoveAnime
     'atndb': (20, EMode_LOOP),   # ANM_ATNDB  (attention back dash)
+    'waitatob': (13, EMode_NONE),  # ANM_WAITATOB (wait A->B, the low-life idle transition); the
+    #                                WAIT proc plays it as a SINGLE, and with an explicit frame-ctrl
+    #                                end of H_10 (12) -- not this frameMax. wait-stop-pose.md.
 }
 
 # HIO daPy_HIO_move_c0::m constants (flat free-walk subset), f32 members in the game -- keep them f32:
@@ -63,6 +66,12 @@ H_38 = fp.f32(1.1)           # field_0x38 (regime-1 f28)
 H_40 = fp.f32(0.8)           # field_0x40 (f29)
 H_48 = fp.f32(2.3)           # field_0x48 (DASH cruise rate / regime-2 f25)
 H_60 = fp.f32(1.0)           # field_0x60 (free-walk f28)
+# procWait_init's low-life arm, setSingleMoveAnime(ANM_WAITATOB, ...) -- see wait-stop-pose.md.
+H_0E = 6                     # field_0xE  (life threshold, quarter-hearts)
+H_10 = fp.f32(12.0)          # field_0x10 (WAITATOB frame-ctrl end)
+H_68 = fp.f32(0.6)           # field_0x68 (WAITATOB rate)
+H_6C = fp.f32(0.0)           # field_0x6C (WAITATOB start frame)
+H_70 = fp.f32(6.0)           # field_0x70 (WAITATOB oldframe-morf)
 
 # daPy_HIO_atnMove_c1 (side strafe) + daPy_HIO_atnMoveB_c1 (back), d_a_player_HIO_data.inc:14/18. f29 = 1.0
 # (not heavy); the abs2XZ()>=49 -> 1.9x rate branch is inert on flat ground (observed rates are field_0x2C/0x28).
@@ -79,15 +88,19 @@ ATNB_28 = fp.f32(0.95)       # mAtnMoveB.field_0x28 (back DASH single rate)
 
 # Canonical anim-CODE order for the native fused engine (_anmc): fixed small codes mapped to the JSON
 # data-index via foot_fk._anim_idx. Keep in sync with the DEF codes in _anmc.pyx.
+# The sword-drawn pair ('walks'/'dashs') is APPENDED, so every existing code keeps its value (the
+# .pyx DEF C_* constants are positional). Keep in sync with _anmc's DEF N_ANIM.
 ANIM_ORDER = ['waits', 'walk', 'dash', 'rollf', 'rot', 'slip', 'atnwls', 'atnwrs',
-              'atnls', 'atnrs', 'atndls', 'atndrs', 'atnwb', 'atndb', 'freeb']
+              'atnls', 'atnrs', 'atndls', 'atndrs', 'atnwb', 'atndb', 'freeb',
+              'walks', 'dashs', 'waitatob']
 ANIM_CODE = {name: i for i, name in enumerate(ANIM_ORDER)}
 NATIVE_META_MAX = [float(ANIM_META[n][0]) for n in ANIM_ORDER]
 NATIVE_META_ATTR = [int(ANIM_META[n][1]) for n in ANIM_ORDER]
 # HIO constants (already f32-quantized above) handed to the native engine, keyed by field.
 NATIVE_HIO = dict(maxspeed=H_MAXSPEED, h2c=H_2C, h30=H_30, h38=H_38, h40=H_40, h48=H_48, h60=H_60,
                   atn1c=ATN_1C, atn20=ATN_20, atn24=ATN_24, atn28=ATN_28, atn2c=ATN_2C,
-                  atnb1c=ATNB_1C, atnb20=ATNB_20, atnb24=ATNB_24, atnb28=ATNB_28)
+                  atnb1c=ATNB_1C, atnb20=ATNB_20, atnb24=ATNB_24, atnb28=ATNB_28,
+                  h10=H_10, h68=H_68, h6c=H_6C, h70=H_70)
 
 
 class FrameCtrl:
@@ -110,13 +123,24 @@ class FrameCtrl:
         return c
 
     def set(self, attribute, start, end, rate, frame):
-        """daPy_lk_c::setFrameCtrl (12938): loop = start if rate>=0 else end."""
+        """daPy_lk_c::setFrameCtrl (12938): loop = start if rate>=0 else end.
+
+        Every float member is **f32**, because `J3DFrameCtrl`'s are (`mFrame`/`mRate`/`mStart`/
+        `mEnd`/`mLoopFrame`), and `update()`'s `mFrame += mRate` is a single-precision add. Rounding
+        here rather than trusting callers is not defensive style, it is the fix for a real console
+        divergence (session 90): `enter_roll` passed the literal `1.1`, a Python DOUBLE fractionally
+        below `f32(1.1)`, and at roll frame 2.2 -> 3.3 the true f32 sum is an exact tie -- so the
+        double's head start broke the tie DOWN to 3.299999952316284 where the hardware rounds
+        half-to-even UP to 3.3000001907348633. One ULP of anim frame, 3 ULP of root translate, and a
+        Co centre that moved Tetra by a ULP and lost a seam clip. `LandState.roll_frame` accumulates
+        the same anim frame from an f32 `ROLL_RATE` and got it right, which is how the two disagreed
+        at all. See `knowledge/mechanics/link-co-centre.md`."""
         self.attribute = attribute
-        self.end = float(end)
-        self.rate = float(rate)
-        self.start = float(start)
-        self.frame = float(frame)
-        self.loop = float(start) if rate >= 0.0 else float(end)
+        self.end = fp.f32(end)
+        self.rate = fp.f32(rate)
+        self.start = fp.f32(start)
+        self.frame = fp.f32(frame)
+        self.loop = self.start if self.rate >= 0.0 else self.end
 
     def update(self):
         """J3DFrameCtrl::update: mFrame += mRate then wrap/clamp per attribute (f32 throughout)."""
@@ -169,8 +193,8 @@ class UnderAnimState:
         # different leg pose -> different toe. See knowledge/model/anim-engine.md.
         self._dash = 'dashs' if sword else 'dash'
         self._walk = 'walks' if sword else 'walk'
-        self.fc0.frame = float(move0_frame)
-        self.fc0.end = float(ANIM_META[move0_anim][0])
+        self.fc0.frame = fp.f32(move0_frame)          # f32 members, as in set() -- see FrameCtrl.set
+        self.fc0.end = fp.f32(ANIM_META[move0_anim][0])
         self.fc0.attribute = ANIM_META[move0_anim][1]
 
     def clone(self):

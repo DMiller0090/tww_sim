@@ -27,6 +27,11 @@ from . import fk
 try:
     from . import _anmc as _N
     _N.init_tables(S._COS_TABLE, S._SIN_TABLE)
+    # The Courtyard native step needs the table atan2 (cone gate / re-aim) + the CC-push rank table.
+    if hasattr(_N, 'init_atan_table'):
+        from ..cc_push import RANK_TBL as _RANK_TBL
+        _N.init_atan_table(S._ATN_TABLE)
+        _N.init_rank_table(_RANK_TBL)
 except ImportError:
     _N = None
 
@@ -51,6 +56,15 @@ def _shared_anim_data(anms, chains):
 # union of both foot chains, in joint-index (calc) order; each processed once per frame.
 CHAIN_JOINTS = [0, 1, 29, 30, 31, 32, 33, 34, 36, 37, 38, 39]
 MORF_START, MORF_END = 0, 0x2A          # initOldFrameMorf(2.4, 0, 0x2A) joint range
+# body-Co mode (setCollision root/neck midpoint): the neck-chain joints past the foot set plus the
+# head (15, mHeadTopPos); all < MORF_END, so the oldframe-morf covers them like the feet.
+BODY_CO_EXTRA = [2, 3, 4, 14, 15]
+NECK_CHAIN = [0, 1, 2, 3, 4, 14]
+HEAD_CHAIN = [0, 1, 2, 3, 4, 14, 15]
+HEAD_TOP_OFF = (40.0, 0.0, 0.0)     # head_offset (d_a_player_main.cpp:11589)
+# J3D segment-scale-compensation joints on the neck chain (scale_compensate=1): mDoExt_setJ3DData
+# (m_Do_ext.cpp:47) row-scales their local 3x3 by 1/parentS. See harness/tetrapush/README.md (s16).
+BODY_CO_SSC = (3, 4, 14)
 
 
 class MorfState:
@@ -123,11 +137,15 @@ class FootFK:
         # C-resident pose engine (world path only): registers the anims + chains once; owns old-pose +
         # morf state internally, so seed()/step_feet() become a single native call. Bit-exact fallback.
         self._engine = None
-        if _N is not None and world and len(anms) <= 16:
+        # `_pose_engine` = the pose_chain PoseEngine handle (shared AnimData sampler); stays live even
+        # when FootSpeedF nulls `_engine` for the Python foot STATE path (pose_chain reads AnimData only).
+        self._pose_engine = None
+        if _N is not None and world and len(anms) <= 20:
             data, self._anim_idx = _shared_anim_data(anms, self._chains)
             # AnimData (keyframe data) is shared + cached across instances; only the per-instance
             # mutable engine (old pose / morf / worldBase) is built here -> clone() stays cheap.
             self._engine = _N.PoseEngine(data)
+            self._pose_engine = self._engine
         self.base = None            # worldBase 3x4 (set each frame by set_pos)
         self.m37b4 = None           # PSMTXInverse(worldBase)
         # Phase G: record the WAIST (30) world translate per drawn pose (footBgCheck's r31
@@ -137,6 +155,12 @@ class FootFK:
         # / 31 (i=1) (jointBeforeCB :276/:282). None = off (flat paths).
         self.foot030 = None
         self.last_waist = None
+        # body-Co mode: also pose the neck-chain extras each frame for body_co_center (the
+        # setCollision midpoint). Off by default -- the pose loop is byte-identical without it.
+        self.body_co = False
+        # (slot, jnt) pose order for the native pose_chain fold; slots align with AnimData's _CJALL
+        # (foot chain 0-11 then BODY_CO_EXTRA 12-16). Built once (immutable list, shared by clones).
+        self._body_co_slots = list(enumerate(CHAIN_JOINTS + BODY_CO_EXTRA))
 
     def clone(self):
         """State-copy clone (mid-walk-safe): shares the immutable anims/skeleton/chains (+ the shared
@@ -150,9 +174,12 @@ class FootFK:
         c.world = self.world; c.quatfn = self.quatfn
         if self._engine is not None:
             c._engine = self._engine.clone_state()   # shares immutable AnimData, copies mutable state
+            c._pose_engine = c._engine
             c._anim_idx = self._anim_idx
         else:
             c._engine = None
+            # pose_chain uses no per-instance engine state (reads immutable AnimData only) -> share.
+            c._pose_engine = self._pose_engine
             c._anim_idx = getattr(self, '_anim_idx', None)
         c.morf = self.morf.clone()
         c.old_quat = dict(self.old_quat)             # jnt -> immutable (w,x,y,z): shallow dict copy
@@ -163,6 +190,8 @@ class FootFK:
         c.track_waist = self.track_waist
         c.last_waist = self.last_waist
         c.foot030 = self.foot030                     # immutable tuple (or None): assign ok
+        c.body_co = self.body_co
+        c._body_co_slots = self._body_co_slots        # immutable list: share
         return c
 
     def set_pos(self, px, pz, py=0.0, facing=0, lean=0, m35b8=0.0):
@@ -177,10 +206,9 @@ class FootFK:
         the ALREADY-BUILT matrices (never re-derived) -- Python path only; 0.0 skips (byte-
         identical flat)."""
         if self._engine is not None:
-            if lean or m35b8:
-                raise NotImplementedError("turn lean / m35B8 need the pure-Python foot path "
-                                          "(native=False)")
-            self._engine.set_pos(px, py, pz, facing)
+            if m35b8:
+                raise NotImplementedError("m35B8 needs the pure-Python foot path (native=False)")
+            self._engine.set_pos(px, py, pz, facing, int(lean) & 0xFFFF)
         elif self.world:
             self.base, self.m37b4 = fk.world_base(px, py, pz, facing, lean)
             if m35b8:
@@ -218,9 +246,19 @@ class FootFK:
         self.old_scale[jnt] = scale
         return q3, trans, scale
 
-    def _pose_frame(self, move0, move1, f0, f1, ratio, rate):
-        """Pose all chain joints once, return {jnt: local 3x4 matrix}."""
+    def _pose_frame(self, move0, move1, f0, f1, ratio, rate, _force_slow=False):
+        """Pose all chain joints once, return {jnt: local 3x4 matrix}. In body_co mode this is one
+        native pose_chain call (C sampling + blend + old-pose update); `_force_slow` keeps the
+        per-joint blend_joint reference path (the differential-gate oracle)."""
         local = {}
+        joints = CHAIN_JOINTS + BODY_CO_EXTRA if self.body_co else CHAIN_JOINTS
+        if (self.body_co and self._pose_engine is not None and self.world and not _force_slow):
+            # Fused body_co pose: the whole 17-joint sample+blend+store loop in one C call.
+            f30 = self.foot030
+            return self._pose_engine.pose_chain(
+                self._anim_idx[move0], self._anim_idx[move1], f0, f1, ratio, rate,
+                self._body_co_slots, self.old_quat, self.old_trans, self.old_scale,
+                float(f30[0]) if f30 else 0.0, float(f30[1]) if f30 else 0.0)
         if _N is not None and self.world:
             # Fused native path: one C call per joint does the whole blend + PSMTXQuat + scale/trans,
             # returning the local matrix and the (quat, trans, scale) to store as the new old pose.
@@ -228,7 +266,7 @@ class FootFK:
             ct = j3d_eval.calc_transform
             oq = self.old_quat; ot = self.old_trans; os_ = self.old_scale
             morf_on = rate > 0.0
-            for jnt in CHAIN_JOINTS:
+            for jnt in joints:
                 i0 = ct(anm0, jnt, f0)
                 i1 = ct(anm1, jnt, f1)
                 apply_morf = morf_on and MORF_START <= jnt < MORF_END and jnt in oq
@@ -239,7 +277,7 @@ class FootFK:
                 local[jnt] = m
             self._apply_foot030(local)
             return local
-        for jnt in CHAIN_JOINTS:
+        for jnt in joints:
             q3, trans, scale = self._blend_joint(move0, move1, f0, f1, ratio, jnt, rate)
             m = self.quatfn(q3)                      # 3x3 rotation, trans column 0 (PSMTXQuat in world mode)
             for i in range(3):                       # M = R * diag(scale): scale column j by scale[j]
@@ -305,6 +343,148 @@ class FootFK:
             if jnt == 30:
                 break
         return self._waist_world(local)
+
+    @staticmethod
+    def _quat_concat(a, b):
+        """mDoMtx_QuatConcat(a, b) -- the quaternion product the jointBeforeCB adjust uses.
+        Canonical in `quat.quat_concat` (`body_cyl`'s baked chain runs the same twist)."""
+        return Q.quat_concat(a, b)
+
+    @staticmethod
+    def _sx(v):
+        v = int(v) & 0xFFFF
+        return v - 0x10000 if v >= 0x8000 else v
+
+    def _local_from_old(self, jnt, body_x=0, cb_xyz=None):
+        """Rebuild one joint's local 3x4 matrix from the STORED old pose (the quat/trans/scale of
+        the LAST posed frame) -- the same reconstruction waist_from_old uses, factored per joint.
+        ``body_x`` (s16) = jointBeforeCB's body_chn extra rotation x term (-mBodyAngle.z; the y/x
+        attention twists are separate and 0 in the courtyard window) -- the callback post-multiplies
+        the animated quat (d_a_player_main.cpp:350-357) and the stored old pose keeps the UN-adjusted
+        quat (m3658), so the adjust is applied here at rebuild time, only at CL_JNT_BODY_CHN.
+        ``cb_xyz`` = a full ``local_38`` (x, y, z) callback adjust (the HEAD joint's
+        ``(m3564.y, m3564.z, m3564.x)`` twist, :270): the decomp applies it as TWO quat concats --
+        ``Q(x, y, 0)`` then ``Q(0, 0, z)`` -- each skipped when its components are 0 (:353-362)."""
+        q = self.old_quat[jnt]
+        if body_x:
+            # JMAEulerToQuat halves the angle as a SIGNED s16; an unsigned-masked -1 mis-rounds
+            # to a ~-32-BAM ghost twist where the game gets identity (session 16).
+            q = self._quat_concat(q, Q.euler_to_quat(self._sx(body_x), 0, 0))
+        if cb_xyz is not None:
+            lx, ly, lz = (self._sx(v) for v in cb_xyz)
+            if lx or ly:
+                q = self._quat_concat(q, Q.euler_to_quat(lx, ly, 0))
+            if lz:
+                q = self._quat_concat(q, Q.euler_to_quat(0, 0, lz))
+        m = self.quatfn(q)
+        s = self.old_scale[jnt]
+        t = self.old_trans[jnt]
+        for i in range(3):
+            m[i][0] = fp.fmuls(m[i][0], s[0])
+            m[i][1] = fp.fmuls(m[i][1], s[1])
+            m[i][2] = fp.fmuls(m[i][2], s[2])
+        m[0][3] = fp.f32(t[0]); m[1][3] = fp.f32(t[1]); m[2][3] = fp.f32(t[2])
+        return m
+
+    def body_co_center(self, px, py, pz, facing, lean=0, body_lean=None, _force_py=False):
+        """Link's body **Co** cylinder centre (x, z) for the pose LAST posed (drawn) by this driver --
+        ``daPy_lk_c::setCollision``'s root/neck world midpoint (d_a_player_main.cpp:9748-9754), the
+        centre ``cM3d_Cross_CylCyl`` pushes other actors from. The generalization of
+        ``body_cyl.roll_co_center`` to EVERY pose this driver produces (walk/dash blends, ATN strafes,
+        rolls INCLUDING the entry oldframe-morf): the stored old pose (position-independent local
+        quat/trans/scale) is re-accumulated from ``worldBase(px, py, pz, facing, lean)`` WITHOUT the
+        ``m37B4`` removal -- ``getAnmMtx(joint)`` column 3 is world.
+
+        Call it AFTER the frame's pose with the frame's SETTLED (post-integration) position, facing,
+        and the draw-time lean (``LandState._draw_lean``) -- the setCollision timing the coupled
+        stepper is gated on. Requires ``body_co`` mode (the neck-chain extras must have been posed);
+        Python world path only.
+
+        ``body_lean`` = the lean the BODY_CHN counter-twist uses -- this frame's POST-update
+        ``shape_angle.z`` (``m351C >> 1``), NOT the draw lean. In the execute pass, ``setWorldMatrix``
+        (:11551, the base -- OLD lean) runs BEFORE ``setMoveSlantAngle`` (:11561, updates ``m351C``
+        and sets ``mBodyAngle.z = shape_angle.z``), and ``mpCLModel->calc()`` (:11591, where
+        ``jointBeforeCB`` reads ``mBodyAngle.z``) runs after BOTH -- so the twist is one lean-update
+        ahead of the base (session-16 chain probe: anim x Rx(-new_lean) reproduces the live joint-2
+        matrix to 0.000000 on every probed frame; the old-lean twist erred only where the two leans
+        cross a sin-table quantization bucket, which is why the gap toggled per frame). Defaults to
+        ``lean`` (the old behavior) for callers without a post-update value."""
+        if not (self.body_co and self.world):
+            raise RuntimeError("body_co_center needs body_co=True on the Python world FK path")
+        lv = int(lean if body_lean is None else body_lean) & 0xFFFF
+        body_x = -(lv - 0x10000 if lv >= 0x8000 else lv)   # -mBodyAngle.z; .z==shape_angle.z (:9526)
+        if _N is not None and self.world and not _force_py:
+            # Native one-call fold of the Python loop below (gated bit-exact by test_from_f0.py +
+            # tests/test_body_co_native.py); marshal the stored old pose in chain order.
+            oq = self.old_quat; ot = self.old_trans; os_ = self.old_scale
+            return _N.co_center(fp.f32(px), fp.f32(py), fp.f32(pz), int(facing) & 0xFFFF,
+                                int(lean) & 0xFFFF, body_x,
+                                [oq[j] for j in NECK_CHAIN], [ot[j] for j in NECK_CHAIN],
+                                [os_[j] for j in NECK_CHAIN])
+        base, _ = fk.world_base(fp.f32(px), fp.f32(py), fp.f32(pz), int(facing) & 0xFFFF,
+                                int(lean) & 0xFFFF)
+        cur = base
+        root_t = None
+        for jnt in NECK_CHAIN:
+            m = self._local_from_old(jnt, body_x=body_x if jnt == 2 else 0)
+            if jnt in BODY_CO_SSC:
+                # SSC: row r of the local 3x3 scaled by 1/parentS[r] (the parent's post-morf local
+                # scale this frame = the old-scale store; mDoExt_setJ3DData:47).
+                ps = self.old_scale.get(self.parent[jnt])
+                if ps is not None and (ps[0] != 1.0 or ps[1] != 1.0 or ps[2] != 1.0):
+                    for r in range(3):
+                        inv = fp.fdivs(1.0, ps[r])
+                        m[r][0] = fp.fmuls(m[r][0], inv)
+                        m[r][1] = fp.fmuls(m[r][1], inv)
+                        m[r][2] = fp.fmuls(m[r][2], inv)
+            cur = fk.mtx_concat(cur, m)
+            if jnt == 0:
+                root_t = (cur[0][3], cur[2][3])
+        cx = fp.fmuls(0.5, fp.fadds(root_t[0], cur[0][3]))
+        cz = fp.fmuls(0.5, fp.fadds(root_t[1], cur[2][3]))
+        return cx, cz
+
+    def head_mtx(self, px, py, pz, facing, lean=0, body_lean=None, neck=None):
+        """The WORLD head anm matrix (``getAnmMtx(CL_JNT_HEAD_JNT_e)``, 3x4) for the pose LAST
+        posed by this driver -- the exec-pass matrix :meth:`head_top` multiplies and the one the
+        NEXT frame's ``setNeckAngle`` (:11571, before that frame's calc) measures its current head
+        angles from. Same base/lean conventions as :meth:`body_co_center`. ``neck`` = the head
+        jointBeforeCB ``local_38`` twist ``(m3564.y, m3564.z, m3564.x)`` (d_a_player_main.cpp:270;
+        `land.neck_look.NeckLook.local_38`); None/zeros = untwisted (the pre-model behavior)."""
+        if not (self.body_co and self.world):
+            raise RuntimeError("head_mtx needs body_co=True on the Python world FK path")
+        base, _ = fk.world_base(fp.f32(px), fp.f32(py), fp.f32(pz), int(facing) & 0xFFFF,
+                                int(lean) & 0xFFFF)
+        lv = int(lean if body_lean is None else body_lean) & 0xFFFF
+        body_x = -(lv - 0x10000 if lv >= 0x8000 else lv)
+        cur = base
+        for jnt in HEAD_CHAIN:
+            m = self._local_from_old(jnt, body_x=body_x if jnt == 2 else 0,
+                                     cb_xyz=neck if jnt == 15 else None)
+            if jnt in BODY_CO_SSC:
+                ps = self.old_scale.get(self.parent[jnt])
+                if ps is not None and (ps[0] != 1.0 or ps[1] != 1.0 or ps[2] != 1.0):
+                    for r in range(3):
+                        inv = fp.fdivs(1.0, ps[r])
+                        m[r][0] = fp.fmuls(m[r][0], inv)
+                        m[r][1] = fp.fmuls(m[r][1], inv)
+                        m[r][2] = fp.fmuls(m[r][2], inv)
+            cur = fk.mtx_concat(cur, m)
+        return cur
+
+    def head_top(self, px, py, pz, facing, lean=0, body_lean=None, neck=None):
+        """Link's ``mHeadTopPos`` for the pose LAST posed by this driver -- ``cMtx_multVec(
+        anmMtx(CL_JNT_HEAD_JNT_e), head_offset)`` at d_a_player_main.cpp:11592, written right
+        after the SAME exec-pass ``mpCLModel->calc()`` (:11591) ``setCollision`` reads, so the
+        base/lean call convention is identical to :meth:`body_co_center` (same worldBase, same
+        new-lean BODY_CHN twist, same proc-init zero-lean handling by the caller). Consumed by
+        Tetra's look-at as ``dNpc_playerEyePos``'s Y (x/z are overwritten with Link's
+        ``current.pos``). Returns the full (x, y, z); pass the REAL ``py`` (the Y is the
+        payload). Requires ``body_co`` mode (joint 15 is posed with the neck-chain extras).
+        ``neck`` = the head-look twist, as in :meth:`head_mtx`."""
+        return tuple(fk.mtx_mult_vec(
+            self.head_mtx(px, py, pz, facing, lean=lean, body_lean=body_lean, neck=neck),
+            HEAD_TOP_OFF))
 
     def _waist_world(self, local):
         """WORLD translate of the WAIST joint (30) for the pose being drawn: the base->waist

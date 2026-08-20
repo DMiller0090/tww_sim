@@ -98,17 +98,15 @@ def test_rest_ship_bitexact():
     assert not bad, f"rows diverged from the live ship trace: {bad}"
 
 
-@pytest.mark.xfail(strict=True, reason=
-                   "KNOWN GAP (2026-07-10): late FRONT_ROLL drawn poses drift 1-122 ULP vs live "
-                   "(rows 32-36, sub-1e-5 on near-zero coords). No effect on any plan element -- "
-                   "m3598 is frozen 0 during the roll so speedF/position/facing/cut stay 0-ULP "
-                   "(test_rest_ship_bitexact) -- but a post-roll WALK resuming on blend frames "
-                   "would consume the stale toe stream. Prime suspect: the jointBeforeCB "
-                   "body-lean on the MOMI/thigh joints (m3516/m3518/m351A, in the foot FK chain, "
-                   "unmodeled; SESSION_PROMPT future-work note), then m35C4 / foot-lift m35B8 / "
-                   "recovery shape angle. Decomp-first: jointBeforeCB + procFrontRoll + "
-                   "setFootPos. Remove this marker when fixed.")
 def test_rest_roll_pose_bitexact():
-    """The FRONT_ROLL rows' drawn poses, 0-ULP vs live -- currently RED (see reason)."""
+    """The FRONT_ROLL rows' drawn poses, 0-ULP vs live.
+
+    RED from 2026-07-10 to session 56 (late roll rows 32-36 drifted 1-122 ULP), and the suspects
+    listed on the old marker -- the jointBeforeCB thigh lean, m35C4, the foot lift -- were all
+    wrong. The real cause was `JMAEulerToQuat`'s half-angle being taken UNSIGNED
+    (`quat.euler_to_quat`): a late-roll joint rotation crosses into negative s16, and halving the
+    raw u16 lands 2048 sin-table entries away -- the equivalent NEGATED quaternion, whose
+    independently-rounded table magnitudes differ by tens of ULP. Fixing the sign-extension closed
+    this and the Courtyard push's console frontier (`tests/test_node1_console.py`) together."""
     bad, cut_row = _ship_diff(pose_rows=set(range(22, 45)))
     assert not bad, f"roll pose rows diverged: {bad}"

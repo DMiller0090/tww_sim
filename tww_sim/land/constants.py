@@ -14,7 +14,9 @@ SUBJECTIVITY = 1  # daPyProc_SUBJECTIVITY_e (first-person view; the C-up-cancel 
 WAIT = 4          # daPyProc_WAIT_e         (idle standstill)
 FREE_WAIT = 5     # daPyProc_FREE_WAIT_e    (anchor's resting proc)
 MOVE = 6          # daPyProc_MOVE_e         (ground locomotion)
-ATN_MOVE = 7      # daPyProc_ATN_MOVE_e     (targeting move: brakeslide / L-held slide)
+ATN_MOVE = 7      # daPyProc_ATN_MOVE_e     (targeting move: brakeslide / L-held slide, no locked actor)
+ATN_ACTOR_WAIT = 8  # daPyProc_ATN_ACTOR_WAIT_e (actor-lock idle: setSpeedAndAngleAtnActor at rest)
+ATN_ACTOR_MOVE = 9  # daPyProc_ATN_ACTOR_MOVE_e (actor-lock move: the untarget brakeslide, faces the actor)
 WAIT_TURN = 23    # daPyProc_WAIT_TURN_e    (pivot-in-place reversal from a standstill)
 MOVE_TURN = 24    # daPyProc_MOVE_TURN_e    (turn-around reversal, low speed / post-slip)
 SLIP = 25         # daPyProc_SLIP_e         (high-speed reversal skid, hands to MOVE_TURN)
@@ -29,7 +31,12 @@ SIDE_STEP_LAND = 0x0B  # daPyProc_SIDE_STEP_LAND_e  (sidehop recovery -> WAIT)
 BACK_JUMP = 0x22       # daPyProc_BACK_JUMP_e       (backflip: stick back while targeting)
 BACK_JUMP_LAND = 0x23  # daPyProc_BACK_JUMP_LAND_e  (backflip recovery -> WAIT)
 
-_STATE_TAG = {MOVE: "MOVE", ATN_MOVE: "ATN", FRONT_ROLL: "ROLL", FRONT_ROLL_CRASH: "CRASH",
+#: Procs an A-press dispatches the ATTACK ROLL from (checkNextActionFromButton 4309 -> 4188): grounded
+#: AND locomoting AND past `ATTACK_MSD_MIN`. See knowledge/strategy/search-prune-the-dispatch.md.
+ROLL_FROM = (MOVE, ATN_MOVE)
+
+_STATE_TAG = {MOVE: "MOVE", ATN_MOVE: "ATN", ATN_ACTOR_MOVE: "ATNACT", ATN_ACTOR_WAIT: "ATNACTW",
+              FRONT_ROLL: "ROLL", FRONT_ROLL_CRASH: "CRASH",
               WAIT_TURN: "WAITTURN",
               MOVE_TURN: "MOVETURN", SLIP: "SLIP", WAIT: "WAIT", FREE_WAIT: "WAIT",
               SUBJECTIVITY: "SUBJ",

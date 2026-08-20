@@ -123,9 +123,11 @@ def load_from_lkanm(lkanm_bytes_or_path, names=('walk', 'dash', 'waits', 'freeb'
 _OUTPUTS = {
     # 'dashs'/'walks' = the sword-drawn dash/walk (getAnmData mSwordAnmIndexTable; different leg
     # rotations than the sheathed clips, waits unchanged). See knowledge/model/anim-engine.md.
+    # 'waitatob' = ANM_WAITATOB, the low-life wait A->B transition procWait_init plays instead of
+    # the WAITS idle blend when checkRestHPAnime() holds. See knowledge/model/wait-stop-pose.md.
     'link_anim_walk_dash.json': ('walk', 'walks', 'dash', 'dashs', 'waits', 'freeb', 'rollf', 'rot',
                                  'slip', 'atnwls', 'atnwrs', 'atnls', 'atnrs', 'atndls', 'atndrs',
-                                 'atnwb', 'atndb'),
+                                 'atnwb', 'atndb', 'waitatob'),
     'link_anim_cuts.json': ('cutf', 'cuta', 'cutturnb'),
 }
 
