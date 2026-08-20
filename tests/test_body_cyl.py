@@ -128,6 +128,60 @@ def test_roll_co_center_bit_exact_with_lean():
 
 @pytest.mark.skipif(not _HAVE_ANIM, reason="anim keyframe data (_generated/anim) not present")
 @pytest.mark.skipif(not os.path.exists(_LEAN), reason="hyrule_roll_lean.json capture not present")
+def test_the_body_chn_twist_leaves_the_live_lean_golden_bit_exact():
+    """The `body_chn` counter-twist (session 87) is ADDITIVE against this capture, which is why it
+    went unnoticed: feeding each frame's own POST-update lean as `body_lean` reproduces the same 0 ULP
+    the untwisted call does. The capture's leans never exceed 28 past the exempt entry frames -- below
+    the sine-table bucket where the twist first moves the midpoint -- so this fixture cannot decide
+    the term either way. What decides it is the courtyard console at leans of 388
+    (`tests/test_clip_console.py`); this asserts the fix did not disturb the older gate."""
+    fix = json.load(open(_LEAN))
+    roll_rows = [r for r in fix["frames"] if r["proc"] == 30 and r.get("cyl")]
+    assert max(abs(r["shape_z"]) for r in roll_rows[2:]) <= 30, (
+        "the capture grew a real lean -- it can now decide the twist, so assert it directly")
+    prev_shz = None
+    checked = 0
+    for k, r in enumerate(roll_rows):
+        base_lean = prev_shz if prev_shz is not None else r["shape_z"]
+        cx, cz = body_cyl.roll_co_center(r["pos"][0], r["pos"][2], r["shape_y"], r["anim_frame"],
+                                         shape_z=base_lean, body_lean=r["shape_z"])
+        prev_shz = r["shape_z"]
+        if k < 2:
+            continue
+        tol = 0 if r["anim_frame"] <= 13.0 else 1
+        assert abs(_bits(cx) - _bits(r["cyl"][0])) <= tol
+        assert abs(_bits(cz) - _bits(r["cyl"][2])) <= tol
+        checked += 1
+    assert checked >= 8
+
+
+@pytest.mark.skipif(not _HAVE_ANIM, reason="anim keyframe data (_generated/anim) not present")
+def test_the_body_chn_twist_moves_the_centre_at_a_real_turn_lean():
+    """Guard the term's SHAPE, since no live capture here carries a lean big enough to: the twist is
+    a no-op at the small leans the old fixture has and worth a real distance at the ones a roll off
+    a curved approach carries (the courtyard entry hit rolls at m351C >> 1 == -388). Keeps a future
+    refactor from quietly dropping it back to always-off."""
+    fac, frame, base = 40820, 4.4, -388
+    c0 = body_cyl.roll_co_center(0.0, 0.0, fac, frame, shape_z=base, body_lean=0)
+    small = body_cyl.roll_co_center(0.0, 0.0, fac, frame, shape_z=base, body_lean=-28)
+    big = body_cyl.roll_co_center(0.0, 0.0, fac, frame, shape_z=base, body_lean=-388)
+    assert (_bits(small[0]), _bits(small[1])) == (_bits(c0[0]), _bits(c0[1])), (
+        "a 28-BAM twist is below the sine-table bucket -- it must be a no-op")
+    moved = math.hypot(big[0] - c0[0], big[1] - c0[1])
+    assert 0.01 < moved < 1.0, "a real turn lean moves the centre by a push-relevant distance: %r" % moved
+    # and the chain-consts decomposition must carry it identically (what ShoveCtx bakes)
+    rc, nc = body_cyl.roll_co_chain_consts(fac, frame, shape_z=base, body_lean=-388)
+    tx_r, tz_r, tx_n, tz_n = 0.0, 0.0, 0.0, 0.0
+    for cx_, cz_ in rc:
+        tx_r, tz_r = body_cyl.fp.fadds(cx_, tx_r), body_cyl.fp.fadds(cz_, tz_r)
+    for cx_, cz_ in nc:
+        tx_n, tz_n = body_cyl.fp.fadds(cx_, tx_n), body_cyl.fp.fadds(cz_, tz_n)
+    assert body_cyl.fp.fmuls(0.5, body_cyl.fp.fadds(tx_r, tx_n)) == big[0]
+    assert body_cyl.fp.fmuls(0.5, body_cyl.fp.fadds(tz_r, tz_n)) == big[1]
+
+
+@pytest.mark.skipif(not _HAVE_ANIM, reason="anim keyframe data (_generated/anim) not present")
+@pytest.mark.skipif(not os.path.exists(_LEAN), reason="hyrule_roll_lean.json capture not present")
 def test_lean_matters_only_off_axis():
     """Guard the fix's shape: feeding shape_z changes the centre on a leaning frame (nonzero lean)
     but is a NO-OP once the lean has decayed to 0 -- so a straight-approach roll (lean 0) is
