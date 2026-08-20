@@ -68,6 +68,28 @@ def fsqrt(a):
     return _f(math.sqrt(_f(a)))
 
 
+def sqrtf_msl(x):
+    """``std::sqrtf`` AS THE GAME LINKS IT (MSL ``math.h``): ``__frsqrte`` then THREE
+    double-precision Newton steps, then a single f32 round of ``x * guess`` -- **not** a
+    correctly-rounded square root.
+
+    Verified in the shipped JP binary (session 55): ``dCcS::SetPosCorrect`` 0x800AB444 inlines
+    exactly this shape -- ``frsqrte``, then 3x ``fmul/fmul/fmul/fsub/fmul`` in double (op 63, no
+    fused ``fmadd``), then ``fmul`` + the f32 store. Same inline sits in ``cM3d_Cross_CylCyl``.
+
+    In practice the 3-step Newton residual is ~2^-32 relative, so this agrees with a correctly
+    rounded ``sqrtf`` on all but pathological operands -- it is here because the push chain is a
+    0-ULP surface and the primitive should be the game's, not because it is known to differ.
+    :func:`fsqrt` stays for the other (separately live-gated) call sites."""
+    x = float(_f(x))
+    if x > 0.0:
+        g = frsqrte(x)
+        for _ in range(3):                 # 12 -> 24 -> 32 significant bits (the MSL comments)
+            g = 0.5 * g * (3.0 - g * g * x)
+        return _f(x * g)
+    return _f(x)
+
+
 # surface classification -- wall/ground/roof (WallCorrect vs GroundCross) = a pure face-normal-Y test,
 # NOT a stored attribute. Decomp cBgW_CheckB* (c_bg_w.h); rationale: knowledge/mechanics/collision.md.
 BG_GROUND_NY = 0.5             # cBgW_CheckBGround: ny >= 0.5  -> ground

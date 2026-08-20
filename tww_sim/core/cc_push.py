@@ -40,12 +40,28 @@ Weights & cylinders (GZLJ01, live-confirmed 2026-07-06 in flooded Hyrule):
     (live-confirmed: ``|Link.cc| / |Tetra.cc| = 1.0000`` every frame, ``Link.cc + Tetra.cc = 0``). NOT
     the mass-proportional 140/260 ≈ 0.538 the old cCcS port assumed. Re-confirm ranks for other scenes.
 
-FP note: ``dist²`` is fused (``fmadds(dz,dz, fmuls(dx,dx))``) like ``PSVECMag``; the ``√`` is a plain
-``sqrtf``. Push magnitude precision (~1 ULP) is far below the f32 *position* ULP (~2e-4 u at coord
-1700) that decides the clip, so a correctly-rounded ``fsqrt`` suffices here. Pure stdlib + ``core.fp``.
+FP note (CORRECTED session 55, read off the shipped JP binary -- the old note here claimed the
+opposite and it cost 113 u on console): ``dist²`` is **NOT** fused. ``cM3d_Cross_CylCyl`` computes it
+as two ``fmuls`` and an ``fadds`` (JP 0x8024C44C-0x8024C454: ``fmuls f1,f2,f2`` / ``fmuls f0,f0,f0`` /
+``fadds f4,f1,f0``), and ``dCcS::SetPosCorrect``'s ``objDistLen`` does the same (JP 0x800AB430-38, and
+0x800AB394-3A4 for the correctY branch) -- there is no ``fmadds`` anywhere in either. The earlier port
+assumed ``fmadds(dz,dz, fmuls(dx,dx))`` "like ``PSVECMag``"; ``PSVECMag`` is a different (paired-single)
+routine and its fusing does not carry over. The ``√`` is ``std::sqrtf`` = ``__frsqrte`` + 3 double
+Newton steps (:func:`collision.sqrtf_msl`), inlined at JP 0x800AB444 / in CylCyl, not a
+correctly-rounded sqrt.
+
+This is a **0-ULP surface, not a rounding detail**: the fused form put ``cross_len`` ~2 ULP high, which
+biased the push ~3e-6 u/frame; the ~1.4x/contact-frame plow amplifier turned that into a 113 u miss by
+plan frame 241 (session 54's falsification, `tests/test_node1_console.py`). Pure stdlib + ``core.fp``.
 """
-from .fp import f32 as _f, fadds, fsubs, fmuls, fdivs, fmadds
-from .collision import fsqrt, is_zero
+from .fp import f32 as _f, fadds, fsubs, fmuls, fdivs
+from .collision import sqrtf_msl as fsqrt, is_zero
+
+
+def _dist_sq(dx, dz):
+    """``delta_x*delta_x + delta_z*delta_z`` the way both call sites compile it: two separate
+    ``fmuls`` and an ``fadds``, each rounded to f32 -- NOT a fused ``fmadds`` (see the FP note)."""
+    return fadds(fmuls(dx, dx), fmuls(dz, dz))
 
 # Raw weights (cCcD_Stts::SetWeight). 0xFF is immovable, 0xFE is the near-immovable rank.
 WEIGHT_LINK = 120           # daPy_lk_c setBgCheckParam SetWeight(120) -> GetRank 5
@@ -104,7 +120,7 @@ def cyl_cyl_cross_len(c1, r1, h1, c2, r2, h2):
     """
     dx = fsubs(c1[0], c2[0])
     dz = fsubs(c1[2], c2[2])
-    dist_sq = fmadds(dz, dz, fmuls(dx, dx))          # dx*dx + dz*dz, fused like PSVECMag
+    dist_sq = _dist_sq(dx, dz)                       # (dx*dx) + (dz*dz), UNFUSED (see the FP note)
     radius_sum = fadds(r1, r2)
     if dist_sq > fmuls(radius_sum, radius_sum):
         return False, _f(0.0)
@@ -157,7 +173,7 @@ def co_push_link(link_c, link_r, link_h, other_c, other_r, other_h,
     # vec1 (Link) = -objsDist * (cross_len/dist) * obj1_weight  ==  (link - other) dir, mag cl*share.
     dx = fsubs(other_c[0], link_c[0])
     dz = fsubs(other_c[2], link_c[2])
-    dist = fsqrt(fmadds(dz, dz, fmuls(dx, dx)))
+    dist = fsqrt(_dist_sq(dx, dz))
     if not is_zero(dist):
         f = fdivs(cross_len, dist)               # pushFactor = cross_len / objDistLen
         return (fmuls(fmuls(dx, f), fsubs(_f(0.0), obj1_weight)), _f(0.0),
@@ -193,7 +209,7 @@ def co_move_pair(c1, r1, h1, c2, r2, h2, w1=WEIGHT_LINK, w2=WEIGHT_TETRA_V5):
     obj2_weight, obj1_weight = shares
     dx = fsubs(c2[0], c1[0])                     # objsDist = ppos2 - ppos1 (obj2 - obj1)
     dz = fsubs(c2[2], c1[2])
-    dist = fsqrt(fmadds(dz, dz, fmuls(dx, dx)))
+    dist = fsqrt(_dist_sq(dx, dz))
     if not is_zero(dist):
         f = fdivs(cross_len, dist)               # pushFactor = cross_len / objDistLen
         sx = fmuls(dx, f)                         # objsDist.x *= pushFactor (scaled in place)
