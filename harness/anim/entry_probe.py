@@ -10,8 +10,16 @@ whether spB0 at the first moving frame is the FREEB pose or the first walk-blend
 DEV tool.
 """
 import os, sys, struct, math
-sys.path.insert(0, os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tww_sim'))
-sys.path.append(os.path.abspath('C:/Users/pinhi/Documents/Claude/speedrunning/tools'))
+# >>> repo bootstrap: find repo root (marker pyproject.toml) so this runs uninstalled from the root.
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d != os.path.dirname(_d) and not os.path.exists(os.path.join(_d, "pyproject.toml")):
+    _d = os.path.dirname(_d)
+if _d not in sys.path:
+    sys.path.insert(0, _d)
+_tools = os.path.join(os.path.dirname(_d), "tools")      # locate tools/
+if os.path.isdir(_tools) and _tools not in sys.path:
+    sys.path.append(_tools)
+# <<< repo bootstrap
 import dolphin_mem as dm
 from harness.dtm.run_dtm import resolve_anchor
 

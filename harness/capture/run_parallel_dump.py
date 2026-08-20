@@ -20,7 +20,9 @@ import dolphin_mem as dm
 
 EXE = os.environ.get("DOLPHIN_EXE", os.path.join(
     os.path.dirname(_rb), "Dolphin-Zelda-TAS-Edition", "Binary", "x64", "Release", "Dolphin.exe"))
-ISO = os.environ.get("TWW_ISO", r"C:\Users\pinhi\Documents\ISOs\twwgz.iso").replace("\\", "/")
+ISO = os.environ.get("TWW_ISO", "").replace("\\", "/")   # set TWW_ISO for your machine
+if not ISO:
+    raise SystemExit("set TWW_ISO to your Wind Waker image (see dolphin.local.example.json)")
 GEN = os.path.join(_rb, "_generated")
 CAP = os.path.join(_rb, "harness", "capture")
 

@@ -12,7 +12,7 @@ drifted from its documented facing.
 ```
 
 - `<isokey>` is the iso basename without extension. The runner resolves it to
-  `$TWW_ISOS_DIR/<isokey>.iso` (default `C:\Users\pinhi\Documents\ISOs`), so the image to
+  `$TWW_ISOS_DIR/<isokey>.iso` (set it for your machine), so the image to
   boot is baked into the anchor name — no more `TWW-JP.iso` vs `twwgz.iso` confusion.
 - Example: `cruise_cold@twwgz.sav` → boots `…/ISOs/twwgz.iso`.
 
